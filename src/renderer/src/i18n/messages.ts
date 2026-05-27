@@ -9,6 +9,8 @@ export const messages = {
     "nav.settings": "设置",
     "composer.placeholder": "描述你想锻造的代码任务",
     "composer.send": "开始",
+    "composer.emptyPrompt": "请输入任务内容",
+    "composer.missingModel": "请先在模型设置中启用一个模型",
     "selector.intelligence": "智能",
     "selector.low": "低",
     "selector.medium": "中",
@@ -31,7 +33,14 @@ export const messages = {
     "settings.deleteKey": "删除",
     "settings.fetchModels": "拉取模型",
     "settings.keySaved": "已保存",
-    "settings.keyMissing": "未保存"
+    "settings.keyMissing": "未保存",
+    "threads.emptyTitle": "还没有任务线程",
+    "threads.emptyBody": "在底部输入任务并选择模型后, Forge 会在这里记录计划和执行日志",
+    "threads.listTitle": "任务线程",
+    "threads.detailTitle": "执行日志",
+    "threads.prompt": "任务",
+    "threads.model": "模型",
+    "threads.status": "状态"
   },
   "en-US": {
     "app.name": "Forge",
@@ -41,6 +50,8 @@ export const messages = {
     "nav.settings": "Settings",
     "composer.placeholder": "Describe the code task you want to forge",
     "composer.send": "Start",
+    "composer.emptyPrompt": "Enter a task first",
+    "composer.missingModel": "Enable a model in settings first",
     "selector.intelligence": "Intelligence",
     "selector.low": "Low",
     "selector.medium": "Medium",
@@ -63,7 +74,14 @@ export const messages = {
     "settings.deleteKey": "Delete",
     "settings.fetchModels": "Fetch models",
     "settings.keySaved": "Saved",
-    "settings.keyMissing": "Missing"
+    "settings.keyMissing": "Missing",
+    "threads.emptyTitle": "No task threads yet",
+    "threads.emptyBody": "Describe a task at the bottom and choose a model, then Forge will record plans and run logs here",
+    "threads.listTitle": "Task threads",
+    "threads.detailTitle": "Run log",
+    "threads.prompt": "Task",
+    "threads.model": "Model",
+    "threads.status": "Status"
   }
 } as const;
 

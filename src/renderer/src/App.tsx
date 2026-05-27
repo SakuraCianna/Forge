@@ -4,6 +4,7 @@ import type { Language } from "@shared/modelTypes";
 import { AppShell } from "@/components/AppShell";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
+import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import { useI18n } from "@/i18n/useI18n";
 import {
   createDefaultModelSettings,
@@ -16,6 +17,7 @@ import {
   setSpeed,
   updateModelEnabled
 } from "@/state/modelSettings";
+import { createThreadFromSettings, type TaskThread } from "@/state/taskThreads";
 
 type ProviderKeyStatus = {
   hasKey: boolean;
@@ -31,6 +33,9 @@ export function App(): ReactElement {
     return loadModelSettings(window.localStorage);
   });
   const [keyStatuses, setKeyStatuses] = useState<Record<string, ProviderKeyStatus>>({});
+  const [threads, setThreads] = useState<TaskThread[]>([]);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [taskNotice, setTaskNotice] = useState<string | null>(null);
   const { t } = useI18n(settings.language);
   const sidebarItems = [t("nav.projects"), t("nav.threads"), t("nav.settings")];
 
@@ -78,6 +83,21 @@ export function App(): ReactElement {
     setSettings((current) => setLanguage(current, language));
   }
 
+  function submitTask(prompt: string): void {
+    const result = createThreadFromSettings(settings, prompt);
+
+    if (!result.ok) {
+      setTaskNotice(
+        result.reason === "empty-prompt" ? t("composer.emptyPrompt") : t("composer.missingModel")
+      );
+      return;
+    }
+
+    setTaskNotice(null);
+    setThreads((current) => [result.thread, ...current]);
+    setSelectedThreadId(result.thread.id);
+  }
+
   return (
     <AppShell
       language={settings.language}
@@ -92,10 +112,17 @@ export function App(): ReactElement {
       ))}
     >
       <div className="flex flex-1 flex-col px-8 py-6">
-        <div className="flex-1 rounded-md border border-white/10 bg-[#15161a] p-6">
-          <p className="text-sm text-[#a8a29a]">{t("app.tagline")}</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-normal">{t("app.name")}</h1>
-        </div>
+        {taskNotice ? (
+          <div className="mb-3 rounded-md border border-[#d7b56d]/40 bg-[#3a2e18] px-3 py-2 text-sm text-[#f4d58d]">
+            {taskNotice}
+          </div>
+        ) : null}
+        <ThreadWorkspace
+          language={settings.language}
+          selectedThreadId={selectedThreadId}
+          threads={threads}
+          onSelectThread={setSelectedThreadId}
+        />
       </div>
       <SettingsPanel
         settings={settings}
@@ -113,6 +140,7 @@ export function App(): ReactElement {
         onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
         onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
         onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
+        onSubmitTask={submitTask}
       />
     </AppShell>
   );
