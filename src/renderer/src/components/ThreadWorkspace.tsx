@@ -23,6 +23,7 @@ type ThreadWorkspaceProps = {
   onApplyAllChanges?: () => void;
   onDiscardAllChanges?: () => void;
   onGenerateFileChange?: (relativePath: string, currentContent: string) => void;
+  onGenerateSelectedFileChanges?: (relativePaths: string[]) => void;
 };
 
 export function ThreadWorkspace({
@@ -41,11 +42,13 @@ export function ThreadWorkspace({
   onDiscardChange,
   onApplyAllChanges,
   onDiscardAllChanges,
-  onGenerateFileChange
+  onGenerateFileChange,
+  onGenerateSelectedFileChanges
 }: ThreadWorkspaceProps): ReactElement {
   const { t } = useI18n(language);
   const [command, setCommand] = useState("");
   const [draftContent, setDraftContent] = useState("");
+  const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
   const allChangePreviews = changePreviews ?? (changePreview ? [changePreview] : []);
@@ -59,6 +62,12 @@ export function ThreadWorkspace({
   useEffect(() => {
     setDraftContent(visibleChangePreview?.nextContent ?? previewFile?.content ?? "");
   }, [previewFile, visibleChangePreview?.relativePath, visibleChangePreview?.nextContent]);
+
+  useEffect(() => {
+    if (!projectScan) {
+      setSelectedFilePaths([]);
+    }
+  }, [projectScan]);
 
   function submitCommand(): void {
     const normalizedCommand = command.trim();
@@ -129,16 +138,42 @@ export function ThreadWorkspace({
           <div className="mb-5 grid gap-3 lg:grid-cols-[260px_1fr]">
             <section className="rounded-md border border-white/10 bg-[#191a1f] p-3">
               <h2 className="mb-3 text-sm font-medium text-[#d7d3ca]">{t("threads.projectFiles")}</h2>
+              {selectedFilePaths.length > 0 && onGenerateSelectedFileChanges ? (
+                <button
+                  type="button"
+                  onClick={() => onGenerateSelectedFileChanges(selectedFilePaths)}
+                  className="mb-3 w-full rounded-md bg-[#f5f4ef] px-2 py-1.5 text-xs font-medium text-[#222] hover:bg-white"
+                >
+                  {t("threads.generateSelectedAiChanges")}
+                </button>
+              ) : null}
               <div className="max-h-44 space-y-1 overflow-auto">
                 {projectScan.files.slice(0, 24).map((file) => (
-                  <button
-                    key={file.relativePath}
-                    type="button"
-                    onClick={() => onPreviewFile(file.relativePath)}
-                    className="block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-[#d7d3ca] hover:bg-white/8"
-                  >
-                    {file.relativePath}
-                  </button>
+                  <div key={file.relativePath} className="flex items-center gap-2 rounded-md hover:bg-white/8">
+                    {onGenerateSelectedFileChanges ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedFilePaths.includes(file.relativePath)}
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked;
+                          setSelectedFilePaths((current) =>
+                            checked
+                              ? [...current, file.relativePath]
+                              : current.filter((relativePath) => relativePath !== file.relativePath)
+                          );
+                        }}
+                        aria-label={`Select ${file.relativePath} for AI edit`}
+                        className="ml-2 h-3.5 w-3.5"
+                      />
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => onPreviewFile(file.relativePath)}
+                      className="block min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-xs text-[#d7d3ca]"
+                    >
+                      {file.relativePath}
+                    </button>
+                  </div>
                 ))}
               </div>
               {shouldShowChangeSet ? (

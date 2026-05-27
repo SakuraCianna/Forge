@@ -306,4 +306,40 @@ describe("ThreadWorkspace", () => {
     expect(onApplyAllChanges).toHaveBeenCalledOnce();
     expect(onDiscardAllChanges).toHaveBeenCalledOnce();
   });
+
+  it("generates AI edits for selected project files", async () => {
+    const user = userEvent.setup();
+    const onGenerateSelectedFileChanges = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[thread]}
+        projectScan={{
+          rootPath: "E:\\CodeHome\\Forge",
+          files: [
+            { relativePath: "src/App.tsx", size: 42 },
+            { relativePath: "src/main.tsx", size: 24 }
+          ],
+          truncated: false
+        }}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onGenerateSelectedFileChanges={onGenerateSelectedFileChanges}
+      />
+    );
+
+    await user.click(screen.getByLabelText("Select src/App.tsx for AI edit"));
+    await user.click(screen.getByLabelText("Select src/main.tsx for AI edit"));
+    await user.click(screen.getByRole("button", { name: "Generate AI edits for selected" }));
+
+    expect(onGenerateSelectedFileChanges).toHaveBeenCalledWith([
+      "src/App.tsx",
+      "src/main.tsx"
+    ]);
+  });
 });

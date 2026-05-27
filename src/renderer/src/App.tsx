@@ -373,6 +373,21 @@ export function App(): ReactElement {
     }
   }
 
+  async function generateSelectedProjectFileChanges(relativePaths: string[]): Promise<void> {
+    if (!currentProject) {
+      return;
+    }
+
+    for (const relativePath of relativePaths) {
+      const file = await window.forge.files.readText({
+        projectRoot: currentProject.path,
+        relativePath
+      });
+
+      await generateProjectFileChange(file.relativePath, file.content);
+    }
+  }
+
   function submitTask(prompt: string): void {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
@@ -581,6 +596,9 @@ export function App(): ReactElement {
           onDiscardAllChanges={discardAllProjectFileChanges}
           onGenerateFileChange={(relativePath, currentContent) =>
             void generateProjectFileChange(relativePath, currentContent)
+          }
+          onGenerateSelectedFileChanges={(relativePaths) =>
+            void generateSelectedProjectFileChanges(relativePaths)
           }
         />
       </div>
