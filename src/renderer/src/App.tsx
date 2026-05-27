@@ -2,8 +2,15 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { TaskComposer } from "@/components/TaskComposer";
 import { useI18n } from "@/i18n/useI18n";
-import { createDefaultModelSettings, updateModelEnabled } from "@/state/modelSettings";
+import {
+  createDefaultModelSettings,
+  setCurrentModel,
+  setIntelligence,
+  setSpeed,
+  updateModelEnabled
+} from "@/state/modelSettings";
 
 export function App(): ReactElement {
   const [settings, setSettings] = useState(createDefaultModelSettings);
@@ -34,6 +41,12 @@ export function App(): ReactElement {
         onToggleModel={(modelId, enabled) =>
           setSettings((current) => updateModelEnabled(current, modelId, enabled))
         }
+      />
+      <TaskComposer
+        settings={settings}
+        onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
+        onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
+        onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
       />
     </AppShell>
   );
