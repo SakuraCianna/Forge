@@ -36,6 +36,15 @@ npm run typecheck
 npm run build
 ```
 
+打包 Windows 桌面应用:
+
+```powershell
+npm run package:dir
+npm run dist:win
+```
+
+`package:dir` 会生成未压缩的本地应用目录, 适合快速验证。`dist:win` 会生成 Windows 安装包和 zip 包, 输出目录是 `release`。
+
 ## 使用流程
 
 1. 在设置区保存 provider API Key
