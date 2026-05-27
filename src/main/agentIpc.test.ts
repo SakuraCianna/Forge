@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
-import type { AgentPlanResult, GenerateAgentPlanRequest } from "../shared/agentTypes.js";
+import type {
+  AgentFileChangeResult,
+  AgentPlanResult,
+  GenerateAgentFileChangeRequest,
+  GenerateAgentPlanRequest
+} from "../shared/agentTypes.js";
 import { agentChannels, registerAgentHandlers } from "./agentIpc.js";
 
 const provider: ForgeProvider = {
@@ -39,6 +44,16 @@ const request: GenerateAgentPlanRequest = {
   }
 };
 
+const fileChangeRequest: GenerateAgentFileChangeRequest = {
+  provider,
+  model,
+  intelligence: "high",
+  speed: "fast",
+  taskPrompt: "Add tests",
+  relativePath: "src/App.tsx",
+  currentContent: "old"
+};
+
 describe("agentIpc", () => {
   it("registers the agent plan generation handler", async () => {
     const handlers = new Map<string, (_event: unknown, ...args: unknown[]) => Promise<unknown>>();
@@ -48,11 +63,25 @@ describe("agentIpc", () => {
       text: "Plan",
       createdAt: "2026-05-27T13:00:00.000Z"
     };
+    const fileChangeResult: AgentFileChangeResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-5.5",
+      relativePath: "src/App.tsx",
+      nextContent: "new",
+      createdAt: "2026-05-27T13:00:00.000Z"
+    };
     const generatePlan = vi.fn(async () => result);
+    const generateFileChange = vi.fn(async () => fileChangeResult);
 
-    registerAgentHandlers(generatePlan, (channel, handler) => handlers.set(channel, handler));
+    registerAgentHandlers(generatePlan, generateFileChange, (channel, handler) =>
+      handlers.set(channel, handler)
+    );
 
     await expect(handlers.get(agentChannels.generatePlan)?.(null, request)).resolves.toEqual(result);
+    await expect(
+      handlers.get(agentChannels.generateFileChange)?.(null, fileChangeRequest)
+    ).resolves.toEqual(fileChangeResult);
     expect(generatePlan).toHaveBeenCalledWith(request);
+    expect(generateFileChange).toHaveBeenCalledWith(fileChangeRequest);
   });
 });

@@ -9,7 +9,8 @@ export const providerModelChannels = {
 } as const;
 
 export const agentChannels = {
-  generatePlan: "forge:agent:generate-plan"
+  generatePlan: "forge:agent:generate-plan",
+  generateFileChange: "forge:agent:generate-file-change"
 } as const;
 
 export const projectChannels = {

@@ -248,6 +248,78 @@ export function App(): ReactElement {
     );
   }
 
+  async function generateProjectFileChange(
+    relativePath: string,
+    currentContent: string
+  ): Promise<void> {
+    if (!currentProject) {
+      return;
+    }
+
+    const selectedThread =
+      threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
+
+    if (!selectedThread) {
+      return;
+    }
+
+    const model = settings.models.find((candidate) => candidate.id === selectedThread.modelId);
+    const provider = model
+      ? settings.providers.find((candidate) => candidate.id === model.providerId)
+      : null;
+
+    if (!model || !provider) {
+      appendThreadError(selectedThread.id, "未找到当前模型或提供商配置");
+      return;
+    }
+
+    const startedAt = new Date().toISOString();
+    setThreads((current) =>
+      appendThreadEvents(current, selectedThread.id, [
+        {
+          id: `${selectedThread.id}-agent-file-started-${startedAt}`,
+          kind: "file",
+          message: `正在让模型生成文件修改: ${relativePath}`,
+          createdAt: startedAt
+        }
+      ])
+    );
+
+    try {
+      const result = await window.forge.agent.generateFileChange({
+        provider,
+        model,
+        intelligence: selectedThread.intelligence,
+        speed: selectedThread.speed,
+        taskPrompt: selectedThread.prompt,
+        relativePath,
+        currentContent
+      });
+      const preview = await window.forge.files.previewTextUpdate({
+        projectRoot: currentProject.path,
+        relativePath,
+        nextContent: result.nextContent
+      });
+
+      setChangePreview(preview);
+      setThreads((current) =>
+        appendThreadEvents(current, selectedThread.id, [
+          {
+            id: `${selectedThread.id}-agent-file-${result.createdAt}`,
+            kind: "file",
+            message: `已生成文件修改建议: ${relativePath}`,
+            createdAt: result.createdAt
+          }
+        ])
+      );
+    } catch (error) {
+      appendThreadError(
+        selectedThread.id,
+        `模型文件修改失败: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
   function submitTask(prompt: string): void {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
@@ -445,6 +517,9 @@ export function App(): ReactElement {
           }
           onApplyChange={(relativePath, nextContent) =>
             void applyProjectFileChange(relativePath, nextContent)
+          }
+          onGenerateFileChange={(relativePath, currentContent) =>
+            void generateProjectFileChange(relativePath, currentContent)
           }
         />
       </div>

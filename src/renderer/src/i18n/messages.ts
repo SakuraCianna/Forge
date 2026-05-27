@@ -66,6 +66,7 @@ export const messages = {
     "threads.filePreview": "文件预览",
     "threads.editContent": "编辑内容",
     "threads.generateDiff": "生成 diff",
+    "threads.generateAiChange": "AI 修改",
     "threads.applyChange": "应用修改"
   },
   "en-US": {
@@ -133,6 +134,7 @@ export const messages = {
     "threads.filePreview": "File preview",
     "threads.editContent": "Edit content",
     "threads.generateDiff": "Generate diff",
+    "threads.generateAiChange": "Generate AI edit",
     "threads.applyChange": "Apply change"
   }
 } as const;

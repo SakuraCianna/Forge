@@ -1,4 +1,9 @@
-import type { AgentPlanResult, GenerateAgentPlanRequest } from "../shared/agentTypes.js";
+import type {
+  AgentFileChangeResult,
+  AgentPlanResult,
+  GenerateAgentFileChangeRequest,
+  GenerateAgentPlanRequest
+} from "../shared/agentTypes.js";
 import { buildTextGenerationRequest, extractGeneratedText } from "../shared/textGeneration.js";
 
 type KeyReader = {
@@ -9,6 +14,13 @@ type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
 type GenerateAgentPlanOptions = {
   request: GenerateAgentPlanRequest;
+  keyVault: KeyReader;
+  fetcher?: Fetcher;
+  now?: () => string;
+};
+
+type GenerateAgentFileChangeOptions = {
+  request: GenerateAgentFileChangeRequest;
   keyVault: KeyReader;
   fetcher?: Fetcher;
   now?: () => string;
@@ -63,6 +75,50 @@ export async function generateAgentPlan({
   };
 }
 
+export async function generateAgentFileChange({
+  request,
+  keyVault,
+  fetcher = fetch,
+  now = () => new Date().toISOString()
+}: GenerateAgentFileChangeOptions): Promise<AgentFileChangeResult> {
+  const apiKey = await keyVault.readProviderKey(request.provider.id);
+
+  if (!apiKey) {
+    throw new Error(`${request.provider.label} API Key is not configured`);
+  }
+
+  const generationRequest = buildTextGenerationRequest({
+    provider: request.provider,
+    model: request.model,
+    apiKey,
+    instructions: createAgentFileChangeInstructions(),
+    input: createAgentFileChangeInput(request),
+    intelligence: request.intelligence
+  });
+  const response = await fetcher(generationRequest.url, generationRequest.init);
+
+  if (!response.ok) {
+    throw new Error(
+      `${request.provider.label} file change request failed: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const body = (await response.json()) as unknown;
+  const nextContent = stripMarkdownCodeFence(extractGeneratedText(request.provider.kind, body));
+
+  if (!nextContent.trim()) {
+    throw new Error(`${request.provider.label} returned an empty file change`);
+  }
+
+  return {
+    providerId: request.provider.id,
+    modelId: request.model.id,
+    relativePath: request.relativePath,
+    nextContent,
+    createdAt: now()
+  };
+}
+
 function createAgentPlanInstructions(): string {
   return [
     "You are Forge, an open-source local AI coding agent.",
@@ -70,6 +126,16 @@ function createAgentPlanInstructions(): string {
     "Do not reveal hidden chain-of-thought. Show only actionable engineering steps.",
     "Prefer Chinese when the user writes Chinese. Keep file paths exact when mentioned.",
     "Do not claim you changed files or ran commands. This response is planning only."
+  ].join("\n");
+}
+
+function createAgentFileChangeInstructions(): string {
+  return [
+    "You are Forge, an open-source local AI coding agent.",
+    "Rewrite the selected file to satisfy the user task.",
+    "Return only the complete replacement file content.",
+    "Do not include explanations, markdown fences, diffs, or patch markers.",
+    "Preserve existing style and imports unless the task requires changes."
   ].join("\n");
 }
 
@@ -87,4 +153,20 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     `Project root:\n${request.projectScan.rootPath}`,
     `Indexed files:\n${files || "- No files indexed"}${truncatedNote}`
   ].join("\n\n");
+}
+
+function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): string {
+  return [
+    `Task:\n${request.taskPrompt}`,
+    `Speed mode:\n${request.speed}`,
+    `File path:\n${request.relativePath}`,
+    `Current file content:\n${request.currentContent}`
+  ].join("\n\n");
+}
+
+function stripMarkdownCodeFence(value: string): string {
+  const trimmed = value.trim();
+  const match = /^```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)\r?\n```$/.exec(trimmed);
+
+  return match ? match[1] : value;
 }

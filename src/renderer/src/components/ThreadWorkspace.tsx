@@ -18,6 +18,7 @@ type ThreadWorkspaceProps = {
   onPreviewFile: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
   onApplyChange?: (relativePath: string, nextContent: string) => void;
+  onGenerateFileChange?: (relativePath: string, currentContent: string) => void;
 };
 
 export function ThreadWorkspace({
@@ -31,7 +32,8 @@ export function ThreadWorkspace({
   onRunCommand,
   onPreviewFile,
   onPreviewChange,
-  onApplyChange
+  onApplyChange,
+  onGenerateFileChange
 }: ThreadWorkspaceProps): ReactElement {
   const { t } = useI18n(language);
   const [command, setCommand] = useState("");
@@ -40,11 +42,17 @@ export function ThreadWorkspace({
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
   const visibleChangePreview =
     previewFile && changePreview?.relativePath === previewFile.relativePath ? changePreview : null;
-  const canEditPreview = Boolean(onPreviewChange || onApplyChange);
+  const canEditPreview = Boolean(onPreviewChange || onApplyChange || onGenerateFileChange);
 
   useEffect(() => {
     setDraftContent(previewFile?.content ?? "");
   }, [previewFile]);
+
+  useEffect(() => {
+    if (visibleChangePreview) {
+      setDraftContent(visibleChangePreview.nextContent);
+    }
+  }, [visibleChangePreview?.relativePath, visibleChangePreview?.nextContent]);
 
   function submitCommand(): void {
     const normalizedCommand = command.trim();
@@ -134,6 +142,11 @@ export function ThreadWorkspace({
                 <div className="grid gap-3">
                   {canEditPreview ? (
                     <>
+                      {draftContent !== previewFile.content ? (
+                        <pre className="max-h-44 overflow-auto whitespace-pre-wrap rounded-md bg-[#101114] p-3 text-xs leading-5 text-[#f5f4ef]">
+                          {previewFile.content}
+                        </pre>
+                      ) : null}
                       <label className="grid gap-2 text-sm text-[#d7d3ca]">
                         <span>{t("threads.editContent")}</span>
                         <textarea
@@ -151,6 +164,15 @@ export function ThreadWorkspace({
                         >
                           {t("threads.generateDiff")}
                         </button>
+                        {onGenerateFileChange ? (
+                          <button
+                            type="button"
+                            onClick={() => onGenerateFileChange(previewFile.relativePath, draftContent)}
+                            className="h-9 rounded-md border border-white/10 px-3 text-sm font-medium text-[#f5f4ef] hover:bg-white/8"
+                          >
+                            {t("threads.generateAiChange")}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => onApplyChange?.(previewFile.relativePath, draftContent)}

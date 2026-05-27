@@ -1,6 +1,11 @@
 /// <reference types="vite/client" />
 
-import type { AgentPlanResult, GenerateAgentPlanRequest } from "@shared/agentTypes";
+import type {
+  AgentFileChangeResult,
+  AgentPlanResult,
+  GenerateAgentFileChangeRequest,
+  GenerateAgentPlanRequest
+} from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import type {
@@ -27,6 +32,9 @@ declare global {
       };
       agent: {
         generatePlan: (request: GenerateAgentPlanRequest) => Promise<AgentPlanResult>;
+        generateFileChange: (
+          request: GenerateAgentFileChangeRequest
+        ) => Promise<AgentFileChangeResult>;
       };
       projects: {
         pickDirectory: () => Promise<string | null>;

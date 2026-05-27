@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
-import type { GenerateAgentPlanRequest } from "../shared/agentTypes.js";
-import { generateAgentPlan } from "./agentPlanService.js";
+import type { GenerateAgentFileChangeRequest, GenerateAgentPlanRequest } from "../shared/agentTypes.js";
+import { generateAgentFileChange, generateAgentPlan } from "./agentPlanService.js";
 
 const provider: ForgeProvider = {
   id: "openai",
@@ -42,6 +42,16 @@ const request: GenerateAgentPlanRequest = {
   }
 };
 
+const fileChangeRequest: GenerateAgentFileChangeRequest = {
+  provider,
+  model,
+  intelligence: "high",
+  speed: "balanced",
+  taskPrompt: "Update the component copy",
+  relativePath: "src/renderer/src/App.tsx",
+  currentContent: "export const label = 'old';"
+};
+
 describe("agentPlanService", () => {
   it("calls the selected provider and returns generated plan text", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ output_text: "1. Read App.tsx" })));
@@ -69,5 +79,29 @@ describe("agentPlanService", () => {
         fetcher: vi.fn()
       })
     ).rejects.toThrow("OpenAI API Key is not configured");
+  });
+
+  it("generates full replacement content for a selected file", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "```ts\nexport const label = 'new';\n```"
+          })
+        )
+    );
+
+    const result = await generateAgentFileChange({
+      request: fileChangeRequest,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(result).toMatchObject({
+      providerId: "openai",
+      modelId: "openai:gpt-5.5",
+      relativePath: "src/renderer/src/App.tsx",
+      nextContent: "export const label = 'new';"
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import { registerAgentHandlers } from "./agentIpc.js";
-import { generateAgentPlan } from "./agentPlanService.js";
+import { generateAgentFileChange, generateAgentPlan } from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
 import { runProjectCommand } from "./commandRunner.js";
 import { registerGitHandlers } from "./gitIpc.js";
@@ -78,6 +78,7 @@ void app.whenReady().then(() => {
 
   registerAgentHandlers(
     (request) => generateAgentPlan({ request, keyVault }),
+    (request) => generateAgentFileChange({ request, keyVault }),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

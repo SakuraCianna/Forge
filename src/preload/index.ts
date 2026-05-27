@@ -8,7 +8,12 @@ import {
   projectChannels,
   providerModelChannels
 } from "../shared/ipcChannels.js";
-import type { AgentPlanResult, GenerateAgentPlanRequest } from "../shared/agentTypes.js";
+import type {
+  AgentFileChangeResult,
+  AgentPlanResult,
+  GenerateAgentFileChangeRequest,
+  GenerateAgentPlanRequest
+} from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 import type {
@@ -34,7 +39,11 @@ contextBridge.exposeInMainWorld("forge", {
   },
   agent: {
     generatePlan: (request: GenerateAgentPlanRequest): Promise<AgentPlanResult> =>
-      ipcRenderer.invoke(agentChannels.generatePlan, request)
+      ipcRenderer.invoke(agentChannels.generatePlan, request),
+    generateFileChange: (
+      request: GenerateAgentFileChangeRequest
+    ): Promise<AgentFileChangeResult> =>
+      ipcRenderer.invoke(agentChannels.generateFileChange, request)
   },
   projects: {
     pickDirectory: () => ipcRenderer.invoke(projectChannels.pickDirectory),
