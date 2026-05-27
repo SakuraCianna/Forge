@@ -1,7 +1,9 @@
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
+import { registerProjectHandlers } from "./projectIpc.js";
+import { pickProjectDirectory } from "./projectPicker.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
 import { registerProviderModelHandlers } from "./providerModelsIpc.js";
 
@@ -56,6 +58,13 @@ void app.whenReady().then(() => {
 
   registerProviderModelHandlers(
     (provider) => fetchModelsForProvider({ provider, keyVault }),
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
+
+  registerProjectHandlers(
+    () => pickProjectDirectory(() => dialog.showOpenDialog({ properties: ["openDirectory"] })),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

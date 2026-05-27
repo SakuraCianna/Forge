@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
-import { keyVaultChannels, providerModelChannels } from "../shared/ipcChannels.js";
+import {
+  keyVaultChannels,
+  projectChannels,
+  providerModelChannels
+} from "../shared/ipcChannels.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
 
 contextBridge.exposeInMainWorld("forge", {
@@ -14,5 +18,8 @@ contextBridge.exposeInMainWorld("forge", {
   models: {
     fetchProviderModels: (provider: ForgeProvider) =>
       ipcRenderer.invoke(providerModelChannels.fetch, provider)
+  },
+  projects: {
+    pickDirectory: () => ipcRenderer.invoke(projectChannels.pickDirectory)
   }
 });

@@ -16,6 +16,9 @@ declare global {
       models: {
         fetchProviderModels: (provider: ForgeProvider) => Promise<ForgeModel[]>;
       };
+      projects: {
+        pickDirectory: () => Promise<string | null>;
+      };
     };
   }
 }

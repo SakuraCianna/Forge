@@ -7,3 +7,7 @@ export const keyVaultChannels = {
 export const providerModelChannels = {
   fetch: "forge:provider-models:fetch"
 } as const;
+
+export const projectChannels = {
+  pickDirectory: "forge:project:pick-directory"
+} as const;

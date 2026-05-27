@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import type { Language } from "@shared/modelTypes";
 import { AppShell } from "@/components/AppShell";
+import { ProjectHeader } from "@/components/ProjectHeader";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
@@ -17,6 +18,13 @@ import {
   setSpeed,
   updateModelEnabled
 } from "@/state/modelSettings";
+import {
+  addRecentProject,
+  createProjectFromPath,
+  loadRecentProjects,
+  saveRecentProjects,
+  type ForgeProject
+} from "@/state/projects";
 import { createThreadFromSettings, type TaskThread } from "@/state/taskThreads";
 
 type ProviderKeyStatus = {
@@ -33,6 +41,16 @@ export function App(): ReactElement {
     return loadModelSettings(window.localStorage);
   });
   const [keyStatuses, setKeyStatuses] = useState<Record<string, ProviderKeyStatus>>({});
+  const [recentProjects, setRecentProjects] = useState<ForgeProject[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    return loadRecentProjects(window.localStorage);
+  });
+  const [currentProject, setCurrentProject] = useState<ForgeProject | null>(
+    () => recentProjects[0] ?? null
+  );
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
@@ -42,6 +60,10 @@ export function App(): ReactElement {
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
   }, [settings]);
+
+  useEffect(() => {
+    saveRecentProjects(window.localStorage, recentProjects);
+  }, [recentProjects]);
 
   useEffect(() => {
     for (const provider of settings.providers) {
@@ -83,7 +105,24 @@ export function App(): ReactElement {
     setSettings((current) => setLanguage(current, language));
   }
 
+  async function pickProject(): Promise<void> {
+    const projectPath = await window.forge.projects.pickDirectory();
+
+    if (!projectPath) {
+      return;
+    }
+
+    const project = createProjectFromPath(projectPath);
+    setCurrentProject(project);
+    setRecentProjects((current) => addRecentProject(current, project));
+  }
+
   function submitTask(prompt: string): void {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      return;
+    }
+
     const result = createThreadFromSettings(settings, prompt);
 
     if (!result.ok) {
@@ -112,6 +151,11 @@ export function App(): ReactElement {
       ))}
     >
       <div className="flex flex-1 flex-col px-8 py-6">
+        <ProjectHeader
+          language={settings.language}
+          project={currentProject}
+          onPickProject={() => void pickProject()}
+        />
         {taskNotice ? (
           <div className="mb-3 rounded-md border border-[#d7b56d]/40 bg-[#3a2e18] px-3 py-2 text-sm text-[#f4d58d]">
             {taskNotice}
