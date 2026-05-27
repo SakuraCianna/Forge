@@ -32,6 +32,7 @@ describe("ThreadWorkspace", () => {
         threads={[]}
         projectScan={null}
         previewFile={null}
+        changePreview={null}
         onSelectThread={vi.fn()}
         onRunCommand={vi.fn()}
         onPreviewFile={vi.fn()}
@@ -49,6 +50,7 @@ describe("ThreadWorkspace", () => {
         threads={[thread]}
         projectScan={null}
         previewFile={null}
+        changePreview={null}
         onSelectThread={vi.fn()}
         onRunCommand={vi.fn()}
         onPreviewFile={vi.fn()}
@@ -71,6 +73,7 @@ describe("ThreadWorkspace", () => {
         threads={[thread]}
         projectScan={null}
         previewFile={null}
+        changePreview={null}
         onSelectThread={vi.fn()}
         onRunCommand={onRunCommand}
         onPreviewFile={vi.fn()}
@@ -103,9 +106,20 @@ describe("ThreadWorkspace", () => {
           content: "export const App = () => null;",
           size: 30
         }}
+        changePreview={{
+          relativePath: "src/App.tsx",
+          currentContent: "old",
+          nextContent: "new",
+          diff: [
+            { kind: "remove", oldLineNumber: 1, text: "old" },
+            { kind: "add", newLineNumber: 1, text: "new" }
+          ]
+        }}
         onSelectThread={vi.fn()}
         onRunCommand={vi.fn()}
         onPreviewFile={onPreviewFile}
+        onPreviewChange={vi.fn()}
+        onApplyChange={vi.fn()}
       />
     );
 
@@ -113,5 +127,45 @@ describe("ThreadWorkspace", () => {
 
     expect(onPreviewFile).toHaveBeenCalledWith("src/App.tsx");
     expect(screen.getByText("export const App = () => null;")).toBeInTheDocument();
+    expect(screen.getByText("- old")).toBeInTheDocument();
+    expect(screen.getByText("+ new")).toBeInTheDocument();
+  });
+
+  it("requests diff preview and applies a file change", async () => {
+    const user = userEvent.setup();
+    const onPreviewChange = vi.fn();
+    const onApplyChange = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="zh-CN"
+        selectedThreadId="thread-1"
+        threads={[thread]}
+        projectScan={{
+          rootPath: "E:\\CodeHome\\Forge",
+          files: [{ relativePath: "src/App.tsx", size: 42 }],
+          truncated: false
+        }}
+        previewFile={{
+          relativePath: "src/App.tsx",
+          content: "old",
+          size: 3
+        }}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onPreviewChange={onPreviewChange}
+        onApplyChange={onApplyChange}
+      />
+    );
+
+    await user.clear(screen.getByLabelText("编辑内容"));
+    await user.type(screen.getByLabelText("编辑内容"), "new");
+    await user.click(screen.getByRole("button", { name: "生成 diff" }));
+    await user.click(screen.getByRole("button", { name: "应用修改" }));
+
+    expect(onPreviewChange).toHaveBeenCalledWith("src/App.tsx", "new");
+    expect(onApplyChange).toHaveBeenCalledWith("src/App.tsx", "new");
   });
 });

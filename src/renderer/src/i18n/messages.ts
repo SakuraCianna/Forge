@@ -52,7 +52,10 @@ export const messages = {
     "threads.command": "命令",
     "threads.runCommand": "运行命令",
     "threads.projectFiles": "项目文件",
-    "threads.filePreview": "文件预览"
+    "threads.filePreview": "文件预览",
+    "threads.editContent": "编辑内容",
+    "threads.generateDiff": "生成 diff",
+    "threads.applyChange": "应用修改"
   },
   "en-US": {
     "app.name": "Forge",
@@ -105,7 +108,10 @@ export const messages = {
     "threads.command": "Command",
     "threads.runCommand": "Run command",
     "threads.projectFiles": "Project files",
-    "threads.filePreview": "File preview"
+    "threads.filePreview": "File preview",
+    "threads.editContent": "Edit content",
+    "threads.generateDiff": "Generate diff",
+    "threads.applyChange": "Apply change"
   }
 } as const;
 

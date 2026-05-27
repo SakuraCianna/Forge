@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
-import type { ProjectTextFile } from "@shared/fileTypes";
+import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { AppShell } from "@/components/AppShell";
@@ -61,6 +61,7 @@ export function App(): ReactElement {
   );
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
+  const [changePreview, setChangePreview] = useState<ProjectFileChangePreview | null>(null);
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export function App(): ReactElement {
     if (!currentProject) {
       setProjectScanResult(null);
       setPreviewFile(null);
+      setChangePreview(null);
       return;
     }
 
@@ -141,6 +143,7 @@ export function App(): ReactElement {
     const result = await window.forge.projects.scan(projectPath);
     setProjectScanResult(result);
     setPreviewFile(null);
+    setChangePreview(null);
   }
 
   async function previewProjectFile(relativePath: string): Promise<void> {
@@ -153,6 +156,50 @@ export function App(): ReactElement {
       relativePath
     });
     setPreviewFile(file);
+    setChangePreview(null);
+  }
+
+  async function previewProjectFileChange(relativePath: string, nextContent: string): Promise<void> {
+    if (!currentProject) {
+      return;
+    }
+
+    const preview = await window.forge.files.previewTextUpdate({
+      projectRoot: currentProject.path,
+      relativePath,
+      nextContent
+    });
+    setChangePreview(preview);
+  }
+
+  async function applyProjectFileChange(relativePath: string, nextContent: string): Promise<void> {
+    if (!currentProject) {
+      return;
+    }
+
+    const file = await window.forge.files.writeText({
+      projectRoot: currentProject.path,
+      relativePath,
+      nextContent
+    });
+    setPreviewFile(file);
+    setChangePreview(null);
+
+    if (!selectedThreadId) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    setThreads((current) =>
+      appendThreadEvents(current, selectedThreadId, [
+        {
+          id: `${selectedThreadId}-file-write-${createdAt}`,
+          kind: "file",
+          message: `已应用文件修改: ${file.relativePath}`,
+          createdAt
+        }
+      ])
+    );
   }
 
   function submitTask(prompt: string): void {
@@ -247,9 +294,16 @@ export function App(): ReactElement {
           threads={threads}
           projectScan={projectScanResult}
           previewFile={previewFile}
+          changePreview={changePreview}
           onSelectThread={setSelectedThreadId}
           onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
           onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
+          onPreviewChange={(relativePath, nextContent) =>
+            void previewProjectFileChange(relativePath, nextContent)
+          }
+          onApplyChange={(relativePath, nextContent) =>
+            void applyProjectFileChange(relativePath, nextContent)
+          }
         />
       </div>
       <SettingsPanel

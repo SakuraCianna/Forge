@@ -1,5 +1,5 @@
 import { fileChannels } from "../shared/ipcChannels.js";
-import type { ProjectTextFile } from "../shared/fileTypes.js";
+import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 
 export type ReadProjectTextFileRequest = {
   projectRoot: string;
@@ -7,7 +7,17 @@ export type ReadProjectTextFileRequest = {
   maxBytes?: number;
 };
 
+export type UpdateProjectTextFileRequest = ReadProjectTextFileRequest & {
+  nextContent: string;
+};
+
 type ReadProjectTextFile = (request: ReadProjectTextFileRequest) => Promise<ProjectTextFile>;
+
+type PreviewProjectTextFileUpdate = (
+  request: UpdateProjectTextFileRequest
+) => Promise<ProjectFileChangePreview>;
+
+type WriteProjectTextFile = (request: UpdateProjectTextFileRequest) => Promise<ProjectTextFile>;
 
 type IpcHandler = (_event: unknown, ...args: unknown[]) => Promise<unknown>;
 
@@ -17,10 +27,20 @@ export { fileChannels };
 
 export function registerProjectFileHandlers(
   readProjectTextFile: ReadProjectTextFile,
+  previewProjectTextFileUpdate: PreviewProjectTextFileUpdate,
+  writeProjectTextFile: WriteProjectTextFile,
   registerHandler: RegisterHandler
 ): void {
   registerHandler(fileChannels.readText, async (_event, request) =>
     readProjectTextFile(assertReadRequest(request))
+  );
+
+  registerHandler(fileChannels.previewTextUpdate, async (_event, request) =>
+    previewProjectTextFileUpdate(assertUpdateRequest(request))
+  );
+
+  registerHandler(fileChannels.writeText, async (_event, request) =>
+    writeProjectTextFile(assertUpdateRequest(request))
   );
 }
 
@@ -37,6 +57,19 @@ function assertReadRequest(value: unknown): ReadProjectTextFileRequest {
     projectRoot: value.projectRoot,
     relativePath: value.relativePath,
     maxBytes: typeof value.maxBytes === "number" ? value.maxBytes : undefined
+  };
+}
+
+function assertUpdateRequest(value: unknown): UpdateProjectTextFileRequest {
+  const readRequest = assertReadRequest(value);
+
+  if (!isRecord(value) || typeof value.nextContent !== "string") {
+    throw new Error("Invalid file update request");
+  }
+
+  return {
+    ...readRequest,
+    nextContent: value.nextContent
   };
 }
 

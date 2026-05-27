@@ -6,7 +6,11 @@ import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
-import { readProjectTextFile } from "./projectFileService.js";
+import {
+  previewProjectTextFileUpdate,
+  readProjectTextFile,
+  writeProjectTextFile
+} from "./projectFileService.js";
 import { pickProjectDirectory } from "./projectPicker.js";
 import { scanProjectFiles } from "./projectScanner.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
@@ -85,6 +89,8 @@ void app.whenReady().then(() => {
 
   registerProjectFileHandlers(
     (request) => readProjectTextFile(request),
+    (request) => previewProjectTextFileUpdate(request),
+    (request) => writeProjectTextFile(request),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

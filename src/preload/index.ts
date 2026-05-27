@@ -7,7 +7,7 @@ import {
   providerModelChannels
 } from "../shared/ipcChannels.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
-import type { ProjectTextFile } from "../shared/fileTypes.js";
+import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 import type { ProjectScanResult } from "../shared/projectTypes.js";
 
 contextBridge.exposeInMainWorld("forge", {
@@ -41,6 +41,19 @@ contextBridge.exposeInMainWorld("forge", {
       projectRoot: string;
       relativePath: string;
       maxBytes?: number;
-    }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.readText, request)
+    }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.readText, request),
+    previewTextUpdate: (request: {
+      projectRoot: string;
+      relativePath: string;
+      nextContent: string;
+      maxBytes?: number;
+    }): Promise<ProjectFileChangePreview> =>
+      ipcRenderer.invoke(fileChannels.previewTextUpdate, request),
+    writeText: (request: {
+      projectRoot: string;
+      relativePath: string;
+      nextContent: string;
+      maxBytes?: number;
+    }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.writeText, request)
   }
 });

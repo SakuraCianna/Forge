@@ -18,5 +18,7 @@ export const commandChannels = {
 } as const;
 
 export const fileChannels = {
-  readText: "forge:file:read-text"
+  readText: "forge:file:read-text",
+  previewTextUpdate: "forge:file:preview-text-update",
+  writeText: "forge:file:write-text"
 } as const;

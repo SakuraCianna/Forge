@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readProjectTextFile } from "./projectFileService";
+import {
+  previewProjectTextFileUpdate,
+  readProjectTextFile,
+  writeProjectTextFile
+} from "./projectFileService";
 
 const testRoot = join(process.cwd(), ".tmp-test", "project-files");
 
@@ -48,5 +52,36 @@ describe("projectFileService", () => {
         maxBytes: 4
       })
     ).rejects.toThrow("File is too large to preview");
+  });
+
+  it("previews a text file update with a line diff", async () => {
+    await mkdir(testRoot, { recursive: true });
+    await writeFile(join(testRoot, "notes.txt"), "old\nsame", "utf8");
+
+    const preview = await previewProjectTextFileUpdate({
+      projectRoot: testRoot,
+      relativePath: "notes.txt",
+      nextContent: "new\nsame"
+    });
+
+    expect(preview.relativePath).toBe("notes.txt");
+    expect(preview.diff).toEqual([
+      { kind: "remove", oldLineNumber: 1, text: "old" },
+      { kind: "add", newLineNumber: 1, text: "new" },
+      { kind: "context", oldLineNumber: 2, newLineNumber: 2, text: "same" }
+    ]);
+  });
+
+  it("writes a text file update inside the selected project", async () => {
+    await mkdir(testRoot, { recursive: true });
+    await writeFile(join(testRoot, "notes.txt"), "old", "utf8");
+
+    await writeProjectTextFile({
+      projectRoot: testRoot,
+      relativePath: "notes.txt",
+      nextContent: "new"
+    });
+
+    await expect(readFile(join(testRoot, "notes.txt"), "utf8")).resolves.toBe("new");
   });
 });

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
-import type { ProjectTextFile } from "@shared/fileTypes";
+import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 
 declare global {
@@ -41,6 +41,18 @@ declare global {
         readText: (request: {
           projectRoot: string;
           relativePath: string;
+          maxBytes?: number;
+        }) => Promise<ProjectTextFile>;
+        previewTextUpdate: (request: {
+          projectRoot: string;
+          relativePath: string;
+          nextContent: string;
+          maxBytes?: number;
+        }) => Promise<ProjectFileChangePreview>;
+        writeText: (request: {
+          projectRoot: string;
+          relativePath: string;
+          nextContent: string;
           maxBytes?: number;
         }) => Promise<ProjectTextFile>;
       };

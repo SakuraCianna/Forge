@@ -1,8 +1,8 @@
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
-import type { ProjectTextFile } from "@shared/fileTypes";
+import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { TaskThread } from "@/state/taskThreads";
 
@@ -12,9 +12,12 @@ type ThreadWorkspaceProps = {
   threads: TaskThread[];
   projectScan: ProjectScanResult | null;
   previewFile: ProjectTextFile | null;
+  changePreview: ProjectFileChangePreview | null;
   onSelectThread: (threadId: string) => void;
   onRunCommand: (threadId: string, command: string) => void;
   onPreviewFile: (relativePath: string) => void;
+  onPreviewChange?: (relativePath: string, nextContent: string) => void;
+  onApplyChange?: (relativePath: string, nextContent: string) => void;
 };
 
 export function ThreadWorkspace({
@@ -23,14 +26,25 @@ export function ThreadWorkspace({
   threads,
   projectScan,
   previewFile,
+  changePreview,
   onSelectThread,
   onRunCommand,
-  onPreviewFile
+  onPreviewFile,
+  onPreviewChange,
+  onApplyChange
 }: ThreadWorkspaceProps): ReactElement {
   const { t } = useI18n(language);
   const [command, setCommand] = useState("");
+  const [draftContent, setDraftContent] = useState("");
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
+  const visibleChangePreview =
+    previewFile && changePreview?.relativePath === previewFile.relativePath ? changePreview : null;
+  const canEditPreview = Boolean(onPreviewChange || onApplyChange);
+
+  useEffect(() => {
+    setDraftContent(previewFile?.content ?? "");
+  }, [previewFile]);
 
   function submitCommand(): void {
     const normalizedCommand = command.trim();
@@ -117,9 +131,65 @@ export function ThreadWorkspace({
             <section className="min-w-0 rounded-md border border-white/10 bg-[#191a1f] p-3">
               <h2 className="mb-3 text-sm font-medium text-[#d7d3ca]">{t("threads.filePreview")}</h2>
               {previewFile ? (
-                <pre className="max-h-44 overflow-auto whitespace-pre-wrap rounded-md bg-[#101114] p-3 text-xs leading-5 text-[#f5f4ef]">
-                  {previewFile.content}
-                </pre>
+                <div className="grid gap-3">
+                  {canEditPreview ? (
+                    <>
+                      <label className="grid gap-2 text-sm text-[#d7d3ca]">
+                        <span>{t("threads.editContent")}</span>
+                        <textarea
+                          value={draftContent}
+                          onChange={(event) => setDraftContent(event.currentTarget.value)}
+                          className="min-h-40 resize-y rounded-md border border-white/10 bg-[#101114] p-3 font-mono text-xs leading-5 text-[#f5f4ef] outline-none focus:border-[#f5f4ef]/50"
+                          spellCheck={false}
+                        />
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onPreviewChange?.(previewFile.relativePath, draftContent)}
+                          className="h-9 rounded-md border border-white/10 px-3 text-sm font-medium text-[#f5f4ef] hover:bg-white/8"
+                        >
+                          {t("threads.generateDiff")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onApplyChange?.(previewFile.relativePath, draftContent)}
+                          className="h-9 rounded-md bg-[#f5f4ef] px-3 text-sm font-medium text-[#222] hover:bg-white"
+                        >
+                          {t("threads.applyChange")}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <pre className="max-h-44 overflow-auto whitespace-pre-wrap rounded-md bg-[#101114] p-3 text-xs leading-5 text-[#f5f4ef]">
+                      {previewFile.content}
+                    </pre>
+                  )}
+                  {visibleChangePreview ? (
+                    <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-md bg-[#101114] p-3 font-mono text-xs leading-5 text-[#d7d3ca]">
+                      {visibleChangePreview.diff.map((line, index) => {
+                        const prefix =
+                          line.kind === "add" ? "+ " : line.kind === "remove" ? "- " : "  ";
+
+                        return (
+                          <div
+                            key={`${line.kind}-${index}`}
+                            className={
+                              line.kind === "add"
+                                ? "text-[#91d18b]"
+                                : line.kind === "remove"
+                                  ? "text-[#f28b82]"
+                                  : "text-[#a8a29a]"
+                            }
+                          >
+                            {prefix}
+                            {line.text}
+                          </div>
+                        );
+                      })}
+                    </pre>
+                  ) : null}
+                </div>
               ) : null}
             </section>
           </div>
