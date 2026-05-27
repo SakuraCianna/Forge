@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
+import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { AppShell } from "@/components/AppShell";
@@ -64,6 +65,9 @@ export function App(): ReactElement {
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
   const [changePreview, setChangePreview] = useState<ProjectFileChangePreview | null>(null);
+  const [gitStatus, setGitStatus] = useState<ProjectGitStatus | null>(null);
+  const [gitNotice, setGitNotice] = useState<string | null>(null);
+  const [commitMessage, setCommitMessage] = useState("");
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
@@ -83,10 +87,13 @@ export function App(): ReactElement {
       setProjectScanResult(null);
       setPreviewFile(null);
       setChangePreview(null);
+      setGitStatus(null);
+      setGitNotice(null);
       return;
     }
 
     void scanProject(currentProject.path);
+    void refreshProjectGitStatus(currentProject.path);
   }, [currentProject]);
 
   useEffect(() => {
@@ -146,6 +153,43 @@ export function App(): ReactElement {
     setProjectScanResult(result);
     setPreviewFile(null);
     setChangePreview(null);
+  }
+
+  async function refreshProjectGitStatus(projectPath = currentProject?.path): Promise<void> {
+    if (!projectPath) {
+      return;
+    }
+
+    try {
+      const status = await window.forge.git.status({ projectRoot: projectPath });
+      setGitStatus(status);
+      setGitNotice(null);
+    } catch (error) {
+      setGitNotice(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function commitCurrentProject(message: string): Promise<void> {
+    if (!currentProject) {
+      return;
+    }
+
+    if (!message.trim()) {
+      setGitNotice(t("projects.commitMessageRequired"));
+      return;
+    }
+
+    try {
+      const result = await window.forge.git.commit({
+        projectRoot: currentProject.path,
+        message
+      });
+      setGitStatus(result.status);
+      setCommitMessage("");
+      setGitNotice(t("projects.commitDone"));
+    } catch (error) {
+      setGitNotice(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function previewProjectFile(relativePath: string): Promise<void> {
@@ -373,7 +417,13 @@ export function App(): ReactElement {
           language={settings.language}
           project={currentProject}
           scanResult={projectScanResult}
+          gitStatus={gitStatus}
+          gitNotice={gitNotice}
+          commitMessage={commitMessage}
+          onCommitMessageChange={setCommitMessage}
+          onCommitProject={(message) => void commitCurrentProject(message)}
           onPickProject={() => void pickProject()}
+          onRefreshGitStatus={() => void refreshProjectGitStatus()}
         />
         {taskNotice ? (
           <div className="mb-3 rounded-md border border-[#d7b56d]/40 bg-[#3a2e18] px-3 py-2 text-sm text-[#f4d58d]">

@@ -3,6 +3,7 @@ import {
   agentChannels,
   commandChannels,
   fileChannels,
+  gitChannels,
   keyVaultChannels,
   projectChannels,
   providerModelChannels
@@ -10,6 +11,12 @@ import {
 import type { AgentPlanResult, GenerateAgentPlanRequest } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
+import type {
+  ProjectGitCommitRequest,
+  ProjectGitCommitResult,
+  ProjectGitStatus,
+  ProjectGitStatusRequest
+} from "../shared/gitTypes.js";
 import type { ProjectScanResult } from "../shared/projectTypes.js";
 
 contextBridge.exposeInMainWorld("forge", {
@@ -41,6 +48,12 @@ contextBridge.exposeInMainWorld("forge", {
       command: string;
       timeoutMs?: number;
     }) => ipcRenderer.invoke(commandChannels.run, request)
+  },
+  git: {
+    status: (request: ProjectGitStatusRequest): Promise<ProjectGitStatus> =>
+      ipcRenderer.invoke(gitChannels.status, request),
+    commit: (request: ProjectGitCommitRequest): Promise<ProjectGitCommitResult> =>
+      ipcRenderer.invoke(gitChannels.commit, request)
   },
   files: {
     readText: (request: {

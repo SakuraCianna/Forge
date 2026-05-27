@@ -4,6 +4,8 @@ import { registerAgentHandlers } from "./agentIpc.js";
 import { generateAgentPlan } from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
 import { runProjectCommand } from "./commandRunner.js";
+import { registerGitHandlers } from "./gitIpc.js";
+import { commitProjectChanges, getProjectGitStatus } from "./gitService.js";
 import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerProjectHandlers } from "./projectIpc.js";
@@ -91,6 +93,14 @@ void app.whenReady().then(() => {
 
   registerCommandHandlers(
     (request) => runProjectCommand(request),
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
+
+  registerGitHandlers(
+    (request) => getProjectGitStatus(request),
+    (request) => commitProjectChanges(request),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

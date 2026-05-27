@@ -3,6 +3,12 @@
 import type { AgentPlanResult, GenerateAgentPlanRequest } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
+import type {
+  ProjectGitCommitRequest,
+  ProjectGitCommitResult,
+  ProjectGitStatus,
+  ProjectGitStatusRequest
+} from "@shared/gitTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 
 declare global {
@@ -40,6 +46,10 @@ declare global {
           stderr: string;
           timedOut: boolean;
         }>;
+      };
+      git: {
+        status: (request: ProjectGitStatusRequest) => Promise<ProjectGitStatus>;
+        commit: (request: ProjectGitCommitRequest) => Promise<ProjectGitCommitResult>;
       };
       files: {
         readText: (request: {

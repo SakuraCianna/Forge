@@ -21,6 +21,11 @@ export const commandChannels = {
   run: "forge:command:run"
 } as const;
 
+export const gitChannels = {
+  status: "forge:git:status",
+  commit: "forge:git:commit"
+} as const;
+
 export const fileChannels = {
   readText: "forge:file:read-text",
   previewTextUpdate: "forge:file:preview-text-update",

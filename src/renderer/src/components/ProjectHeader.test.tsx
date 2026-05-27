@@ -43,4 +43,38 @@ describe("ProjectHeader", () => {
 
     expect(onPickProject).toHaveBeenCalledOnce();
   });
+
+  it("shows Git status and submits an explicit commit message", async () => {
+    const user = userEvent.setup();
+    const onCommitProject = vi.fn();
+    const onCommitMessageChange = vi.fn();
+
+    render(
+      <ProjectHeader
+        language="en-US"
+        project={{
+          name: "Forge",
+          path: "E:\\CodeHome\\Forge",
+          openedAt: "2026-05-27T13:00:00.000Z"
+        }}
+        gitStatus={{
+          isRepo: true,
+          changedFiles: ["src/App.tsx", "src/main/index.ts"],
+          rawStatus: " M src/App.tsx\n M src/main/index.ts\n"
+        }}
+        commitMessage=""
+        onCommitMessageChange={onCommitMessageChange}
+        onCommitProject={onCommitProject}
+        onPickProject={vi.fn()}
+        onRefreshGitStatus={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Git: 2 changed files")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Commit message"), "update shell");
+    await user.click(screen.getByRole("button", { name: "Commit" }));
+
+    expect(onCommitMessageChange).toHaveBeenLastCalledWith("update shell");
+    expect(onCommitProject).toHaveBeenCalledOnce();
+  });
 });
