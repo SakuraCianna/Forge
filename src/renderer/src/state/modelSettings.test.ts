@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultModelSettings,
+  addManualModel,
   getEnabledModels,
   loadModelSettings,
   mergeFetchedModels,
@@ -8,6 +9,7 @@ import {
   setCurrentModel,
   setLanguage,
   setSpeed,
+  updateProviderBaseUrl,
   updateModelEnabled
 } from "./modelSettings";
 
@@ -75,6 +77,33 @@ describe("modelSettings", () => {
     expect(loaded.speed).toBe("careful");
     expect(loaded.currentModelId).toBe("openai:gpt-5.5");
     expect(getEnabledModels(loaded).map((model) => model.id)).toEqual(["openai:gpt-5.5"]);
+  });
+
+  it("persists provider Base URL overrides", () => {
+    const storage = createMemoryStorage();
+    let settings = createDefaultModelSettings();
+
+    settings = updateProviderBaseUrl(settings, "openrouter", "https://example.com/api/v1");
+    saveModelSettings(storage, settings);
+
+    const loaded = loadModelSettings(storage);
+
+    expect(loaded.providers.find((provider) => provider.id === "openrouter")?.baseUrl).toBe(
+      "https://example.com/api/v1"
+    );
+  });
+
+  it("adds manual provider models and restores them from storage", () => {
+    const storage = createMemoryStorage();
+    let settings = createDefaultModelSettings();
+
+    settings = addManualModel(settings, "openrouter", "moonshot-v1");
+    saveModelSettings(storage, settings);
+
+    const loaded = loadModelSettings(storage);
+
+    expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openrouter:moonshot-v1");
+    expect(loaded.currentModelId).toBe("openrouter:moonshot-v1");
   });
 
   it("falls back to defaults when persisted settings are invalid", () => {

@@ -8,9 +8,11 @@ type SettingsPanelProps = {
   keyStatuses: Record<string, { hasKey: boolean; last4: string | null }>;
   onDeleteProviderKey: (providerId: string) => void;
   onFetchModels: (providerId: string) => void;
+  onAddManualModel: (providerId: string, modelName: string) => void;
   onSaveProviderKey: (providerId: string, apiKey: string) => void;
   onSetLanguage: (language: Language) => void;
   onToggleModel: (modelId: string, enabled: boolean) => void;
+  onUpdateProviderBaseUrl: (providerId: string, baseUrl: string) => void;
 };
 
 export function SettingsPanel({
@@ -18,12 +20,16 @@ export function SettingsPanel({
   keyStatuses,
   onDeleteProviderKey,
   onFetchModels,
+  onAddManualModel,
   onSaveProviderKey,
   onSetLanguage,
-  onToggleModel
+  onToggleModel,
+  onUpdateProviderBaseUrl
 }: SettingsPanelProps): ReactElement {
   const { t } = useI18n(settings.language);
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({});
+  const [draftBaseUrls, setDraftBaseUrls] = useState<Record<string, string>>({});
+  const [manualModelDrafts, setManualModelDrafts] = useState<Record<string, string>>({});
 
   return (
     <section className="border-t border-white/10 bg-[#15161a] px-6 py-5">
@@ -51,6 +57,8 @@ export function SettingsPanel({
           {settings.providers.map((provider) => {
             const keyStatus = keyStatuses[provider.id] ?? { hasKey: false, last4: null };
             const draftKey = draftKeys[provider.id] ?? "";
+            const draftBaseUrl = draftBaseUrls[provider.id] ?? provider.baseUrl ?? "";
+            const manualModelDraft = manualModelDrafts[provider.id] ?? "";
 
             return (
               <div
@@ -74,6 +82,21 @@ export function SettingsPanel({
                     {t("settings.fetchModels")}
                   </button>
                 </div>
+                <label className="mt-3 grid gap-1 text-xs text-[#a8a29a]">
+                  {provider.label} {t("settings.baseUrl")}
+                  <input
+                    value={draftBaseUrl}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget.value;
+                      setDraftBaseUrls((current) => ({
+                        ...current,
+                        [provider.id]: nextValue
+                      }));
+                      onUpdateProviderBaseUrl(provider.id, nextValue);
+                    }}
+                    className="h-9 rounded-md border border-white/10 bg-[#15161a] px-2 text-sm text-[#f5f4ef] outline-none"
+                  />
+                </label>
                 <label className="mt-3 grid gap-1 text-xs text-[#a8a29a]">
                   {provider.label} API Key
                   <input
@@ -105,6 +128,30 @@ export function SettingsPanel({
                     {t("settings.deleteKey")}
                   </button>
                 </div>
+                <label className="mt-3 grid gap-1 text-xs text-[#a8a29a]">
+                  {provider.label} {t("settings.manualModel")}
+                  <input
+                    value={manualModelDraft}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget.value;
+                      setManualModelDrafts((current) => ({
+                        ...current,
+                        [provider.id]: nextValue
+                      }));
+                    }}
+                    className="h-9 rounded-md border border-white/10 bg-[#15161a] px-2 text-sm text-[#f5f4ef] outline-none"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="mt-2 rounded-md border border-white/10 px-3 py-1.5 text-xs text-[#d7d3ca] hover:bg-white/8"
+                  onClick={() => {
+                    onAddManualModel(provider.id, manualModelDraft);
+                    setManualModelDrafts((current) => ({ ...current, [provider.id]: "" }));
+                  }}
+                >
+                  {t("settings.addModel")} {provider.label}
+                </button>
               </div>
             );
           })}

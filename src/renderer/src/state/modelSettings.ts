@@ -15,6 +15,14 @@ type PersistedModelSettings = {
   speed?: SpeedMode;
   currentModelId?: string | null;
   enabledModelIds?: string[];
+  providerBaseUrls?: Record<string, string>;
+  manualModels?: PersistedManualModel[];
+};
+
+type PersistedManualModel = {
+  providerId: string;
+  modelName: string;
+  label: string;
 };
 
 export function createDefaultModelSettings(): ModelSettings {
@@ -104,13 +112,60 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
   };
 }
 
+export function updateProviderBaseUrl(
+  settings: ModelSettings,
+  providerId: string,
+  baseUrl: string
+): ModelSettings {
+  return {
+    ...settings,
+    providers: settings.providers.map((provider) =>
+      provider.id === providerId ? { ...provider, baseUrl } : provider
+    )
+  };
+}
+
+export function addManualModel(settings: ModelSettings, providerId: string, modelName: string): ModelSettings {
+  const normalizedModelName = modelName.trim();
+
+  if (!normalizedModelName || !settings.providers.some((provider) => provider.id === providerId)) {
+    return settings;
+  }
+
+  const modelId = `${providerId}:${normalizedModelName}`;
+
+  if (settings.models.some((model) => model.id === modelId)) {
+    return updateModelEnabled(settings, modelId, true);
+  }
+
+  const model = createManualModel(providerId, normalizedModelName, normalizedModelName, true);
+
+  return {
+    ...settings,
+    models: [...settings.models, model],
+    currentModelId: settings.currentModelId ?? model.id
+  };
+}
+
 export function saveModelSettings(storage: Storage, settings: ModelSettings): void {
   const persisted: PersistedModelSettings = {
     language: settings.language,
     intelligence: settings.intelligence,
     speed: settings.speed,
     currentModelId: settings.currentModelId,
-    enabledModelIds: getEnabledModels(settings).map((model) => model.id)
+    enabledModelIds: getEnabledModels(settings).map((model) => model.id),
+    providerBaseUrls: Object.fromEntries(
+      settings.providers.flatMap((provider) =>
+        provider.baseUrl ? [[provider.id, provider.baseUrl] as const] : []
+      )
+    ),
+    manualModels: settings.models
+      .filter((model) => model.capabilitySource === "manual")
+      .map((model) => ({
+        providerId: model.providerId,
+        modelName: model.modelName,
+        label: model.label
+      }))
   };
 
   storage.setItem(modelSettingsStorageKey, JSON.stringify(persisted));
@@ -133,7 +188,21 @@ export function loadModelSettings(storage: Storage): ModelSettings {
 function mergePersistedSettings(persisted: PersistedModelSettings): ModelSettings {
   const defaults = createDefaultModelSettings();
   const enabledModelIds = new Set(persisted.enabledModelIds ?? []);
-  const models = defaults.models.map((model) => ({
+  const providers = defaults.providers.map((provider) => ({
+    ...provider,
+    baseUrl: persisted.providerBaseUrls?.[provider.id] ?? provider.baseUrl
+  }));
+  const manualModels = (persisted.manualModels ?? [])
+    .filter((model) => model.providerId && model.modelName)
+    .map((model) =>
+      createManualModel(
+        model.providerId,
+        model.modelName,
+        model.label || model.modelName,
+        enabledModelIds.has(`${model.providerId}:${model.modelName}`)
+      )
+    );
+  const models = [...defaults.models, ...manualModels].map((model) => ({
     ...model,
     enabled: enabledModelIds.has(model.id)
   }));
@@ -148,6 +217,29 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
     intelligence: persisted.intelligence ?? defaults.intelligence,
     speed: persisted.speed ?? defaults.speed,
     currentModelId,
+    providers,
     models
+  };
+}
+
+function createManualModel(
+  providerId: string,
+  modelName: string,
+  label: string,
+  enabled: boolean
+): ForgeModel {
+  return {
+    id: `${providerId}:${modelName}`,
+    providerId,
+    label,
+    modelName,
+    enabled,
+    capabilities: {
+      reasoning: { type: "none" },
+      toolCalling: "unknown",
+      streaming: "unknown",
+      vision: "unknown"
+    },
+    capabilitySource: "manual"
   };
 }

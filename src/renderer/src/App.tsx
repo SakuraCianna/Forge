@@ -12,6 +12,7 @@ import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/c
 import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
 import {
+  addManualModel,
   createDefaultModelSettings,
   loadModelSettings,
   mergeFetchedModels,
@@ -20,6 +21,7 @@ import {
   setIntelligence,
   setLanguage,
   setSpeed,
+  updateProviderBaseUrl,
   updateModelEnabled
 } from "@/state/modelSettings";
 import {
@@ -401,10 +403,16 @@ export function App(): ReactElement {
         keyStatuses={keyStatuses}
         onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
         onFetchModels={(providerId) => void fetchModels(providerId)}
+        onAddManualModel={(providerId, modelName) =>
+          setSettings((current) => addManualModel(current, providerId, modelName))
+        }
         onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
         onSetLanguage={setInterfaceLanguage}
         onToggleModel={(modelId, enabled) =>
           setSettings((current) => updateModelEnabled(current, modelId, enabled))
+        }
+        onUpdateProviderBaseUrl={(providerId, baseUrl) =>
+          setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
         }
       />
       <TaskComposer
