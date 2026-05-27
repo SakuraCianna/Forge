@@ -4,6 +4,7 @@ import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { pickProjectDirectory } from "./projectPicker.js";
+import { scanProjectFiles } from "./projectScanner.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
 import { registerProviderModelHandlers } from "./providerModelsIpc.js";
 
@@ -65,6 +66,7 @@ void app.whenReady().then(() => {
 
   registerProjectHandlers(
     () => pickProjectDirectory(() => dialog.showOpenDialog({ properties: ["openDirectory"] })),
+    (rootPath) => scanProjectFiles(rootPath),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

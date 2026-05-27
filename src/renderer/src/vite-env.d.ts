@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
+import type { ProjectScanResult } from "@shared/projectTypes";
 
 declare global {
   interface Window {
@@ -18,6 +19,7 @@ declare global {
       };
       projects: {
         pickDirectory: () => Promise<string | null>;
+        scan: (rootPath: string) => Promise<ProjectScanResult>;
       };
     };
   }

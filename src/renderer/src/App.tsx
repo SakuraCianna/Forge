@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import type { Language } from "@shared/modelTypes";
+import type { ProjectScanResult } from "@shared/projectTypes";
 import { AppShell } from "@/components/AppShell";
 import { ProjectHeader } from "@/components/ProjectHeader";
 import { SettingsPanel } from "@/components/SettingsPanel";
@@ -51,6 +52,7 @@ export function App(): ReactElement {
   const [currentProject, setCurrentProject] = useState<ForgeProject | null>(
     () => recentProjects[0] ?? null
   );
+  const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
@@ -64,6 +66,15 @@ export function App(): ReactElement {
   useEffect(() => {
     saveRecentProjects(window.localStorage, recentProjects);
   }, [recentProjects]);
+
+  useEffect(() => {
+    if (!currentProject) {
+      setProjectScanResult(null);
+      return;
+    }
+
+    void scanProject(currentProject.path);
+  }, [currentProject]);
 
   useEffect(() => {
     for (const provider of settings.providers) {
@@ -117,6 +128,11 @@ export function App(): ReactElement {
     setRecentProjects((current) => addRecentProject(current, project));
   }
 
+  async function scanProject(projectPath: string): Promise<void> {
+    const result = await window.forge.projects.scan(projectPath);
+    setProjectScanResult(result);
+  }
+
   function submitTask(prompt: string): void {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
@@ -154,6 +170,7 @@ export function App(): ReactElement {
         <ProjectHeader
           language={settings.language}
           project={currentProject}
+          scanResult={projectScanResult}
           onPickProject={() => void pickProject()}
         />
         {taskNotice ? (

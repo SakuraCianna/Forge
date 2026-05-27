@@ -9,5 +9,6 @@ export const providerModelChannels = {
 } as const;
 
 export const projectChannels = {
-  pickDirectory: "forge:project:pick-directory"
+  pickDirectory: "forge:project:pick-directory",
+  scan: "forge:project:scan"
 } as const;

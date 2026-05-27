@@ -1,18 +1,21 @@
 import type { ReactElement } from "react";
 import { FolderOpen } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
+import type { ProjectScanResult } from "@shared/projectTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { ForgeProject } from "@/state/projects";
 
 type ProjectHeaderProps = {
   language: Language;
   project: ForgeProject | null;
+  scanResult?: ProjectScanResult | null;
   onPickProject: () => void;
 };
 
 export function ProjectHeader({
   language,
   project,
+  scanResult = null,
   onPickProject
 }: ProjectHeaderProps): ReactElement {
   const { t } = useI18n(language);
@@ -25,6 +28,12 @@ export function ProjectHeader({
           {project?.name ?? t("projects.empty")}
         </h1>
         {project ? <p className="mt-1 truncate text-xs text-[#a8a29a]">{project.path}</p> : null}
+        {scanResult ? (
+          <p className="mt-1 text-xs text-[#a8a29a]">
+            {t("projects.indexed")} {scanResult.files.length} {t("projects.files")}
+            {scanResult.truncated ? `, ${t("projects.truncated")}` : ""}
+          </p>
+        ) : null}
       </div>
       <button
         type="button"

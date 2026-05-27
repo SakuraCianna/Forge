@@ -5,6 +5,7 @@ import {
   providerModelChannels
 } from "../shared/ipcChannels.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
+import type { ProjectScanResult } from "../shared/projectTypes.js";
 
 contextBridge.exposeInMainWorld("forge", {
   appName: "Forge",
@@ -20,6 +21,8 @@ contextBridge.exposeInMainWorld("forge", {
       ipcRenderer.invoke(providerModelChannels.fetch, provider)
   },
   projects: {
-    pickDirectory: () => ipcRenderer.invoke(projectChannels.pickDirectory)
+    pickDirectory: () => ipcRenderer.invoke(projectChannels.pickDirectory),
+    scan: (rootPath: string): Promise<ProjectScanResult> =>
+      ipcRenderer.invoke(projectChannels.scan, rootPath)
   }
 });
