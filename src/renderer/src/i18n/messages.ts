@@ -64,9 +64,11 @@ export const messages = {
     "threads.runCommand": "运行命令",
     "threads.projectFiles": "项目文件",
     "threads.filePreview": "文件预览",
+    "threads.pendingChanges": "待处理修改",
     "threads.editContent": "编辑内容",
     "threads.generateDiff": "生成 diff",
     "threads.generateAiChange": "AI 修改",
+    "threads.discardChange": "丢弃修改",
     "threads.applyChange": "应用修改"
   },
   "en-US": {
@@ -132,9 +134,11 @@ export const messages = {
     "threads.runCommand": "Run command",
     "threads.projectFiles": "Project files",
     "threads.filePreview": "File preview",
+    "threads.pendingChanges": "Pending changes",
     "threads.editContent": "Edit content",
     "threads.generateDiff": "Generate diff",
     "threads.generateAiChange": "Generate AI edit",
+    "threads.discardChange": "Discard change",
     "threads.applyChange": "Apply change"
   }
 } as const;

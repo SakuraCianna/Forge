@@ -202,4 +202,62 @@ describe("ThreadWorkspace", () => {
 
     expect(onGenerateFileChange).toHaveBeenCalledWith("src/App.tsx", "old");
   });
+
+  it("shows a multi-file change set and discards selected changes", async () => {
+    const user = userEvent.setup();
+    const onPreviewFile = vi.fn();
+    const onDiscardChange = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[thread]}
+        projectScan={{
+          rootPath: "E:\\CodeHome\\Forge",
+          files: [
+            { relativePath: "src/App.tsx", size: 42 },
+            { relativePath: "src/main.tsx", size: 24 }
+          ],
+          truncated: false
+        }}
+        previewFile={{
+          relativePath: "src/App.tsx",
+          content: "old app",
+          size: 7
+        }}
+        changePreview={null}
+        changePreviews={[
+          {
+            relativePath: "src/App.tsx",
+            currentContent: "old app",
+            nextContent: "new app",
+            diff: [
+              { kind: "remove", oldLineNumber: 1, text: "old app" },
+              { kind: "add", newLineNumber: 1, text: "new app" }
+            ]
+          },
+          {
+            relativePath: "src/main.tsx",
+            currentContent: "old main",
+            nextContent: "new main",
+            diff: [{ kind: "add", newLineNumber: 1, text: "new main" }]
+          }
+        ]}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={onPreviewFile}
+        onPreviewChange={vi.fn()}
+        onApplyChange={vi.fn()}
+        onDiscardChange={onDiscardChange}
+      />
+    );
+
+    expect(screen.getByText("Pending changes")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Pending change src/main.tsx" }));
+    await user.click(screen.getByRole("button", { name: "Discard change" }));
+
+    expect(onPreviewFile).toHaveBeenCalledWith("src/main.tsx");
+    expect(onDiscardChange).toHaveBeenCalledWith("src/App.tsx");
+  });
 });

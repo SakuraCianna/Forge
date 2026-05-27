@@ -13,11 +13,13 @@ type ThreadWorkspaceProps = {
   projectScan: ProjectScanResult | null;
   previewFile: ProjectTextFile | null;
   changePreview: ProjectFileChangePreview | null;
+  changePreviews?: ProjectFileChangePreview[];
   onSelectThread: (threadId: string) => void;
   onRunCommand: (threadId: string, command: string) => void;
   onPreviewFile: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
   onApplyChange?: (relativePath: string, nextContent: string) => void;
+  onDiscardChange?: (relativePath: string) => void;
   onGenerateFileChange?: (relativePath: string, currentContent: string) => void;
 };
 
@@ -28,11 +30,13 @@ export function ThreadWorkspace({
   projectScan,
   previewFile,
   changePreview,
+  changePreviews,
   onSelectThread,
   onRunCommand,
   onPreviewFile,
   onPreviewChange,
   onApplyChange,
+  onDiscardChange,
   onGenerateFileChange
 }: ThreadWorkspaceProps): ReactElement {
   const { t } = useI18n(language);
@@ -40,19 +44,17 @@ export function ThreadWorkspace({
   const [draftContent, setDraftContent] = useState("");
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
+  const allChangePreviews = changePreviews ?? (changePreview ? [changePreview] : []);
+  const shouldShowChangeSet = Boolean(changePreviews?.length);
   const visibleChangePreview =
-    previewFile && changePreview?.relativePath === previewFile.relativePath ? changePreview : null;
+    previewFile
+      ? (allChangePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
+      : null;
   const canEditPreview = Boolean(onPreviewChange || onApplyChange || onGenerateFileChange);
 
   useEffect(() => {
-    setDraftContent(previewFile?.content ?? "");
-  }, [previewFile]);
-
-  useEffect(() => {
-    if (visibleChangePreview) {
-      setDraftContent(visibleChangePreview.nextContent);
-    }
-  }, [visibleChangePreview?.relativePath, visibleChangePreview?.nextContent]);
+    setDraftContent(visibleChangePreview?.nextContent ?? previewFile?.content ?? "");
+  }, [previewFile, visibleChangePreview?.relativePath, visibleChangePreview?.nextContent]);
 
   function submitCommand(): void {
     const normalizedCommand = command.trim();
@@ -135,6 +137,30 @@ export function ThreadWorkspace({
                   </button>
                 ))}
               </div>
+              {shouldShowChangeSet ? (
+                <div className="mt-4 border-t border-white/10 pt-3">
+                  <h3 className="mb-2 text-xs font-medium text-[#a8a29a]">
+                    {t("threads.pendingChanges")}
+                  </h3>
+                  <div className="space-y-1">
+                    {allChangePreviews.map((preview) => (
+                      <button
+                        key={preview.relativePath}
+                        type="button"
+                        aria-label={`Pending change ${preview.relativePath}`}
+                        onClick={() => onPreviewFile(preview.relativePath)}
+                        className={`block w-full truncate rounded-md px-2 py-1.5 text-left text-xs ${
+                          previewFile?.relativePath === preview.relativePath
+                            ? "bg-[#f5f4ef] text-[#222]"
+                            : "text-[#d7d3ca] hover:bg-white/8"
+                        }`}
+                      >
+                        {preview.relativePath}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </section>
             <section className="min-w-0 rounded-md border border-white/10 bg-[#191a1f] p-3">
               <h2 className="mb-3 text-sm font-medium text-[#d7d3ca]">{t("threads.filePreview")}</h2>
@@ -171,6 +197,15 @@ export function ThreadWorkspace({
                             className="h-9 rounded-md border border-white/10 px-3 text-sm font-medium text-[#f5f4ef] hover:bg-white/8"
                           >
                             {t("threads.generateAiChange")}
+                          </button>
+                        ) : null}
+                        {visibleChangePreview && onDiscardChange ? (
+                          <button
+                            type="button"
+                            onClick={() => onDiscardChange(visibleChangePreview.relativePath)}
+                            className="h-9 rounded-md border border-white/10 px-3 text-sm font-medium text-[#f5f4ef] hover:bg-white/8"
+                          >
+                            {t("threads.discardChange")}
                           </button>
                         ) : null}
                         <button

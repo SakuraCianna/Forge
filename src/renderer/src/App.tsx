@@ -12,6 +12,7 @@ import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
 import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
+import { removeFileChangePreview, upsertFileChangePreview } from "@/state/fileChanges";
 import {
   addManualModel,
   createDefaultModelSettings,
@@ -64,7 +65,7 @@ export function App(): ReactElement {
   );
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
-  const [changePreview, setChangePreview] = useState<ProjectFileChangePreview | null>(null);
+  const [changePreviews, setChangePreviews] = useState<ProjectFileChangePreview[]>([]);
   const [gitStatus, setGitStatus] = useState<ProjectGitStatus | null>(null);
   const [gitNotice, setGitNotice] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
@@ -86,7 +87,7 @@ export function App(): ReactElement {
     if (!currentProject) {
       setProjectScanResult(null);
       setPreviewFile(null);
-      setChangePreview(null);
+      setChangePreviews([]);
       setGitStatus(null);
       setGitNotice(null);
       return;
@@ -152,7 +153,7 @@ export function App(): ReactElement {
     const result = await window.forge.projects.scan(projectPath);
     setProjectScanResult(result);
     setPreviewFile(null);
-    setChangePreview(null);
+    setChangePreviews([]);
   }
 
   async function refreshProjectGitStatus(projectPath = currentProject?.path): Promise<void> {
@@ -202,7 +203,6 @@ export function App(): ReactElement {
       relativePath
     });
     setPreviewFile(file);
-    setChangePreview(null);
   }
 
   async function previewProjectFileChange(relativePath: string, nextContent: string): Promise<void> {
@@ -215,7 +215,7 @@ export function App(): ReactElement {
       relativePath,
       nextContent
     });
-    setChangePreview(preview);
+    setChangePreviews((current) => upsertFileChangePreview(current, preview));
   }
 
   async function applyProjectFileChange(relativePath: string, nextContent: string): Promise<void> {
@@ -229,7 +229,8 @@ export function App(): ReactElement {
       nextContent
     });
     setPreviewFile(file);
-    setChangePreview(null);
+    setChangePreviews((current) => removeFileChangePreview(current, relativePath));
+    void refreshProjectGitStatus();
 
     if (!selectedThreadId) {
       return;
@@ -246,6 +247,10 @@ export function App(): ReactElement {
         }
       ])
     );
+  }
+
+  function discardProjectFileChange(relativePath: string): void {
+    setChangePreviews((current) => removeFileChangePreview(current, relativePath));
   }
 
   async function generateProjectFileChange(
@@ -301,7 +306,7 @@ export function App(): ReactElement {
         nextContent: result.nextContent
       });
 
-      setChangePreview(preview);
+      setChangePreviews((current) => upsertFileChangePreview(current, preview));
       setThreads((current) =>
         appendThreadEvents(current, selectedThread.id, [
           {
@@ -508,7 +513,12 @@ export function App(): ReactElement {
           threads={threads}
           projectScan={projectScanResult}
           previewFile={previewFile}
-          changePreview={changePreview}
+          changePreview={
+            previewFile
+              ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
+              : null
+          }
+          changePreviews={changePreviews}
           onSelectThread={setSelectedThreadId}
           onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
           onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
@@ -518,6 +528,7 @@ export function App(): ReactElement {
           onApplyChange={(relativePath, nextContent) =>
             void applyProjectFileChange(relativePath, nextContent)
           }
+          onDiscardChange={discardProjectFileChange}
           onGenerateFileChange={(relativePath, currentContent) =>
             void generateProjectFileChange(relativePath, currentContent)
           }
