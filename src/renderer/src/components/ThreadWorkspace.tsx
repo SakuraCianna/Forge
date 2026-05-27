@@ -1,6 +1,8 @@
 import type { ReactElement } from "react";
 import { useState } from "react";
 import type { Language } from "@shared/modelTypes";
+import type { ProjectScanResult } from "@shared/projectTypes";
+import type { ProjectTextFile } from "@shared/fileTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { TaskThread } from "@/state/taskThreads";
 
@@ -8,16 +10,22 @@ type ThreadWorkspaceProps = {
   language: Language;
   selectedThreadId: string | null;
   threads: TaskThread[];
+  projectScan: ProjectScanResult | null;
+  previewFile: ProjectTextFile | null;
   onSelectThread: (threadId: string) => void;
   onRunCommand: (threadId: string, command: string) => void;
+  onPreviewFile: (relativePath: string) => void;
 };
 
 export function ThreadWorkspace({
   language,
   selectedThreadId,
   threads,
+  projectScan,
+  previewFile,
   onSelectThread,
-  onRunCommand
+  onRunCommand,
+  onPreviewFile
 }: ThreadWorkspaceProps): ReactElement {
   const { t } = useI18n(language);
   const [command, setCommand] = useState("");
@@ -88,6 +96,34 @@ export function ThreadWorkspace({
             </span>
           </div>
         </div>
+
+        {projectScan ? (
+          <div className="mb-5 grid gap-3 lg:grid-cols-[260px_1fr]">
+            <section className="rounded-md border border-white/10 bg-[#191a1f] p-3">
+              <h2 className="mb-3 text-sm font-medium text-[#d7d3ca]">{t("threads.projectFiles")}</h2>
+              <div className="max-h-44 space-y-1 overflow-auto">
+                {projectScan.files.slice(0, 24).map((file) => (
+                  <button
+                    key={file.relativePath}
+                    type="button"
+                    onClick={() => onPreviewFile(file.relativePath)}
+                    className="block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-[#d7d3ca] hover:bg-white/8"
+                  >
+                    {file.relativePath}
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className="min-w-0 rounded-md border border-white/10 bg-[#191a1f] p-3">
+              <h2 className="mb-3 text-sm font-medium text-[#d7d3ca]">{t("threads.filePreview")}</h2>
+              {previewFile ? (
+                <pre className="max-h-44 overflow-auto whitespace-pre-wrap rounded-md bg-[#101114] p-3 text-xs leading-5 text-[#f5f4ef]">
+                  {previewFile.content}
+                </pre>
+              ) : null}
+            </section>
+          </div>
+        ) : null}
 
         <h2 className="mb-3 text-sm font-medium text-[#d7d3ca]">{t("threads.detailTitle")}</h2>
         <div className="space-y-2">

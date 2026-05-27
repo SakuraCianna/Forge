@@ -30,8 +30,11 @@ describe("ThreadWorkspace", () => {
         language="zh-CN"
         selectedThreadId={null}
         threads={[]}
+        projectScan={null}
+        previewFile={null}
         onSelectThread={vi.fn()}
         onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
       />
     );
 
@@ -44,8 +47,11 @@ describe("ThreadWorkspace", () => {
         language="zh-CN"
         selectedThreadId="thread-1"
         threads={[thread]}
+        projectScan={null}
+        previewFile={null}
         onSelectThread={vi.fn()}
         onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
       />
     );
 
@@ -63,8 +69,11 @@ describe("ThreadWorkspace", () => {
         language="zh-CN"
         selectedThreadId="thread-1"
         threads={[thread]}
+        projectScan={null}
+        previewFile={null}
         onSelectThread={vi.fn()}
         onRunCommand={onRunCommand}
+        onPreviewFile={vi.fn()}
       />
     );
 
@@ -73,5 +82,36 @@ describe("ThreadWorkspace", () => {
 
     expect(onRunCommand).toHaveBeenCalledWith("thread-1", "npm test");
     expect(screen.getByLabelText("命令")).toHaveValue("");
+  });
+
+  it("shows scanned project files and previews selected content", async () => {
+    const user = userEvent.setup();
+    const onPreviewFile = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="zh-CN"
+        selectedThreadId="thread-1"
+        threads={[thread]}
+        projectScan={{
+          rootPath: "E:\\CodeHome\\Forge",
+          files: [{ relativePath: "src/App.tsx", size: 42 }],
+          truncated: false
+        }}
+        previewFile={{
+          relativePath: "src/App.tsx",
+          content: "export const App = () => null;",
+          size: 30
+        }}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={onPreviewFile}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "src/App.tsx" }));
+
+    expect(onPreviewFile).toHaveBeenCalledWith("src/App.tsx");
+    expect(screen.getByText("export const App = () => null;")).toBeInTheDocument();
   });
 });

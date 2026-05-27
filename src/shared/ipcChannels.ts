@@ -16,3 +16,7 @@ export const projectChannels = {
 export const commandChannels = {
   run: "forge:command:run"
 } as const;
+
+export const fileChannels = {
+  readText: "forge:file:read-text"
+} as const;

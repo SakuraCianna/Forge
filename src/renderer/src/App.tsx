@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
+import type { ProjectTextFile } from "@shared/fileTypes";
 import type { Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { AppShell } from "@/components/AppShell";
@@ -59,6 +60,7 @@ export function App(): ReactElement {
     () => recentProjects[0] ?? null
   );
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
+  const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export function App(): ReactElement {
   useEffect(() => {
     if (!currentProject) {
       setProjectScanResult(null);
+      setPreviewFile(null);
       return;
     }
 
@@ -137,6 +140,19 @@ export function App(): ReactElement {
   async function scanProject(projectPath: string): Promise<void> {
     const result = await window.forge.projects.scan(projectPath);
     setProjectScanResult(result);
+    setPreviewFile(null);
+  }
+
+  async function previewProjectFile(relativePath: string): Promise<void> {
+    if (!currentProject) {
+      return;
+    }
+
+    const file = await window.forge.files.readText({
+      projectRoot: currentProject.path,
+      relativePath
+    });
+    setPreviewFile(file);
   }
 
   function submitTask(prompt: string): void {
@@ -229,8 +245,11 @@ export function App(): ReactElement {
           language={settings.language}
           selectedThreadId={selectedThreadId}
           threads={threads}
+          projectScan={projectScanResult}
+          previewFile={previewFile}
           onSelectThread={setSelectedThreadId}
           onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
+          onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
         />
       </div>
       <SettingsPanel

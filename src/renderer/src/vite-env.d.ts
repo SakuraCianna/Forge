@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
+import type { ProjectTextFile } from "@shared/fileTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 
 declare global {
@@ -35,6 +36,13 @@ declare global {
           stderr: string;
           timedOut: boolean;
         }>;
+      };
+      files: {
+        readText: (request: {
+          projectRoot: string;
+          relativePath: string;
+          maxBytes?: number;
+        }) => Promise<ProjectTextFile>;
       };
     };
   }

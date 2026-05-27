@@ -50,7 +50,9 @@ export const messages = {
     "threads.model": "模型",
     "threads.status": "状态",
     "threads.command": "命令",
-    "threads.runCommand": "运行命令"
+    "threads.runCommand": "运行命令",
+    "threads.projectFiles": "项目文件",
+    "threads.filePreview": "文件预览"
   },
   "en-US": {
     "app.name": "Forge",
@@ -101,7 +103,9 @@ export const messages = {
     "threads.model": "Model",
     "threads.status": "Status",
     "threads.command": "Command",
-    "threads.runCommand": "Run command"
+    "threads.runCommand": "Run command",
+    "threads.projectFiles": "Project files",
+    "threads.filePreview": "File preview"
   }
 } as const;
 

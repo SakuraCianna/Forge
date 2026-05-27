@@ -1,11 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   commandChannels,
+  fileChannels,
   keyVaultChannels,
   projectChannels,
   providerModelChannels
 } from "../shared/ipcChannels.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
+import type { ProjectTextFile } from "../shared/fileTypes.js";
 import type { ProjectScanResult } from "../shared/projectTypes.js";
 
 contextBridge.exposeInMainWorld("forge", {
@@ -33,5 +35,12 @@ contextBridge.exposeInMainWorld("forge", {
       command: string;
       timeoutMs?: number;
     }) => ipcRenderer.invoke(commandChannels.run, request)
+  },
+  files: {
+    readText: (request: {
+      projectRoot: string;
+      relativePath: string;
+      maxBytes?: number;
+    }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.readText, request)
   }
 });
