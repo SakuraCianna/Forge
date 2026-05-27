@@ -1,5 +1,21 @@
 import { catalogModels, providerCatalog } from "@shared/providerCatalog";
-import type { ForgeModel, IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
+import type {
+  ForgeModel,
+  IntelligenceLevel,
+  Language,
+  ModelSettings,
+  SpeedMode
+} from "@shared/modelTypes";
+
+const modelSettingsStorageKey = "forge.modelSettings";
+
+type PersistedModelSettings = {
+  language?: Language;
+  intelligence?: IntelligenceLevel;
+  speed?: SpeedMode;
+  currentModelId?: string | null;
+  enabledModelIds?: string[];
+};
 
 export function createDefaultModelSettings(): ModelSettings {
   return {
@@ -57,4 +73,81 @@ export function setIntelligence(
 
 export function setSpeed(settings: ModelSettings, speed: SpeedMode): ModelSettings {
   return { ...settings, speed };
+}
+
+export function setLanguage(settings: ModelSettings, language: Language): ModelSettings {
+  return { ...settings, language };
+}
+
+export function mergeFetchedModels(settings: ModelSettings, fetchedModels: ForgeModel[]): ModelSettings {
+  const existingModelsById = new Map(settings.models.map((model) => [model.id, model]));
+  const nextModels = [...settings.models];
+
+  for (const fetchedModel of fetchedModels) {
+    const existingModel = existingModelsById.get(fetchedModel.id);
+
+    if (existingModel) {
+      const nextModel = {
+        ...fetchedModel,
+        enabled: existingModel.enabled
+      };
+      const index = nextModels.findIndex((model) => model.id === fetchedModel.id);
+      nextModels[index] = nextModel;
+    } else {
+      nextModels.push({ ...fetchedModel, enabled: false });
+    }
+  }
+
+  return {
+    ...settings,
+    models: nextModels
+  };
+}
+
+export function saveModelSettings(storage: Storage, settings: ModelSettings): void {
+  const persisted: PersistedModelSettings = {
+    language: settings.language,
+    intelligence: settings.intelligence,
+    speed: settings.speed,
+    currentModelId: settings.currentModelId,
+    enabledModelIds: getEnabledModels(settings).map((model) => model.id)
+  };
+
+  storage.setItem(modelSettingsStorageKey, JSON.stringify(persisted));
+}
+
+export function loadModelSettings(storage: Storage): ModelSettings {
+  const rawValue = storage.getItem(modelSettingsStorageKey);
+
+  if (!rawValue) {
+    return createDefaultModelSettings();
+  }
+
+  try {
+    return mergePersistedSettings(JSON.parse(rawValue) as PersistedModelSettings);
+  } catch {
+    return createDefaultModelSettings();
+  }
+}
+
+function mergePersistedSettings(persisted: PersistedModelSettings): ModelSettings {
+  const defaults = createDefaultModelSettings();
+  const enabledModelIds = new Set(persisted.enabledModelIds ?? []);
+  const models = defaults.models.map((model) => ({
+    ...model,
+    enabled: enabledModelIds.has(model.id)
+  }));
+  const currentModelId =
+    persisted.currentModelId && enabledModelIds.has(persisted.currentModelId)
+      ? persisted.currentModelId
+      : (models.find((model) => model.enabled)?.id ?? null);
+
+  return {
+    ...defaults,
+    language: persisted.language ?? defaults.language,
+    intelligence: persisted.intelligence ?? defaults.intelligence,
+    speed: persisted.speed ?? defaults.speed,
+    currentModelId,
+    models
+  };
 }

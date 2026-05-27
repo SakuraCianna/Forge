@@ -1,7 +1,23 @@
 /// <reference types="vite/client" />
 
-interface Window {
-  forge: {
-    appName: string;
-  };
+import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
+
+declare global {
+  interface Window {
+    forge: {
+      appName: string;
+      secrets: {
+        saveProviderKey: (providerId: string, apiKey: string) => Promise<void>;
+        getProviderKeyStatus: (
+          providerId: string
+        ) => Promise<{ hasKey: boolean; last4: string | null }>;
+        deleteProviderKey: (providerId: string) => Promise<void>;
+      };
+      models: {
+        fetchProviderModels: (provider: ForgeProvider) => Promise<ForgeModel[]>;
+      };
+    };
+  }
 }
+
+export {};

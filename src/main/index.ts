@@ -1,5 +1,9 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
+import { createKeyVault } from "./keyVault.js";
+import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
+import { fetchModelsForProvider } from "./providerModelService.js";
+import { registerProviderModelHandlers } from "./providerModelsIpc.js";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -32,6 +36,31 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  const keyVault = createKeyVault({
+    directory: join(app.getPath("userData"), "secrets"),
+    codec: {
+      encryptString: (value) => {
+        if (!safeStorage.isEncryptionAvailable()) {
+          throw new Error("Secure storage is not available on this system");
+        }
+
+        return safeStorage.encryptString(value);
+      },
+      decryptString: (value) => safeStorage.decryptString(value)
+    }
+  });
+
+  registerKeyVaultHandlers(keyVault, (channel, handler) => {
+    ipcMain.handle(channel, handler);
+  });
+
+  registerProviderModelHandlers(
+    (provider) => fetchModelsForProvider({ provider, keyVault }),
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
+
   createWindow();
 
   app.on("activate", () => {

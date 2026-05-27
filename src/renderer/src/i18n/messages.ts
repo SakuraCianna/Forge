@@ -23,7 +23,15 @@ export const messages = {
     "selector.noReasoning": "普通, 不可调",
     "settings.title": "模型设置",
     "settings.subtitle": "只启用你想在任务菜单中使用的模型",
-    "settings.enabled": "启用"
+    "settings.enabled": "启用",
+    "settings.language": "界面语言",
+    "settings.providers": "模型提供商",
+    "settings.models": "可用模型",
+    "settings.saveKey": "保存",
+    "settings.deleteKey": "删除",
+    "settings.fetchModels": "拉取模型",
+    "settings.keySaved": "已保存",
+    "settings.keyMissing": "未保存"
   },
   "en-US": {
     "app.name": "Forge",
@@ -47,7 +55,15 @@ export const messages = {
     "selector.noReasoning": "Normal, fixed",
     "settings.title": "Model settings",
     "settings.subtitle": "Only enabled models appear in the task menu",
-    "settings.enabled": "Enabled"
+    "settings.enabled": "Enabled",
+    "settings.language": "Interface language",
+    "settings.providers": "Model providers",
+    "settings.models": "Available models",
+    "settings.saveKey": "Save",
+    "settings.deleteKey": "Delete",
+    "settings.fetchModels": "Fetch models",
+    "settings.keySaved": "Saved",
+    "settings.keyMissing": "Missing"
   }
 } as const;
 
