@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { useState } from "react";
 import type { Language } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { TaskThread } from "@/state/taskThreads";
@@ -8,17 +9,31 @@ type ThreadWorkspaceProps = {
   selectedThreadId: string | null;
   threads: TaskThread[];
   onSelectThread: (threadId: string) => void;
+  onRunCommand: (threadId: string, command: string) => void;
 };
 
 export function ThreadWorkspace({
   language,
   selectedThreadId,
   threads,
-  onSelectThread
+  onSelectThread,
+  onRunCommand
 }: ThreadWorkspaceProps): ReactElement {
   const { t } = useI18n(language);
+  const [command, setCommand] = useState("");
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
+
+  function submitCommand(): void {
+    const normalizedCommand = command.trim();
+
+    if (!selectedThread || !normalizedCommand) {
+      return;
+    }
+
+    onRunCommand(selectedThread.id, normalizedCommand);
+    setCommand("");
+  }
 
   if (!selectedThread) {
     return (
@@ -82,6 +97,26 @@ export function ThreadWorkspace({
               <p className="text-sm leading-6 text-[#f5f4ef]">{event.message}</p>
             </article>
           ))}
+        </div>
+
+        <div className="mt-5 rounded-md border border-white/10 bg-[#191a1f] p-3">
+          <label className="grid gap-2 text-sm text-[#d7d3ca]">
+            {t("threads.command")}
+            <div className="flex gap-2">
+              <input
+                value={command}
+                onChange={(event) => setCommand(event.currentTarget.value)}
+                className="h-9 flex-1 rounded-md border border-white/10 bg-[#101114] px-3 text-sm text-[#f5f4ef] outline-none"
+              />
+              <button
+                type="button"
+                onClick={submitCommand}
+                className="h-9 rounded-md bg-[#f5f4ef] px-3 text-sm font-medium text-[#222] hover:bg-white"
+              >
+                {t("threads.runCommand")}
+              </button>
+            </div>
+          </label>
         </div>
       </div>
     </section>

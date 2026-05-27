@@ -12,3 +12,7 @@ export const projectChannels = {
   pickDirectory: "forge:project:pick-directory",
   scan: "forge:project:scan"
 } as const;
+
+export const commandChannels = {
+  run: "forge:command:run"
+} as const;

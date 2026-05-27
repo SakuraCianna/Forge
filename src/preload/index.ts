@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
+  commandChannels,
   keyVaultChannels,
   projectChannels,
   providerModelChannels
@@ -24,5 +25,13 @@ contextBridge.exposeInMainWorld("forge", {
     pickDirectory: () => ipcRenderer.invoke(projectChannels.pickDirectory),
     scan: (rootPath: string): Promise<ProjectScanResult> =>
       ipcRenderer.invoke(projectChannels.scan, rootPath)
+  },
+  commands: {
+    run: (request: {
+      projectRoot: string;
+      cwd: string;
+      command: string;
+      timeoutMs?: number;
+    }) => ipcRenderer.invoke(commandChannels.run, request)
   }
 });

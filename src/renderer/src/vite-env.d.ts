@@ -21,6 +21,21 @@ declare global {
         pickDirectory: () => Promise<string | null>;
         scan: (rootPath: string) => Promise<ProjectScanResult>;
       };
+      commands: {
+        run: (request: {
+          projectRoot: string;
+          cwd: string;
+          command: string;
+          timeoutMs?: number;
+        }) => Promise<{
+          command: string;
+          cwd: string;
+          exitCode: number | null;
+          stdout: string;
+          stderr: string;
+          timedOut: boolean;
+        }>;
+      };
     };
   }
 }

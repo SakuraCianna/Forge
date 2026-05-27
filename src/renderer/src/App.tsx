@@ -7,6 +7,7 @@ import { ProjectHeader } from "@/components/ProjectHeader";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
+import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
 import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
 import {
@@ -171,6 +172,34 @@ export function App(): ReactElement {
     setSelectedThreadId(result.thread.id);
   }
 
+  async function runThreadCommand(threadId: string, command: string): Promise<void> {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      return;
+    }
+
+    setTaskNotice(null);
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [createCommandStartedEvent({ threadId, command })], "running")
+    );
+
+    const result = await window.forge.commands.run({
+      projectRoot: currentProject.path,
+      cwd: currentProject.path,
+      command,
+      timeoutMs: 120000
+    });
+
+    setThreads((current) =>
+      appendThreadEvents(
+        current,
+        threadId,
+        [createCommandFinishedEvent({ threadId, result })],
+        result.exitCode === 0 && !result.timedOut ? "running" : "blocked"
+      )
+    );
+  }
+
   return (
     <AppShell
       language={settings.language}
@@ -201,6 +230,7 @@ export function App(): ReactElement {
           selectedThreadId={selectedThreadId}
           threads={threads}
           onSelectThread={setSelectedThreadId}
+          onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
         />
       </div>
       <SettingsPanel

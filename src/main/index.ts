@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
+import { registerCommandHandlers } from "./commandIpc.js";
+import { runProjectCommand } from "./commandRunner.js";
 import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerProjectHandlers } from "./projectIpc.js";
@@ -67,6 +69,13 @@ void app.whenReady().then(() => {
   registerProjectHandlers(
     () => pickProjectDirectory(() => dialog.showOpenDialog({ properties: ["openDirectory"] })),
     (rootPath) => scanProjectFiles(rootPath),
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
+
+  registerCommandHandlers(
+    (request) => runProjectCommand(request),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }
