@@ -253,6 +253,54 @@ export function App(): ReactElement {
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
   }
 
+  async function applyAllProjectFileChanges(): Promise<void> {
+    if (!currentProject || changePreviews.length === 0) {
+      return;
+    }
+
+    const appliedPreviews = [...changePreviews];
+    let nextPreviewFile: ProjectTextFile | null = null;
+
+    for (const preview of appliedPreviews) {
+      const writtenFile = await window.forge.files.writeText({
+        projectRoot: currentProject.path,
+        relativePath: preview.relativePath,
+        nextContent: preview.nextContent
+      });
+
+      if (previewFile?.relativePath === writtenFile.relativePath) {
+        nextPreviewFile = writtenFile;
+      }
+    }
+
+    if (nextPreviewFile) {
+      setPreviewFile(nextPreviewFile);
+    }
+
+    setChangePreviews([]);
+    void refreshProjectGitStatus();
+
+    if (!selectedThreadId) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    setThreads((current) =>
+      appendThreadEvents(current, selectedThreadId, [
+        {
+          id: `${selectedThreadId}-file-write-all-${createdAt}`,
+          kind: "file",
+          message: `已应用 ${appliedPreviews.length} 个文件修改`,
+          createdAt
+        }
+      ])
+    );
+  }
+
+  function discardAllProjectFileChanges(): void {
+    setChangePreviews([]);
+  }
+
   async function generateProjectFileChange(
     relativePath: string,
     currentContent: string
@@ -529,6 +577,8 @@ export function App(): ReactElement {
             void applyProjectFileChange(relativePath, nextContent)
           }
           onDiscardChange={discardProjectFileChange}
+          onApplyAllChanges={() => void applyAllProjectFileChanges()}
+          onDiscardAllChanges={discardAllProjectFileChanges}
           onGenerateFileChange={(relativePath, currentContent) =>
             void generateProjectFileChange(relativePath, currentContent)
           }

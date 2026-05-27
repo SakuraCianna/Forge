@@ -260,4 +260,50 @@ describe("ThreadWorkspace", () => {
     expect(onPreviewFile).toHaveBeenCalledWith("src/main.tsx");
     expect(onDiscardChange).toHaveBeenCalledWith("src/App.tsx");
   });
+
+  it("supports applying or discarding all pending changes", async () => {
+    const user = userEvent.setup();
+    const onApplyAllChanges = vi.fn();
+    const onDiscardAllChanges = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[thread]}
+        projectScan={{
+          rootPath: "E:\\CodeHome\\Forge",
+          files: [{ relativePath: "src/App.tsx", size: 42 }],
+          truncated: false
+        }}
+        previewFile={{
+          relativePath: "src/App.tsx",
+          content: "old",
+          size: 3
+        }}
+        changePreview={null}
+        changePreviews={[
+          {
+            relativePath: "src/App.tsx",
+            currentContent: "old",
+            nextContent: "new",
+            diff: [{ kind: "add", newLineNumber: 1, text: "new" }]
+          }
+        ]}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onPreviewChange={vi.fn()}
+        onApplyChange={vi.fn()}
+        onApplyAllChanges={onApplyAllChanges}
+        onDiscardAllChanges={onDiscardAllChanges}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Apply all changes" }));
+    await user.click(screen.getByRole("button", { name: "Discard all changes" }));
+
+    expect(onApplyAllChanges).toHaveBeenCalledOnce();
+    expect(onDiscardAllChanges).toHaveBeenCalledOnce();
+  });
 });

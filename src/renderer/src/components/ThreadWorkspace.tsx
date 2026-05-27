@@ -20,6 +20,8 @@ type ThreadWorkspaceProps = {
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
   onApplyChange?: (relativePath: string, nextContent: string) => void;
   onDiscardChange?: (relativePath: string) => void;
+  onApplyAllChanges?: () => void;
+  onDiscardAllChanges?: () => void;
   onGenerateFileChange?: (relativePath: string, currentContent: string) => void;
 };
 
@@ -37,6 +39,8 @@ export function ThreadWorkspace({
   onPreviewChange,
   onApplyChange,
   onDiscardChange,
+  onApplyAllChanges,
+  onDiscardAllChanges,
   onGenerateFileChange
 }: ThreadWorkspaceProps): ReactElement {
   const { t } = useI18n(language);
@@ -142,6 +146,26 @@ export function ThreadWorkspace({
                   <h3 className="mb-2 text-xs font-medium text-[#a8a29a]">
                     {t("threads.pendingChanges")}
                   </h3>
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {onApplyAllChanges ? (
+                      <button
+                        type="button"
+                        onClick={onApplyAllChanges}
+                        className="rounded-md bg-[#f5f4ef] px-2 py-1 text-xs font-medium text-[#222] hover:bg-white"
+                      >
+                        {t("threads.applyAllChanges")}
+                      </button>
+                    ) : null}
+                    {onDiscardAllChanges ? (
+                      <button
+                        type="button"
+                        onClick={onDiscardAllChanges}
+                        className="rounded-md border border-white/10 px-2 py-1 text-xs text-[#d7d3ca] hover:bg-white/8"
+                      >
+                        {t("threads.discardAllChanges")}
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="space-y-1">
                     {allChangePreviews.map((preview) => (
                       <button

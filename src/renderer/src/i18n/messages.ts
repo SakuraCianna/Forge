@@ -69,6 +69,8 @@ export const messages = {
     "threads.generateDiff": "生成 diff",
     "threads.generateAiChange": "AI 修改",
     "threads.discardChange": "丢弃修改",
+    "threads.applyAllChanges": "应用全部修改",
+    "threads.discardAllChanges": "丢弃全部修改",
     "threads.applyChange": "应用修改"
   },
   "en-US": {
@@ -139,6 +141,8 @@ export const messages = {
     "threads.generateDiff": "Generate diff",
     "threads.generateAiChange": "Generate AI edit",
     "threads.discardChange": "Discard change",
+    "threads.applyAllChanges": "Apply all changes",
+    "threads.discardAllChanges": "Discard all changes",
     "threads.applyChange": "Apply change"
   }
 } as const;
