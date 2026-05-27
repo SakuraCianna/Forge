@@ -80,3 +80,20 @@ export function createThreadFromSettings(
     }
   };
 }
+
+export function appendThreadEvents(
+  threads: TaskThread[],
+  threadId: string,
+  events: TaskThreadEvent[],
+  status?: TaskThreadStatus
+): TaskThread[] {
+  return threads.map((thread) =>
+    thread.id === threadId
+      ? {
+          ...thread,
+          status: status ?? thread.status,
+          events: [...thread.events, ...events]
+        }
+      : thread
+  );
+}

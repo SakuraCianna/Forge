@@ -4,7 +4,7 @@ import {
   setCurrentModel,
   updateModelEnabled
 } from "./modelSettings";
-import { createThreadFromSettings } from "./taskThreads";
+import { appendThreadEvents, createThreadFromSettings } from "./taskThreads";
 
 const deps = {
   createId: () => "thread-1",
@@ -58,5 +58,35 @@ describe("taskThreads", () => {
         ]
       }
     });
+  });
+
+  it("appends events to a matching thread and updates its status", () => {
+    let settings = createDefaultModelSettings();
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
+    const result = createThreadFromSettings(settings, "实现设置持久化", deps);
+
+    if (!result.ok) {
+      throw new Error("Expected thread");
+    }
+
+    const threads = appendThreadEvents(
+      [result.thread],
+      "thread-1",
+      [
+        {
+          id: "thread-1-plan-2",
+          kind: "plan",
+          message: "初始计划",
+          createdAt: "2026-05-27T13:00:00.000Z"
+        }
+      ],
+      "running"
+    );
+
+    expect(threads[0].status).toBe("running");
+    expect(threads[0].events.map((event) => event.message)).toEqual([
+      "任务已创建, 等待 Forge 生成执行计划",
+      "初始计划"
+    ]);
   });
 });

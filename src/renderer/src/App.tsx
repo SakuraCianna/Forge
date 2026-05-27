@@ -7,6 +7,7 @@ import { ProjectHeader } from "@/components/ProjectHeader";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
+import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
 import {
   createDefaultModelSettings,
@@ -26,7 +27,11 @@ import {
   saveRecentProjects,
   type ForgeProject
 } from "@/state/projects";
-import { createThreadFromSettings, type TaskThread } from "@/state/taskThreads";
+import {
+  appendThreadEvents,
+  createThreadFromSettings,
+  type TaskThread
+} from "@/state/taskThreads";
 
 type ProviderKeyStatus = {
   hasKey: boolean;
@@ -139,6 +144,11 @@ export function App(): ReactElement {
       return;
     }
 
+    if (!projectScanResult) {
+      setTaskNotice(t("projects.scanning"));
+      return;
+    }
+
     const result = createThreadFromSettings(settings, prompt);
 
     if (!result.ok) {
@@ -149,7 +159,15 @@ export function App(): ReactElement {
     }
 
     setTaskNotice(null);
-    setThreads((current) => [result.thread, ...current]);
+    const planEvents = createInitialPlanEvents({
+      threadId: result.thread.id,
+      prompt: result.thread.prompt,
+      speed: result.thread.speed,
+      projectScan: projectScanResult
+    });
+    const plannedThread = appendThreadEvents([result.thread], result.thread.id, planEvents, "running")[0];
+
+    setThreads((current) => [plannedThread, ...current]);
     setSelectedThreadId(result.thread.id);
   }
 
