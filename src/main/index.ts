@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
+import { registerAgentHandlers } from "./agentIpc.js";
+import { generateAgentPlan } from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
 import { runProjectCommand } from "./commandRunner.js";
 import { createKeyVault } from "./keyVault.js";
@@ -67,6 +69,13 @@ void app.whenReady().then(() => {
 
   registerProviderModelHandlers(
     (provider) => fetchModelsForProvider({ provider, keyVault }),
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
+
+  registerAgentHandlers(
+    (request) => generateAgentPlan({ request, keyVault }),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

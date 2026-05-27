@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
-import type { Language } from "@shared/modelTypes";
+import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { AppShell } from "@/components/AppShell";
 import { ProjectHeader } from "@/components/ProjectHeader";
@@ -230,9 +230,99 @@ export function App(): ReactElement {
       projectScan: projectScanResult
     });
     const plannedThread = appendThreadEvents([result.thread], result.thread.id, planEvents, "running")[0];
+    const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
+    const selectedProvider = selectedModel
+      ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
+      : null;
 
     setThreads((current) => [plannedThread, ...current]);
     setSelectedThreadId(result.thread.id);
+
+    if (!selectedModel || !selectedProvider) {
+      appendThreadError(result.thread.id, "未找到当前模型或提供商配置");
+      return;
+    }
+
+    void generateThreadPlan({
+      threadId: result.thread.id,
+      taskPrompt: result.thread.prompt,
+      model: selectedModel,
+      provider: selectedProvider,
+      projectScan: projectScanResult
+    });
+  }
+
+  async function generateThreadPlan({
+    threadId,
+    taskPrompt,
+    model,
+    provider,
+    projectScan
+  }: {
+    threadId: string;
+    taskPrompt: string;
+    model: ForgeModel;
+    provider: ForgeProvider;
+    projectScan: ProjectScanResult;
+  }): Promise<void> {
+    const startedAt = new Date().toISOString();
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        {
+          id: `${threadId}-agent-plan-started-${startedAt}`,
+          kind: "plan",
+          message: "正在调用模型生成执行计划",
+          createdAt: startedAt
+        }
+      ])
+    );
+
+    try {
+      const plan = await window.forge.agent.generatePlan({
+        provider,
+        model,
+        intelligence: settings.intelligence,
+        speed: settings.speed,
+        taskPrompt,
+        projectScan
+      });
+
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-agent-plan-${plan.createdAt}`,
+            kind: "plan",
+            message: plan.text,
+            createdAt: plan.createdAt
+          }
+        ])
+      );
+    } catch (error) {
+      appendThreadError(
+        threadId,
+        `模型计划生成失败: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  function appendThreadError(threadId: string, message: string): void {
+    const createdAt = new Date().toISOString();
+
+    setThreads((current) =>
+      appendThreadEvents(
+        current,
+        threadId,
+        [
+          {
+            id: `${threadId}-error-${createdAt}`,
+            kind: "error",
+            message,
+            createdAt
+          }
+        ],
+        "blocked"
+      )
+    );
   }
 
   async function runThreadCommand(threadId: string, command: string): Promise<void> {

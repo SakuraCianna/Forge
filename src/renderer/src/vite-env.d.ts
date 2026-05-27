@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+import type { AgentPlanResult, GenerateAgentPlanRequest } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
@@ -17,6 +18,9 @@ declare global {
       };
       models: {
         fetchProviderModels: (provider: ForgeProvider) => Promise<ForgeModel[]>;
+      };
+      agent: {
+        generatePlan: (request: GenerateAgentPlanRequest) => Promise<AgentPlanResult>;
       };
       projects: {
         pickDirectory: () => Promise<string | null>;

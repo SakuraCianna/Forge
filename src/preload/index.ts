@@ -1,11 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
+  agentChannels,
   commandChannels,
   fileChannels,
   keyVaultChannels,
   projectChannels,
   providerModelChannels
 } from "../shared/ipcChannels.js";
+import type { AgentPlanResult, GenerateAgentPlanRequest } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 import type { ProjectScanResult } from "../shared/projectTypes.js";
@@ -22,6 +24,10 @@ contextBridge.exposeInMainWorld("forge", {
   models: {
     fetchProviderModels: (provider: ForgeProvider) =>
       ipcRenderer.invoke(providerModelChannels.fetch, provider)
+  },
+  agent: {
+    generatePlan: (request: GenerateAgentPlanRequest): Promise<AgentPlanResult> =>
+      ipcRenderer.invoke(agentChannels.generatePlan, request)
   },
   projects: {
     pickDirectory: () => ipcRenderer.invoke(projectChannels.pickDirectory),

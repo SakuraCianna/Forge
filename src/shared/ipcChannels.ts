@@ -8,6 +8,10 @@ export const providerModelChannels = {
   fetch: "forge:provider-models:fetch"
 } as const;
 
+export const agentChannels = {
+  generatePlan: "forge:agent:generate-plan"
+} as const;
+
 export const projectChannels = {
   pickDirectory: "forge:project:pick-directory",
   scan: "forge:project:scan"
