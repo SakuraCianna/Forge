@@ -62,8 +62,8 @@ select {
 
 @keyframes forge-title-swap {
   0% {
-    opacity: 0;
-    transform: translateY(8px);
+    opacity: 0.82;
+    transform: translateY(4px);
   }
 
   14%,
@@ -73,7 +73,7 @@ select {
   }
 
   100% {
-    opacity: 0;
-    transform: translateY(-6px);
+    opacity: 0.82;
+    transform: translateY(-4px);
   }
 }

@@ -1,6 +1,9 @@
 import type { ComponentType, ReactElement } from "react";
 import { useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
+  Archive,
+  Check,
   CheckCircle2,
   ChevronDown,
   CircleAlert,
@@ -19,6 +22,7 @@ import type { Language, ModelSettings } from "@shared/modelTypes";
 import type { UsageEvent } from "@shared/usageTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { PersonalizationSettings } from "@/state/personalization";
+import type { TaskThread } from "@/state/taskThreads";
 import {
   summarizeUsage,
   summarizeUsageByProvider,
@@ -26,9 +30,15 @@ import {
   type UsageRateMap
 } from "@/state/usage";
 
+export type ProviderFetchState = {
+  status: "idle" | "loading" | "success" | "error";
+  message?: string;
+};
+
 type SettingsPanelProps = {
   settings: ModelSettings;
   keyStatuses: Record<string, { hasKey: boolean; last4: string | null }>;
+  archivedThreads: TaskThread[];
   onDeleteProviderKey: (providerId: string) => void;
   onFetchModels: (providerId: string) => void;
   onAddProvider: (label: string, baseUrl: string) => void;
@@ -40,12 +50,14 @@ type SettingsPanelProps = {
   onUpdateProviderBaseUrl: (providerId: string, baseUrl: string) => void;
   onUpdateProviderLabel: (providerId: string, label: string) => void;
   onUpdateUsageRate: (providerId: string, rate: UsageRate) => void;
+  onRestoreArchivedThread: (threadId: string) => void;
   personalization: PersonalizationSettings;
+  providerFetchStates: Record<string, ProviderFetchState>;
   usageEvents: UsageEvent[];
   usageRates: UsageRateMap;
 };
 
-type SettingsSection = "general" | "models" | "providers" | "usage" | "personalization";
+type SettingsSection = "general" | "models" | "providers" | "usage" | "personalization" | "archived";
 
 type SectionItem = {
   id: SettingsSection;
@@ -57,6 +69,7 @@ type SectionItem = {
 export function SettingsPanel({
   settings,
   keyStatuses,
+  archivedThreads,
   onDeleteProviderKey,
   onFetchModels,
   onAddProvider,
@@ -68,7 +81,9 @@ export function SettingsPanel({
   onUpdateProviderBaseUrl,
   onUpdateProviderLabel,
   onUpdateUsageRate,
+  onRestoreArchivedThread,
   personalization,
+  providerFetchStates,
   usageEvents,
   usageRates
 }: SettingsPanelProps): ReactElement {
@@ -116,6 +131,17 @@ export function SettingsPanel({
       label: t("settings.personalization"),
       description: getToneLabel(personalization.replyTone),
       icon: Palette
+    },
+    {
+      id: "archived",
+      label: settings.language === "zh-CN" ? "已归档对话" : "Archived chats",
+      description:
+        archivedThreads.length > 0
+          ? `${archivedThreads.length}`
+          : settings.language === "zh-CN"
+            ? "暂无"
+            : "None",
+      icon: Archive
     }
   ];
   const activeItem = sectionItems.find((item) => item.id === activeSection) ?? sectionItems[0];
@@ -124,12 +150,10 @@ export function SettingsPanel({
     <section className="h-full min-h-0 overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1180px] flex-col">
         <header className="border-b border-[#ececf1] px-1 pb-4">
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-normal text-[#202123]">{activeItem.label}</h1>
-            <p className="mt-1 text-sm leading-6 text-[#6e6e80]">
-              {getSectionDescription(activeSection)}
-            </p>
-          </div>
+          <h1 className="text-xl font-semibold tracking-normal text-[#202123]">{activeItem.label}</h1>
+          <p className="mt-1 text-sm leading-6 text-[#6e6e80]">
+            {getSectionDescription(activeSection)}
+          </p>
         </header>
 
         <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)] overflow-hidden">
@@ -139,6 +163,7 @@ export function SettingsPanel({
                 <button
                   key={item.id}
                   type="button"
+                  aria-label={item.label}
                   onClick={() => setActiveSection(item.id)}
                   className={`flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left transition active:scale-[0.99] ${
                     activeSection === item.id
@@ -154,7 +179,6 @@ export function SettingsPanel({
                 </button>
               ))}
             </nav>
-
           </aside>
 
           <main className="min-h-0 overflow-auto px-6 py-5">
@@ -163,6 +187,7 @@ export function SettingsPanel({
             {activeSection === "providers" ? renderProvidersSection() : null}
             {activeSection === "usage" ? renderUsageSection() : null}
             {activeSection === "personalization" ? renderPersonalizationSection() : null}
+            {activeSection === "archived" ? renderArchivedSection() : null}
           </main>
         </div>
       </div>
@@ -171,10 +196,7 @@ export function SettingsPanel({
 
   function renderGeneralSection(): ReactElement {
     return (
-      <SectionFrame
-        title={settings.language === "zh-CN" ? "常规" : "General"}
-        description={settings.language === "zh-CN" ? "调整界面语言和基础偏好" : "Adjust language and basic preferences"}
-      >
+      <SectionFrame>
         <label className="flex items-center justify-between gap-4 rounded-[14px] border border-[#ececf1] bg-white px-4 py-3 text-sm">
           <span>
             <span className="block font-medium text-[#202123]">{t("settings.language")}</span>
@@ -182,15 +204,15 @@ export function SettingsPanel({
               {settings.language === "zh-CN" ? "应用界面显示语言" : "Application interface language"}
             </span>
           </span>
-          <select
-            aria-label={t("settings.language")}
+          <InlineDropdown
+            ariaLabel={t("settings.language")}
             value={settings.language}
-            onChange={(event) => onSetLanguage(event.currentTarget.value as Language)}
-            className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
-          >
-            <option value="zh-CN">中文</option>
-            <option value="en-US">English</option>
-          </select>
+            options={[
+              { value: "zh-CN", label: "中文" },
+              { value: "en-US", label: "English" }
+            ]}
+            onChange={(value) => onSetLanguage(value as Language)}
+          />
         </label>
       </SectionFrame>
     );
@@ -198,7 +220,7 @@ export function SettingsPanel({
 
   function renderModelsSection(): ReactElement {
     return (
-      <SectionFrame title={t("settings.models")} description={t("settings.modelsAutoDescription")}>
+      <SectionFrame>
         <div className="mb-4 grid gap-3 md:grid-cols-3">
           <StatusTile
             icon={Cpu}
@@ -255,7 +277,7 @@ export function SettingsPanel({
 
   function renderProvidersSection(): ReactElement {
     return (
-      <SectionFrame title={t("settings.providerProfiles")} description={t("settings.providerProfilesDescription")}>
+      <SectionFrame>
         <div className="mb-5 rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] p-4">
           <div className="mb-3">
             <h2 className="text-sm font-semibold text-[#202123]">{t("settings.addProvider")}</h2>
@@ -304,6 +326,7 @@ export function SettingsPanel({
             const draftBaseUrl = draftBaseUrls[provider.id] ?? provider.baseUrl ?? "";
             const isExpanded = expandedProviderId === provider.id;
             const providerLabel = provider.label.trim() || t("settings.customProvider");
+            const fetchState = providerFetchStates[provider.id] ?? { status: "idle" as const };
 
             return (
               <article
@@ -413,11 +436,16 @@ export function SettingsPanel({
                       </button>
                       <button
                         type="button"
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                        disabled={fetchState.status === "loading"}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
                         onClick={() => onFetchModels(provider.id)}
                       >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        {t("settings.fetchModels")}
+                        <RefreshCw className={`h-3.5 w-3.5 ${fetchState.status === "loading" ? "animate-spin" : ""}`} />
+                        {fetchState.status === "loading"
+                          ? settings.language === "zh-CN"
+                            ? "拉取中"
+                            : "Fetching"
+                          : t("settings.fetchModels")}
                       </button>
                       {provider.custom ? (
                         <button
@@ -434,6 +462,15 @@ export function SettingsPanel({
                     <p className="text-xs leading-5 text-[#6e6e80]">
                       {t("settings.fetchModelsHint")}
                     </p>
+                    {fetchState.message ? (
+                      <p
+                        className={`text-xs leading-5 ${
+                          fetchState.status === "error" ? "text-[#b45309]" : "text-[#087443]"
+                        }`}
+                      >
+                        {fetchState.message}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
               </article>
@@ -446,10 +483,7 @@ export function SettingsPanel({
 
   function renderUsageSection(): ReactElement {
     return (
-      <SectionFrame
-        title={t("settings.usage")}
-        description={t("settings.usageDescription")}
-      >
+      <SectionFrame>
         <div className="mb-4 grid gap-3 md:grid-cols-4">
           <MetricTile label={t("settings.usageRequests")} value={String(totalUsage.requests)} />
           <MetricTile label={t("settings.inputTokens")} value={formatInteger(totalUsage.inputTokens)} />
@@ -509,31 +543,28 @@ export function SettingsPanel({
 
   function renderPersonalizationSection(): ReactElement {
     return (
-      <SectionFrame
-        title={t("settings.personalization")}
-        description={t("settings.personalizationDescription")}
-      >
+      <SectionFrame>
         <div className="grid gap-4">
           <label className="flex items-center justify-between gap-4 rounded-[14px] border border-[#ececf1] bg-white px-4 py-3 text-sm">
             <span>
               <span className="block font-medium text-[#202123]">{t("settings.replyTone")}</span>
               <span className="mt-1 block text-xs text-[#6e6e80]">{t("settings.replyToneDescription")}</span>
             </span>
-            <select
-              aria-label={t("settings.replyTone")}
+            <InlineDropdown
+              ariaLabel={t("settings.replyTone")}
               value={personalization.replyTone}
-              onChange={(event) =>
+              options={[
+                { value: "friendly", label: t("settings.tone.friendly") },
+                { value: "concise", label: t("settings.tone.concise") },
+                { value: "technical", label: t("settings.tone.technical") }
+              ]}
+              onChange={(value) =>
                 onUpdatePersonalization({
                   ...personalization,
-                  replyTone: event.currentTarget.value as PersonalizationSettings["replyTone"]
+                  replyTone: value as PersonalizationSettings["replyTone"]
                 })
               }
-              className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
-            >
-              <option value="friendly">{t("settings.tone.friendly")}</option>
-              <option value="concise">{t("settings.tone.concise")}</option>
-              <option value="technical">{t("settings.tone.technical")}</option>
-            </select>
+            />
           </label>
 
           <label className="grid gap-2 rounded-[14px] border border-[#ececf1] bg-white px-4 py-3 text-sm">
@@ -555,6 +586,42 @@ export function SettingsPanel({
               placeholder={t("settings.customInstructionsPlaceholder")}
             />
           </label>
+        </div>
+      </SectionFrame>
+    );
+  }
+
+  function renderArchivedSection(): ReactElement {
+    return (
+      <SectionFrame>
+        <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+          {archivedThreads.length > 0 ? (
+            archivedThreads.map((thread, index) => (
+              <div
+                key={thread.id}
+                className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${
+                  index === 0 ? "" : "border-t border-[#ececf1]"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-[#202123]">{thread.title}</span>
+                  <span className="mt-1 block truncate text-xs text-[#6e6e80]">{thread.createdAt}</span>
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Restore ${thread.title}`}
+                  onClick={() => onRestoreArchivedThread(thread.id)}
+                  className="h-9 shrink-0 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] transition hover:bg-[#f7f7f8]"
+                >
+                  {settings.language === "zh-CN" ? "恢复" : "Restore"}
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="px-4 py-10 text-center text-sm text-[#6e6e80]">
+              {settings.language === "zh-CN" ? "暂无已归档的聊天。" : "No archived chats yet."}
+            </div>
+          )}
         </div>
       </SectionFrame>
     );
@@ -591,18 +658,63 @@ export function SettingsPanel({
       return t("settings.usageDescription");
     }
 
+    if (section === "archived") {
+      return settings.language === "zh-CN" ? "查看和恢复已归档的对话" : "Review and restore archived chats";
+    }
+
     return t("settings.personalizationDescription");
   }
 }
 
-function SectionFrame({
-  children
-}: {
-  title?: string;
-  description?: string;
-  children: ReactElement | ReactElement[];
-}): ReactElement {
+function SectionFrame({ children }: { children: ReactElement | ReactElement[] }): ReactElement {
   return <section>{children}</section>;
+}
+
+function InlineDropdown<T extends string>({
+  ariaLabel,
+  onChange,
+  options,
+  value
+}: {
+  ariaLabel: string;
+  onChange: (value: T) => void;
+  options: Array<{ value: T; label: string }>;
+  value: T;
+}): ReactElement {
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          className="inline-flex h-9 min-w-32 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123]"
+        >
+          <span>{selected.label}</span>
+          <ChevronDown className="h-4 w-4 text-[#6e6e80]" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 min-w-40 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+        >
+          {options.map((option) => (
+            <DropdownMenu.Item
+              key={option.value}
+              onSelect={() => onChange(option.value)}
+              className="flex h-9 cursor-default select-none items-center justify-between gap-3 rounded-[10px] px-2.5 outline-none transition data-[highlighted]:bg-[#f7f7f8]"
+            >
+              <span>{option.label}</span>
+              {option.value === value ? <Check className="h-4 w-4" /> : null}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
 }
 
 function StatusTile({

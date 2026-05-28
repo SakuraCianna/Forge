@@ -40,4 +40,54 @@ describe("AppShell", () => {
     expect(onNavigate).toHaveBeenNthCalledWith(1, "files");
     expect(onNavigate).toHaveBeenNthCalledWith(2, "settings");
   });
+
+  it("offers project actions and conversation archive controls from the sidebar", async () => {
+    const user = userEvent.setup();
+    const onPickProject = vi.fn();
+    const onArchiveAllChats = vi.fn();
+    const onNewProjectChat = vi.fn();
+    const onArchiveThread = vi.fn();
+
+    render(
+      <AppShell
+        language="en-US"
+        activeView="workspace"
+        projects={[{ name: "Forge", path: "E:\\CodeHome\\Forge", openedAt: "2026-05-27T13:00:00.000Z" }]}
+        threads={[
+          {
+            id: "thread-1",
+            title: "Build Forge",
+            prompt: "Build Forge",
+            status: "planned",
+            modelId: "openai:gpt-5.5",
+            intelligence: "high",
+            speed: "balanced",
+            createdAt: "2026-05-27T13:00:00.000Z",
+            events: []
+          }
+        ]}
+        onArchiveAllChats={onArchiveAllChats}
+        onArchiveThread={onArchiveThread}
+        onNavigate={() => undefined}
+        onNewProjectChat={onNewProjectChat}
+        onPickProject={onPickProject}
+      >
+        <section>Workbench</section>
+      </AppShell>
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add project" }));
+    expect(onPickProject).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Project options" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive all chats" }));
+    expect(onArchiveAllChats).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "New chat in Forge" }));
+    expect(onNewProjectChat).toHaveBeenCalledWith("E:\\CodeHome\\Forge");
+
+    await user.click(screen.getByRole("button", { name: "Conversation options Build Forge" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive conversation" }));
+    expect(onArchiveThread).toHaveBeenCalledWith("thread-1");
+  });
 });

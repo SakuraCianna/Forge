@@ -4,7 +4,14 @@ import {
   mergeFetchedModels,
   setCurrentModel
 } from "./modelSettings";
-import { appendThreadEvents, createThreadFromSettings } from "./taskThreads";
+import {
+  appendThreadEvents,
+  archiveAllThreads,
+  archiveThread,
+  createThreadFromSettings,
+  restoreThread,
+  toggleThreadPinned
+} from "./taskThreads";
 
 const deps = {
   createId: () => "thread-1",
@@ -92,6 +99,34 @@ describe("taskThreads", () => {
       "任务已创建, 等待 Forge 生成执行计划",
       "初始计划"
     ]);
+  });
+  it("pins, archives, restores, and archives all conversations without losing events", () => {
+    let settings = createDefaultModelSettings();
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
+    ]);
+    const first = createThreadFromSettings(settings, "First conversation", deps);
+    const second = createThreadFromSettings(settings, "Second conversation", {
+      createId: () => "thread-2",
+      now: deps.now
+    });
+
+    if (!first.ok || !second.ok) {
+      throw new Error("Expected threads");
+    }
+
+    let threads = toggleThreadPinned([first.thread, second.thread], "thread-2");
+    expect(threads.find((thread) => thread.id === "thread-2")?.pinned).toBe(true);
+
+    threads = archiveThread(threads, "thread-1");
+    expect(threads.find((thread) => thread.id === "thread-1")?.archived).toBe(true);
+    expect(threads.find((thread) => thread.id === "thread-1")?.events.length).toBe(1);
+
+    threads = restoreThread(threads, "thread-1");
+    expect(threads.find((thread) => thread.id === "thread-1")?.archived).toBe(false);
+
+    threads = archiveAllThreads(threads);
+    expect(threads.every((thread) => thread.archived)).toBe(true);
   });
 });
 

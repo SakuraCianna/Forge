@@ -7,7 +7,7 @@ export type TokenUsage = {
   cacheWriteTokens?: number;
 };
 
-export type UsageEventKind = "plan" | "file-change";
+export type UsageEventKind = "plan" | "file-change" | "ask";
 
 export type UsageEvent = TokenUsage & {
   id: string;

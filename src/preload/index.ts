@@ -11,7 +11,9 @@ import {
 } from "../shared/ipcChannels.js";
 import type {
   AgentFileChangeResult,
+  AgentAskResult,
   AgentPlanResult,
+  GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
@@ -58,7 +60,9 @@ contextBridge.exposeInMainWorld("forge", {
     generateFileChange: (
       request: GenerateAgentFileChangeRequest
     ): Promise<AgentFileChangeResult> =>
-      ipcRenderer.invoke(agentChannels.generateFileChange, request)
+      ipcRenderer.invoke(agentChannels.generateFileChange, request),
+    generateAsk: (request: GenerateAgentAskRequest): Promise<AgentAskResult> =>
+      ipcRenderer.invoke(agentChannels.generateAsk, request)
   },
   projects: {
     pickDirectory: () => ipcRenderer.invoke(projectChannels.pickDirectory),

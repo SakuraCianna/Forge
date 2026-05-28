@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addRecentProject,
   createProjectFromPath,
+  getProjectDisplayName,
   loadRecentProjects,
   saveRecentProjects
 } from "./projects";
@@ -51,5 +52,13 @@ describe("projects", () => {
     saveRecentProjects(storage, [project]);
 
     expect(loadRecentProjects(storage)).toEqual([project]);
+  });
+
+  it("disambiguates projects with the same folder name", () => {
+    const first = createProjectFromPath("E:\\CodeHome\\Forge", "2026-05-27T13:00:00.000Z");
+    const second = createProjectFromPath("D:\\Archive\\Forge", "2026-05-27T14:00:00.000Z");
+
+    expect(getProjectDisplayName(first, [first, second])).toBe("Forge (CodeHome)");
+    expect(getProjectDisplayName(second, [first, second])).toBe("Forge (Archive)");
   });
 });

@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
-import type { GenerateAgentFileChangeRequest, GenerateAgentPlanRequest } from "../shared/agentTypes.js";
-import { generateAgentFileChange, generateAgentPlan } from "./agentPlanService.js";
+import type {
+  GenerateAgentAskRequest,
+  GenerateAgentFileChangeRequest,
+  GenerateAgentPlanRequest
+} from "../shared/agentTypes.js";
+import { generateAgentAsk, generateAgentFileChange, generateAgentPlan } from "./agentPlanService.js";
 
 const provider: ForgeProvider = {
   id: "openai",
@@ -50,6 +54,15 @@ const fileChangeRequest: GenerateAgentFileChangeRequest = {
   taskPrompt: "Update the component copy",
   relativePath: "src/renderer/src/App.tsx",
   currentContent: "export const label = 'old';"
+};
+
+const askRequest: GenerateAgentAskRequest = {
+  provider,
+  model,
+  intelligence: "high",
+  personalization: "Be concise.",
+  speed: "balanced",
+  prompt: "Explain what Forge is"
 };
 
 describe("agentPlanService", () => {
@@ -111,6 +124,33 @@ describe("agentPlanService", () => {
       modelId: "openai:gpt-5.5",
       relativePath: "src/renderer/src/App.tsx",
       nextContent: "export const label = 'new';"
+    });
+  });
+
+  it("generates a direct ASK-mode answer without project context", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "Forge is a local coding agent.",
+            usage: { input_tokens: 5, output_tokens: 7, total_tokens: 12 }
+          })
+        )
+    );
+
+    const result = await generateAgentAsk({
+      request: askRequest,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    const [_url, init] = fetcher.mock.calls[0];
+    expect(JSON.parse(String(init.body)).input).toContain("Explain what Forge is");
+    expect(result).toMatchObject({
+      providerId: "openai",
+      modelId: "openai:gpt-5.5",
+      text: "Forge is a local coding agent.",
+      usage: { inputTokens: 5, outputTokens: 7, totalTokens: 12 }
     });
   });
 });

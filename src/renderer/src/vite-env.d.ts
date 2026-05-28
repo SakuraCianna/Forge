@@ -2,7 +2,9 @@
 
 import type {
   AgentFileChangeResult,
+  AgentAskResult,
   AgentPlanResult,
+  GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
 } from "@shared/agentTypes";
@@ -40,6 +42,7 @@ declare global {
         generateFileChange: (
           request: GenerateAgentFileChangeRequest
         ) => Promise<AgentFileChangeResult>;
+        generateAsk: (request: GenerateAgentAskRequest) => Promise<AgentAskResult>;
       };
       projects: {
         pickDirectory: () => Promise<string | null>;

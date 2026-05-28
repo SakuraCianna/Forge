@@ -21,6 +21,9 @@ export type TaskThread = {
   intelligence: IntelligenceLevel;
   speed: SpeedMode;
   createdAt: string;
+  pinned?: boolean;
+  archived?: boolean;
+  mode?: "ask" | "project";
   events: TaskThreadEvent[];
 };
 
@@ -96,4 +99,26 @@ export function appendThreadEvents(
         }
       : thread
   );
+}
+
+export function toggleThreadPinned(threads: TaskThread[], threadId: string): TaskThread[] {
+  return threads.map((thread) =>
+    thread.id === threadId ? { ...thread, pinned: !thread.pinned } : thread
+  );
+}
+
+export function archiveThread(threads: TaskThread[], threadId: string): TaskThread[] {
+  return threads.map((thread) =>
+    thread.id === threadId ? { ...thread, archived: true, pinned: false } : thread
+  );
+}
+
+export function restoreThread(threads: TaskThread[], threadId: string): TaskThread[] {
+  return threads.map((thread) =>
+    thread.id === threadId ? { ...thread, archived: false } : thread
+  );
+}
+
+export function archiveAllThreads(threads: TaskThread[]): TaskThread[] {
+  return threads.map((thread) => ({ ...thread, archived: true, pinned: false }));
 }

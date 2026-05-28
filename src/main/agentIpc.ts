@@ -1,6 +1,8 @@
 import type {
   AgentFileChangeResult,
+  AgentAskResult,
   AgentPlanResult,
+  GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
@@ -12,6 +14,8 @@ type AgentFileChangeGenerator = (
   request: GenerateAgentFileChangeRequest
 ) => Promise<AgentFileChangeResult>;
 
+type AgentAskGenerator = (request: GenerateAgentAskRequest) => Promise<AgentAskResult>;
+
 type IpcHandler = (_event: unknown, ...args: unknown[]) => Promise<unknown>;
 
 type RegisterHandler = (channel: string, handler: IpcHandler) => void;
@@ -21,6 +25,7 @@ export { agentChannels };
 export function registerAgentHandlers(
   generatePlan: AgentPlanGenerator,
   generateFileChange: AgentFileChangeGenerator,
+  generateAsk: AgentAskGenerator,
   registerHandler: RegisterHandler
 ): void {
   registerHandler(agentChannels.generatePlan, async (_event, request) =>
@@ -28,6 +33,9 @@ export function registerAgentHandlers(
   );
   registerHandler(agentChannels.generateFileChange, async (_event, request) =>
     generateFileChange(assertGenerateAgentFileChangeRequest(request))
+  );
+  registerHandler(agentChannels.generateAsk, async (_event, request) =>
+    generateAsk(assertGenerateAgentAskRequest(request))
   );
 }
 
@@ -57,6 +65,18 @@ function assertGenerateAgentFileChangeRequest(value: unknown): GenerateAgentFile
   }
 
   return value as GenerateAgentFileChangeRequest;
+}
+
+function assertGenerateAgentAskRequest(value: unknown): GenerateAgentAskRequest {
+  if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.model)) {
+    throw new Error("Invalid agent ask request");
+  }
+
+  if (typeof value.prompt !== "string") {
+    throw new Error("Invalid agent ask request");
+  }
+
+  return value as GenerateAgentAskRequest;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -156,6 +156,24 @@ describe("modelSettings", () => {
     );
   });
 
+  it("keeps custom API profile labels unique", () => {
+    let settings = createDefaultModelSettings();
+
+    settings = addCustomProvider(settings, "Custom Provider", "https://one.example/v1");
+    settings = addCustomProvider(settings, "Custom Provider", "https://two.example/v1");
+
+    expect(settings.providers.filter((provider) => provider.custom).map((provider) => provider.label)).toEqual([
+      "Custom Provider",
+      "Custom Provider 2"
+    ]);
+
+    settings = updateProviderLabel(settings, "custom-custom-provider-2", "Custom Provider");
+
+    expect(settings.providers.find((provider) => provider.id === "custom-custom-provider-2")?.label).toBe(
+      "Custom Provider 2"
+    );
+  });
+
   it("deletes custom API profiles without touching built-in providers", () => {
     let settings = createDefaultModelSettings();
 

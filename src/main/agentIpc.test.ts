@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
 import type {
   AgentFileChangeResult,
+  AgentAskResult,
+  GenerateAgentAskRequest,
   AgentPlanResult,
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
@@ -54,6 +56,14 @@ const fileChangeRequest: GenerateAgentFileChangeRequest = {
   currentContent: "old"
 };
 
+const askRequest: GenerateAgentAskRequest = {
+  provider,
+  model,
+  intelligence: "high",
+  speed: "fast",
+  prompt: "Explain Forge"
+};
+
 describe("agentIpc", () => {
   it("registers the agent plan generation handler", async () => {
     const handlers = new Map<string, (_event: unknown, ...args: unknown[]) => Promise<unknown>>();
@@ -70,10 +80,17 @@ describe("agentIpc", () => {
       nextContent: "new",
       createdAt: "2026-05-27T13:00:00.000Z"
     };
+    const askResult: AgentAskResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-5.5",
+      text: "Answer",
+      createdAt: "2026-05-27T13:00:00.000Z"
+    };
     const generatePlan = vi.fn(async () => result);
     const generateFileChange = vi.fn(async () => fileChangeResult);
+    const generateAsk = vi.fn(async () => askResult);
 
-    registerAgentHandlers(generatePlan, generateFileChange, (channel, handler) =>
+    registerAgentHandlers(generatePlan, generateFileChange, generateAsk, (channel, handler) =>
       handlers.set(channel, handler)
     );
 
@@ -81,7 +98,9 @@ describe("agentIpc", () => {
     await expect(
       handlers.get(agentChannels.generateFileChange)?.(null, fileChangeRequest)
     ).resolves.toEqual(fileChangeResult);
+    await expect(handlers.get(agentChannels.generateAsk)?.(null, askRequest)).resolves.toEqual(askResult);
     expect(generatePlan).toHaveBeenCalledWith(request);
     expect(generateFileChange).toHaveBeenCalledWith(fileChangeRequest);
+    expect(generateAsk).toHaveBeenCalledWith(askRequest);
   });
 });

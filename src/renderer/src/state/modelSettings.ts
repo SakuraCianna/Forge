@@ -162,10 +162,15 @@ export function updateProviderLabel(
     return settings;
   }
 
+  const existingLabels = settings.providers
+    .filter((candidate) => candidate.id !== providerId)
+    .map((candidate) => candidate.label);
+  const uniqueLabel = createUniqueLabel(label.trim() || "Custom Provider", existingLabels);
+
   return {
     ...settings,
     providers: settings.providers.map((candidate) =>
-      candidate.id === providerId ? { ...candidate, label } : candidate
+      candidate.id === providerId ? { ...candidate, label: uniqueLabel } : candidate
     )
   };
 }
@@ -175,7 +180,10 @@ export function addCustomProvider(
   label: string,
   baseUrl: string
 ): ModelSettings {
-  const normalizedLabel = label.trim() || "Custom Provider";
+  const normalizedLabel = createUniqueLabel(
+    label.trim() || "Custom Provider",
+    settings.providers.map((provider) => provider.label)
+  );
   const normalizedBaseUrl = baseUrl.trim();
   const existingIds = new Set(settings.providers.map((provider) => provider.id));
   const provider: ForgeProvider = {
@@ -386,6 +394,25 @@ function createCustomProviderId(label: string, existingIds: Set<string>): string
   }
 
   return id;
+}
+
+function createUniqueLabel(label: string, existingLabels: string[]): string {
+  const normalizedLabel = label.trim() || "Custom Provider";
+  const existing = new Set(existingLabels.map((candidate) => candidate.trim().toLowerCase()));
+
+  if (!existing.has(normalizedLabel.toLowerCase())) {
+    return normalizedLabel;
+  }
+
+  let suffix = 2;
+  let candidate = `${normalizedLabel} ${suffix}`;
+
+  while (existing.has(candidate.toLowerCase())) {
+    suffix += 1;
+    candidate = `${normalizedLabel} ${suffix}`;
+  }
+
+  return candidate;
 }
 
 function createManualModel(

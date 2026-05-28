@@ -23,6 +23,9 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
       onUpdateProviderBaseUrl={vi.fn()}
       onUpdateProviderLabel={vi.fn()}
       onUpdateUsageRate={vi.fn()}
+      providerFetchStates={{}}
+      archivedThreads={[]}
+      onRestoreArchivedThread={vi.fn()}
       personalization={createDefaultPersonalizationSettings()}
       usageEvents={[]}
       usageRates={{}}
@@ -40,7 +43,8 @@ describe("SettingsPanel", () => {
     renderSettingsPanel({ settings, onSetLanguage });
 
     await user.click(screen.getByRole("button", { name: /General/ }));
-    await user.selectOptions(screen.getByLabelText("Interface language"), "zh-CN");
+    await user.click(screen.getByRole("button", { name: /Interface language/ }));
+    await user.click(screen.getByRole("menuitem", { name: "中文" }));
 
     expect(onSetLanguage).toHaveBeenCalledWith("zh-CN");
   });
@@ -111,10 +115,57 @@ describe("SettingsPanel", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /Personalization/ }));
-    await user.selectOptions(screen.getByLabelText("Response style"), "technical");
+    await user.click(screen.getByRole("button", { name: /Response style/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Technical" }));
 
     expect(onUpdatePersonalization).toHaveBeenLastCalledWith(
       expect.objectContaining({ replyTone: "technical" })
     );
+  });
+
+  it("shows provider model fetch feedback", async () => {
+    const user = userEvent.setup();
+    const onFetchModels = vi.fn();
+
+    renderSettingsPanel({
+      onFetchModels,
+      providerFetchStates: {
+        openai: { status: "error", message: "OpenAI API Key is not configured" }
+      }
+    });
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+
+    expect(screen.getByText("OpenAI API Key is not configured")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Fetch models" })[0]);
+    expect(onFetchModels).toHaveBeenCalledWith("openai");
+  });
+
+  it("lists archived conversations and restores them", async () => {
+    const user = userEvent.setup();
+    const onRestoreArchivedThread = vi.fn();
+
+    renderSettingsPanel({
+      archivedThreads: [
+        {
+          id: "thread-1",
+          title: "Old chat",
+          prompt: "Old chat",
+          status: "completed",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          archived: true,
+          events: []
+        }
+      ],
+      onRestoreArchivedThread
+    });
+
+    await user.click(screen.getByRole("button", { name: /Archived chats/ }));
+    await user.click(screen.getByRole("button", { name: /Restore Old chat/ }));
+
+    expect(onRestoreArchivedThread).toHaveBeenCalledWith("thread-1");
   });
 });

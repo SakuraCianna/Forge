@@ -1,6 +1,8 @@
 import type {
   AgentFileChangeResult,
+  AgentAskResult,
   AgentPlanResult,
+  GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
@@ -25,6 +27,13 @@ type GenerateAgentPlanOptions = {
 
 type GenerateAgentFileChangeOptions = {
   request: GenerateAgentFileChangeRequest;
+  keyVault: KeyReader;
+  fetcher?: Fetcher;
+  now?: () => string;
+};
+
+type GenerateAgentAskOptions = {
+  request: GenerateAgentAskRequest;
   keyVault: KeyReader;
   fetcher?: Fetcher;
   now?: () => string;
@@ -127,6 +136,51 @@ export async function generateAgentFileChange({
   };
 }
 
+export async function generateAgentAsk({
+  request,
+  keyVault,
+  fetcher = fetch,
+  now = () => new Date().toISOString()
+}: GenerateAgentAskOptions): Promise<AgentAskResult> {
+  const apiKey = await keyVault.readProviderKey(request.provider.id);
+
+  if (!apiKey) {
+    throw new Error(`${request.provider.label} API Key is not configured`);
+  }
+
+  const generationRequest = buildTextGenerationRequest({
+    provider: request.provider,
+    model: request.model,
+    apiKey,
+    instructions: createAskInstructions(request.personalization),
+    input: createAskInput(request),
+    intelligence: request.intelligence
+  });
+  const response = await fetcher(generationRequest.url, generationRequest.init);
+
+  if (!response.ok) {
+    throw new Error(
+      `${request.provider.label} ask request failed: ${response.status} ${response.statusText}`
+    );
+  }
+
+  const body = (await response.json()) as unknown;
+  const text = extractGeneratedText(request.provider.kind, body).trim();
+  const usage = extractTokenUsage(request.provider.kind, body);
+
+  if (!text) {
+    throw new Error(`${request.provider.label} returned an empty ask response`);
+  }
+
+  return {
+    providerId: request.provider.id,
+    modelId: request.model.id,
+    text,
+    createdAt: now(),
+    usage
+  };
+}
+
 function createAgentPlanInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
@@ -144,6 +198,15 @@ function createAgentFileChangeInstructions(personalization?: string): string {
     "Return only the complete replacement file content.",
     "Do not include explanations, markdown fences, diffs, or patch markers.",
     "Preserve existing style and imports unless the task requires changes."
+  ], personalization);
+}
+
+function createAskInstructions(personalization?: string): string {
+  return appendPersonalization([
+    "You are Forge in ASK mode, a direct chat assistant.",
+    "Answer the user's question without assuming access to a local project.",
+    "Do not claim you edited files, ran commands, or inspected the workspace.",
+    "Prefer Chinese when the user writes Chinese. Keep answers concise and useful."
   ], personalization);
 }
 
@@ -177,6 +240,14 @@ function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): st
     `Speed mode:\n${request.speed}`,
     `File path:\n${request.relativePath}`,
     `Current file content:\n${request.currentContent}`
+  ].join("\n\n");
+}
+
+function createAskInput(request: GenerateAgentAskRequest): string {
+  return [
+    `User message:\n${request.prompt}`,
+    `Selected model:\n${request.model.label} (${request.model.modelName})`,
+    `Speed mode:\n${request.speed}`
   ].join("\n\n");
 }
 

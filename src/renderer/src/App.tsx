@@ -5,8 +5,8 @@ import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
-import { SettingsPanel } from "@/components/SettingsPanel";
-import { TaskComposer } from "@/components/TaskComposer";
+import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
+import { TaskComposer, type ComposerContextMode } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
 import { createInitialPlanEvents } from "@/agent/initialPlanner";
@@ -43,7 +43,11 @@ import {
 } from "@/state/projects";
 import {
   appendThreadEvents,
+  archiveAllThreads,
+  archiveThread,
   createThreadFromSettings,
+  restoreThread,
+  toggleThreadPinned,
   type TaskThread
 } from "@/state/taskThreads";
 import {
@@ -61,6 +65,72 @@ type ProviderKeyStatus = {
   hasKey: boolean;
   last4: string | null;
 };
+
+const zhHeroPrompts = [
+  "我们该做什么？",
+  "要修复哪个问题？",
+  "想实现什么功能？",
+  "需要解释哪段代码？",
+  "今天要锻造哪个想法？",
+  "要把哪个报错处理掉？",
+  "想让 Forge 先读哪里？",
+  "需要补哪一组测试？",
+  "要重构哪个模块？",
+  "想检查哪次变更？",
+  "要生成什么实现计划？",
+  "想优化哪个页面？",
+  "要排查哪个接口？",
+  "需要整理哪段逻辑？",
+  "想让代码更清晰吗？",
+  "要给项目加什么能力？",
+  "今天从哪个文件开始？",
+  "想验证哪个命令？",
+  "要修复构建还是类型？",
+  "需要写一份变更说明吗？",
+  "想比较哪两种方案？",
+  "要找出性能瓶颈吗？",
+  "需要生成提交信息吗？",
+  "要检查 Git 改动吗？",
+  "想让 Forge 先规划吗？",
+  "要把需求拆小吗？",
+  "需要补充文档吗？",
+  "想处理哪个 TODO？",
+  "要让界面更顺手吗？",
+  "准备锻造下一步了吗？"
+];
+
+const enHeroPrompts = [
+  "What should we build?",
+  "What should we fix?",
+  "What feature is next?",
+  "What code should we explain?",
+  "What idea should we forge today?",
+  "Which error should we clear?",
+  "Where should Forge read first?",
+  "Which tests should we add?",
+  "Which module needs refactoring?",
+  "Which change should we review?",
+  "What plan should we generate?",
+  "Which screen should we improve?",
+  "Which API should we debug?",
+  "Which logic needs cleanup?",
+  "Should we make this code clearer?",
+  "What capability should this project gain?",
+  "Which file should we start with?",
+  "Which command should we verify?",
+  "Build issue or type issue?",
+  "Need a change summary?",
+  "Which two approaches should we compare?",
+  "Should we look for a performance bottleneck?",
+  "Need a commit message?",
+  "Should we inspect Git changes?",
+  "Should Forge plan first?",
+  "Should we break this down?",
+  "Need documentation updates?",
+  "Which TODO should we handle?",
+  "Should we make the UI smoother?",
+  "Ready to forge the next step?"
+];
 
 export function App(): ReactElement {
   const [settings, setSettings] = useState(() => {
@@ -90,6 +160,8 @@ export function App(): ReactElement {
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
+  const [composerContextMode, setComposerContextMode] = useState<ComposerContextMode>("project");
+  const [providerFetchStates, setProviderFetchStates] = useState<Record<string, ProviderFetchState>>({});
   const [usageEvents, setUsageEvents] = useState<UsageEvent[]>(() => {
     if (typeof window === "undefined") {
       return [];
@@ -120,6 +192,12 @@ export function App(): ReactElement {
     settings.language === "zh-CN"
       ? ["我们该做什么？", "要修复哪个问题？", "想实现什么功能？", "需要解释哪段代码？"]
       : ["What should we build?", "What should we fix?", "What feature is next?", "What code should we explain?"];
+  const activeHeroPrompts =
+    settings.language === "zh-CN" && heroPrompts.length === 4
+      ? zhHeroPrompts
+      : settings.language === "en-US" && heroPrompts.length === 4
+        ? enHeroPrompts
+        : heroPrompts;
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -143,11 +221,11 @@ export function App(): ReactElement {
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      setHeroPromptIndex((current) => (current + 1) % heroPrompts.length);
+      setHeroPromptIndex((current) => (current + 1) % activeHeroPrompts.length);
     }, 2600);
 
     return () => window.clearInterval(intervalId);
-  }, [heroPrompts.length]);
+  }, [activeHeroPrompts.length]);
 
   useEffect(() => {
     if (!currentProject) {
@@ -196,8 +274,36 @@ export function App(): ReactElement {
       return;
     }
 
-    const fetchedModels = await window.forge.models.fetchProviderModels(provider);
-    setSettings((current) => mergeFetchedModels(current, fetchedModels));
+    setProviderFetchStates((current) => ({
+      ...current,
+      [providerId]: {
+        status: "loading",
+        message: settings.language === "zh-CN" ? "正在拉取模型..." : "Fetching models..."
+      }
+    }));
+
+    try {
+      const fetchedModels = await window.forge.models.fetchProviderModels(provider);
+      setSettings((current) => mergeFetchedModels(current, fetchedModels));
+      setProviderFetchStates((current) => ({
+        ...current,
+        [providerId]: {
+          status: "success",
+          message:
+            settings.language === "zh-CN"
+              ? `已拉取 ${fetchedModels.length} 个模型`
+              : `Fetched ${fetchedModels.length} models`
+        }
+      }));
+    } catch (error) {
+      setProviderFetchStates((current) => ({
+        ...current,
+        [providerId]: {
+          status: "error",
+          message: error instanceof Error ? error.message : String(error)
+        }
+      }));
+    }
   }
 
   function setInterfaceLanguage(language: Language): void {
@@ -215,6 +321,55 @@ export function App(): ReactElement {
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, project));
     setActiveView("workspace");
+    setComposerContextMode("project");
+  }
+
+  function selectProject(projectPath: string): void {
+    const project = recentProjects.find((candidate) => candidate.path === projectPath);
+
+    if (!project) {
+      return;
+    }
+
+    setCurrentProject(project);
+    setRecentProjects((current) => addRecentProject(current, { ...project, openedAt: new Date().toISOString() }));
+    setComposerContextMode("project");
+    setActiveView("workspace");
+  }
+
+  function removeRecentProject(projectPath: string): void {
+    setRecentProjects((current) => current.filter((project) => project.path !== projectPath));
+
+    if (currentProject?.path === projectPath) {
+      setCurrentProject(null);
+    }
+  }
+
+  function renameProject(projectPath: string): void {
+    const project = recentProjects.find((candidate) => candidate.path === projectPath);
+
+    if (!project) {
+      return;
+    }
+
+    const nextName = window.prompt(
+      settings.language === "zh-CN" ? "输入新的项目名称" : "Enter a new project name",
+      project.name
+    );
+
+    if (!nextName?.trim()) {
+      return;
+    }
+
+    const normalizedName = makeUniqueProjectName(nextName.trim(), recentProjects, projectPath);
+    setRecentProjects((current) =>
+      current.map((candidate) =>
+        candidate.path === projectPath ? { ...candidate, name: normalizedName } : candidate
+      )
+    );
+    setCurrentProject((current) =>
+      current?.path === projectPath ? { ...current, name: normalizedName } : current
+    );
   }
 
   function openMostRecentProject(): void {
@@ -226,6 +381,7 @@ export function App(): ReactElement {
     }
 
     setCurrentProject(recentProject);
+    setComposerContextMode("project");
     setActiveView("workspace");
   }
 
@@ -477,6 +633,52 @@ export function App(): ReactElement {
   }
 
   function submitTask(prompt: string): void {
+    if (composerContextMode === "ask") {
+      const result = createThreadFromSettings(settings, prompt);
+
+      if (!result.ok) {
+        setTaskNotice(
+          result.reason === "empty-prompt" ? t("composer.emptyPrompt") : t("composer.missingModel")
+        );
+        return;
+      }
+
+      const askThread: TaskThread = {
+        ...result.thread,
+        mode: "ask",
+        status: "running",
+        events: [
+          {
+            id: `${result.thread.id}-ask-started`,
+            kind: "plan",
+            message: settings.language === "zh-CN" ? "ASK 对话已创建, 正在生成回答" : "ASK chat created. Generating an answer.",
+            createdAt: result.thread.createdAt
+          }
+        ]
+      };
+      const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
+      const selectedProvider = selectedModel
+        ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
+        : null;
+
+      setTaskNotice(null);
+      setThreads((current) => [askThread, ...current]);
+      setSelectedThreadId(result.thread.id);
+
+      if (!selectedModel || !selectedProvider) {
+        appendThreadError(result.thread.id, "未找到当前模型或提供商配置");
+        return;
+      }
+
+      void generateAskResponse({
+        threadId: result.thread.id,
+        prompt: result.thread.prompt,
+        model: selectedModel,
+        provider: selectedProvider
+      });
+      return;
+    }
+
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
       return;
@@ -587,6 +789,57 @@ export function App(): ReactElement {
     }
   }
 
+  async function generateAskResponse({
+    threadId,
+    prompt,
+    model,
+    provider
+  }: {
+    threadId: string;
+    prompt: string;
+    model: ForgeModel;
+    provider: ForgeProvider;
+  }): Promise<void> {
+    try {
+      const answer = await window.forge.agent.generateAsk({
+        provider,
+        model,
+        intelligence: settings.intelligence,
+        personalization: createPersonalizationPrompt(personalization),
+        speed: settings.speed,
+        prompt
+      });
+
+      recordUsageEvent({
+        kind: "ask",
+        providerId: answer.providerId,
+        modelId: answer.modelId,
+        usage: answer.usage,
+        createdAt: answer.createdAt
+      });
+      setThreads((current) =>
+        appendThreadEvents(
+          current,
+          threadId,
+          [
+            {
+              id: `${threadId}-ask-${answer.createdAt}`,
+              kind: "result",
+              message: answer.text,
+              createdAt: answer.createdAt
+            }
+          ],
+          "completed"
+        )
+      );
+    } catch (error) {
+      appendThreadError(
+        threadId,
+        `ASK 对话失败: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
   function appendThreadError(threadId: string, message: string): void {
     const createdAt = new Date().toISOString();
 
@@ -685,9 +938,9 @@ export function App(): ReactElement {
     return (
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
         <div className="w-full max-w-[860px] -translate-y-[5vh]">
-          <h1 className="mb-7 text-center text-[28px] font-medium leading-tight tracking-normal text-[#202123] md:text-[30px]">
-            <span key={heroPromptIndex} className="inline-block animate-[forge-title-swap_2.6s_ease-in-out]">
-              {heroPrompts[heroPromptIndex]}
+          <h1 className="mb-7 overflow-hidden whitespace-nowrap text-center text-[28px] font-medium leading-tight tracking-normal text-[#202123] md:text-[30px]">
+            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_2.6s_ease-in-out] truncate align-bottom">
+              {activeHeroPrompts[heroPromptIndex]}
             </span>
           </h1>
           {taskNotice ? (
@@ -705,13 +958,18 @@ export function App(): ReactElement {
     return (
       <TaskComposer
         settings={settings}
+        contextMode={composerContextMode}
         focusSignal={composerFocusSignal}
         placeholder={variant === "hero" ? t("composer.heroPlaceholder") : undefined}
         projectName={currentProject?.name}
+        projectPath={currentProject?.path}
+        projects={recentProjects}
         submitSignal={composerSubmitSignal}
         variant={variant}
         onOpenSettings={() => setActiveView("settings")}
         onPickProject={() => void pickProject()}
+        onSelectContextMode={setComposerContextMode}
+        onSelectProject={selectProject}
         onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
         onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
         onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
@@ -726,7 +984,7 @@ export function App(): ReactElement {
         language={settings.language}
         hasProject={Boolean(currentProject)}
         selectedThreadId={selectedThreadId}
-        threads={threads}
+        threads={threads.filter((thread) => !thread.archived)}
         projectScan={projectScanResult}
         previewFile={previewFile}
         changePreview={
@@ -869,6 +1127,7 @@ export function App(): ReactElement {
         <SettingsPanel
           settings={settings}
           keyStatuses={keyStatuses}
+          archivedThreads={threads.filter((thread) => thread.archived)}
           onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
           onFetchModels={(providerId) => void fetchModels(providerId)}
           onAddProvider={(label, baseUrl) =>
@@ -886,7 +1145,13 @@ export function App(): ReactElement {
           onUpdateProviderLabel={(providerId, label) =>
             setSettings((current) => updateProviderLabel(current, providerId, label))
           }
+          onRestoreArchivedThread={(threadId) => {
+            setThreads((current) => restoreThread(current, threadId));
+            setSelectedThreadId(threadId);
+            setActiveView("workspace");
+          }}
           personalization={personalization}
+          providerFetchStates={providerFetchStates}
           usageEvents={usageEvents}
           usageRates={usageRates}
           onClearUsage={() => setUsageEvents([])}
@@ -921,10 +1186,28 @@ export function App(): ReactElement {
       activeView={activeView}
       currentProjectName={currentProject?.name}
       currentProjectPath={currentProject?.path}
+      projects={recentProjects}
+      threads={threads}
+      onArchiveAllChats={() => {
+        setThreads((current) => archiveAllThreads(current));
+        setSelectedThreadId(null);
+      }}
+      onArchiveThread={(threadId) => {
+        setThreads((current) => archiveThread(current, threadId));
+        if (selectedThreadId === threadId) {
+          setSelectedThreadId(null);
+        }
+      }}
       onNavigate={setActiveView}
       onNewTask={() => {
         setActiveView("workspace");
         setSelectedThreadId(null);
+        setComposerFocusSignal((current) => current + 1);
+      }}
+      onNewProjectChat={(projectPath) => {
+        selectProject(projectPath);
+        setSelectedThreadId(null);
+        setComposerContextMode("project");
         setComposerFocusSignal((current) => current + 1);
       }}
       onRun={() => {
@@ -932,10 +1215,40 @@ export function App(): ReactElement {
         setComposerSubmitSignal((current) => current + 1);
       }}
       onPickProject={() => void pickProject()}
+      onRemoveProject={removeRecentProject}
+      onRenameProject={renameProject}
+      onSelectProject={selectProject}
+      onSelectThread={(threadId) => {
+        setSelectedThreadId(threadId);
+        setActiveView("workspace");
+      }}
+      onTogglePinThread={(threadId) => setThreads((current) => toggleThreadPinned(current, threadId))}
     >
       {renderActiveView()}
     </AppShell>
   );
+}
+
+function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPath: string): string {
+  const existing = new Set(
+    projects
+      .filter((project) => project.path !== projectPath)
+      .map((project) => project.name.trim().toLowerCase())
+  );
+
+  if (!existing.has(name.toLowerCase())) {
+    return name;
+  }
+
+  let suffix = 2;
+  let candidate = `${name} ${suffix}`;
+
+  while (existing.has(candidate.toLowerCase())) {
+    suffix += 1;
+    candidate = `${name} ${suffix}`;
+  }
+
+  return candidate;
 }
 
 function Notice({ message }: { message: string }): ReactElement {

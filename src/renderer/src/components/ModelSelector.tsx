@@ -57,11 +57,11 @@ export function ModelSelector({
       <button
         type="button"
         onClick={onOpenSettings}
-        className="inline-flex h-9 items-center gap-2 rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-sm font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+        className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 whitespace-nowrap rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-sm font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
         aria-label={triggerLabel}
       >
         <Zap className="h-4 w-4 text-[#202123]" />
-        <span>{triggerLabel}</span>
+        <span className="truncate">{triggerLabel}</span>
       </button>
     );
   }
@@ -71,11 +71,11 @@ export function ModelSelector({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="inline-flex h-9 items-center gap-2 rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-sm font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+          className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 whitespace-nowrap rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-sm font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
           aria-label={triggerLabel}
         >
           <Zap className="h-4 w-4 text-[#202123]" />
-          <span>{triggerLabel}</span>
+          <span className="truncate">{triggerLabel}</span>
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

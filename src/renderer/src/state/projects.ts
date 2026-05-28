@@ -23,6 +23,24 @@ export function addRecentProject(projects: ForgeProject[], project: ForgeProject
   return [project, ...withoutDuplicate].slice(0, maxRecentProjects);
 }
 
+export function getProjectDisplayName(project: ForgeProject, projects: ForgeProject[]): string {
+  const duplicateNames = projects.filter(
+    (candidate) => candidate.name.toLowerCase() === project.name.toLowerCase()
+  );
+
+  if (duplicateNames.length <= 1) {
+    return project.name;
+  }
+
+  const parentName = getParentFolderName(project.path);
+  const candidateName = parentName ? `${project.name} (${parentName})` : project.name;
+  const matchingCandidateCount = duplicateNames.filter(
+    (candidate) => `${candidate.name} (${getParentFolderName(candidate.path)})` === candidateName
+  ).length;
+
+  return matchingCandidateCount > 1 ? `${project.name} (${project.path})` : candidateName;
+}
+
 export function saveRecentProjects(storage: Storage, projects: ForgeProject[]): void {
   storage.setItem(recentProjectsStorageKey, JSON.stringify(projects));
 }
@@ -50,4 +68,9 @@ function isForgeProject(value: unknown): value is ForgeProject {
     typeof (value as ForgeProject).path === "string" &&
     typeof (value as ForgeProject).openedAt === "string"
   );
+}
+
+function getParentFolderName(path: string): string {
+  const parts = path.replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean);
+  return parts.at(-2) ?? "";
 }

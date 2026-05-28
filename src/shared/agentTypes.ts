@@ -23,6 +23,15 @@ export type GenerateAgentFileChangeRequest = {
   currentContent: string;
 };
 
+export type GenerateAgentAskRequest = {
+  provider: ForgeProvider;
+  model: ForgeModel;
+  intelligence: IntelligenceLevel;
+  personalization?: string;
+  speed: SpeedMode;
+  prompt: string;
+};
+
 export type AgentPlanResult = {
   providerId: string;
   modelId: string;
@@ -36,6 +45,14 @@ export type AgentFileChangeResult = {
   modelId: string;
   relativePath: string;
   nextContent: string;
+  createdAt: string;
+  usage?: TokenUsage;
+};
+
+export type AgentAskResult = {
+  providerId: string;
+  modelId: string;
+  text: string;
   createdAt: string;
   usage?: TokenUsage;
 };
