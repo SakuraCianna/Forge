@@ -50,14 +50,26 @@ function closeSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvoke
 }
 
 function createWindow(): void {
+  const titleBarOptions: Electron.BrowserWindowConstructorOptions =
+    process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" }
+      : {
+          titleBarStyle: "hidden",
+          titleBarOverlay: {
+            color: "#090f19",
+            symbolColor: "#cbd8e8",
+            height: 48
+          }
+        };
+
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 1040,
     minHeight: 680,
     title: "Forge",
-    frame: false,
-    backgroundColor: "#08111f",
+    backgroundColor: "#080d16",
+    ...titleBarOptions,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,

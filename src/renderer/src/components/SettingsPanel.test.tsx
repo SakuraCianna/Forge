@@ -8,10 +8,11 @@ describe("SettingsPanel", () => {
   it("switches language through an explicit user control", async () => {
     const user = userEvent.setup();
     const onSetLanguage = vi.fn();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
 
     render(
       <SettingsPanel
-        settings={createDefaultModelSettings()}
+        settings={settings}
         keyStatuses={{}}
         onDeleteProviderKey={vi.fn()}
         onFetchModels={vi.fn()}
@@ -23,18 +24,20 @@ describe("SettingsPanel", () => {
       />
     );
 
-    await user.selectOptions(screen.getByLabelText("界面语言"), "en-US");
+    await user.click(screen.getByRole("button", { name: /General/ }));
+    await user.selectOptions(screen.getByLabelText("Interface language"), "zh-CN");
 
-    expect(onSetLanguage).toHaveBeenCalledWith("en-US");
+    expect(onSetLanguage).toHaveBeenCalledWith("zh-CN");
   });
 
   it("saves provider API keys without exposing them in settings state", async () => {
     const user = userEvent.setup();
     const onSaveProviderKey = vi.fn();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
 
     render(
       <SettingsPanel
-        settings={createDefaultModelSettings()}
+        settings={settings}
         keyStatuses={{}}
         onDeleteProviderKey={vi.fn()}
         onFetchModels={vi.fn()}
@@ -46,8 +49,9 @@ describe("SettingsPanel", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: /Model providers/ }));
     await user.type(screen.getAllByLabelText(/^OpenAI API Key$/)[0], "sk-secret");
-    await user.click(screen.getAllByRole("button", { name: "保存 OpenAI API Key" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "Save OpenAI API Key" })[0]);
 
     expect(onSaveProviderKey).toHaveBeenCalledWith("openai", "sk-secret");
   });
@@ -72,6 +76,7 @@ describe("SettingsPanel", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: /Model providers/ }));
     await user.click(screen.getByRole("button", { name: "Configure OpenRouter" }));
     await user.clear(screen.getByLabelText("OpenRouter Base URL"));
     await user.type(screen.getByLabelText("OpenRouter Base URL"), "https://gateway.example/v1");

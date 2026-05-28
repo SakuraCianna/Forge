@@ -5,11 +5,8 @@ import {
   FolderOpen,
   GitBranch,
   Hammer,
-  Maximize2,
-  Minus,
   Settings,
-  Workflow,
-  X
+  Workflow
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
@@ -54,7 +51,7 @@ export function AppShell({
 
   return (
     <div className="grid h-screen min-h-screen grid-rows-[48px_minmax(0,1fr)] overflow-hidden bg-[#080d16] text-[#e5edf7]">
-      <header className="grid h-12 grid-cols-[220px_minmax(0,1fr)_auto] border-b border-[rgba(148,163,184,0.12)] bg-[#090f19]/98 backdrop-blur-xl">
+      <header className="grid h-12 grid-cols-[220px_minmax(0,1fr)_138px] border-b border-[rgba(148,163,184,0.12)] bg-[#090f19]/98 backdrop-blur-xl">
         <div className="drag-region flex h-12 items-center gap-2 px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#ff6b3d] text-[#08111f] shadow-[0_0_18px_rgba(255,107,61,0.16)]">
             <Hammer className="h-4 w-4" />
@@ -74,20 +71,7 @@ export function AppShell({
           </button>
         </div>
 
-        <div className="no-drag flex h-12 items-center">
-          <WindowButton label={t("titlebar.minimize")} onClick={() => void window.forge.windowControls.minimize()}>
-            <Minus className="h-4 w-4" />
-          </WindowButton>
-          <WindowButton
-            label={t("titlebar.maximize")}
-            onClick={() => void window.forge.windowControls.toggleMaximize()}
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </WindowButton>
-          <WindowButton label={t("titlebar.close")} danger onClick={() => void window.forge.windowControls.close()}>
-            <X className="h-4 w-4" />
-          </WindowButton>
-        </div>
+        <div className="drag-region h-12" aria-hidden="true" />
       </header>
 
       <div className="grid min-h-0 grid-cols-[220px_minmax(0,1fr)] overflow-hidden">
@@ -137,33 +121,5 @@ export function AppShell({
         </main>
       </div>
     </div>
-  );
-}
-
-function WindowButton({
-  label,
-  danger = false,
-  onClick,
-  children
-}: {
-  label: string;
-  danger?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}): ReactElement {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={onClick}
-      className={`no-drag flex h-12 w-11 items-center justify-center transition active:scale-[0.98] ${
-        danger
-          ? "text-[#cbd8e8] hover:bg-[#ef4444] hover:text-white"
-          : "text-[#8ea0b8] hover:bg-[#121e31] hover:text-white"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
