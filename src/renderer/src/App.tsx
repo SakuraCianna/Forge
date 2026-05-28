@@ -5,7 +5,6 @@ import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
-import { ProjectHeader } from "@/components/ProjectHeader";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
@@ -555,43 +554,54 @@ export function App(): ReactElement {
   }
 
   function renderWorkspaceView(): ReactElement {
+    if (!selectedThreadId) {
+      return renderNewConversationView();
+    }
+
     return (
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
-        {currentProject ? (
-          <div className="px-5 pt-5">
-            <ProjectHeader
-              language={settings.language}
-              project={currentProject}
-              scanResult={projectScanResult}
-              gitStatus={gitStatus}
-              gitNotice={gitNotice}
-              commitMessage={commitMessage}
-              onCommitMessageChange={setCommitMessage}
-              onCommitProject={(message) => void commitCurrentProject(message)}
-              onPickProject={() => void pickProject()}
-              onRefreshGitStatus={() => void refreshProjectGitStatus()}
-            />
-            {taskNotice ? <Notice message={taskNotice} /> : null}
-          </div>
-        ) : taskNotice ? (
-          <div className="px-5 pt-5">
-            <Notice message={taskNotice} />
-          </div>
-        ) : null}
-        <div className={`min-h-0 px-5 pb-4 ${currentProject || taskNotice ? "" : "pt-5"}`}>
+      <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+        <div className="min-h-0 p-5">
           {renderThreadWorkspace()}
         </div>
-        <TaskComposer
-          settings={settings}
-          focusSignal={composerFocusSignal}
-          submitSignal={composerSubmitSignal}
-          onOpenSettings={() => setActiveView("settings")}
-          onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
-          onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
-          onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
-          onSubmitTask={submitTask}
-        />
+        {renderTaskComposer("dock")}
       </div>
+    );
+  }
+
+  function renderNewConversationView(): ReactElement {
+    return (
+      <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
+        <div className="w-full max-w-[860px] -translate-y-[5vh]">
+          <h1 className="mb-7 text-center text-[28px] font-medium leading-tight tracking-normal text-[#202123] md:text-[30px]">
+            {t("composer.newChatTitle")}
+          </h1>
+          {taskNotice ? (
+            <div className="mx-auto mb-4 max-w-[760px]">
+              <Notice message={taskNotice} />
+            </div>
+          ) : null}
+          {renderTaskComposer("hero")}
+        </div>
+      </section>
+    );
+  }
+
+  function renderTaskComposer(variant: "dock" | "hero"): ReactElement {
+    return (
+      <TaskComposer
+        settings={settings}
+        focusSignal={composerFocusSignal}
+        placeholder={variant === "hero" ? t("composer.heroPlaceholder") : undefined}
+        projectName={currentProject?.name}
+        submitSignal={composerSubmitSignal}
+        variant={variant}
+        onOpenSettings={() => setActiveView("settings")}
+        onPickProject={() => void pickProject()}
+        onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
+        onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
+        onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
+        onSubmitTask={submitTask}
+      />
     );
   }
 
@@ -795,6 +805,7 @@ export function App(): ReactElement {
       onNavigate={setActiveView}
       onNewTask={() => {
         setActiveView("workspace");
+        setSelectedThreadId(null);
         setComposerFocusSignal((current) => current + 1);
       }}
       onRun={() => {

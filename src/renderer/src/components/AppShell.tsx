@@ -5,8 +5,8 @@ import {
   FolderOpen,
   GitBranch,
   Hammer,
-  Settings,
-  Workflow
+  Plus,
+  Settings
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
@@ -37,61 +37,46 @@ export function AppShell({
   currentProjectName,
   currentProjectPath,
   onNavigate,
+  onNewTask,
   onPickProject,
   children
 }: AppShellProps): ReactElement {
   const { t } = useI18n(language);
   const navItems: NavItem[] = [
-    { key: "workspace", label: t("nav.workspace"), icon: Workflow },
     { key: "tasks", label: t("nav.threads"), icon: Code2 },
     { key: "files", label: t("nav.files"), icon: FileCode2 },
-    { key: "source", label: t("nav.sourceControl"), icon: GitBranch },
-    { key: "settings", label: t("nav.settings"), icon: Settings }
+    { key: "source", label: t("nav.sourceControl"), icon: GitBranch }
   ];
 
   return (
     <div className="grid h-screen min-h-screen grid-rows-[48px_minmax(0,1fr)] overflow-hidden bg-white text-[#202123]">
-      <header className="grid h-12 grid-cols-[220px_minmax(0,1fr)_138px] border-b border-[#e5e5e5] bg-white">
+      <header className="grid h-12 grid-cols-[220px_minmax(0,1fr)_138px] border-b border-[#ececf1] bg-white">
         <div className="drag-region flex h-12 items-center gap-2 px-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#e5e5e5] bg-[#f7f7f8] text-[#202123]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#ececf1] bg-white text-[#202123] shadow-sm">
             <Hammer className="h-4 w-4" />
           </div>
           <span className="text-sm font-semibold tracking-normal text-[#202123]">Forge</span>
         </div>
 
-        <div className="drag-region flex min-w-0 items-center justify-center px-3">
-          <button
-            type="button"
-            onClick={() => onNavigate("workspace")}
-            onPointerDown={(event) => event.stopPropagation()}
-            className="no-drag inline-flex h-8 max-w-[320px] items-center gap-2 rounded-[12px] border border-[#e5e5e5] bg-[#f7f7f8] px-3 text-sm font-medium text-[#202123] transition hover:bg-[#ececf1] active:scale-[0.99]"
-          >
-            <span className="h-2 w-2 rounded-full bg-[#10a37f]" />
-            <span className="truncate">{t("workspace.agentWorkspace")}</span>
-          </button>
-        </div>
-
+        <div className="drag-region h-12" aria-hidden="true" />
         <div className="drag-region h-12" aria-hidden="true" />
       </header>
 
       <div className="grid min-h-0 grid-cols-[220px_minmax(0,1fr)] overflow-hidden">
-        <aside className="flex min-h-0 flex-col border-r border-[#e5e5e5] bg-[#f7f7f8] p-3">
+        <aside className="flex min-h-0 flex-col border-r border-[#ececf1] bg-[#f7f7f8] p-3">
           <button
             type="button"
-            onClick={onPickProject}
-            className="mb-4 flex h-12 items-center gap-2.5 rounded-[14px] border border-[#e5e5e5] bg-white px-3 text-left transition hover:bg-[#ececf1] active:scale-[0.99]"
+            onClick={() => {
+              if (onNewTask) {
+                onNewTask();
+              } else {
+                onNavigate("workspace");
+              }
+            }}
+            className="mb-2 flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-sm text-[#202123] transition hover:bg-[#ececf1] active:scale-[0.99]"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#f1f1f1] text-[#565869]">
-              <FolderOpen className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-[#202123]">
-                {currentProjectName ?? t("projects.empty")}
-              </div>
-              <div className="truncate text-xs text-[#6e6e80]">
-                {currentProjectPath ?? t("sidebar.pickProjectHint")}
-              </div>
-            </div>
+            <Plus className="h-4 w-4" />
+            <span className="truncate">{t("nav.newChat")}</span>
           </button>
 
           <nav aria-label="Forge navigation" className="space-y-1">
@@ -111,6 +96,38 @@ export function AppShell({
               </button>
             ))}
           </nav>
+
+          <div className="mt-5 px-3 text-xs text-[#8e8ea0]">{t("nav.projects")}</div>
+          <button
+            type="button"
+            onClick={onPickProject}
+            className="mt-2 flex h-11 items-center gap-2 rounded-[12px] px-3 text-left text-sm text-[#565869] transition hover:bg-[#ececf1] hover:text-[#202123] active:scale-[0.99]"
+          >
+            <FolderOpen className="h-4 w-4 shrink-0" />
+            <span className="min-w-0">
+              <span className="block truncate text-[#202123]">
+                {currentProjectName ?? t("projects.empty")}
+              </span>
+              <span className="block truncate text-xs text-[#8e8ea0]">
+                {currentProjectPath ?? t("sidebar.pickProjectHint")}
+              </span>
+            </span>
+          </button>
+
+          <div className="mt-auto pt-4">
+            <button
+              type="button"
+              onClick={() => onNavigate("settings")}
+              className={`flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-sm transition active:scale-[0.99] ${
+                activeView === "settings"
+                  ? "bg-[#ececf1] text-[#202123]"
+                  : "text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
+              }`}
+            >
+              <Settings className="h-4 w-4" />
+              <span className="truncate">{t("nav.settings")}</span>
+            </button>
+          </div>
         </aside>
 
         <main
