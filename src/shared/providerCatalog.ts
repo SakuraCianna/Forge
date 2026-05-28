@@ -32,6 +32,15 @@ export const providerCatalog: ForgeProvider[] = [
     accentColor: "#1a73e8"
   },
   {
+    id: "openrouter",
+    label: "OpenRouter",
+    kind: "openai-compatible",
+    baseUrl: "https://openrouter.ai/api/v1",
+    requiresBaseUrl: false,
+    icon: "OR",
+    accentColor: "#7c3aed"
+  },
+  {
     id: "deepseek",
     label: "DeepSeek",
     kind: "openai-compatible",
@@ -56,6 +65,16 @@ export const providerCatalog: ForgeProvider[] = [
     label: "通义千问 / 百炼",
     kind: "openai-compatible",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    requiresBaseUrl: false,
+    icon: "Q",
+    iconAsset: "qwen",
+    accentColor: "#615ced"
+  },
+  {
+    id: "qwen-dashscope-intl",
+    label: "Qwen / DashScope International",
+    kind: "openai-compatible",
+    baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
     requiresBaseUrl: false,
     icon: "Q",
     iconAsset: "qwen",
@@ -95,7 +114,7 @@ export const providerCatalog: ForgeProvider[] = [
     id: "minimax-cn",
     label: "MiniMax",
     kind: "openai-compatible",
-    baseUrl: "https://api.minimax.chat/v1",
+    baseUrl: "https://api.minimaxi.com/v1",
     requiresBaseUrl: false,
     icon: "MM",
     iconAsset: "minimax",
@@ -142,14 +161,78 @@ export const providerCatalog: ForgeProvider[] = [
     accentColor: "#2932e1"
   },
   {
-    id: "tencent-hunyuan",
-    label: "腾讯混元",
+    id: "baidu-qianfan-intl",
+    label: "Baidu Qianfan International",
     kind: "openai-compatible",
-    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
+    baseUrl: "https://api.baiduqianfan.ai/v1",
     requiresBaseUrl: false,
-    icon: "HY",
+    icon: "BD",
+    iconAsset: "baidu",
+    accentColor: "#2932e1"
+  },
+  {
+    id: "tencent-hunyuan",
+    label: "腾讯 TokenHub / 混元",
+    kind: "openai-compatible",
+    baseUrl: "https://tokenhub.tencentmaas.com/v1",
+    requiresBaseUrl: false,
+    icon: "TC",
     iconAsset: "hunyuan",
     accentColor: "#0052d9"
+  },
+  {
+    id: "groq",
+    label: "Groq",
+    kind: "openai-compatible",
+    baseUrl: "https://api.groq.com/openai/v1",
+    requiresBaseUrl: false,
+    icon: "GQ",
+    accentColor: "#f55036"
+  },
+  {
+    id: "together",
+    label: "Together AI",
+    kind: "openai-compatible",
+    baseUrl: "https://api.together.xyz/v1",
+    requiresBaseUrl: false,
+    icon: "TG",
+    accentColor: "#111827"
+  },
+  {
+    id: "mistral",
+    label: "Mistral AI",
+    kind: "openai-compatible",
+    baseUrl: "https://api.mistral.ai/v1",
+    requiresBaseUrl: false,
+    icon: "MS",
+    accentColor: "#ff7000"
+  },
+  {
+    id: "xai",
+    label: "xAI",
+    kind: "openai-compatible",
+    baseUrl: "https://api.x.ai/v1",
+    requiresBaseUrl: false,
+    icon: "X",
+    accentColor: "#202123"
+  },
+  {
+    id: "fireworks",
+    label: "Fireworks AI",
+    kind: "openai-compatible",
+    baseUrl: "https://api.fireworks.ai/inference/v1",
+    requiresBaseUrl: false,
+    icon: "FW",
+    accentColor: "#ef4444"
+  },
+  {
+    id: "cerebras",
+    label: "Cerebras",
+    kind: "openai-compatible",
+    baseUrl: "https://api.cerebras.ai/v1",
+    requiresBaseUrl: false,
+    icon: "CB",
+    accentColor: "#111827"
   },
   {
     id: "stepfun",

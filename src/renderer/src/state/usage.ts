@@ -8,6 +8,7 @@ export type UsageRate = {
   outputPerMillion: number;
 };
 
+// Rates may be keyed by provider id or exact model id. Model-specific rates win.
 export type UsageRateMap = Record<string, UsageRate>;
 
 export type UsageSummary = {
@@ -51,7 +52,7 @@ export function appendUsageEvent(events: UsageEvent[], event: UsageEvent): Usage
 export function summarizeUsage(events: UsageEvent[], rates: UsageRateMap): UsageSummary {
   return events.reduce<UsageSummary>(
     (summary, event) => {
-      const rate = rates[event.providerId];
+      const rate = getUsageRateForEvent(event, rates);
 
       return {
         requests: summary.requests + 1,
@@ -79,6 +80,23 @@ export function summarizeUsage(events: UsageEvent[], rates: UsageRateMap): Usage
       cacheWriteTokens: 0,
       estimatedCost: 0
     }
+  );
+}
+
+export function summarizeUsageByModel(
+  events: UsageEvent[],
+  rates: UsageRateMap
+): Record<string, UsageSummary> {
+  const eventsByModel = events.reduce<Record<string, UsageEvent[]>>((groups, event) => {
+    groups[event.modelId] = [...(groups[event.modelId] ?? []), event];
+    return groups;
+  }, {});
+
+  return Object.fromEntries(
+    Object.entries(eventsByModel).map(([modelId, modelEvents]) => [
+      modelId,
+      summarizeUsage(modelEvents, rates)
+    ])
   );
 }
 
@@ -133,6 +151,10 @@ export function loadUsageRates(storage: Storage): UsageRateMap {
 
 export function saveUsageRates(storage: Storage, rates: UsageRateMap): void {
   storage.setItem(usageRatesStorageKey, JSON.stringify(rates));
+}
+
+function getUsageRateForEvent(event: UsageEvent, rates: UsageRateMap): UsageRate | undefined {
+  return rates[event.modelId] ?? rates[event.providerId];
 }
 
 function parseJsonArray<T>(rawValue: string | null, guard: (value: unknown) => value is T): T[] {

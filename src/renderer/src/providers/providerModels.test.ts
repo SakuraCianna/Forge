@@ -76,11 +76,17 @@ describe("provider model adapters", () => {
     expect(providerCatalog.find((provider) => provider.id === "qwen-dashscope")?.baseUrl).toBe(
       "https://dashscope.aliyuncs.com/compatible-mode/v1"
     );
+    expect(providerCatalog.find((provider) => provider.id === "qwen-dashscope-intl")?.baseUrl).toBe(
+      "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    );
     expect(providerCatalog.find((provider) => provider.id === "siliconflow")?.baseUrl).toBe(
       "https://api.siliconflow.cn/v1"
     );
     expect(providerCatalog.find((provider) => provider.id === "volcengine-ark")?.baseUrl).toBe(
       "https://ark.cn-beijing.volces.com/api/v3"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "baidu-qianfan-intl")?.baseUrl).toBe(
+      "https://api.baiduqianfan.ai/v1"
     );
     expect(providerCatalog.find((provider) => provider.id === "zai")?.baseUrl).toBe(
       "https://api.z.ai/api/paas/v4"
@@ -89,10 +95,31 @@ describe("provider model adapters", () => {
       "https://api.z.ai/api/coding/paas/v4"
     );
     expect(providerCatalog.find((provider) => provider.id === "minimax-cn")?.baseUrl).toBe(
-      "https://api.minimax.chat/v1"
+      "https://api.minimaxi.com/v1"
     );
-    expect(providerCatalog.find((provider) => provider.id === "minimax")?.label).toBe(
-      "MiniMax 海外版"
+    expect(providerCatalog.find((provider) => provider.id === "tencent-hunyuan")?.baseUrl).toBe(
+      "https://tokenhub.tencentmaas.com/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "openrouter")?.baseUrl).toBe(
+      "https://openrouter.ai/api/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "groq")?.baseUrl).toBe(
+      "https://api.groq.com/openai/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "together")?.baseUrl).toBe(
+      "https://api.together.xyz/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "mistral")?.baseUrl).toBe(
+      "https://api.mistral.ai/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "xai")?.baseUrl).toBe(
+      "https://api.x.ai/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "fireworks")?.baseUrl).toBe(
+      "https://api.fireworks.ai/inference/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "cerebras")?.baseUrl).toBe(
+      "https://api.cerebras.ai/v1"
     );
     expect(providerCatalog.find((provider) => provider.id === "xiaomi-mimo")?.baseUrl).toBe(
       "https://api.xiaomimimo.com/v1"

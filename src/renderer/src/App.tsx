@@ -61,6 +61,17 @@ import {
   saveUsageRates,
   type UsageRateMap
 } from "@/state/usage";
+import {
+  formatCodePreview,
+  type CodeFormatResult,
+  type CodeFormatterMode
+} from "@/state/codeFormatting";
+import {
+  createDefaultGeneralPreferences,
+  loadGeneralPreferences,
+  saveGeneralPreferences,
+  type GeneralPreferences
+} from "@/state/generalPreferences";
 import type { TokenUsage, UsageEvent, UsageEventKind } from "@shared/usageTypes";
 
 type ProviderKeyStatus = {
@@ -135,7 +146,7 @@ const enHeroPrompts = [
 ];
 
 const heroSwapAnimationMs = 900;
-const heroSwapIdleMs = 1000;
+const heroSwapIdleMs = 1500;
 
 export function App(): ReactElement {
   const [settings, setSettings] = useState(() => {
@@ -158,6 +169,8 @@ export function App(): ReactElement {
   );
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
+  const [fileFormatterMode, setFileFormatterMode] = useState<CodeFormatterMode>("raw");
+  const [formattedPreview, setFormattedPreview] = useState<CodeFormatResult | null>(null);
   const [changePreviews, setChangePreviews] = useState<ProjectFileChangePreview[]>([]);
   const [gitStatus, setGitStatus] = useState<ProjectGitStatus | null>(null);
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
@@ -188,6 +201,13 @@ export function App(): ReactElement {
     }
 
     return loadPersonalizationSettings(window.localStorage);
+  });
+  const [generalPreferences, setGeneralPreferences] = useState<GeneralPreferences>(() => {
+    if (typeof window === "undefined") {
+      return createDefaultGeneralPreferences();
+    }
+
+    return loadGeneralPreferences(window.localStorage);
   });
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
@@ -226,6 +246,10 @@ export function App(): ReactElement {
   }, [personalization]);
 
   useEffect(() => {
+    saveGeneralPreferences(window.localStorage, generalPreferences);
+  }, [generalPreferences]);
+
+  useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setHeroPromptIndex((current) => (current + 1) % activeHeroPrompts.length);
     }, heroSwapAnimationMs + heroSwapIdleMs);
@@ -237,6 +261,7 @@ export function App(): ReactElement {
     if (!currentProject) {
       setProjectScanResult(null);
       setPreviewFile(null);
+      setFormattedPreview(null);
       setChangePreviews([]);
       setGitStatus(null);
       setSelectedGitPath(null);
@@ -247,6 +272,29 @@ export function App(): ReactElement {
     void scanProject(currentProject.path);
     void refreshProjectGitStatus(currentProject.path);
   }, [currentProject]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!previewFile) {
+      setFormattedPreview(null);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    void formatCodePreview(previewFile.relativePath, previewFile.content, fileFormatterMode).then(
+      (result) => {
+        if (isActive) {
+          setFormattedPreview(result);
+        }
+      }
+    );
+
+    return () => {
+      isActive = false;
+    };
+  }, [fileFormatterMode, previewFile]);
 
   useEffect(() => {
     const changes = gitStatus?.changes ?? [];
@@ -451,6 +499,7 @@ export function App(): ReactElement {
     const result = await window.forge.projects.scan(projectPath);
     setProjectScanResult(result);
     setPreviewFile(null);
+    setFormattedPreview(null);
     setChangePreviews([]);
   }
 
@@ -1005,8 +1054,8 @@ export function App(): ReactElement {
   function renderNewConversationView(): ReactElement {
     return (
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
-        <div className="w-full max-w-[860px] -translate-y-[5vh]">
-          <h1 className="mb-7 overflow-hidden whitespace-nowrap text-center text-[26px] font-medium leading-tight tracking-normal text-[#202123] md:text-[28px]">
+        <div className="w-full max-w-[760px] -translate-y-[5vh]">
+          <h1 className="mb-5 overflow-hidden whitespace-nowrap text-center text-[24px] font-medium leading-tight tracking-normal text-[#202123] md:text-[26px]">
             <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_900ms_ease-in-out] truncate align-bottom">
               {activeHeroPrompts[heroPromptIndex]}
             </span>
@@ -1086,6 +1135,9 @@ export function App(): ReactElement {
   }
 
   function renderFilesView(): ReactElement {
+    const previewContent = formattedPreview?.content ?? previewFile?.content ?? "";
+    const formatterMessage = formatPreviewStatus(formattedPreview, settings.language);
+
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-hidden rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
         <ViewHeader title={t("files.title")} description={t("files.description")} />
@@ -1109,11 +1161,37 @@ export function App(): ReactElement {
                 </button>
               ))}
             </div>
-            <div className="min-h-0 overflow-auto p-4">
+            <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-4">
               {previewFile ? (
-                <pre className="min-h-full whitespace-pre-wrap rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] p-4 font-mono text-xs leading-5 text-[#202123]">
-                  {previewFile.content}
-                </pre>
+                <>
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-[#202123]">
+                        {previewFile.relativePath}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-[#8e8ea0]">
+                        {formatterMessage}
+                      </span>
+                    </span>
+                    <label className="flex shrink-0 items-center gap-2 text-xs text-[#6e6e80]">
+                      {settings.language === "zh-CN" ? "格式化" : "Formatter"}
+                      <select
+                        aria-label={settings.language === "zh-CN" ? "代码格式化" : "Code formatter"}
+                        value={fileFormatterMode}
+                        onChange={(event) =>
+                          setFileFormatterMode(event.currentTarget.value as CodeFormatterMode)
+                        }
+                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs text-[#202123] outline-none focus:border-[#202123]"
+                      >
+                        <option value="raw">{settings.language === "zh-CN" ? "原始" : "Raw"}</option>
+                        <option value="prettier">Prettier</option>
+                      </select>
+                    </label>
+                  </div>
+                  <pre className="min-h-0 overflow-auto whitespace-pre-wrap rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-4 font-mono text-xs leading-5 text-[#202123]">
+                    {previewContent}
+                  </pre>
+                </>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-[#6e6e80]">
                   {t("files.pickFile")}
@@ -1138,10 +1216,10 @@ export function App(): ReactElement {
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
         ) : (
-          <div className="grid h-[calc(100%-86px)] min-h-0 gap-4 p-5 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-[18px] border border-[#ececf1] bg-white">
-              <div className="border-b border-[#ececf1] px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
+          <div className="grid h-[calc(100%-86px)] min-h-0 gap-3 p-4 xl:grid-cols-[minmax(260px,330px)_minmax(0,1fr)]">
+            <div className="flex min-h-0 flex-col overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+              <div className="border-b border-[#ececf1] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0">
                     <h2 className="text-sm font-semibold text-[#202123]">{t("source.changedFiles")}</h2>
                     <span className="mt-1 block truncate text-xs text-[#8e8ea0]">{currentProject.path}</span>
@@ -1149,13 +1227,13 @@ export function App(): ReactElement {
                   <button
                     type="button"
                     onClick={() => void refreshProjectGitStatus()}
-                    className="shrink-0 rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-1.5 text-xs text-[#202123] hover:bg-[#f7f7f8]"
+                    className="shrink-0 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 py-1.5 text-xs text-[#202123] hover:bg-[#f7f7f8]"
                   >
                     {t("projects.refreshGit")}
                   </button>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-auto p-2">
+              <div className="min-h-0 flex-1 overflow-auto p-1.5">
                 {gitStatus?.isRepo === false ? (
                   <p className="px-2 py-2 text-sm text-[#6e6e80]">{t("projects.gitNotRepo")}</p>
                 ) : changedFiles.length > 0 ? (
@@ -1165,13 +1243,13 @@ export function App(): ReactElement {
                         key={change.path}
                         type="button"
                         onClick={() => setSelectedGitPath(change.path)}
-                        className={`grid w-full grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-sm transition ${
+                        className={`grid w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-[9px] px-1.5 py-1.5 text-left text-[13px] transition ${
                           selectedChange?.path === change.path
                             ? "bg-[#ececf1] text-[#202123]"
                             : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
                         }`}
                       >
-                        <span className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-[#d9d9e3] bg-white font-mono text-[11px] text-[#6e6e80]">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-[#d9d9e3] bg-white font-mono text-[10px] text-[#6e6e80]">
                           {formatGitStatusLetter(change.status)}
                         </span>
                         <span className="min-w-0 truncate">{change.path}</span>
@@ -1185,7 +1263,7 @@ export function App(): ReactElement {
                   <p className="px-2 py-2 text-sm text-[#6e6e80]">{t("projects.gitClean")}</p>
                 )}
               </div>
-              <div className="border-t border-[#ececf1] p-3">
+              <div className="border-t border-[#ececf1] p-2.5">
                 <label className="grid gap-2 text-sm text-[#6e6e80]">
                   {t("projects.commitMessage")}
                   <input
@@ -1206,7 +1284,7 @@ export function App(): ReactElement {
               </div>
             </div>
 
-            <div className="min-h-[520px] overflow-hidden rounded-[18px] border border-[#ececf1] bg-white">
+            <div className="min-h-[520px] overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
               <div className="border-b border-[#ececf1] px-4 py-3">
                 <h2 className="text-sm font-semibold text-[#202123]">{t("source.diffPreview")}</h2>
                 <p className="mt-1 truncate text-xs text-[#6e6e80]">
@@ -1234,6 +1312,7 @@ export function App(): ReactElement {
       <div className="h-full min-h-0 p-5">
         <SettingsPanel
           settings={settings}
+          generalPreferences={generalPreferences}
           keyStatuses={keyStatuses}
           archivedThreads={threads.filter((thread) => thread.archived)}
           onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
@@ -1247,6 +1326,7 @@ export function App(): ReactElement {
           }}
           onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
           onSetLanguage={setInterfaceLanguage}
+          onUpdateGeneralPreferences={setGeneralPreferences}
           onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
           onUpdateProviderBaseUrl={(providerId, baseUrl) =>
             setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
@@ -1442,6 +1522,29 @@ function formatGitStatusLetter(status: string): string {
   }
 
   return "M";
+}
+
+function formatPreviewStatus(
+  result: CodeFormatResult | null,
+  language: Language
+): string {
+  if (!result) {
+    return language === "zh-CN" ? "准备预览" : "Preparing preview";
+  }
+
+  if (result.status === "formatted") {
+    return language === "zh-CN" ? "已使用 Prettier 格式化预览" : "Formatted with Prettier";
+  }
+
+  if (result.status === "unsupported") {
+    return language === "zh-CN" ? "当前文件类型暂不支持格式化" : "No formatter for this file type";
+  }
+
+  if (result.status === "error") {
+    return result.message ?? (language === "zh-CN" ? "格式化失败" : "Formatting failed");
+  }
+
+  return language === "zh-CN" ? "原始内容" : "Raw content";
 }
 
 function Notice({ message }: { message: string }): ReactElement {

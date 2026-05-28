@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultModelSettings, mergeFetchedModels, setLanguage } from "@/state/modelSettings";
+import { createDefaultGeneralPreferences } from "@/state/generalPreferences";
 import { createDefaultPersonalizationSettings } from "@/state/personalization";
 import { SettingsPanel } from "./SettingsPanel";
 
@@ -11,6 +12,7 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
   return render(
     <SettingsPanel
       settings={settings}
+      generalPreferences={createDefaultGeneralPreferences()}
       keyStatuses={{}}
       onClearUsage={vi.fn()}
       onDeleteProviderKey={vi.fn()}
@@ -19,6 +21,7 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
       onDeleteProvider={vi.fn()}
       onSaveProviderKey={vi.fn()}
       onSetLanguage={vi.fn()}
+      onUpdateGeneralPreferences={vi.fn()}
       onSelectModel={vi.fn()}
       onUpdatePersonalization={vi.fn()}
       onUpdateProviderBaseUrl={vi.fn()}
@@ -48,6 +51,27 @@ describe("SettingsPanel", () => {
     await user.click(screen.getByRole("menuitem", { name: "中文" }));
 
     expect(onSetLanguage).toHaveBeenCalledWith("zh-CN");
+  });
+
+  it("updates Codex-like general preferences", async () => {
+    const user = userEvent.setup();
+    const onUpdateGeneralPreferences = vi.fn();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+
+    renderSettingsPanel({ settings, onUpdateGeneralPreferences });
+
+    await user.click(screen.getByRole("button", { name: /General/ }));
+    await user.click(screen.getByRole("button", { name: /Daily work/ }));
+
+    expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
+      expect.objectContaining({ workMode: "daily" })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Auto review" }));
+
+    expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
+      expect.objectContaining({ autoReview: false })
+    );
   });
 
   it("saves provider API keys without exposing them in settings state", async () => {

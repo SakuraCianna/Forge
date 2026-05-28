@@ -47,9 +47,11 @@ describe("modelSettings", () => {
       "openai",
       "anthropic",
       "gemini",
+      "openrouter",
       "deepseek",
       "moonshot",
       "qwen-dashscope",
+      "qwen-dashscope-intl",
       "zhipu",
       "zai",
       "zai-coding",
@@ -58,7 +60,14 @@ describe("modelSettings", () => {
       "siliconflow",
       "volcengine-ark",
       "baidu-qianfan",
+      "baidu-qianfan-intl",
       "tencent-hunyuan",
+      "groq",
+      "together",
+      "mistral",
+      "xai",
+      "fireworks",
+      "cerebras",
       "stepfun",
       "modelscope",
       "xiaomi-mimo",
@@ -130,13 +139,13 @@ describe("modelSettings", () => {
     const storage = createMemoryStorage();
     let settings = createDefaultModelSettings();
 
-    settings = addCustomProvider(settings, "OpenRouter", "https://openrouter.ai/api/v1");
-    settings = updateProviderBaseUrl(settings, "custom-openrouter", "https://example.com/api/v1");
+    settings = addCustomProvider(settings, "Cherry Gateway", "https://gateway.example/v1");
+    settings = updateProviderBaseUrl(settings, "custom-cherry-gateway", "https://example.com/api/v1");
     saveModelSettings(storage, settings);
 
     const loaded = loadModelSettings(storage);
 
-    expect(loaded.providers.find((provider) => provider.id === "custom-openrouter")?.baseUrl).toBe(
+    expect(loaded.providers.find((provider) => provider.id === "custom-cherry-gateway")?.baseUrl).toBe(
       "https://example.com/api/v1"
     );
   });

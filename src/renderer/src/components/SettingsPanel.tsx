@@ -16,6 +16,7 @@ import {
   ReceiptText,
   RefreshCw,
   SlidersHorizontal,
+  Terminal,
   Trash2
 } from "lucide-react";
 import type { ForgeModel, Language, ModelSettings } from "@shared/modelTypes";
@@ -23,8 +24,10 @@ import type { UsageEvent } from "@shared/usageTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { PersonalizationSettings } from "@/state/personalization";
 import type { TaskThread } from "@/state/taskThreads";
+import type { GeneralPreferences } from "@/state/generalPreferences";
 import {
   summarizeUsage,
+  summarizeUsageByModel,
   summarizeUsageByProvider,
   type UsageRate,
   type UsageRateMap
@@ -40,6 +43,7 @@ type SettingsPanelProps = {
   settings: ModelSettings;
   keyStatuses: Record<string, { hasKey: boolean; last4: string | null }>;
   archivedThreads: TaskThread[];
+  generalPreferences: GeneralPreferences;
   onDeleteProviderKey: (providerId: string) => void;
   onFetchModels: (providerId: string, apiKey?: string) => void;
   onAddProvider: (label: string, baseUrl: string) => void;
@@ -47,10 +51,11 @@ type SettingsPanelProps = {
   onDeleteProvider: (providerId: string) => void;
   onSaveProviderKey: (providerId: string, apiKey: string) => void;
   onSetLanguage: (language: Language) => void;
+  onUpdateGeneralPreferences: (preferences: GeneralPreferences) => void;
   onUpdatePersonalization: (settings: PersonalizationSettings) => void;
   onUpdateProviderBaseUrl: (providerId: string, baseUrl: string) => void;
   onUpdateProviderLabel: (providerId: string, label: string) => void;
-  onUpdateUsageRate: (providerId: string, rate: UsageRate) => void;
+  onUpdateUsageRate: (rateKey: string, rate: UsageRate) => void;
   onRestoreArchivedThread: (threadId: string) => void;
   onSelectModel: (modelId: string) => void;
   personalization: PersonalizationSettings;
@@ -72,6 +77,7 @@ export function SettingsPanel({
   settings,
   keyStatuses,
   archivedThreads,
+  generalPreferences,
   onDeleteProviderKey,
   onFetchModels,
   onAddProvider,
@@ -79,6 +85,7 @@ export function SettingsPanel({
   onDeleteProvider,
   onSaveProviderKey,
   onSetLanguage,
+  onUpdateGeneralPreferences,
   onUpdatePersonalization,
   onUpdateProviderBaseUrl,
   onUpdateProviderLabel,
@@ -104,6 +111,7 @@ export function SettingsPanel({
     : null;
   const totalUsage = summarizeUsage(usageEvents, usageRates);
   const providerUsage = summarizeUsageByProvider(usageEvents, usageRates);
+  const modelUsage = summarizeUsageByModel(usageEvents, usageRates);
   const sectionItems: SectionItem[] = [
     {
       id: "general",
@@ -198,25 +206,154 @@ export function SettingsPanel({
   );
 
   function renderGeneralSection(): ReactElement {
+    const copy = getGeneralSettingsCopy(settings.language);
+
     return (
       <SectionFrame>
-        <label className="flex items-center justify-between gap-4 rounded-[14px] border border-[#ececf1] bg-white px-4 py-3 text-sm">
-          <span>
-            <span className="block font-medium text-[#202123]">{t("settings.language")}</span>
-            <span className="mt-1 block text-xs text-[#6e6e80]">
-              {settings.language === "zh-CN" ? "应用界面显示语言" : "Application interface language"}
-            </span>
-          </span>
-          <InlineDropdown
-            ariaLabel={t("settings.language")}
-            value={settings.language}
-            options={[
-              { value: "zh-CN", label: "中文" },
-              { value: "en-US", label: "English" }
-            ]}
-            onChange={(value) => onSetLanguage(value as Language)}
-          />
-        </label>
+        <div className="grid gap-5">
+          <div>
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold text-[#202123]">{copy.workModeTitle}</h2>
+              <p className="mt-1 text-xs leading-5 text-[#6e6e80]">{copy.workModeDescription}</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <ModeCard
+                icon={Terminal}
+                label={copy.codeMode}
+                description={copy.codeModeDescription}
+                selected={generalPreferences.workMode === "code"}
+                onClick={() =>
+                  onUpdateGeneralPreferences({ ...generalPreferences, workMode: "code" })
+                }
+              />
+              <ModeCard
+                icon={Globe2}
+                label={copy.dailyMode}
+                description={copy.dailyModeDescription}
+                selected={generalPreferences.workMode === "daily"}
+                onClick={() =>
+                  onUpdateGeneralPreferences({ ...generalPreferences, workMode: "daily" })
+                }
+              />
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+            <SettingRow label={t("settings.language")} description={copy.languageDescription}>
+              <InlineDropdown
+                ariaLabel={t("settings.language")}
+                value={settings.language}
+                options={[
+                  { value: "zh-CN", label: "中文" },
+                  { value: "en-US", label: "English" }
+                ]}
+                onChange={(value) => onSetLanguage(value as Language)}
+              />
+            </SettingRow>
+            <SettingRow label={copy.defaultOpenTarget} description={copy.defaultOpenTargetDescription}>
+              <InlineDropdown
+                ariaLabel={copy.defaultOpenTarget}
+                value={generalPreferences.defaultOpenTarget}
+                options={[
+                  { value: "recent-project", label: copy.recentProject },
+                  { value: "blank", label: copy.blankWorkspace }
+                ]}
+                onChange={(value) =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    defaultOpenTarget: value as GeneralPreferences["defaultOpenTarget"]
+                  })
+                }
+              />
+            </SettingRow>
+            <SettingRow label={copy.agentRuntime} description={copy.agentRuntimeDescription}>
+              <InlineDropdown
+                ariaLabel={copy.agentRuntime}
+                value={generalPreferences.agentRuntime}
+                options={[
+                  { value: "windows-native", label: copy.windowsNative },
+                  { value: "wsl", label: "WSL" }
+                ]}
+                onChange={(value) =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    agentRuntime: value as GeneralPreferences["agentRuntime"]
+                  })
+                }
+              />
+            </SettingRow>
+            <SettingRow label={copy.terminalShell} description={copy.terminalShellDescription}>
+              <InlineDropdown
+                ariaLabel={copy.terminalShell}
+                value={generalPreferences.terminalShell}
+                options={[
+                  { value: "powershell", label: "PowerShell" },
+                  { value: "cmd", label: "Command Prompt" },
+                  { value: "git-bash", label: "Git Bash" }
+                ]}
+                onChange={(value) =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    terminalShell: value as GeneralPreferences["terminalShell"]
+                  })
+                }
+              />
+            </SettingRow>
+          </div>
+
+          <div>
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold text-[#202123]">{copy.permissionsTitle}</h2>
+              <p className="mt-1 text-xs leading-5 text-[#6e6e80]">{copy.permissionsDescription}</p>
+            </div>
+            <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+              <PreferenceToggle
+                label={copy.defaultPermission}
+                description={copy.defaultPermissionDescription}
+                enabled={generalPreferences.defaultPermission}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    defaultPermission: !generalPreferences.defaultPermission
+                  })
+                }
+              />
+              <PreferenceToggle
+                label={copy.autoReview}
+                description={copy.autoReviewDescription}
+                enabled={generalPreferences.autoReview}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    autoReview: !generalPreferences.autoReview
+                  })
+                }
+              />
+              <PreferenceToggle
+                label={copy.fullAccess}
+                description={copy.fullAccessDescription}
+                enabled={generalPreferences.fullAccess}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    fullAccess: !generalPreferences.fullAccess
+                  })
+                }
+              />
+              <PreferenceToggle
+                label={copy.telemetry}
+                description={copy.telemetryDescription}
+                enabled={generalPreferences.telemetry}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    telemetry: !generalPreferences.telemetry
+                  })
+                }
+              />
+            </div>
+          </div>
+        </div>
       </SectionFrame>
     );
   }
@@ -551,38 +688,94 @@ export function SettingsPanel({
           {settings.providers.map((provider, index) => {
             const usage = providerUsage[provider.id] ?? summarizeUsage([], usageRates);
             const rate = usageRates[provider.id] ?? { inputPerMillion: 0, outputPerMillion: 0 };
+            const providerModels = getProviderModelRows(provider.id);
 
             return (
               <div
                 key={provider.id}
-                className={`grid gap-4 px-4 py-4 lg:grid-cols-[minmax(180px,1fr)_minmax(170px,220px)_minmax(170px,220px)_100px] lg:items-end ${
+                className={`grid gap-3 px-4 py-4 ${
                   index === 0 ? "" : "border-t border-[#ececf1]"
                 }`}
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <ProviderMark provider={provider} fallbackLabel={provider.label} size="md" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-[#202123]">
-                      {provider.label}
+                <div className="grid gap-4 lg:grid-cols-[minmax(180px,1fr)_minmax(150px,200px)_minmax(150px,200px)_92px] lg:items-end">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ProviderMark provider={provider} fallbackLabel={provider.label} size="md" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-[#202123]">
+                        {provider.label}
+                      </span>
+                      <span className="mt-1 block text-xs text-[#6e6e80]">
+                        {formatInteger(usage.totalTokens)} tokens / {usage.requests} requests
+                      </span>
                     </span>
-                    <span className="mt-1 block text-xs text-[#6e6e80]">
-                      {formatInteger(usage.totalTokens)} tokens / {usage.requests} requests
-                    </span>
-                  </span>
+                  </div>
+                  <PriceInput
+                    label={t("settings.inputPrice")}
+                    value={rate.inputPerMillion}
+                    onChange={(value) =>
+                      onUpdateUsageRate(provider.id, { ...rate, inputPerMillion: value })
+                    }
+                  />
+                  <PriceInput
+                    label={t("settings.outputPrice")}
+                    value={rate.outputPerMillion}
+                    onChange={(value) =>
+                      onUpdateUsageRate(provider.id, { ...rate, outputPerMillion: value })
+                    }
+                  />
+                  <div className="text-sm font-semibold text-[#202123] lg:text-right">
+                    ${usage.estimatedCost.toFixed(4)}
+                  </div>
                 </div>
-                <PriceInput
-                  label={t("settings.inputPrice")}
-                  value={rate.inputPerMillion}
-                  onChange={(value) => onUpdateUsageRate(provider.id, { ...rate, inputPerMillion: value })}
-                />
-                <PriceInput
-                  label={t("settings.outputPrice")}
-                  value={rate.outputPerMillion}
-                  onChange={(value) => onUpdateUsageRate(provider.id, { ...rate, outputPerMillion: value })}
-                />
-                <div className="text-sm font-semibold text-[#202123] lg:text-right">
-                  ${usage.estimatedCost.toFixed(4)}
-                </div>
+                {providerModels.length > 0 ? (
+                  <div className="ml-10 overflow-hidden rounded-[12px] border border-[#ececf1] bg-[#fafafa]">
+                    {providerModels.map((modelRow, modelIndex) => {
+                      const modelRate = usageRates[modelRow.id] ?? rate;
+                      const usageForModel = modelUsage[modelRow.id] ?? summarizeUsage([], usageRates);
+
+                      return (
+                        <div
+                          key={modelRow.id}
+                          className={`grid gap-3 px-3 py-3 lg:grid-cols-[minmax(180px,1fr)_minmax(150px,200px)_minmax(150px,200px)_92px] lg:items-end ${
+                            modelIndex === 0 ? "" : "border-t border-[#ececf1]"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <span className="block truncate text-xs font-semibold text-[#202123]">
+                              {modelRow.label}
+                            </span>
+                            <span className="mt-1 block truncate text-[11px] text-[#8e8ea0]">
+                              {formatInteger(usageForModel.totalTokens)} tokens / {usageForModel.requests} requests
+                            </span>
+                          </div>
+                          <PriceInput
+                            label={getUsageModelInputLabel(settings.language)}
+                            value={modelRate.inputPerMillion}
+                            onChange={(value) =>
+                              onUpdateUsageRate(modelRow.id, {
+                                ...modelRate,
+                                inputPerMillion: value
+                              })
+                            }
+                          />
+                          <PriceInput
+                            label={getUsageModelOutputLabel(settings.language)}
+                            value={modelRate.outputPerMillion}
+                            onChange={(value) =>
+                              onUpdateUsageRate(modelRow.id, {
+                                ...modelRate,
+                                outputPerMillion: value
+                              })
+                            }
+                          />
+                          <div className="text-xs font-semibold text-[#202123] lg:text-right">
+                            ${usageForModel.estimatedCost.toFixed(4)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -600,6 +793,26 @@ export function SettingsPanel({
         </div>
       </SectionFrame>
     );
+  }
+
+  function getProviderModelRows(providerId: string): Array<{ id: string; label: string }> {
+    const rowsById = new Map<string, { id: string; label: string }>();
+
+    for (const model of settings.models.filter((candidate) => candidate.providerId === providerId)) {
+      rowsById.set(model.id, { id: model.id, label: model.label });
+    }
+
+    for (const event of usageEvents.filter((candidate) => candidate.providerId === providerId)) {
+      rowsById.set(event.modelId, {
+        id: event.modelId,
+        label:
+          rowsById.get(event.modelId)?.label ??
+          event.modelId.replace(`${providerId}:`, "") ??
+          event.modelId
+      });
+    }
+
+    return Array.from(rowsById.values());
   }
 
   function renderPersonalizationSection(): ReactElement {
@@ -729,6 +942,92 @@ export function SettingsPanel({
 
 function SectionFrame({ children }: { children: ReactElement | ReactElement[] }): ReactElement {
   return <section>{children}</section>;
+}
+
+function ModeCard({
+  description,
+  icon: Icon,
+  label,
+  onClick,
+  selected
+}: {
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+  selected: boolean;
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={`grid grid-cols-[24px_minmax(0,1fr)_18px] items-center gap-3 rounded-[14px] border px-4 py-3 text-left transition active:scale-[0.99] ${
+        selected
+          ? "border-[#d9d9e3] bg-[#ececf1] text-[#202123]"
+          : "border-[#ececf1] bg-white text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+      }`}
+    >
+      <Icon className="h-4 w-4" />
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{label}</span>
+        <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">{description}</span>
+      </span>
+      {selected ? <Check className="h-4 w-4 text-[#202123]" /> : <span />}
+    </button>
+  );
+}
+
+function SettingRow({
+  children,
+  description,
+  label
+}: {
+  children: ReactElement;
+  description: string;
+  label: string;
+}): ReactElement {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-[#ececf1] px-4 py-3 text-sm last:border-b-0">
+      <span className="min-w-0">
+        <span className="block font-medium text-[#202123]">{label}</span>
+        <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">{description}</span>
+      </span>
+      <span className="shrink-0">{children}</span>
+    </div>
+  );
+}
+
+function PreferenceToggle({
+  description,
+  enabled,
+  label,
+  onToggle
+}: {
+  description: string;
+  enabled: boolean;
+  label: string;
+  onToggle: () => void;
+}): ReactElement {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-[#ececf1] px-4 py-3 last:border-b-0">
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-[#202123]">{label}</span>
+        <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">{description}</span>
+      </span>
+      <button
+        type="button"
+        aria-pressed={enabled}
+        aria-label={label}
+        onClick={onToggle}
+        className={`flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${
+          enabled ? "justify-end bg-[#202123]" : "justify-start bg-[#d9d9e3]"
+        }`}
+      >
+        <span className="h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.18)]" />
+      </button>
+    </div>
+  );
 }
 
 function InlineDropdown<T extends string>({
@@ -889,6 +1188,103 @@ function PriceInput({
       />
     </label>
   );
+}
+
+function getUsageModelInputLabel(language: Language): string {
+  return language === "zh-CN" ? "模型输入单价 / 1M" : "Model input price / 1M";
+}
+
+function getUsageModelOutputLabel(language: Language): string {
+  return language === "zh-CN" ? "模型输出单价 / 1M" : "Model output price / 1M";
+}
+
+function getGeneralSettingsCopy(language: Language): {
+  agentRuntime: string;
+  agentRuntimeDescription: string;
+  autoReview: string;
+  autoReviewDescription: string;
+  blankWorkspace: string;
+  codeMode: string;
+  codeModeDescription: string;
+  dailyMode: string;
+  dailyModeDescription: string;
+  defaultOpenTarget: string;
+  defaultOpenTargetDescription: string;
+  defaultPermission: string;
+  defaultPermissionDescription: string;
+  fullAccess: string;
+  fullAccessDescription: string;
+  languageDescription: string;
+  permissionsDescription: string;
+  permissionsTitle: string;
+  recentProject: string;
+  telemetry: string;
+  telemetryDescription: string;
+  terminalShell: string;
+  terminalShellDescription: string;
+  windowsNative: string;
+  workModeDescription: string;
+  workModeTitle: string;
+} {
+  if (language === "zh-CN") {
+    return {
+      agentRuntime: "智能体环境",
+      agentRuntimeDescription: "选择智能体在 Windows 上的运行位置",
+      autoReview: "自动审核",
+      autoReviewDescription: "运行前自动审查潜在高风险操作",
+      blankWorkspace: "空白工作区",
+      codeMode: "适用于编程",
+      codeModeDescription: "更技术性的回答和控制",
+      dailyMode: "适用于日常工作",
+      dailyModeDescription: "同样强大, 技术细节更少",
+      defaultOpenTarget: "默认打开目标",
+      defaultOpenTargetDescription: "默认打开文件和文件夹的位置",
+      defaultPermission: "默认权限",
+      defaultPermissionDescription: "允许 Forge 读取和编辑当前工作区中的文件",
+      fullAccess: "完全访问权限",
+      fullAccessDescription: "允许请求额外文件和联网命令, 生产操作仍需谨慎",
+      languageDescription: "应用 UI 语言",
+      permissionsDescription: "控制智能体默认能做什么, 高风险操作仍会保留明确反馈",
+      permissionsTitle: "权限",
+      recentProject: "最近项目",
+      telemetry: "诊断信息",
+      telemetryDescription: "本地保留基础诊断开关, 默认关闭",
+      terminalShell: "集成终端 Shell",
+      terminalShellDescription: "选择要在集成终端中打开的 Shell",
+      windowsNative: "Windows 原生",
+      workModeDescription: "选择 Forge 默认显示多少技术细节",
+      workModeTitle: "工作模式"
+    };
+  }
+
+  return {
+    agentRuntime: "Agent runtime",
+    agentRuntimeDescription: "Choose where the agent runs on Windows",
+    autoReview: "Auto review",
+    autoReviewDescription: "Review potentially risky operations before running",
+    blankWorkspace: "Blank workspace",
+    codeMode: "Code work",
+    codeModeDescription: "More technical answers and controls",
+    dailyMode: "Daily work",
+    dailyModeDescription: "Same power, fewer implementation details",
+    defaultOpenTarget: "Default open target",
+    defaultOpenTargetDescription: "Default location for opening files and folders",
+    defaultPermission: "Default permission",
+    defaultPermissionDescription: "Allow Forge to read and edit files in the current workspace",
+    fullAccess: "Full access",
+    fullAccessDescription: "Allow extra file access and network commands when needed",
+    languageDescription: "Application UI language",
+    permissionsDescription: "Control what the agent can do by default",
+    permissionsTitle: "Permissions",
+    recentProject: "Recent project",
+    telemetry: "Diagnostics",
+    telemetryDescription: "Keep local diagnostics off by default",
+    terminalShell: "Integrated terminal shell",
+    terminalShellDescription: "Choose the shell opened in the integrated terminal",
+    windowsNative: "Windows native",
+    workModeDescription: "Choose how much technical detail Forge shows by default",
+    workModeTitle: "Work mode"
+  };
 }
 
 function formatInteger(value: number): string {

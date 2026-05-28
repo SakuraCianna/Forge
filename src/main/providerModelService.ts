@@ -21,7 +21,7 @@ type FetchModelsForProviderOptions = {
 export async function fetchModelsForProvider({
   provider,
   keyVault,
-  fetcher = fetch
+  fetcher = runtimeFetch
 }: FetchModelsForProviderOptions): Promise<ForgeModel[]> {
   const hydratedProvider = hydrateProviderFromCatalog(provider);
   const apiKey = await keyVault.readProviderKey(hydratedProvider.id);
@@ -63,10 +63,30 @@ function createNetworkErrorMessage(provider: ForgeProvider, url: string, error: 
   return [
     `${provider.label} model fetch failed: network request failed`,
     detail ? `(${detail})` : "",
-    `Check Base URL, proxy/network access, and whether this provider exposes ${url}.`
+    `Check Base URL, Electron proxy/network access, and whether this provider exposes ${url}.`
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+async function runtimeFetch(url: string, init: RequestInit): Promise<Response> {
+  if (isElectronRuntime()) {
+    try {
+      const electron = await import("electron");
+
+      if (electron.net?.fetch) {
+        return electron.net.fetch(url, init);
+      }
+    } catch {
+      // Fall through to global fetch when Electron's network stack is unavailable in tests.
+    }
+  }
+
+  return fetch(url, init);
+}
+
+function isElectronRuntime(): boolean {
+  return typeof process !== "undefined" && Boolean(process.versions?.electron);
 }
 
 async function readErrorDetail(response: Response): Promise<string> {

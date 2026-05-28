@@ -89,22 +89,22 @@ export function TaskComposer({
 
   const inputPanel = (
     <div
-      className={`bg-white p-3 text-[#202123] transition focus-within:border-[#202123] ${
+      className={`bg-white p-2.5 text-[#202123] transition focus-within:border-[#202123] ${
         isHero
-          ? "rounded-t-[22px] border-0 shadow-none"
-          : "rounded-[20px] border border-[#d9d9e3] shadow-[0_12px_36px_rgba(0,0,0,0.08)]"
+          ? "rounded-t-[18px] border-0 shadow-none"
+          : "rounded-[18px] border border-[#d9d9e3] shadow-[0_10px_28px_rgba(0,0,0,0.08)]"
       }`}
     >
       <textarea
         ref={textareaRef}
         value={prompt}
         onChange={(event) => setPrompt(event.currentTarget.value)}
-        className={`w-full resize-none bg-transparent px-2 py-2 text-[13px] leading-6 outline-none placeholder:text-[#b4b4bf] ${
-          isHero ? "min-h-[58px]" : "min-h-[68px]"
+        className={`w-full resize-none bg-transparent px-1.5 py-1.5 text-[12px] leading-5 outline-none placeholder:text-[#b4b4bf] ${
+          isHero ? "min-h-[46px]" : "min-h-[56px]"
         }`}
         placeholder={placeholderText}
       />
-      <div className="mt-2 flex items-center justify-between gap-3">
+      <div className="mt-1.5 flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
           {isHero ? (
             <button
@@ -112,9 +112,9 @@ export function TaskComposer({
               aria-label={copy.addProject}
               title={copy.addProject}
               onClick={onPickProject}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
             >
-              <Plus className="h-5 w-5" />
+              <Plus className="h-[18px] w-[18px]" />
             </button>
           ) : null}
           <ModelSelector
@@ -127,12 +127,12 @@ export function TaskComposer({
         </div>
         <button
           type="button"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
           aria-label={t("composer.send")}
           title={t("composer.send")}
           onClick={submitTask}
         >
-          <ArrowUp className="h-5 w-5" />
+          <ArrowUp className="h-[18px] w-[18px]" />
         </button>
       </div>
     </div>
@@ -141,7 +141,7 @@ export function TaskComposer({
   if (isHero) {
     return (
       <section className="w-full">
-        <div className="mx-auto max-w-[760px] overflow-visible rounded-[22px] border border-[#d9d9e3] bg-white shadow-[0_18px_54px_rgba(0,0,0,0.10)] transition focus-within:border-[#202123]">
+        <div className="mx-auto max-w-[680px] overflow-visible rounded-[18px] border border-[#d9d9e3] bg-white shadow-[0_14px_42px_rgba(0,0,0,0.10)] transition focus-within:border-[#202123]">
           {inputPanel}
           {renderContextSelector()}
         </div>
@@ -168,7 +168,7 @@ export function TaskComposer({
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className="flex h-12 w-full items-center gap-2 rounded-b-[22px] border-t border-[#ececf1] bg-white px-4 text-left text-xs text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123]"
+            className="flex h-10 w-full items-center gap-2 rounded-b-[18px] border-t border-[#ececf1] bg-white px-3 text-left text-[11px] text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123]"
           >
             {contextMode === "ask" ? (
               <BotMessageSquare className="h-4 w-4 shrink-0" />
@@ -183,7 +183,7 @@ export function TaskComposer({
           <DropdownMenu.Content
             align="start"
             sideOffset={8}
-            className="z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[18px] border border-[#d9d9e3] bg-white p-2 text-xs text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+            className="z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-xs text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
             <ContextItem
               selected={contextMode === "ask"}
@@ -240,7 +240,7 @@ function ContextItem({
   return (
     <DropdownMenu.Item
       onSelect={onSelect}
-      className="grid min-h-11 cursor-default select-none grid-cols-[18px_minmax(0,1fr)_18px] items-center gap-2 rounded-[11px] px-2.5 py-2 outline-none transition data-[highlighted]:bg-[#f7f7f8]"
+      className="grid min-h-10 cursor-default select-none grid-cols-[18px_minmax(0,1fr)_18px] items-center gap-2 rounded-[10px] px-2 py-1.5 outline-none transition data-[highlighted]:bg-[#f7f7f8]"
     >
       {children}
       {selected ? <Check className="h-4 w-4 text-[#202123]" /> : <span />}
