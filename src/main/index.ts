@@ -56,8 +56,8 @@ function createWindow(): void {
       : {
           titleBarStyle: "hidden",
           titleBarOverlay: {
-            color: "#090f19",
-            symbolColor: "#cbd8e8",
+            color: "#ffffff",
+            symbolColor: "#202123",
             height: 48
           }
         };
@@ -68,7 +68,7 @@ function createWindow(): void {
     minWidth: 1040,
     minHeight: 680,
     title: "Forge",
-    backgroundColor: "#080d16",
+    backgroundColor: "#ffffff",
     ...titleBarOptions,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),

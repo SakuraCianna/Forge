@@ -54,13 +54,13 @@ export function TaskComposer({
   }, [submitSignal, submitTask]);
 
   return (
-    <section className="border-t border-[rgba(148,163,184,0.1)] bg-[#080d16]/96 px-5 py-4">
-      <div className="mx-auto max-w-[880px] rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(13,22,36,0.96),rgba(9,16,28,0.98))] p-3 text-[#e5edf7] shadow-[0_18px_58px_rgba(0,0,0,0.3)] backdrop-blur-xl transition focus-within:border-[rgba(95,134,255,0.45)]">
+    <section className="border-t border-[#ececf1] bg-white px-5 py-4">
+      <div className="mx-auto max-w-[880px] rounded-[18px] border border-[#d9d9e3] bg-white p-3 text-[#202123] shadow-[0_12px_36px_rgba(0,0,0,0.08)] transition focus-within:border-[#202123]">
         <textarea
           ref={textareaRef}
           value={prompt}
           onChange={(event) => setPrompt(event.currentTarget.value)}
-          className="min-h-[68px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-6 outline-none placeholder:text-[#718198]"
+          className="min-h-[68px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-6 outline-none placeholder:text-[#8e8ea0]"
           placeholder={t("composer.placeholder")}
         />
         <div className="mt-2 flex items-center justify-between gap-3">
@@ -73,7 +73,7 @@ export function TaskComposer({
           />
           <button
             type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ff6b3d] text-[#08111f] shadow-[0_12px_30px_rgba(255,107,61,0.26)] transition hover:bg-[#ff815a] active:scale-[0.97]"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
             aria-label={t("composer.send")}
             onClick={submitTask}
           >

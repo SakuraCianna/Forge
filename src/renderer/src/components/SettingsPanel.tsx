@@ -99,10 +99,10 @@ export function SettingsPanel({
   return (
     <section className="h-full min-h-0 overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1180px] flex-col">
-        <header className="flex items-start justify-between gap-4 border-b border-[rgba(148,163,184,0.12)] px-1 pb-4">
+        <header className="flex items-start justify-between gap-4 border-b border-[#ececf1] px-1 pb-4">
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-normal text-white">{t("settings.title")}</h1>
-            <p className="mt-1 text-sm leading-6 text-[#8ea0b8]">{t("settings.subtitle")}</p>
+            <h1 className="text-xl font-semibold tracking-normal text-[#202123]">{t("settings.title")}</h1>
+            <p className="mt-1 text-sm leading-6 text-[#6e6e80]">{t("settings.subtitle")}</p>
           </div>
           <div className="hidden gap-2 md:flex">
             <StatusPill label={t("settings.currentModel")} value={currentModel?.label ?? t("settings.noModel")} />
@@ -111,7 +111,7 @@ export function SettingsPanel({
         </header>
 
         <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)] overflow-hidden">
-          <aside className="min-h-0 border-r border-[rgba(148,163,184,0.12)] py-4 pr-4">
+          <aside className="min-h-0 border-r border-[#ececf1] py-4 pr-4">
             <nav aria-label={t("settings.title")} className="space-y-1">
               {sectionItems.map((item) => (
                 <button
@@ -120,25 +120,25 @@ export function SettingsPanel({
                   onClick={() => setActiveSection(item.id)}
                   className={`flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left transition active:scale-[0.99] ${
                     activeSection === item.id
-                      ? "bg-[#17233a] text-white shadow-[inset_3px_0_0_#5f86ff]"
-                      : "text-[#9aaac0] hover:bg-[#101b2c] hover:text-[#edf5ff]"
+                      ? "bg-[#ececf1] text-[#202123]"
+                      : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
                   }`}
                 >
                   <item.icon className="h-4 w-4 shrink-0" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">{item.label}</span>
-                    <span className="mt-0.5 block truncate text-xs text-[#718198]">{item.description}</span>
+                    <span className="mt-0.5 block truncate text-xs text-[#8e8ea0]">{item.description}</span>
                   </span>
                 </button>
               ))}
             </nav>
 
-            <div className="mt-5 rounded-[14px] border border-[rgba(148,163,184,0.12)] bg-[#0d1726] p-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-[#dbe7f5]">
-                <ShieldCheck className="h-4 w-4 text-[#7da0ff]" />
+            <div className="mt-5 rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#202123]">
+                <ShieldCheck className="h-4 w-4 text-[#565869]" />
                 {t("app.keysLocal")}
               </div>
-              <p className="mt-2 text-xs leading-5 text-[#718198]">
+              <p className="mt-2 text-xs leading-5 text-[#6e6e80]">
                 {settings.language === "zh-CN"
                   ? "密钥通过本机安全存储保存, 不写入项目文件"
                   : "Keys are stored locally and never written into project files"}
@@ -163,10 +163,10 @@ export function SettingsPanel({
         title={settings.language === "zh-CN" ? "常规" : "General"}
         description={settings.language === "zh-CN" ? "调整界面语言和基础偏好" : "Adjust language and basic preferences"}
       >
-        <label className="flex items-center justify-between gap-4 rounded-[14px] border border-[rgba(148,163,184,0.12)] bg-[#0d1726] px-4 py-3 text-sm">
+        <label className="flex items-center justify-between gap-4 rounded-[14px] border border-[#ececf1] bg-white px-4 py-3 text-sm">
           <span>
-            <span className="block font-medium text-[#e5edf7]">{t("settings.language")}</span>
-            <span className="mt-1 block text-xs text-[#718198]">
+            <span className="block font-medium text-[#202123]">{t("settings.language")}</span>
+            <span className="mt-1 block text-xs text-[#6e6e80]">
               {settings.language === "zh-CN" ? "应用界面显示语言" : "Application interface language"}
             </span>
           </span>
@@ -174,7 +174,7 @@ export function SettingsPanel({
             aria-label={t("settings.language")}
             value={settings.language}
             onChange={(event) => onSetLanguage(event.currentTarget.value as Language)}
-            className="h-9 rounded-[12px] border border-[rgba(148,163,184,0.16)] bg-[#08111f] px-3 text-sm text-[#dbe7f5] outline-none transition focus:border-[#5f86ff]"
+            className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
           >
             <option value="zh-CN">中文</option>
             <option value="en-US">English</option>
@@ -205,17 +205,17 @@ export function SettingsPanel({
           />
         </div>
 
-        <div className="overflow-hidden rounded-[16px] border border-[rgba(148,163,184,0.12)]">
+        <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
           {settings.models.map((model, index) => (
             <label
               key={model.id}
-              className={`flex items-center justify-between gap-4 bg-[#0b1423] px-4 py-3 text-sm transition hover:bg-[#101b2c] ${
-                index === 0 ? "" : "border-t border-[rgba(148,163,184,0.1)]"
+              className={`flex items-center justify-between gap-4 bg-white px-4 py-3 text-sm transition hover:bg-[#f7f7f8] ${
+                index === 0 ? "" : "border-t border-[#ececf1]"
               }`}
             >
               <span className="min-w-0">
-                <span className="block truncate font-medium text-[#e5edf7]">{model.label}</span>
-                <span className="mt-1 block truncate text-xs text-[#718198]">
+                <span className="block truncate font-medium text-[#202123]">{model.label}</span>
+                <span className="mt-1 block truncate text-xs text-[#6e6e80]">
                   {model.providerId} / {model.capabilitySource}
                 </span>
               </span>
@@ -224,7 +224,7 @@ export function SettingsPanel({
                 checked={model.enabled}
                 onChange={(event) => onToggleModel(model.id, event.currentTarget.checked)}
                 aria-label={`${t("settings.enabled")} ${model.label}`}
-                className="h-4 w-4 shrink-0 accent-[#ff6b3d]"
+                className="h-4 w-4 shrink-0 accent-[#202123]"
               />
             </label>
           ))}
@@ -247,27 +247,27 @@ export function SettingsPanel({
             return (
               <article
                 key={provider.id}
-                className="overflow-hidden rounded-[16px] border border-[rgba(148,163,184,0.12)] bg-[#0b1423]"
+                className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white"
               >
                 <button
                   type="button"
                   aria-expanded={isExpanded}
                   aria-label={`${t("settings.configure")} ${provider.label}`}
                   onClick={() => setExpandedProviderId(isExpanded ? "" : provider.id)}
-                  className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-[#101b2c]"
+                  className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-[#f7f7f8]"
                 >
                   <span className="min-w-0">
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-white">{provider.label}</span>
+                      <span className="truncate text-sm font-semibold text-[#202123]">{provider.label}</span>
                       {provider.kind === "openai-compatible" ? (
-                        <span className="rounded-full border border-[#5f86ff]/24 bg-[#5f86ff]/10 px-2 py-0.5 text-[11px] text-[#a9bcff]">
+                        <span className="rounded-full border border-[#ececf1] bg-[#f7f7f8] px-2 py-0.5 text-[11px] text-[#565869]">
                           {t("settings.compatibleProvider")}
                         </span>
                       ) : null}
                     </span>
                     <span
                       className={`mt-1 flex items-center gap-1.5 text-xs ${
-                        keyStatus.hasKey ? "text-[#9df2bd]" : "text-[#ffb49c]"
+                        keyStatus.hasKey ? "text-[#087443]" : "text-[#b45309]"
                       }`}
                     >
                       {keyStatus.hasKey ? (
@@ -281,15 +281,15 @@ export function SettingsPanel({
                     </span>
                   </span>
                   <ChevronDown
-                    className={`h-4 w-4 shrink-0 text-[#8ea0b8] transition ${
+                    className={`h-4 w-4 shrink-0 text-[#6e6e80] transition ${
                       isExpanded ? "rotate-180" : ""
                     }`}
                   />
                 </button>
 
                 {isExpanded ? (
-                  <div className="grid gap-3 border-t border-[rgba(148,163,184,0.1)] px-4 py-4">
-                    <label className="grid gap-1.5 text-xs text-[#8ea0b8]">
+                  <div className="grid gap-3 border-t border-[#ececf1] bg-[#fafafa] px-4 py-4">
+                    <label className="grid gap-1.5 text-xs text-[#6e6e80]">
                       {provider.label} {t("settings.baseUrl")}
                       <input
                         value={draftBaseUrl}
@@ -301,11 +301,11 @@ export function SettingsPanel({
                           }));
                           onUpdateProviderBaseUrl(provider.id, nextValue);
                         }}
-                        className="h-10 rounded-[12px] border border-[rgba(148,163,184,0.16)] bg-[#08111f] px-3 text-sm text-[#dbe7f5] outline-none transition placeholder:text-[#718198] focus:border-[#5f86ff]"
+                        className="h-10 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
                       />
                     </label>
 
-                    <label className="grid gap-1.5 text-xs text-[#8ea0b8]">
+                    <label className="grid gap-1.5 text-xs text-[#6e6e80]">
                       {provider.label} API Key
                       <input
                         type="password"
@@ -317,7 +317,7 @@ export function SettingsPanel({
                             [provider.id]: nextValue
                           }));
                         }}
-                        className="h-10 rounded-[12px] border border-[rgba(148,163,184,0.16)] bg-[#08111f] px-3 text-sm text-[#dbe7f5] outline-none transition placeholder:text-[#718198] focus:border-[#5f86ff]"
+                        className="h-10 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
                       />
                     </label>
 
@@ -325,21 +325,21 @@ export function SettingsPanel({
                       <button
                         type="button"
                         aria-label={`${t("settings.saveKey")} ${provider.label} API Key`}
-                        className="inline-flex h-9 items-center justify-center rounded-[12px] bg-[#5f86ff] px-3 text-xs font-semibold text-white transition hover:bg-[#7598ff] active:scale-[0.99]"
+                        className="inline-flex h-9 items-center justify-center rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
                         onClick={() => onSaveProviderKey(provider.id, draftKey)}
                       >
                         {t("settings.saveKey")}
                       </button>
                       <button
                         type="button"
-                        className="inline-flex h-9 items-center justify-center rounded-[12px] border border-[rgba(148,163,184,0.16)] bg-[#0d1726] px-3 text-xs text-[#dbe7f5] transition hover:bg-[#142238] active:scale-[0.99]"
+                        className="inline-flex h-9 items-center justify-center rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
                         onClick={() => onDeleteProviderKey(provider.id)}
                       >
                         {t("settings.deleteKey")}
                       </button>
                       <button
                         type="button"
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-[12px] border border-[#37d67a]/20 bg-[#37d67a]/10 px-3 text-xs font-semibold text-[#9df2bd] transition hover:bg-[#37d67a]/16 active:scale-[0.99]"
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
                         onClick={() => onFetchModels(provider.id)}
                       >
                         <RefreshCw className="h-3.5 w-3.5" />
@@ -347,7 +347,7 @@ export function SettingsPanel({
                       </button>
                     </div>
 
-                    <label className="grid gap-1.5 text-xs text-[#8ea0b8]">
+                    <label className="grid gap-1.5 text-xs text-[#6e6e80]">
                       {provider.label} {t("settings.manualModel")}
                       <div className="flex gap-2">
                         <input
@@ -359,12 +359,12 @@ export function SettingsPanel({
                               [provider.id]: nextValue
                             }));
                           }}
-                          className="h-10 min-w-0 flex-1 rounded-[12px] border border-[rgba(148,163,184,0.16)] bg-[#08111f] px-3 text-sm text-[#dbe7f5] outline-none transition placeholder:text-[#718198] focus:border-[#5f86ff]"
+                          className="h-10 min-w-0 flex-1 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
                         />
                         <button
                           type="button"
                           aria-label={`${t("settings.addModel")} ${provider.label}`}
-                          className="inline-flex h-10 items-center gap-1.5 rounded-[12px] bg-[#ff6b3d] px-3 text-xs font-semibold text-[#08111f] transition hover:bg-[#ff815a] active:scale-[0.99]"
+                          className="inline-flex h-10 items-center gap-1.5 rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
                           onClick={() => {
                             onAddManualModel(provider.id, manualModelDraft);
                             setManualModelDrafts((current) => ({ ...current, [provider.id]: "" }));
@@ -391,7 +391,7 @@ export function SettingsPanel({
         title={t("settings.contextTitle")}
         description={settings.language === "zh-CN" ? "Forge 当前可以访问和使用的本地上下文" : "Local context available to Forge"}
       >
-        <div className="overflow-hidden rounded-[16px] border border-[rgba(148,163,184,0.12)]">
+        <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
           <ContextRow label={t("settings.localWorkspace")} value="read / write" />
           <ContextRow label={t("settings.projectRuntime")} value="PowerShell" />
           <ContextRow label={t("selector.speed")} value={speedLabel} />
@@ -413,8 +413,8 @@ function SectionFrame({
   return (
     <section>
       <div className="mb-5">
-        <h2 className="text-lg font-semibold tracking-normal text-white">{title}</h2>
-        <p className="mt-1 text-sm leading-6 text-[#8ea0b8]">{description}</p>
+        <h2 className="text-lg font-semibold tracking-normal text-[#202123]">{title}</h2>
+        <p className="mt-1 text-sm leading-6 text-[#6e6e80]">{description}</p>
       </div>
       {children}
     </section>
@@ -423,9 +423,9 @@ function SectionFrame({
 
 function StatusPill({ label, value }: { label: string; value: string }): ReactElement {
   return (
-    <div className="rounded-[12px] border border-[rgba(148,163,184,0.12)] bg-[#0d1726] px-3 py-2">
-      <div className="text-[11px] text-[#718198]">{label}</div>
-      <div className="mt-0.5 max-w-40 truncate text-xs font-semibold text-[#dbe7f5]">{value}</div>
+    <div className="rounded-[12px] border border-[#ececf1] bg-[#f7f7f8] px-3 py-2">
+      <div className="text-[11px] text-[#6e6e80]">{label}</div>
+      <div className="mt-0.5 max-w-40 truncate text-xs font-semibold text-[#202123]">{value}</div>
     </div>
   );
 }
@@ -440,19 +440,19 @@ function StatusTile({
   value: string;
 }): ReactElement {
   return (
-    <div className="rounded-[16px] border border-[rgba(148,163,184,0.12)] bg-[#0d1726] p-3">
-      <Icon className="mb-2 h-4 w-4 text-[#7da0ff]" />
-      <div className="text-xs text-[#718198]">{label}</div>
-      <div className="mt-1 truncate text-sm font-semibold text-white">{value}</div>
+    <div className="rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] p-3">
+      <Icon className="mb-2 h-4 w-4 text-[#565869]" />
+      <div className="text-xs text-[#6e6e80]">{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold text-[#202123]">{value}</div>
     </div>
   );
 }
 
 function ContextRow({ label, value }: { label: string; value: string }): ReactElement {
   return (
-    <div className="flex items-center justify-between gap-4 border-t border-[rgba(148,163,184,0.1)] bg-[#0b1423] px-4 py-3 first:border-t-0">
-      <span className="truncate text-sm text-[#9aaac0]">{label}</span>
-      <span className="shrink-0 text-sm font-medium text-[#dbe7f5]">{value}</span>
+    <div className="flex items-center justify-between gap-4 border-t border-[#ececf1] bg-white px-4 py-3 first:border-t-0">
+      <span className="truncate text-sm text-[#6e6e80]">{label}</span>
+      <span className="shrink-0 text-sm font-medium text-[#202123]">{value}</span>
     </div>
   );
 }

@@ -3,8 +3,8 @@
 :root {
   font-family:
     Inter, "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
-  color: #e5edf7;
-  background: #08111f;
+  color: #202123;
+  background: #ffffff;
 }
 
 * {
@@ -26,7 +26,7 @@ select {
 }
 
 ::selection {
-  background: rgba(79, 124, 255, 0.34);
+  background: rgba(16, 163, 127, 0.22);
 }
 
 ::-webkit-scrollbar {
@@ -39,14 +39,14 @@ select {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.34);
+  background: rgba(0, 0, 0, 0.18);
   border: 3px solid transparent;
   border-radius: 999px;
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.52);
+  background: rgba(0, 0, 0, 0.28);
   border: 3px solid transparent;
   background-clip: content-box;
 }

@@ -640,13 +640,13 @@ export function App(): ReactElement {
 
   function renderFilesView(): ReactElement {
     return (
-      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-hidden rounded-[20px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(15,26,42,0.9),rgba(9,18,32,0.96))] shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-hidden rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
         <ViewHeader title={t("files.title")} description={t("files.description")} />
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
         ) : (
           <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
-            <div className="min-h-0 overflow-auto border-r border-[rgba(148,163,184,0.16)] p-3">
+            <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
               {(projectScanResult?.files ?? []).slice(0, 80).map((file) => (
                 <button
                   key={file.relativePath}
@@ -654,8 +654,8 @@ export function App(): ReactElement {
                   onClick={() => void previewProjectFile(file.relativePath)}
                   className={`block w-full truncate rounded-[12px] px-3 py-2 text-left text-sm ${
                     previewFile?.relativePath === file.relativePath
-                      ? "bg-[#17243a] text-white"
-                      : "text-[#9fb0c7] hover:bg-[#121f33] hover:text-[#edf5ff]"
+                      ? "bg-[#ececf1] text-[#202123]"
+                      : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
                   }`}
                 >
                   {file.relativePath}
@@ -664,11 +664,11 @@ export function App(): ReactElement {
             </div>
             <div className="min-h-0 overflow-auto p-4">
               {previewFile ? (
-                <pre className="min-h-full whitespace-pre-wrap rounded-[16px] border border-[rgba(148,163,184,0.16)] bg-[#08111f]/82 p-4 font-mono text-xs leading-5 text-[#dbe7f5]">
+                <pre className="min-h-full whitespace-pre-wrap rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] p-4 font-mono text-xs leading-5 text-[#202123]">
                   {previewFile.content}
                 </pre>
               ) : (
-                <div className="flex h-full items-center justify-center text-sm text-[#8ea0b8]">
+                <div className="flex h-full items-center justify-center text-sm text-[#6e6e80]">
                   {t("files.pickFile")}
                 </div>
               )}
@@ -683,58 +683,58 @@ export function App(): ReactElement {
     const changedFiles = gitStatus?.changedFiles ?? [];
 
     return (
-      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(15,26,42,0.9),rgba(9,18,32,0.96))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white p-5 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
         <ViewHeader title={t("source.title")} description={t("source.description")} />
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
         ) : (
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-[#0f1a2a]/82 p-4">
+            <div className="rounded-[18px] border border-[#ececf1] bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-white">{t("source.changedFiles")}</h2>
+                <h2 className="text-sm font-semibold text-[#202123]">{t("source.changedFiles")}</h2>
                 <button
                   type="button"
                   onClick={() => void refreshProjectGitStatus()}
-                  className="rounded-[12px] border border-[rgba(148,163,184,0.18)] bg-[#0c1727] px-3 py-1.5 text-xs text-[#dbe7f5] hover:bg-[#142238]"
+                  className="rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-1.5 text-xs text-[#202123] hover:bg-[#f7f7f8]"
                 >
                   {t("projects.refreshGit")}
                 </button>
               </div>
               {gitStatus?.isRepo === false ? (
-                <p className="text-sm text-[#8ea0b8]">{t("projects.gitNotRepo")}</p>
+                <p className="text-sm text-[#6e6e80]">{t("projects.gitNotRepo")}</p>
               ) : changedFiles.length > 0 ? (
                 <div className="space-y-1">
                   {changedFiles.map((file) => (
                     <div
                       key={file}
-                      className="flex items-center justify-between gap-3 rounded-[12px] bg-[#08111f]/62 px-3 py-2 text-sm"
+                      className="flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f7f8] px-3 py-2 text-sm"
                     >
-                      <span className="truncate text-[#dbe7f5]">{file}</span>
+                      <span className="truncate text-[#202123]">{file}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-[#8ea0b8]">{t("projects.gitClean")}</p>
+                <p className="text-sm text-[#6e6e80]">{t("projects.gitClean")}</p>
               )}
             </div>
-            <div className="rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-[#0f1a2a]/82 p-4">
-              <label className="grid gap-2 text-sm text-[#8ea0b8]">
+            <div className="rounded-[18px] border border-[#ececf1] bg-white p-4">
+              <label className="grid gap-2 text-sm text-[#6e6e80]">
                 {t("projects.commitMessage")}
                 <input
                   value={commitMessage}
                   onChange={(event) => setCommitMessage(event.currentTarget.value)}
-                  className="h-10 rounded-[14px] border border-[rgba(148,163,184,0.18)] bg-[#08111f]/82 px-3 text-sm text-[#dbe7f5] outline-none transition focus:border-[#4f7cff]"
+                  className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
                 />
               </label>
               <button
                 type="button"
                 onClick={() => void commitCurrentProject(commitMessage)}
                 disabled={!gitStatus?.isRepo || changedFiles.length === 0}
-                className="mt-3 h-10 w-full rounded-[14px] bg-[#ff6b3d] text-sm font-semibold text-[#08111f] transition hover:bg-[#ff815a] disabled:cursor-not-allowed disabled:bg-[#17243a] disabled:text-[#718198]"
+                className="mt-3 h-10 w-full rounded-[14px] bg-[#202123] text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-[#ececf1] disabled:text-[#8e8ea0]"
               >
                 {t("projects.commit")}
               </button>
-              {gitNotice ? <p className="mt-3 text-sm text-[#ffb49c]">{gitNotice}</p> : null}
+              {gitNotice ? <p className="mt-3 text-sm text-[#b45309]">{gitNotice}</p> : null}
             </div>
           </div>
         )}
@@ -810,7 +810,7 @@ export function App(): ReactElement {
 
 function Notice({ message }: { message: string }): ReactElement {
   return (
-    <div className="mb-3 rounded-[14px] border border-[#ff6b3d]/28 bg-[#2a1620]/80 px-3 py-2 text-sm text-[#ffd0c0]">
+    <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2 text-sm text-[#b45309]">
       {message}
     </div>
   );
@@ -824,9 +824,9 @@ function ViewHeader({
   description: string;
 }): ReactElement {
   return (
-    <header className="border-b border-[rgba(148,163,184,0.16)] px-5 py-4">
-      <h1 className="text-xl font-semibold text-white">{title}</h1>
-      <p className="mt-1 text-sm text-[#8ea0b8]">{description}</p>
+    <header className="border-b border-[#ececf1] px-5 py-4">
+      <h1 className="text-xl font-semibold text-[#202123]">{title}</h1>
+      <p className="mt-1 text-sm text-[#6e6e80]">{description}</p>
     </header>
   );
 }
@@ -843,11 +843,11 @@ function EmptyAction({
   return (
     <div className="flex h-[calc(100%-86px)] items-center justify-center p-6">
       <div className="text-center">
-        <p className="mb-4 text-sm text-[#8ea0b8]">{message}</p>
+        <p className="mb-4 text-sm text-[#6e6e80]">{message}</p>
         <button
           type="button"
           onClick={onClick}
-          className="rounded-[14px] bg-[#ff6b3d] px-4 py-2 text-sm font-semibold text-[#08111f] transition hover:bg-[#ff815a]"
+          className="rounded-[14px] bg-[#202123] px-4 py-2 text-sm font-semibold text-white transition hover:bg-black"
         >
           {action}
         </button>
