@@ -33,4 +33,10 @@ describe("package config", () => {
     });
     expect(pkg.build?.files).toContain("out/**/*");
   });
+
+  it("loads the ESM preload bundle emitted by electron-vite", () => {
+    const mainSource = readFileSync(join(process.cwd(), "src", "main", "index.ts"), "utf8");
+
+    expect(mainSource).toContain("../preload/index.mjs");
+  });
 });

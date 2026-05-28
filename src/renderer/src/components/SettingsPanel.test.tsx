@@ -15,11 +15,14 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
       onClearUsage={vi.fn()}
       onDeleteProviderKey={vi.fn()}
       onFetchModels={vi.fn()}
+      onAddProvider={vi.fn()}
       onAddManualModel={vi.fn()}
+      onDeleteProvider={vi.fn()}
       onSaveProviderKey={vi.fn()}
       onSetLanguage={vi.fn()}
       onUpdatePersonalization={vi.fn()}
       onUpdateProviderBaseUrl={vi.fn()}
+      onUpdateProviderLabel={vi.fn()}
       onUpdateUsageRate={vi.fn()}
       personalization={createDefaultPersonalizationSettings()}
       usageEvents={[]}
@@ -50,7 +53,7 @@ describe("SettingsPanel", () => {
 
     renderSettingsPanel({ settings, onSaveProviderKey });
 
-    await user.click(screen.getByRole("button", { name: /Model providers/ }));
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
     await user.type(screen.getAllByLabelText(/^OpenAI API Key$/)[0], "sk-secret");
     await user.click(screen.getAllByRole("button", { name: "Save OpenAI API Key" })[0]);
 
@@ -65,7 +68,7 @@ describe("SettingsPanel", () => {
 
     renderSettingsPanel({ settings, onAddManualModel, onUpdateProviderBaseUrl });
 
-    await user.click(screen.getByRole("button", { name: /Model providers/ }));
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
     await user.click(screen.getByRole("button", { name: "Configure OpenRouter" }));
     await user.clear(screen.getByLabelText("OpenRouter Base URL"));
     await user.type(screen.getByLabelText("OpenRouter Base URL"), "https://gateway.example/v1");
@@ -77,6 +80,23 @@ describe("SettingsPanel", () => {
       "https://gateway.example/v1"
     );
     expect(onAddManualModel).toHaveBeenCalledWith("openrouter", "moonshot-v1");
+  });
+
+  it("adds custom OpenAI-compatible API profiles without a fixed key limit", async () => {
+    const user = userEvent.setup();
+    const onAddProvider = vi.fn();
+
+    renderSettingsPanel({ onAddProvider });
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+    await user.type(screen.getByLabelText("Profile name"), "Cherry Gateway");
+    await user.type(screen.getByLabelText("Base URL"), "https://gateway.example/v1");
+    await user.click(screen.getByRole("button", { name: "Add API profile" }));
+
+    expect(onAddProvider).toHaveBeenCalledWith(
+      "Cherry Gateway",
+      "https://gateway.example/v1"
+    );
   });
 
   it("edits usage rates and personalization settings", async () => {

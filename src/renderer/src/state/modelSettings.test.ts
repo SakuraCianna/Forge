@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  addCustomProvider,
   createDefaultModelSettings,
   addManualModel,
+  deleteCustomProvider,
   getEnabledModels,
   loadModelSettings,
   mergeFetchedModels,
@@ -9,6 +11,7 @@ import {
   setCurrentModel,
   setLanguage,
   setSpeed,
+  updateProviderLabel,
   updateProviderBaseUrl,
   updateModelEnabled
 } from "./modelSettings";
@@ -108,6 +111,51 @@ describe("modelSettings", () => {
 
     expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openrouter:moonshot-v1");
     expect(loaded.currentModelId).toBe("openai:gpt-5.5");
+  });
+
+  it("adds unlimited custom API profiles and restores them from storage", () => {
+    const storage = createMemoryStorage();
+    let settings = createDefaultModelSettings();
+
+    settings = addCustomProvider(settings, "Cherry Gateway", "https://gateway.example/v1");
+    const provider = settings.providers.find((candidate) => candidate.id === "custom-cherry-gateway");
+
+    expect(provider).toMatchObject({
+      label: "Cherry Gateway",
+      kind: "openai-compatible",
+      custom: true,
+      baseUrl: "https://gateway.example/v1"
+    });
+
+    settings = updateProviderLabel(settings, "custom-cherry-gateway", "Campus Gateway");
+    settings = addManualModel(settings, "custom-cherry-gateway", "deepseek-chat");
+    saveModelSettings(storage, settings);
+
+    const loaded = loadModelSettings(storage);
+
+    expect(loaded.providers.find((candidate) => candidate.id === "custom-cherry-gateway")).toMatchObject({
+      label: "Campus Gateway",
+      custom: true,
+      baseUrl: "https://gateway.example/v1"
+    });
+    expect(getEnabledModels(loaded).map((model) => model.id)).toContain(
+      "custom-cherry-gateway:deepseek-chat"
+    );
+  });
+
+  it("deletes custom API profiles without touching built-in providers", () => {
+    let settings = createDefaultModelSettings();
+
+    settings = addCustomProvider(settings, "Cherry Gateway", "https://gateway.example/v1");
+    settings = addManualModel(settings, "custom-cherry-gateway", "deepseek-chat");
+    settings = deleteCustomProvider(settings, "custom-cherry-gateway");
+
+    expect(settings.providers.some((provider) => provider.id === "custom-cherry-gateway")).toBe(false);
+    expect(settings.models.some((model) => model.providerId === "custom-cherry-gateway")).toBe(false);
+
+    const unchanged = deleteCustomProvider(settings, "openai");
+
+    expect(unchanged.providers.some((provider) => provider.id === "openai")).toBe(true);
   });
 
   it("falls back to defaults when persisted settings are invalid", () => {

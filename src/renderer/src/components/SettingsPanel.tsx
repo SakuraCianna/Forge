@@ -12,8 +12,8 @@ import {
   Plus,
   ReceiptText,
   RefreshCw,
-  ShieldCheck,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Trash2
 } from "lucide-react";
 import type { Language, ModelSettings } from "@shared/modelTypes";
 import type { UsageEvent } from "@shared/usageTypes";
@@ -31,12 +31,15 @@ type SettingsPanelProps = {
   keyStatuses: Record<string, { hasKey: boolean; last4: string | null }>;
   onDeleteProviderKey: (providerId: string) => void;
   onFetchModels: (providerId: string) => void;
+  onAddProvider: (label: string, baseUrl: string) => void;
   onAddManualModel: (providerId: string, modelName: string) => void;
   onClearUsage: () => void;
+  onDeleteProvider: (providerId: string) => void;
   onSaveProviderKey: (providerId: string, apiKey: string) => void;
   onSetLanguage: (language: Language) => void;
   onUpdatePersonalization: (settings: PersonalizationSettings) => void;
   onUpdateProviderBaseUrl: (providerId: string, baseUrl: string) => void;
+  onUpdateProviderLabel: (providerId: string, label: string) => void;
   onUpdateUsageRate: (providerId: string, rate: UsageRate) => void;
   personalization: PersonalizationSettings;
   usageEvents: UsageEvent[];
@@ -57,12 +60,15 @@ export function SettingsPanel({
   keyStatuses,
   onDeleteProviderKey,
   onFetchModels,
+  onAddProvider,
   onAddManualModel,
   onClearUsage,
+  onDeleteProvider,
   onSaveProviderKey,
   onSetLanguage,
   onUpdatePersonalization,
   onUpdateProviderBaseUrl,
+  onUpdateProviderLabel,
   onUpdateUsageRate,
   personalization,
   usageEvents,
@@ -74,39 +80,38 @@ export function SettingsPanel({
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({});
   const [draftBaseUrls, setDraftBaseUrls] = useState<Record<string, string>>({});
   const [manualModelDrafts, setManualModelDrafts] = useState<Record<string, string>>({});
+  const [newProviderLabel, setNewProviderLabel] = useState("");
+  const [newProviderBaseUrl, setNewProviderBaseUrl] = useState("");
   const availableModels = settings.models;
   const currentModel = settings.models.find((model) => model.id === settings.currentModelId) ?? null;
   const currentProvider = currentModel
     ? (settings.providers.find((provider) => provider.id === currentModel.providerId) ?? null)
     : null;
-  const configuredProviders = settings.providers.filter(
-    (provider) => keyStatuses[provider.id]?.hasKey
-  ).length;
   const totalUsage = summarizeUsage(usageEvents, usageRates);
   const providerUsage = summarizeUsageByProvider(usageEvents, usageRates);
   const sectionItems: SectionItem[] = [
     {
       id: "general",
-      label: settings.language === "zh-CN" ? "常规" : "General",
+      label: t("settings.general"),
       description: t("settings.language"),
       icon: SlidersHorizontal
     },
     {
       id: "models",
       label: t("settings.models"),
-      description: `${availableModels.length}`,
+      description: t("settings.modelsMenuDescription"),
       icon: Cpu
     },
     {
       id: "providers",
-      label: t("settings.providers"),
-      description: `${configuredProviders}/${settings.providers.length}`,
+      label: t("settings.providerProfiles"),
+      description: t("settings.providerProfilesDescription"),
       icon: KeyRound
     },
     {
       id: "usage",
       label: t("settings.usage"),
-      description: `${totalUsage.totalTokens.toLocaleString()} tokens`,
+      description: t("settings.usageMenuDescription"),
       icon: ReceiptText
     },
     {
@@ -121,16 +126,12 @@ export function SettingsPanel({
   return (
     <section className="h-full min-h-0 overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1180px] flex-col">
-        <header className="flex items-start justify-between gap-4 border-b border-[#ececf1] px-1 pb-4">
+        <header className="border-b border-[#ececf1] px-1 pb-4">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold tracking-normal text-[#202123]">{activeItem.label}</h1>
             <p className="mt-1 text-sm leading-6 text-[#6e6e80]">
               {getSectionDescription(activeSection)}
             </p>
-          </div>
-          <div className="hidden gap-2 md:flex">
-            <StatusPill label={t("settings.currentModel")} value={currentModel?.label ?? t("settings.noModel")} />
-            <StatusPill label={t("settings.apiKeys")} value={`${configuredProviders}/${settings.providers.length}`} />
           </div>
         </header>
 
@@ -157,17 +158,6 @@ export function SettingsPanel({
               ))}
             </nav>
 
-            <div className="mt-5 rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-[#202123]">
-                <ShieldCheck className="h-4 w-4 text-[#565869]" />
-                {t("app.keysLocal")}
-              </div>
-              <p className="mt-2 text-xs leading-5 text-[#6e6e80]">
-                {settings.language === "zh-CN"
-                  ? "密钥通过本机安全存储保存, 不写入项目文件"
-                  : "Keys are stored locally and never written into project files"}
-              </p>
-            </div>
           </aside>
 
           <main className="min-h-0 overflow-auto px-6 py-5">
@@ -256,7 +246,48 @@ export function SettingsPanel({
 
   function renderProvidersSection(): ReactElement {
     return (
-      <SectionFrame title={t("settings.providers")} description={t("settings.expandHint")}>
+      <SectionFrame title={t("settings.providerProfiles")} description={t("settings.providerProfilesDescription")}>
+        <div className="mb-5 rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] p-4">
+          <div className="mb-3">
+            <h2 className="text-sm font-semibold text-[#202123]">{t("settings.addProvider")}</h2>
+            <p className="mt-1 text-xs leading-5 text-[#6e6e80]">
+              {t("settings.noProviderLimitDescription")}
+            </p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(160px,220px)_minmax(260px,1fr)_auto] lg:items-end">
+            <label className="grid min-w-0 gap-1.5 text-xs text-[#6e6e80]">
+              {t("settings.providerName")}
+              <input
+                value={newProviderLabel}
+                onChange={(event) => setNewProviderLabel(event.currentTarget.value)}
+                placeholder={t("settings.providerNamePlaceholder")}
+                className="h-10 w-full rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
+              />
+            </label>
+            <label className="grid min-w-0 gap-1.5 text-xs text-[#6e6e80]">
+              {t("settings.baseUrl")}
+              <input
+                value={newProviderBaseUrl}
+                onChange={(event) => setNewProviderBaseUrl(event.currentTarget.value)}
+                placeholder={t("settings.providerBaseUrlPlaceholder")}
+                className="h-10 w-full rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
+              />
+            </label>
+            <button
+              type="button"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[12px] bg-[#202123] px-4 text-sm font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+              onClick={() => {
+                onAddProvider(newProviderLabel, newProviderBaseUrl);
+                setNewProviderLabel("");
+                setNewProviderBaseUrl("");
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              {t("settings.addProvider")}
+            </button>
+          </div>
+        </div>
+
         <div className="grid gap-3">
           {settings.providers.map((provider) => {
             const keyStatus = keyStatuses[provider.id] ?? { hasKey: false, last4: null };
@@ -264,6 +295,7 @@ export function SettingsPanel({
             const draftBaseUrl = draftBaseUrls[provider.id] ?? provider.baseUrl ?? "";
             const manualModelDraft = manualModelDrafts[provider.id] ?? "";
             const isExpanded = expandedProviderId === provider.id;
+            const providerLabel = provider.label.trim() || t("settings.customProvider");
 
             return (
               <article
@@ -273,16 +305,16 @@ export function SettingsPanel({
                 <button
                   type="button"
                   aria-expanded={isExpanded}
-                  aria-label={`${t("settings.configure")} ${provider.label}`}
+                  aria-label={`${t("settings.configure")} ${providerLabel}`}
                   onClick={() => setExpandedProviderId(isExpanded ? "" : provider.id)}
                   className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-[#f7f7f8]"
                 >
                   <span className="min-w-0">
                     <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-[#202123]">{provider.label}</span>
-                      {provider.kind === "openai-compatible" ? (
+                      <span className="truncate text-sm font-semibold text-[#202123]">{providerLabel}</span>
+                      {provider.custom ? (
                         <span className="rounded-full border border-[#ececf1] bg-[#f7f7f8] px-2 py-0.5 text-[11px] text-[#565869]">
-                          {t("settings.compatibleProvider")}
+                          {t("settings.customProvider")}
                         </span>
                       ) : null}
                     </span>
@@ -310,8 +342,21 @@ export function SettingsPanel({
 
                 {isExpanded ? (
                   <div className="grid gap-3 border-t border-[#ececf1] bg-[#fafafa] px-4 py-4">
+                    {provider.custom ? (
+                      <label className="grid gap-1.5 text-xs text-[#6e6e80]">
+                        {t("settings.providerName")}
+                        <input
+                          value={provider.label}
+                          onChange={(event) =>
+                            onUpdateProviderLabel(provider.id, event.currentTarget.value)
+                          }
+                          className="h-10 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
+                        />
+                      </label>
+                    ) : null}
+
                     <label className="grid gap-1.5 text-xs text-[#6e6e80]">
-                      {provider.label} {t("settings.baseUrl")}
+                      {providerLabel} {t("settings.baseUrl")}
                       <input
                         value={draftBaseUrl}
                         onChange={(event) => {
@@ -327,7 +372,7 @@ export function SettingsPanel({
                     </label>
 
                     <label className="grid gap-1.5 text-xs text-[#6e6e80]">
-                      {provider.label} API Key
+                      {providerLabel} API Key
                       <input
                         type="password"
                         value={draftKey}
@@ -345,7 +390,7 @@ export function SettingsPanel({
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        aria-label={`${t("settings.saveKey")} ${provider.label} API Key`}
+                        aria-label={`${t("settings.saveKey")} ${providerLabel} API Key`}
                         className="inline-flex h-9 items-center justify-center rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
                         onClick={() => onSaveProviderKey(provider.id, draftKey)}
                       >
@@ -366,10 +411,20 @@ export function SettingsPanel({
                         <RefreshCw className="h-3.5 w-3.5" />
                         {t("settings.fetchModels")}
                       </button>
+                      {provider.custom ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[12px] border border-[#f1c2c2] bg-white px-3 text-xs font-semibold text-[#b42318] transition hover:bg-[#fff5f5] active:scale-[0.99]"
+                          onClick={() => onDeleteProvider(provider.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {t("settings.deleteProvider")}
+                        </button>
+                      ) : null}
                     </div>
 
                     <label className="grid gap-1.5 text-xs text-[#6e6e80]">
-                      {provider.label} {t("settings.manualModel")}
+                      {providerLabel} {t("settings.manualModel")}
                       <div className="flex gap-2">
                         <input
                           value={manualModelDraft}
@@ -384,7 +439,7 @@ export function SettingsPanel({
                         />
                         <button
                           type="button"
-                          aria-label={`${t("settings.addModel")} ${provider.label}`}
+                          aria-label={`${t("settings.addModel")} ${providerLabel}`}
                           className="inline-flex h-10 items-center gap-1.5 rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
                           onClick={() => {
                             onAddManualModel(provider.id, manualModelDraft);
@@ -427,7 +482,7 @@ export function SettingsPanel({
             return (
               <div
                 key={provider.id}
-                className={`grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_120px_120px_120px] md:items-center ${
+                className={`grid gap-4 px-4 py-4 lg:grid-cols-[minmax(180px,1fr)_minmax(170px,220px)_minmax(170px,220px)_100px] lg:items-end ${
                   index === 0 ? "" : "border-t border-[#ececf1]"
                 }`}
               >
@@ -447,7 +502,7 @@ export function SettingsPanel({
                   value={rate.outputPerMillion}
                   onChange={(value) => onUpdateUsageRate(provider.id, { ...rate, outputPerMillion: value })}
                 />
-                <div className="text-sm font-semibold text-[#202123] md:text-right">
+                <div className="text-sm font-semibold text-[#202123] lg:text-right">
                   ${usage.estimatedCost.toFixed(4)}
                 </div>
               </div>
@@ -546,7 +601,7 @@ export function SettingsPanel({
     }
 
     if (section === "providers") {
-      return t("settings.expandHint");
+      return t("settings.providerProfilesDescription");
     }
 
     if (section === "usage") {
@@ -565,15 +620,6 @@ function SectionFrame({
   children: ReactElement | ReactElement[];
 }): ReactElement {
   return <section>{children}</section>;
-}
-
-function StatusPill({ label, value }: { label: string; value: string }): ReactElement {
-  return (
-    <div className="rounded-[12px] border border-[#ececf1] bg-[#f7f7f8] px-3 py-2">
-      <div className="text-[11px] text-[#6e6e80]">{label}</div>
-      <div className="mt-0.5 max-w-40 truncate text-xs font-semibold text-[#202123]">{value}</div>
-    </div>
-  );
 }
 
 function StatusTile({
@@ -613,7 +659,7 @@ function PriceInput({
   onChange: (value: number) => void;
 }): ReactElement {
   return (
-    <label className="grid gap-1 text-xs text-[#6e6e80]">
+    <label className="grid min-w-0 gap-1 text-xs text-[#6e6e80]">
       {label}
       <input
         type="number"
@@ -621,7 +667,7 @@ function PriceInput({
         step="0.01"
         value={value}
         onChange={(event) => onChange(Number(event.currentTarget.value) || 0)}
-        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+        className="h-9 w-full rounded-[12px] border border-[#d9d9e3] bg-white px-2 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
       />
     </label>
   );

@@ -1,5 +1,6 @@
 import { catalogModels, providerCatalog } from "@shared/providerCatalog";
 import type {
+  ForgeProvider,
   ForgeModel,
   IntelligenceLevel,
   Language,
@@ -15,7 +16,14 @@ type PersistedModelSettings = {
   speed?: SpeedMode;
   currentModelId?: string | null;
   providerBaseUrls?: Record<string, string>;
+  customProviders?: PersistedCustomProvider[];
   manualModels?: PersistedManualModel[];
+};
+
+type PersistedCustomProvider = {
+  id: string;
+  label: string;
+  baseUrl?: string;
 };
 
 type PersistedManualModel = {
@@ -30,7 +38,7 @@ export function createDefaultModelSettings(): ModelSettings {
     intelligence: "high",
     speed: "balanced",
     currentModelId: catalogModels[0]?.id ?? null,
-    providers: providerCatalog,
+    providers: providerCatalog.map((provider) => ({ ...provider })),
     models: catalogModels.map((model) => ({ ...model, enabled: true }))
   };
 }
@@ -125,6 +133,69 @@ export function updateProviderBaseUrl(
   };
 }
 
+export function updateProviderLabel(
+  settings: ModelSettings,
+  providerId: string,
+  label: string
+): ModelSettings {
+  const provider = settings.providers.find((candidate) => candidate.id === providerId);
+
+  if (!provider?.custom) {
+    return settings;
+  }
+
+  return {
+    ...settings,
+    providers: settings.providers.map((candidate) =>
+      candidate.id === providerId ? { ...candidate, label } : candidate
+    )
+  };
+}
+
+export function addCustomProvider(
+  settings: ModelSettings,
+  label: string,
+  baseUrl: string
+): ModelSettings {
+  const normalizedLabel = label.trim() || "Custom Provider";
+  const normalizedBaseUrl = baseUrl.trim();
+  const existingIds = new Set(settings.providers.map((provider) => provider.id));
+  const provider: ForgeProvider = {
+    id: createCustomProviderId(normalizedLabel, existingIds),
+    label: normalizedLabel,
+    kind: "openai-compatible",
+    baseUrl: normalizedBaseUrl || undefined,
+    requiresBaseUrl: true,
+    custom: true
+  };
+
+  return {
+    ...settings,
+    providers: [...settings.providers, provider]
+  };
+}
+
+export function deleteCustomProvider(settings: ModelSettings, providerId: string): ModelSettings {
+  const provider = settings.providers.find((candidate) => candidate.id === providerId);
+
+  if (!provider?.custom) {
+    return settings;
+  }
+
+  const providers = settings.providers.filter((candidate) => candidate.id !== providerId);
+  const models = settings.models.filter((model) => model.providerId !== providerId);
+  const currentModelId = models.some((model) => model.id === settings.currentModelId)
+    ? settings.currentModelId
+    : (models[0]?.id ?? null);
+
+  return {
+    ...settings,
+    providers,
+    models,
+    currentModelId
+  };
+}
+
 export function addManualModel(settings: ModelSettings, providerId: string, modelName: string): ModelSettings {
   const normalizedModelName = modelName.trim();
 
@@ -158,6 +229,13 @@ export function saveModelSettings(storage: Storage, settings: ModelSettings): vo
         provider.baseUrl ? [[provider.id, provider.baseUrl] as const] : []
       )
     ),
+    customProviders: settings.providers
+      .filter((provider) => provider.custom)
+      .map((provider) => ({
+        id: provider.id,
+        label: provider.label,
+        baseUrl: provider.baseUrl
+      })),
     manualModels: settings.models
       .filter((model) => model.capabilitySource === "manual")
       .map((model) => ({
@@ -186,10 +264,25 @@ export function loadModelSettings(storage: Storage): ModelSettings {
 
 function mergePersistedSettings(persisted: PersistedModelSettings): ModelSettings {
   const defaults = createDefaultModelSettings();
-  const providers = defaults.providers.map((provider) => ({
-    ...provider,
-    baseUrl: persisted.providerBaseUrls?.[provider.id] ?? provider.baseUrl
-  }));
+  const customProviders = (persisted.customProviders ?? [])
+    .filter((provider) => provider.id)
+    .map(
+      (provider): ForgeProvider => ({
+        id: provider.id,
+        label: provider.label || "Custom Provider",
+        kind: "openai-compatible",
+        baseUrl: persisted.providerBaseUrls?.[provider.id] ?? provider.baseUrl,
+        requiresBaseUrl: true,
+        custom: true
+      })
+    );
+  const providers = [
+    ...defaults.providers.map((provider) => ({
+      ...provider,
+      baseUrl: persisted.providerBaseUrls?.[provider.id] ?? provider.baseUrl
+    })),
+    ...customProviders
+  ];
   const manualModels = (persisted.manualModels ?? [])
     .filter((model) => model.providerId && model.modelName)
     .map((model) =>
@@ -218,6 +311,24 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
     providers,
     models
   };
+}
+
+function createCustomProviderId(label: string, existingIds: Set<string>): string {
+  const normalizedLabel =
+    label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "provider";
+  let id = `custom-${normalizedLabel}`;
+  let suffix = 2;
+
+  while (existingIds.has(id)) {
+    id = `custom-${normalizedLabel}-${suffix}`;
+    suffix += 1;
+  }
+
+  return id;
 }
 
 function createManualModel(

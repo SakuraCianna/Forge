@@ -13,8 +13,10 @@ import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
 import { removeFileChangePreview, upsertFileChangePreview } from "@/state/fileChanges";
 import {
+  addCustomProvider,
   addManualModel,
   createDefaultModelSettings,
+  deleteCustomProvider,
   loadModelSettings,
   mergeFetchedModels,
   saveModelSettings,
@@ -22,7 +24,8 @@ import {
   setIntelligence,
   setLanguage,
   setSpeed,
-  updateProviderBaseUrl
+  updateProviderBaseUrl,
+  updateProviderLabel
 } from "@/state/modelSettings";
 import {
   createDefaultPersonalizationSettings,
@@ -856,13 +859,23 @@ export function App(): ReactElement {
           keyStatuses={keyStatuses}
           onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
           onFetchModels={(providerId) => void fetchModels(providerId)}
+          onAddProvider={(label, baseUrl) =>
+            setSettings((current) => addCustomProvider(current, label, baseUrl))
+          }
           onAddManualModel={(providerId, modelName) =>
             setSettings((current) => addManualModel(current, providerId, modelName))
           }
+          onDeleteProvider={(providerId) => {
+            setSettings((current) => deleteCustomProvider(current, providerId));
+            void deleteProviderKey(providerId);
+          }}
           onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
           onSetLanguage={setInterfaceLanguage}
           onUpdateProviderBaseUrl={(providerId, baseUrl) =>
             setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
+          }
+          onUpdateProviderLabel={(providerId, label) =>
+            setSettings((current) => updateProviderLabel(current, providerId, label))
           }
           personalization={personalization}
           usageEvents={usageEvents}

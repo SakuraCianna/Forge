@@ -17,6 +17,7 @@ export type ForgeProvider = {
   kind: ProviderKind;
   baseUrl?: string;
   requiresBaseUrl: boolean;
+  custom?: boolean;
 };
 
 export type ForgeModel = {
