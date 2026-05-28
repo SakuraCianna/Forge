@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { useState } from "react";
+import { KeyRound, SlidersHorizontal } from "lucide-react";
 import type { Language, ModelSettings } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
 
@@ -32,18 +33,21 @@ export function SettingsPanel({
   const [manualModelDrafts, setManualModelDrafts] = useState<Record<string, string>>({});
 
   return (
-    <section className="border-t border-white/10 bg-[#15161a] px-6 py-5">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+    <section className="min-h-0 overflow-auto border-l border-[#e0e5ec] bg-[#f8fafc] px-4 py-5">
+      <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-medium">{t("settings.title")}</h2>
-          <p className="mt-1 text-sm text-[#a8a29a]">{t("settings.subtitle")}</p>
+          <h2 className="flex items-center gap-2 text-base font-semibold text-[#202124]">
+            <SlidersHorizontal className="h-4 w-4 text-[#596171]" />
+            {t("settings.title")}
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-[#6b7280]">{t("settings.subtitle")}</p>
         </div>
-        <label className="grid gap-1 text-xs text-[#a8a29a]">
+        <label className="grid gap-1 text-xs text-[#6b7280]">
           {t("settings.language")}
           <select
             value={settings.language}
             onChange={(event) => onSetLanguage(event.currentTarget.value as Language)}
-            className="h-9 rounded-md border border-white/10 bg-[#1d1f24] px-2 text-sm text-[#f5f4ef]"
+            className="h-9 rounded-md border border-[#d9e0e8] bg-white px-2 text-sm text-[#202124] outline-none focus:border-[#1f2328]"
           >
             <option value="zh-CN">中文</option>
             <option value="en-US">English</option>
@@ -51,9 +55,12 @@ export function SettingsPanel({
         </label>
       </div>
 
-      <div className="mb-5">
-        <h3 className="mb-3 text-sm font-medium text-[#d7d3ca]">{t("settings.providers")}</h3>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mb-5 rounded-md border border-[#e0e5ec] bg-white p-3 shadow-sm">
+        <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase text-[#6b7280]">
+          <KeyRound className="h-4 w-4 text-[#596171]" />
+          {t("settings.providers")}
+        </h3>
+        <div className="grid gap-2">
           {settings.providers.map((provider) => {
             const keyStatus = keyStatuses[provider.id] ?? { hasKey: false, last4: null };
             const draftKey = draftKeys[provider.id] ?? "";
@@ -63,12 +70,12 @@ export function SettingsPanel({
             return (
               <div
                 key={provider.id}
-                className="rounded-md border border-white/10 bg-[#1d1f24] px-3 py-3 text-sm"
+                className="rounded-md border border-[#e3e8ef] bg-[#fbfcfe] px-3 py-3 text-sm"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium text-[#f5f4ef]">{provider.label}</div>
-                    <div className="mt-1 text-xs text-[#a8a29a]">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold text-[#202124]">{provider.label}</div>
+                    <div className="mt-1 text-xs text-[#6b7280]">
                       {keyStatus.hasKey
                         ? `${t("settings.keySaved")} ****${keyStatus.last4}`
                         : t("settings.keyMissing")}
@@ -76,13 +83,13 @@ export function SettingsPanel({
                   </div>
                   <button
                     type="button"
-                    className="rounded-md px-2 py-1 text-xs text-[#d7d3ca] hover:bg-white/8"
+                    className="rounded-md border border-[#d9e0e8] bg-white px-2 py-1 text-xs text-[#3f4752] hover:bg-[#f3f6f9]"
                     onClick={() => onFetchModels(provider.id)}
                   >
                     {t("settings.fetchModels")}
                   </button>
                 </div>
-                <label className="mt-3 grid gap-1 text-xs text-[#a8a29a]">
+                <label className="mt-3 grid gap-1 text-xs text-[#6b7280]">
                   {provider.label} {t("settings.baseUrl")}
                   <input
                     value={draftBaseUrl}
@@ -94,10 +101,10 @@ export function SettingsPanel({
                       }));
                       onUpdateProviderBaseUrl(provider.id, nextValue);
                     }}
-                    className="h-9 rounded-md border border-white/10 bg-[#15161a] px-2 text-sm text-[#f5f4ef] outline-none"
+                    className="h-9 rounded-md border border-[#d9e0e8] bg-white px-2 text-sm text-[#202124] outline-none transition focus:border-[#1f2328]"
                   />
                 </label>
-                <label className="mt-3 grid gap-1 text-xs text-[#a8a29a]">
+                <label className="mt-3 grid gap-1 text-xs text-[#6b7280]">
                   {provider.label} API Key
                   <input
                     type="password"
@@ -109,26 +116,26 @@ export function SettingsPanel({
                         [provider.id]: nextValue
                       }));
                     }}
-                    className="h-9 rounded-md border border-white/10 bg-[#15161a] px-2 text-sm text-[#f5f4ef] outline-none"
+                    className="h-9 rounded-md border border-[#d9e0e8] bg-white px-2 text-sm text-[#202124] outline-none transition focus:border-[#1f2328]"
                   />
                 </label>
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
-                    className="rounded-md bg-[#f5f4ef] px-3 py-1.5 text-xs font-medium text-[#222] hover:bg-white"
+                    className="rounded-md bg-[#1f2328] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#343941]"
                     onClick={() => onSaveProviderKey(provider.id, draftKey)}
                   >
                     {t("settings.saveKey")} {provider.label} API Key
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-[#d7d3ca] hover:bg-white/8"
+                    className="rounded-md border border-[#d9e0e8] bg-white px-3 py-1.5 text-xs text-[#3f4752] hover:bg-[#f3f6f9]"
                     onClick={() => onDeleteProviderKey(provider.id)}
                   >
                     {t("settings.deleteKey")}
                   </button>
                 </div>
-                <label className="mt-3 grid gap-1 text-xs text-[#a8a29a]">
+                <label className="mt-3 grid gap-1 text-xs text-[#6b7280]">
                   {provider.label} {t("settings.manualModel")}
                   <input
                     value={manualModelDraft}
@@ -139,12 +146,12 @@ export function SettingsPanel({
                         [provider.id]: nextValue
                       }));
                     }}
-                    className="h-9 rounded-md border border-white/10 bg-[#15161a] px-2 text-sm text-[#f5f4ef] outline-none"
+                    className="h-9 rounded-md border border-[#d9e0e8] bg-white px-2 text-sm text-[#202124] outline-none transition focus:border-[#1f2328]"
                   />
                 </label>
                 <button
                   type="button"
-                  className="mt-2 rounded-md border border-white/10 px-3 py-1.5 text-xs text-[#d7d3ca] hover:bg-white/8"
+                  className="mt-2 rounded-md border border-[#d9e0e8] bg-white px-3 py-1.5 text-xs text-[#3f4752] hover:bg-[#f3f6f9]"
                   onClick={() => {
                     onAddManualModel(provider.id, manualModelDraft);
                     setManualModelDrafts((current) => ({ ...current, [provider.id]: "" }));
@@ -158,23 +165,23 @@ export function SettingsPanel({
         </div>
       </div>
 
-      <h3 className="mb-3 text-sm font-medium text-[#d7d3ca]">{t("settings.models")}</h3>
-      <div className="grid gap-3 md:grid-cols-3">
+      <h3 className="mb-3 text-xs font-semibold uppercase text-[#6b7280]">{t("settings.models")}</h3>
+      <div className="grid gap-2">
         {settings.models.map((model) => (
           <label
             key={model.id}
-            className="flex items-center justify-between rounded-md border border-white/10 bg-[#1d1f24] px-3 py-3 text-sm"
+            className="flex items-center justify-between gap-3 rounded-md border border-[#e3e8ef] bg-white px-3 py-2.5 text-sm shadow-sm"
           >
-            <span>
-              <span className="block text-[#f5f4ef]">{model.label}</span>
-              <span className="block text-xs text-[#a8a29a]">{model.providerId}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-[#202124]">{model.label}</span>
+              <span className="block truncate text-xs text-[#6b7280]">{model.providerId}</span>
             </span>
             <input
               type="checkbox"
               checked={model.enabled}
               onChange={(event) => onToggleModel(model.id, event.currentTarget.checked)}
               aria-label={`${t("settings.enabled")} ${model.label}`}
-              className="h-4 w-4"
+              className="h-4 w-4 shrink-0 accent-[#1f2328]"
             />
           </label>
         ))}

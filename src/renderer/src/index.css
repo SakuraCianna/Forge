@@ -3,8 +3,8 @@
 :root {
   font-family:
     Inter, "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
-  color: #f5f4ef;
-  background: #101114;
+  color: #202124;
+  background: #f6f8fb;
 }
 
 * {
@@ -15,6 +15,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 button,
@@ -22,4 +23,30 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+::selection {
+  background: rgba(18, 18, 18, 0.14);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c7d0dc;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aeb9c7;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }

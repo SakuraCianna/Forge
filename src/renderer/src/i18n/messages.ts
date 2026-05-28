@@ -4,6 +4,8 @@ export const messages = {
   "zh-CN": {
     "app.name": "Forge",
     "app.tagline": "本地 AI 开发锻造台",
+    "app.localAgent": "本地 Agent",
+    "app.keysLocal": "API Key 只保存在本机",
     "nav.projects": "项目",
     "nav.threads": "任务",
     "nav.settings": "设置",
@@ -77,6 +79,8 @@ export const messages = {
   "en-US": {
     "app.name": "Forge",
     "app.tagline": "Local AI development forge",
+    "app.localAgent": "Local Agent",
+    "app.keysLocal": "API keys stay on this machine",
     "nav.projects": "Projects",
     "nav.threads": "Threads",
     "nav.settings": "Settings",

@@ -52,7 +52,7 @@ export function ModelSelector({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm text-[#3f3a34] hover:bg-black/6"
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-[#d9e0e8] bg-[#f6f8fb] px-2.5 text-sm font-medium text-[#3f4752] transition hover:bg-[#edf1f5]"
           aria-label={triggerLabel}
         >
           <Zap className="h-4 w-4" />
@@ -63,9 +63,9 @@ export function ModelSelector({
         <DropdownMenu.Content
           align="start"
           sideOffset={8}
-          className="z-50 w-72 rounded-lg border border-black/10 bg-[#f7f5f0] p-2 text-[#222] shadow-xl"
+          className="z-50 w-72 rounded-xl border border-[#d9e0e8] bg-white p-2 text-[#202124] shadow-[0_24px_70px_rgba(31,35,40,0.18)]"
         >
-          <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#8a8178]">
+          <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#7a828e]">
             {t("selector.intelligence")}
           </DropdownMenu.Label>
           {supportsReasoning ? (
@@ -73,7 +73,7 @@ export function ModelSelector({
               <DropdownMenu.Item
                 key={level}
                 onSelect={() => onSelectIntelligence(level)}
-                className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-black/6"
+                className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]"
               >
                 {t(intelligenceLabels[level])}
                 {settings.intelligence === level ? <Check className="h-4 w-4" /> : null}
@@ -84,9 +84,9 @@ export function ModelSelector({
               {t("selector.noReasoning")}
             </DropdownMenu.Item>
           )}
-          <DropdownMenu.Separator className="my-2 h-px bg-black/10" />
+          <DropdownMenu.Separator className="my-2 h-px bg-[#e4e9ef]" />
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-black/6">
+            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]">
               <span className="inline-flex items-center gap-2">
                 <Zap className="h-4 w-4" />
                 {currentModel?.label ?? t("selector.configureModel")}
@@ -96,16 +96,16 @@ export function ModelSelector({
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 sideOffset={10}
-                className="z-50 w-72 rounded-lg border border-black/10 bg-[#f7f5f0] p-2 text-[#222] shadow-xl"
+                className="z-50 w-72 rounded-xl border border-[#d9e0e8] bg-white p-2 text-[#202124] shadow-[0_24px_70px_rgba(31,35,40,0.18)]"
               >
-                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#8a8178]">
+                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#7a828e]">
                   {t("selector.model")}
                 </DropdownMenu.Label>
                 {enabledModels.map((model) => (
                   <DropdownMenu.Item
                     key={model.id}
                     onSelect={() => onSelectModel(model.id)}
-                    className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-black/6"
+                    className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]"
                   >
                     <span className="inline-flex items-center gap-2">
                       {model.capabilities.reasoning.type !== "none" ? <Zap className="h-4 w-4" /> : null}
@@ -118,23 +118,23 @@ export function ModelSelector({
             </DropdownMenu.Portal>
           </DropdownMenu.Sub>
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-black/6">
+            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]">
               <span>{t("selector.speed")}</span>
               <ChevronRight className="h-4 w-4" />
             </DropdownMenu.SubTrigger>
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 sideOffset={10}
-                className="z-50 w-56 rounded-lg border border-black/10 bg-[#f7f5f0] p-2 text-[#222] shadow-xl"
+                className="z-50 w-56 rounded-xl border border-[#d9e0e8] bg-white p-2 text-[#202124] shadow-[0_24px_70px_rgba(31,35,40,0.18)]"
               >
-                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#8a8178]">
+                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#7a828e]">
                   {t("selector.speed")}
                 </DropdownMenu.Label>
                 {speedModes.map((speed) => (
                   <DropdownMenu.Item
                     key={speed}
                     onSelect={() => onSelectSpeed(speed)}
-                    className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-black/6"
+                    className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]"
                   >
                     {t(speedLabels[speed])}
                     {settings.speed === speed ? <Check className="h-4 w-4" /> : null}

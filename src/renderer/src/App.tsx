@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
+import { FolderKanban, MessageSquareText, Settings } from "lucide-react";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
@@ -73,7 +74,11 @@ export function App(): ReactElement {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
   const { t } = useI18n(settings.language);
-  const sidebarItems = [t("nav.projects"), t("nav.threads"), t("nav.settings")];
+  const sidebarItems = [
+    { label: t("nav.projects"), icon: FolderKanban },
+    { label: t("nav.threads"), icon: MessageSquareText },
+    { label: t("nav.settings"), icon: Settings }
+  ];
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -542,90 +547,101 @@ export function App(): ReactElement {
   return (
     <AppShell
       language={settings.language}
-      sidebar={sidebarItems.map((item) => (
+      sidebar={sidebarItems.map(({ label, icon: Icon }, index) => (
         <button
-          key={item}
-          className="flex h-9 w-full items-center rounded-md px-3 text-left hover:bg-white/8"
+          key={label}
+          className={`flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left transition ${
+            index === 0
+              ? "bg-white text-[#1f2328] shadow-sm ring-1 ring-[#dce3eb]"
+              : "text-[#5f6875] hover:bg-white/72 hover:text-[#1f2328]"
+          }`}
           type="button"
         >
-          {item}
+          <Icon className="h-4 w-4" />
+          <span className="truncate">{label}</span>
         </button>
       ))}
     >
-      <div className="flex flex-1 flex-col px-8 py-6">
-        <ProjectHeader
-          language={settings.language}
-          project={currentProject}
-          scanResult={projectScanResult}
-          gitStatus={gitStatus}
-          gitNotice={gitNotice}
-          commitMessage={commitMessage}
-          onCommitMessageChange={setCommitMessage}
-          onCommitProject={(message) => void commitCurrentProject(message)}
-          onPickProject={() => void pickProject()}
-          onRefreshGitStatus={() => void refreshProjectGitStatus()}
-        />
-        {taskNotice ? (
-          <div className="mb-3 rounded-md border border-[#d7b56d]/40 bg-[#3a2e18] px-3 py-2 text-sm text-[#f4d58d]">
-            {taskNotice}
+      <div className="grid h-screen min-h-0 grid-cols-[minmax(0,1fr)_382px] overflow-hidden">
+        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-[#fbfcfe]">
+          <div className="px-6 pt-5">
+            <ProjectHeader
+              language={settings.language}
+              project={currentProject}
+              scanResult={projectScanResult}
+              gitStatus={gitStatus}
+              gitNotice={gitNotice}
+              commitMessage={commitMessage}
+              onCommitMessageChange={setCommitMessage}
+              onCommitProject={(message) => void commitCurrentProject(message)}
+              onPickProject={() => void pickProject()}
+              onRefreshGitStatus={() => void refreshProjectGitStatus()}
+            />
+            {taskNotice ? (
+              <div className="mb-3 rounded-md border border-[#f2c48b] bg-[#fff7ed] px-3 py-2 text-sm text-[#9a4d00]">
+                {taskNotice}
+              </div>
+            ) : null}
           </div>
-        ) : null}
-        <ThreadWorkspace
-          language={settings.language}
-          selectedThreadId={selectedThreadId}
-          threads={threads}
-          projectScan={projectScanResult}
-          previewFile={previewFile}
-          changePreview={
-            previewFile
-              ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
-              : null
+          <div className="min-h-0 px-6 pb-4">
+            <ThreadWorkspace
+              language={settings.language}
+              selectedThreadId={selectedThreadId}
+              threads={threads}
+              projectScan={projectScanResult}
+              previewFile={previewFile}
+              changePreview={
+                previewFile
+                  ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
+                  : null
+              }
+              changePreviews={changePreviews}
+              onSelectThread={setSelectedThreadId}
+              onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
+              onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
+              onPreviewChange={(relativePath, nextContent) =>
+                void previewProjectFileChange(relativePath, nextContent)
+              }
+              onApplyChange={(relativePath, nextContent) =>
+                void applyProjectFileChange(relativePath, nextContent)
+              }
+              onDiscardChange={discardProjectFileChange}
+              onApplyAllChanges={() => void applyAllProjectFileChanges()}
+              onDiscardAllChanges={discardAllProjectFileChanges}
+              onGenerateFileChange={(relativePath, currentContent) =>
+                void generateProjectFileChange(relativePath, currentContent)
+              }
+              onGenerateSelectedFileChanges={(relativePaths) =>
+                void generateSelectedProjectFileChanges(relativePaths)
+              }
+            />
+          </div>
+          <TaskComposer
+            settings={settings}
+            onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
+            onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
+            onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
+            onSubmitTask={submitTask}
+          />
+        </div>
+        <SettingsPanel
+          settings={settings}
+          keyStatuses={keyStatuses}
+          onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
+          onFetchModels={(providerId) => void fetchModels(providerId)}
+          onAddManualModel={(providerId, modelName) =>
+            setSettings((current) => addManualModel(current, providerId, modelName))
           }
-          changePreviews={changePreviews}
-          onSelectThread={setSelectedThreadId}
-          onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
-          onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
-          onPreviewChange={(relativePath, nextContent) =>
-            void previewProjectFileChange(relativePath, nextContent)
+          onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
+          onSetLanguage={setInterfaceLanguage}
+          onToggleModel={(modelId, enabled) =>
+            setSettings((current) => updateModelEnabled(current, modelId, enabled))
           }
-          onApplyChange={(relativePath, nextContent) =>
-            void applyProjectFileChange(relativePath, nextContent)
-          }
-          onDiscardChange={discardProjectFileChange}
-          onApplyAllChanges={() => void applyAllProjectFileChanges()}
-          onDiscardAllChanges={discardAllProjectFileChanges}
-          onGenerateFileChange={(relativePath, currentContent) =>
-            void generateProjectFileChange(relativePath, currentContent)
-          }
-          onGenerateSelectedFileChanges={(relativePaths) =>
-            void generateSelectedProjectFileChanges(relativePaths)
+          onUpdateProviderBaseUrl={(providerId, baseUrl) =>
+            setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
           }
         />
       </div>
-      <SettingsPanel
-        settings={settings}
-        keyStatuses={keyStatuses}
-        onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
-        onFetchModels={(providerId) => void fetchModels(providerId)}
-        onAddManualModel={(providerId, modelName) =>
-          setSettings((current) => addManualModel(current, providerId, modelName))
-        }
-        onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
-        onSetLanguage={setInterfaceLanguage}
-        onToggleModel={(modelId, enabled) =>
-          setSettings((current) => updateModelEnabled(current, modelId, enabled))
-        }
-        onUpdateProviderBaseUrl={(providerId, baseUrl) =>
-          setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
-        }
-      />
-      <TaskComposer
-        settings={settings}
-        onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
-        onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
-        onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
-        onSubmitTask={submitTask}
-      />
     </AppShell>
   );
 }
