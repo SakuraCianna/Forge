@@ -21,8 +21,8 @@ describe("taskThreads", () => {
     });
   });
 
-  it("requires an enabled model before creating a task thread", () => {
-    const settings = createDefaultModelSettings();
+  it("requires at least one available model before creating a task thread", () => {
+    const settings = { ...createDefaultModelSettings(), currentModelId: null, models: [] };
 
     expect(createThreadFromSettings(settings, "修复登录错误", deps)).toEqual({
       ok: false,

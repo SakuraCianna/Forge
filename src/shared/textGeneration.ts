@@ -1,4 +1,5 @@
 import type { ForgeModel, ForgeProvider, IntelligenceLevel, ProviderKind } from "./modelTypes.js";
+import type { TokenUsage } from "./usageTypes.js";
 
 export type TextGenerationRequestOptions = {
   provider: ForgeProvider;
@@ -76,6 +77,26 @@ export function extractGeneratedText(providerKind: ProviderKind, response: unkno
   }
 
   return extractChatCompletionsText(response);
+}
+
+export function extractTokenUsage(providerKind: ProviderKind, response: unknown): TokenUsage | undefined {
+  if (!isRecord(response)) {
+    return undefined;
+  }
+
+  if (providerKind === "openai") {
+    return extractOpenAITokenUsage(response);
+  }
+
+  if (providerKind === "anthropic") {
+    return extractAnthropicTokenUsage(response);
+  }
+
+  if (providerKind === "gemini") {
+    return extractGeminiTokenUsage(response);
+  }
+
+  return extractChatCompletionsTokenUsage(response);
 }
 
 function buildOpenAIRequest({
@@ -295,6 +316,127 @@ function extractChatCompletionsText(response: Record<string, unknown>): string {
       return content.flatMap((part) => (isRecord(part) && typeof part.text === "string" ? [part.text] : []));
     })
     .join("\n");
+}
+
+function extractOpenAITokenUsage(response: Record<string, unknown>): TokenUsage | undefined {
+  if (!isRecord(response.usage)) {
+    return undefined;
+  }
+
+  const inputTokens = readNumber(response.usage.input_tokens);
+  const outputTokens = readNumber(response.usage.output_tokens);
+  const totalTokens = readNumber(response.usage.total_tokens) ?? sumKnown(inputTokens, outputTokens);
+  const outputDetails = isRecord(response.usage.output_tokens_details)
+    ? response.usage.output_tokens_details
+    : {};
+  const inputDetails = isRecord(response.usage.input_tokens_details)
+    ? response.usage.input_tokens_details
+    : {};
+
+  return createTokenUsage({
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    reasoningTokens: readNumber(outputDetails.reasoning_tokens),
+    cacheReadTokens: readNumber(inputDetails.cached_tokens)
+  });
+}
+
+function extractAnthropicTokenUsage(response: Record<string, unknown>): TokenUsage | undefined {
+  if (!isRecord(response.usage)) {
+    return undefined;
+  }
+
+  const inputTokens = readNumber(response.usage.input_tokens);
+  const outputTokens = readNumber(response.usage.output_tokens);
+
+  return createTokenUsage({
+    inputTokens,
+    outputTokens,
+    totalTokens: sumKnown(inputTokens, outputTokens),
+    cacheReadTokens: readNumber(response.usage.cache_read_input_tokens),
+    cacheWriteTokens: readNumber(response.usage.cache_creation_input_tokens)
+  });
+}
+
+function extractGeminiTokenUsage(response: Record<string, unknown>): TokenUsage | undefined {
+  if (!isRecord(response.usageMetadata)) {
+    return undefined;
+  }
+
+  const inputTokens = readNumber(response.usageMetadata.promptTokenCount);
+  const outputTokens = readNumber(response.usageMetadata.candidatesTokenCount);
+  const totalTokens =
+    readNumber(response.usageMetadata.totalTokenCount) ?? sumKnown(inputTokens, outputTokens);
+
+  return createTokenUsage({
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    reasoningTokens: readNumber(response.usageMetadata.thoughtsTokenCount)
+  });
+}
+
+function extractChatCompletionsTokenUsage(response: Record<string, unknown>): TokenUsage | undefined {
+  if (!isRecord(response.usage)) {
+    return undefined;
+  }
+
+  const inputTokens = readNumber(response.usage.prompt_tokens);
+  const outputTokens = readNumber(response.usage.completion_tokens);
+  const totalTokens = readNumber(response.usage.total_tokens) ?? sumKnown(inputTokens, outputTokens);
+  const completionDetails = isRecord(response.usage.completion_tokens_details)
+    ? response.usage.completion_tokens_details
+    : {};
+  const promptDetails = isRecord(response.usage.prompt_tokens_details)
+    ? response.usage.prompt_tokens_details
+    : {};
+
+  return createTokenUsage({
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    reasoningTokens: readNumber(completionDetails.reasoning_tokens),
+    cacheReadTokens: readNumber(promptDetails.cached_tokens)
+  });
+}
+
+function createTokenUsage(usage: {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}): TokenUsage | undefined {
+  if (
+    usage.inputTokens === undefined &&
+    usage.outputTokens === undefined &&
+    usage.totalTokens === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    totalTokens: usage.totalTokens ?? sumKnown(usage.inputTokens, usage.outputTokens) ?? 0,
+    reasoningTokens: usage.reasoningTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens
+  };
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function sumKnown(first?: number, second?: number): number | undefined {
+  if (first === undefined && second === undefined) {
+    return undefined;
+  }
+
+  return (first ?? 0) + (second ?? 0);
 }
 
 function clamp(value: number, min: number, max: number): number {

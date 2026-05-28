@@ -4,7 +4,11 @@ import type {
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
-import { buildTextGenerationRequest, extractGeneratedText } from "../shared/textGeneration.js";
+import {
+  buildTextGenerationRequest,
+  extractGeneratedText,
+  extractTokenUsage
+} from "../shared/textGeneration.js";
 
 type KeyReader = {
   readProviderKey: (providerId: string) => Promise<string | null>;
@@ -48,7 +52,7 @@ export async function generateAgentPlan({
     provider: request.provider,
     model: request.model,
     apiKey,
-    instructions: createAgentPlanInstructions(),
+    instructions: createAgentPlanInstructions(request.personalization),
     input: createAgentPlanInput(request),
     intelligence: request.intelligence
   });
@@ -62,6 +66,7 @@ export async function generateAgentPlan({
 
   const body = (await response.json()) as unknown;
   const text = extractGeneratedText(request.provider.kind, body).trim();
+  const usage = extractTokenUsage(request.provider.kind, body);
 
   if (!text) {
     throw new Error(`${request.provider.label} returned an empty agent response`);
@@ -71,7 +76,8 @@ export async function generateAgentPlan({
     providerId: request.provider.id,
     modelId: request.model.id,
     text,
-    createdAt: now()
+    createdAt: now(),
+    usage
   };
 }
 
@@ -91,7 +97,7 @@ export async function generateAgentFileChange({
     provider: request.provider,
     model: request.model,
     apiKey,
-    instructions: createAgentFileChangeInstructions(),
+    instructions: createAgentFileChangeInstructions(request.personalization),
     input: createAgentFileChangeInput(request),
     intelligence: request.intelligence
   });
@@ -105,6 +111,7 @@ export async function generateAgentFileChange({
 
   const body = (await response.json()) as unknown;
   const nextContent = stripMarkdownCodeFence(extractGeneratedText(request.provider.kind, body));
+  const usage = extractTokenUsage(request.provider.kind, body);
 
   if (!nextContent.trim()) {
     throw new Error(`${request.provider.label} returned an empty file change`);
@@ -115,28 +122,37 @@ export async function generateAgentFileChange({
     modelId: request.model.id,
     relativePath: request.relativePath,
     nextContent,
-    createdAt: now()
+    createdAt: now(),
+    usage
   };
 }
 
-function createAgentPlanInstructions(): string {
-  return [
+function createAgentPlanInstructions(personalization?: string): string {
+  return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
     "Do not reveal hidden chain-of-thought. Show only actionable engineering steps.",
     "Prefer Chinese when the user writes Chinese. Keep file paths exact when mentioned.",
     "Do not claim you changed files or ran commands. This response is planning only."
-  ].join("\n");
+  ], personalization);
 }
 
-function createAgentFileChangeInstructions(): string {
-  return [
+function createAgentFileChangeInstructions(personalization?: string): string {
+  return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
     "Rewrite the selected file to satisfy the user task.",
     "Return only the complete replacement file content.",
     "Do not include explanations, markdown fences, diffs, or patch markers.",
     "Preserve existing style and imports unless the task requires changes."
-  ].join("\n");
+  ], personalization);
+}
+
+function appendPersonalization(instructions: string[], personalization?: string): string {
+  if (!personalization?.trim()) {
+    return instructions.join("\n");
+  }
+
+  return [...instructions, "User personalization:", personalization.trim()].join("\n");
 }
 
 function createAgentPlanInput(request: GenerateAgentPlanRequest): string {

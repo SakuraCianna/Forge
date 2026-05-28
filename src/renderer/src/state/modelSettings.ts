@@ -14,7 +14,6 @@ type PersistedModelSettings = {
   intelligence?: IntelligenceLevel;
   speed?: SpeedMode;
   currentModelId?: string | null;
-  enabledModelIds?: string[];
   providerBaseUrls?: Record<string, string>;
   manualModels?: PersistedManualModel[];
 };
@@ -30,14 +29,14 @@ export function createDefaultModelSettings(): ModelSettings {
     language: "zh-CN",
     intelligence: "high",
     speed: "balanced",
-    currentModelId: null,
+    currentModelId: catalogModels[0]?.id ?? null,
     providers: providerCatalog,
-    models: catalogModels
+    models: catalogModels.map((model) => ({ ...model, enabled: true }))
   };
 }
 
 export function getEnabledModels(settings: ModelSettings): ForgeModel[] {
-  return settings.models.filter((model) => model.enabled);
+  return settings.models;
 }
 
 export function updateModelEnabled(
@@ -60,7 +59,7 @@ export function updateModelEnabled(
 }
 
 export function setCurrentModel(settings: ModelSettings, modelId: string): ModelSettings {
-  const model = settings.models.find((candidate) => candidate.id === modelId && candidate.enabled);
+  const model = settings.models.find((candidate) => candidate.id === modelId);
 
   if (!model) {
     return settings;
@@ -97,18 +96,19 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
     if (existingModel) {
       const nextModel = {
         ...fetchedModel,
-        enabled: existingModel.enabled
+        enabled: true
       };
       const index = nextModels.findIndex((model) => model.id === fetchedModel.id);
       nextModels[index] = nextModel;
     } else {
-      nextModels.push({ ...fetchedModel, enabled: false });
+      nextModels.push({ ...fetchedModel, enabled: true });
     }
   }
 
   return {
     ...settings,
-    models: nextModels
+    models: nextModels,
+    currentModelId: settings.currentModelId ?? nextModels[0]?.id ?? null
   };
 }
 
@@ -153,7 +153,6 @@ export function saveModelSettings(storage: Storage, settings: ModelSettings): vo
     intelligence: settings.intelligence,
     speed: settings.speed,
     currentModelId: settings.currentModelId,
-    enabledModelIds: getEnabledModels(settings).map((model) => model.id),
     providerBaseUrls: Object.fromEntries(
       settings.providers.flatMap((provider) =>
         provider.baseUrl ? [[provider.id, provider.baseUrl] as const] : []
@@ -187,7 +186,6 @@ export function loadModelSettings(storage: Storage): ModelSettings {
 
 function mergePersistedSettings(persisted: PersistedModelSettings): ModelSettings {
   const defaults = createDefaultModelSettings();
-  const enabledModelIds = new Set(persisted.enabledModelIds ?? []);
   const providers = defaults.providers.map((provider) => ({
     ...provider,
     baseUrl: persisted.providerBaseUrls?.[provider.id] ?? provider.baseUrl
@@ -199,17 +197,17 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
         model.providerId,
         model.modelName,
         model.label || model.modelName,
-        enabledModelIds.has(`${model.providerId}:${model.modelName}`)
+        true
       )
     );
   const models = [...defaults.models, ...manualModels].map((model) => ({
     ...model,
-    enabled: enabledModelIds.has(model.id)
+    enabled: true
   }));
   const currentModelId =
-    persisted.currentModelId && enabledModelIds.has(persisted.currentModelId)
+    persisted.currentModelId && models.some((model) => model.id === persisted.currentModelId)
       ? persisted.currentModelId
-      : (models.find((model) => model.enabled)?.id ?? null);
+      : (models[0]?.id ?? null);
 
   return {
     ...defaults,

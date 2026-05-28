@@ -1,13 +1,13 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultModelSettings, updateModelEnabled } from "@/state/modelSettings";
+import { createDefaultModelSettings } from "@/state/modelSettings";
 import { ModelSelector } from "./ModelSelector";
 
 describe("ModelSelector", () => {
-  it("shows only enabled models in the model submenu", async () => {
+  it("shows all available models in the model submenu", async () => {
     const user = userEvent.setup();
-    const settings = updateModelEnabled(createDefaultModelSettings(), "openai:gpt-5.5", true);
+    const settings = createDefaultModelSettings();
 
     render(
       <ModelSelector
@@ -21,17 +21,27 @@ describe("ModelSelector", () => {
     await user.click(screen.getByRole("button", { name: /GPT-5.5/ }));
     const menu = await screen.findByRole("menu");
 
-    expect(within(menu).getAllByText("GPT-5.5").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Claude Sonnet")).not.toBeInTheDocument();
+    const modelSubTrigger = within(menu).getAllByText("GPT-5.5").at(-1);
+
+    expect(modelSubTrigger).toBeDefined();
+
+    await user.hover(modelSubTrigger as HTMLElement);
+
+    expect(await screen.findByText("Claude Sonnet")).toBeInTheDocument();
   });
 
-  it("opens settings directly when no model is enabled", async () => {
+  it("opens settings directly when no model exists", async () => {
     const user = userEvent.setup();
     const onOpenSettings = vi.fn();
+    const settings = {
+      ...createDefaultModelSettings(),
+      currentModelId: null,
+      models: []
+    };
 
     render(
       <ModelSelector
-        settings={createDefaultModelSettings()}
+        settings={settings}
         onSelectModel={vi.fn()}
         onSelectIntelligence={vi.fn()}
         onSelectSpeed={vi.fn()}

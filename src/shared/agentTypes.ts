@@ -1,10 +1,12 @@
 import type { ForgeModel, ForgeProvider, IntelligenceLevel, SpeedMode } from "./modelTypes.js";
 import type { ProjectScanResult } from "./projectTypes.js";
+import type { TokenUsage } from "./usageTypes.js";
 
 export type GenerateAgentPlanRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
   intelligence: IntelligenceLevel;
+  personalization?: string;
   speed: SpeedMode;
   taskPrompt: string;
   projectScan: ProjectScanResult;
@@ -14,6 +16,7 @@ export type GenerateAgentFileChangeRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
   intelligence: IntelligenceLevel;
+  personalization?: string;
   speed: SpeedMode;
   taskPrompt: string;
   relativePath: string;
@@ -25,6 +28,7 @@ export type AgentPlanResult = {
   modelId: string;
   text: string;
   createdAt: string;
+  usage?: TokenUsage;
 };
 
 export type AgentFileChangeResult = {
@@ -33,4 +37,5 @@ export type AgentFileChangeResult = {
   relativePath: string;
   nextContent: string;
   createdAt: string;
+  usage?: TokenUsage;
 };

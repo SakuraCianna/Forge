@@ -54,7 +54,15 @@ const fileChangeRequest: GenerateAgentFileChangeRequest = {
 
 describe("agentPlanService", () => {
   it("calls the selected provider and returns generated plan text", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ output_text: "1. Read App.tsx" })));
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "1. Read App.tsx",
+            usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 }
+          })
+        )
+    );
 
     const result = await generateAgentPlan({
       request,
@@ -67,7 +75,8 @@ describe("agentPlanService", () => {
     expect(result).toMatchObject({
       providerId: "openai",
       modelId: "openai:gpt-5.5",
-      text: "1. Read App.tsx"
+      text: "1. Read App.tsx",
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }
     });
   });
 

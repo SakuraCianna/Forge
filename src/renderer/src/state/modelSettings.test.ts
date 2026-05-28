@@ -33,28 +33,33 @@ function createMemoryStorage(initialValue?: string): Storage {
 }
 
 describe("modelSettings", () => {
-  it("starts with Chinese defaults and no enabled models", () => {
+  it("starts with Chinese defaults and all known models available", () => {
     const settings = createDefaultModelSettings();
 
     expect(settings.language).toBe("zh-CN");
     expect(settings.intelligence).toBe("high");
     expect(settings.speed).toBe("balanced");
-    expect(getEnabledModels(settings)).toEqual([]);
+    expect(settings.currentModelId).toBe("openai:gpt-5.5");
+    expect(getEnabledModels(settings).map((model) => model.id)).toEqual([
+      "openai:gpt-5.5",
+      "anthropic:claude-sonnet",
+      "gemini:gemini-2.5-pro"
+    ]);
   });
 
-  it("only returns models explicitly enabled by the user", () => {
+  it("keeps detected models available without a manual enable step", () => {
     let settings = createDefaultModelSettings();
 
-    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     settings = updateModelEnabled(settings, "anthropic:claude-sonnet", false);
 
-    expect(getEnabledModels(settings).map((model) => model.id)).toEqual(["openai:gpt-5.5"]);
+    expect(getEnabledModels(settings).map((model) => model.id)).toContain(
+      "anthropic:claude-sonnet"
+    );
   });
 
   it("keeps the current model pointed at an enabled model", () => {
     let settings = createDefaultModelSettings();
 
-    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
 
     expect(settings.currentModelId).toBe("openai:gpt-5.5");
@@ -66,7 +71,6 @@ describe("modelSettings", () => {
 
     settings = setLanguage(settings, "en-US");
     settings = setSpeed(settings, "careful");
-    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
 
     saveModelSettings(storage, settings);
@@ -76,7 +80,7 @@ describe("modelSettings", () => {
     expect(loaded.language).toBe("en-US");
     expect(loaded.speed).toBe("careful");
     expect(loaded.currentModelId).toBe("openai:gpt-5.5");
-    expect(getEnabledModels(loaded).map((model) => model.id)).toEqual(["openai:gpt-5.5"]);
+    expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openai:gpt-5.5");
   });
 
   it("persists provider Base URL overrides", () => {
@@ -103,7 +107,7 @@ describe("modelSettings", () => {
     const loaded = loadModelSettings(storage);
 
     expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openrouter:moonshot-v1");
-    expect(loaded.currentModelId).toBe("openrouter:moonshot-v1");
+    expect(loaded.currentModelId).toBe("openai:gpt-5.5");
   });
 
   it("falls back to defaults when persisted settings are invalid", () => {
@@ -112,11 +116,11 @@ describe("modelSettings", () => {
     const loaded = loadModelSettings(storage);
 
     expect(loaded.language).toBe("zh-CN");
-    expect(loaded.currentModelId).toBeNull();
-    expect(getEnabledModels(loaded)).toEqual([]);
+    expect(loaded.currentModelId).toBe("openai:gpt-5.5");
+    expect(getEnabledModels(loaded).length).toBeGreaterThan(0);
   });
 
-  it("merges fetched provider models without enabling them by default", () => {
+  it("merges fetched provider models as immediately available", () => {
     let settings = createDefaultModelSettings();
 
     settings = mergeFetchedModels(settings, [
@@ -137,6 +141,6 @@ describe("modelSettings", () => {
     ]);
 
     expect(settings.models.some((model) => model.id === "openai:gpt-5.6")).toBe(true);
-    expect(getEnabledModels(settings)).toEqual([]);
+    expect(getEnabledModels(settings).map((model) => model.id)).toContain("openai:gpt-5.6");
   });
 });

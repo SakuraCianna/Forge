@@ -22,9 +22,15 @@ import {
   setIntelligence,
   setLanguage,
   setSpeed,
-  updateProviderBaseUrl,
-  updateModelEnabled
+  updateProviderBaseUrl
 } from "@/state/modelSettings";
+import {
+  createDefaultPersonalizationSettings,
+  createPersonalizationPrompt,
+  loadPersonalizationSettings,
+  savePersonalizationSettings,
+  type PersonalizationSettings
+} from "@/state/personalization";
 import {
   addRecentProject,
   createProjectFromPath,
@@ -37,6 +43,16 @@ import {
   createThreadFromSettings,
   type TaskThread
 } from "@/state/taskThreads";
+import {
+  appendUsageEvent,
+  createUsageEvent,
+  loadUsageEvents,
+  loadUsageRates,
+  saveUsageEvents,
+  saveUsageRates,
+  type UsageRateMap
+} from "@/state/usage";
+import type { TokenUsage, UsageEvent, UsageEventKind } from "@shared/usageTypes";
 
 type ProviderKeyStatus = {
   hasKey: boolean;
@@ -71,6 +87,27 @@ export function App(): ReactElement {
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
+  const [usageEvents, setUsageEvents] = useState<UsageEvent[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    return loadUsageEvents(window.localStorage);
+  });
+  const [usageRates, setUsageRates] = useState<UsageRateMap>(() => {
+    if (typeof window === "undefined") {
+      return {};
+    }
+
+    return loadUsageRates(window.localStorage);
+  });
+  const [personalization, setPersonalization] = useState<PersonalizationSettings>(() => {
+    if (typeof window === "undefined") {
+      return createDefaultPersonalizationSettings();
+    }
+
+    return loadPersonalizationSettings(window.localStorage);
+  });
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
@@ -83,6 +120,18 @@ export function App(): ReactElement {
   useEffect(() => {
     saveRecentProjects(window.localStorage, recentProjects);
   }, [recentProjects]);
+
+  useEffect(() => {
+    saveUsageEvents(window.localStorage, usageEvents);
+  }, [usageEvents]);
+
+  useEffect(() => {
+    saveUsageRates(window.localStorage, usageRates);
+  }, [usageRates]);
+
+  useEffect(() => {
+    savePersonalizationSettings(window.localStorage, personalization);
+  }, [personalization]);
 
   useEffect(() => {
     if (!currentProject) {
@@ -357,6 +406,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: selectedThread.intelligence,
+        personalization: createPersonalizationPrompt(personalization),
         speed: selectedThread.speed,
         taskPrompt: selectedThread.prompt,
         relativePath,
@@ -369,6 +419,13 @@ export function App(): ReactElement {
       });
 
       setChangePreviews((current) => upsertFileChangePreview(current, preview));
+      recordUsageEvent({
+        kind: "file-change",
+        providerId: result.providerId,
+        modelId: result.modelId,
+        usage: result.usage,
+        createdAt: result.createdAt
+      });
       setThreads((current) =>
         appendThreadEvents(current, selectedThread.id, [
           {
@@ -482,11 +539,19 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: settings.intelligence,
+        personalization: createPersonalizationPrompt(personalization),
         speed: settings.speed,
         taskPrompt,
         projectScan
       });
 
+      recordUsageEvent({
+        kind: "plan",
+        providerId: plan.providerId,
+        modelId: plan.modelId,
+        usage: plan.usage,
+        createdAt: plan.createdAt
+      });
       setThreads((current) =>
         appendThreadEvents(current, threadId, [
           {
@@ -521,6 +586,37 @@ export function App(): ReactElement {
           }
         ],
         "blocked"
+      )
+    );
+  }
+
+  function recordUsageEvent({
+    kind,
+    providerId,
+    modelId,
+    usage,
+    createdAt
+  }: {
+    kind: UsageEventKind;
+    providerId: string;
+    modelId: string;
+    usage?: TokenUsage;
+    createdAt: string;
+  }): void {
+    if (!usage) {
+      return;
+    }
+
+    setUsageEvents((current) =>
+      appendUsageEvent(
+        current,
+        createUsageEvent({
+          providerId,
+          modelId,
+          kind,
+          usage,
+          createdAt
+        })
       )
     );
   }
@@ -693,12 +789,12 @@ export function App(): ReactElement {
     const changedFiles = gitStatus?.changedFiles ?? [];
 
     return (
-      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white p-5 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
+      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
         <ViewHeader title={t("source.title")} description={t("source.description")} />
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
         ) : (
-          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="rounded-[18px] border border-[#ececf1] bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-[#202123]">{t("source.changedFiles")}</h2>
@@ -765,11 +861,16 @@ export function App(): ReactElement {
           }
           onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
           onSetLanguage={setInterfaceLanguage}
-          onToggleModel={(modelId, enabled) =>
-            setSettings((current) => updateModelEnabled(current, modelId, enabled))
-          }
           onUpdateProviderBaseUrl={(providerId, baseUrl) =>
             setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
+          }
+          personalization={personalization}
+          usageEvents={usageEvents}
+          usageRates={usageRates}
+          onClearUsage={() => setUsageEvents([])}
+          onUpdatePersonalization={(nextPersonalization) => setPersonalization(nextPersonalization)}
+          onUpdateUsageRate={(providerId, rate) =>
+            setUsageRates((current) => ({ ...current, [providerId]: rate }))
           }
         />
       </div>

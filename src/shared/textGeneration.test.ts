@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ForgeModel, ForgeProvider } from "./modelTypes.js";
-import { buildTextGenerationRequest, extractGeneratedText } from "./textGeneration.js";
+import {
+  buildTextGenerationRequest,
+  extractGeneratedText,
+  extractTokenUsage
+} from "./textGeneration.js";
 
 const reasoningModel: ForgeModel = {
   id: "openai:gpt-5.5",
@@ -189,5 +193,51 @@ describe("textGeneration", () => {
         choices: [{ message: { content: "Compatible plan" } }]
       })
     ).toBe("Compatible plan");
+  });
+
+  it("extracts token usage from supported provider responses", () => {
+    expect(
+      extractTokenUsage("openai", {
+        usage: {
+          input_tokens: 10,
+          output_tokens: 20,
+          total_tokens: 30,
+          output_tokens_details: { reasoning_tokens: 4 },
+          input_tokens_details: { cached_tokens: 2 }
+        }
+      })
+    ).toEqual({
+      inputTokens: 10,
+      outputTokens: 20,
+      totalTokens: 30,
+      reasoningTokens: 4,
+      cacheReadTokens: 2,
+      cacheWriteTokens: undefined
+    });
+    expect(
+      extractTokenUsage("anthropic", {
+        usage: {
+          input_tokens: 11,
+          output_tokens: 21,
+          cache_creation_input_tokens: 3,
+          cache_read_input_tokens: 5
+        }
+      })
+    ).toMatchObject({ inputTokens: 11, outputTokens: 21, totalTokens: 32 });
+    expect(
+      extractTokenUsage("gemini", {
+        usageMetadata: {
+          promptTokenCount: 12,
+          candidatesTokenCount: 22,
+          totalTokenCount: 34,
+          thoughtsTokenCount: 6
+        }
+      })
+    ).toMatchObject({ inputTokens: 12, outputTokens: 22, totalTokens: 34 });
+    expect(
+      extractTokenUsage("openai-compatible", {
+        usage: { prompt_tokens: 13, completion_tokens: 23, total_tokens: 36 }
+      })
+    ).toMatchObject({ inputTokens: 13, outputTokens: 23, totalTokens: 36 });
   });
 });

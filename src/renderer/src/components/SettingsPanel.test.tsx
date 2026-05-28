@@ -2,7 +2,32 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultModelSettings, setLanguage } from "@/state/modelSettings";
+import { createDefaultPersonalizationSettings } from "@/state/personalization";
 import { SettingsPanel } from "./SettingsPanel";
+
+function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>[0]> = {}) {
+  const settings = overrides.settings ?? setLanguage(createDefaultModelSettings(), "en-US");
+
+  return render(
+    <SettingsPanel
+      settings={settings}
+      keyStatuses={{}}
+      onClearUsage={vi.fn()}
+      onDeleteProviderKey={vi.fn()}
+      onFetchModels={vi.fn()}
+      onAddManualModel={vi.fn()}
+      onSaveProviderKey={vi.fn()}
+      onSetLanguage={vi.fn()}
+      onUpdatePersonalization={vi.fn()}
+      onUpdateProviderBaseUrl={vi.fn()}
+      onUpdateUsageRate={vi.fn()}
+      personalization={createDefaultPersonalizationSettings()}
+      usageEvents={[]}
+      usageRates={{}}
+      {...overrides}
+    />
+  );
+}
 
 describe("SettingsPanel", () => {
   it("switches language through an explicit user control", async () => {
@@ -10,19 +35,7 @@ describe("SettingsPanel", () => {
     const onSetLanguage = vi.fn();
     const settings = setLanguage(createDefaultModelSettings(), "en-US");
 
-    render(
-      <SettingsPanel
-        settings={settings}
-        keyStatuses={{}}
-        onDeleteProviderKey={vi.fn()}
-        onFetchModels={vi.fn()}
-        onAddManualModel={vi.fn()}
-        onSaveProviderKey={vi.fn()}
-        onSetLanguage={onSetLanguage}
-        onToggleModel={vi.fn()}
-        onUpdateProviderBaseUrl={vi.fn()}
-      />
-    );
+    renderSettingsPanel({ settings, onSetLanguage });
 
     await user.click(screen.getByRole("button", { name: /General/ }));
     await user.selectOptions(screen.getByLabelText("Interface language"), "zh-CN");
@@ -35,19 +48,7 @@ describe("SettingsPanel", () => {
     const onSaveProviderKey = vi.fn();
     const settings = setLanguage(createDefaultModelSettings(), "en-US");
 
-    render(
-      <SettingsPanel
-        settings={settings}
-        keyStatuses={{}}
-        onDeleteProviderKey={vi.fn()}
-        onFetchModels={vi.fn()}
-        onAddManualModel={vi.fn()}
-        onSaveProviderKey={onSaveProviderKey}
-        onSetLanguage={vi.fn()}
-        onToggleModel={vi.fn()}
-        onUpdateProviderBaseUrl={vi.fn()}
-      />
-    );
+    renderSettingsPanel({ settings, onSaveProviderKey });
 
     await user.click(screen.getByRole("button", { name: /Model providers/ }));
     await user.type(screen.getAllByLabelText(/^OpenAI API Key$/)[0], "sk-secret");
@@ -62,19 +63,7 @@ describe("SettingsPanel", () => {
     const onAddManualModel = vi.fn();
     const settings = setLanguage(createDefaultModelSettings(), "en-US");
 
-    render(
-      <SettingsPanel
-        settings={settings}
-        keyStatuses={{}}
-        onDeleteProviderKey={vi.fn()}
-        onFetchModels={vi.fn()}
-        onAddManualModel={onAddManualModel}
-        onSaveProviderKey={vi.fn()}
-        onSetLanguage={vi.fn()}
-        onToggleModel={vi.fn()}
-        onUpdateProviderBaseUrl={onUpdateProviderBaseUrl}
-      />
-    );
+    renderSettingsPanel({ settings, onAddManualModel, onUpdateProviderBaseUrl });
 
     await user.click(screen.getByRole("button", { name: /Model providers/ }));
     await user.click(screen.getByRole("button", { name: "Configure OpenRouter" }));
@@ -88,5 +77,29 @@ describe("SettingsPanel", () => {
       "https://gateway.example/v1"
     );
     expect(onAddManualModel).toHaveBeenCalledWith("openrouter", "moonshot-v1");
+  });
+
+  it("edits usage rates and personalization settings", async () => {
+    const user = userEvent.setup();
+    const onUpdateUsageRate = vi.fn();
+    const onUpdatePersonalization = vi.fn();
+
+    renderSettingsPanel({ onUpdateUsageRate, onUpdatePersonalization });
+
+    await user.click(screen.getByRole("button", { name: /Usage and billing/ }));
+    await user.clear(screen.getAllByLabelText("Input price / 1M")[0]);
+    await user.type(screen.getAllByLabelText("Input price / 1M")[0], "5");
+
+    expect(onUpdateUsageRate).toHaveBeenLastCalledWith(
+      "openai",
+      expect.objectContaining({ inputPerMillion: 5 })
+    );
+
+    await user.click(screen.getByRole("button", { name: /Personalization/ }));
+    await user.selectOptions(screen.getByLabelText("Response style"), "technical");
+
+    expect(onUpdatePersonalization).toHaveBeenLastCalledWith(
+      expect.objectContaining({ replyTone: "technical" })
+    );
   });
 });
