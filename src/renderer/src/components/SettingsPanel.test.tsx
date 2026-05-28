@@ -139,7 +139,20 @@ describe("SettingsPanel", () => {
 
     expect(screen.getByText("OpenAI API Key is not configured")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Fetch models" })[0]);
-    expect(onFetchModels).toHaveBeenCalledWith("openai");
+    expect(onFetchModels).toHaveBeenCalledWith("openai", "");
+  });
+
+  it("passes the draft API key when fetching models", async () => {
+    const user = userEvent.setup();
+    const onFetchModels = vi.fn();
+
+    renderSettingsPanel({ onFetchModels });
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+    await user.type(screen.getAllByLabelText(/^OpenAI API Key$/)[0], "sk-live");
+    await user.click(screen.getAllByRole("button", { name: "Fetch models" })[0]);
+
+    expect(onFetchModels).toHaveBeenCalledWith("openai", "sk-live");
   });
 
   it("shows fetched models inside each provider profile and selects one", async () => {

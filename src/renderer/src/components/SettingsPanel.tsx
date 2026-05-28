@@ -1,4 +1,4 @@
-import type { ComponentType, CSSProperties, ReactElement } from "react";
+import type { ComponentType, ReactElement } from "react";
 import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -18,7 +18,7 @@ import {
   SlidersHorizontal,
   Trash2
 } from "lucide-react";
-import type { ForgeModel, ForgeProvider, Language, ModelSettings } from "@shared/modelTypes";
+import type { ForgeModel, Language, ModelSettings } from "@shared/modelTypes";
 import type { UsageEvent } from "@shared/usageTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { PersonalizationSettings } from "@/state/personalization";
@@ -29,26 +29,7 @@ import {
   type UsageRate,
   type UsageRateMap
 } from "@/state/usage";
-
-const providerIconUrls: Record<string, string> = {
-  anthropic: new URL("../assets/provider-icons/anthropic.svg", import.meta.url).href,
-  baidu: new URL("../assets/provider-icons/baidu.svg", import.meta.url).href,
-  deepseek: new URL("../assets/provider-icons/deepseek.svg", import.meta.url).href,
-  gemini: new URL("../assets/provider-icons/gemini.svg", import.meta.url).href,
-  "github-copilot": new URL("../assets/provider-icons/github-copilot.svg", import.meta.url).href,
-  hunyuan: new URL("../assets/provider-icons/hunyuan.svg", import.meta.url).href,
-  minimax: new URL("../assets/provider-icons/minimax.svg", import.meta.url).href,
-  modelscope: new URL("../assets/provider-icons/modelscope.svg", import.meta.url).href,
-  moonshot: new URL("../assets/provider-icons/moonshot.svg", import.meta.url).href,
-  ollama: new URL("../assets/provider-icons/ollama.svg", import.meta.url).href,
-  openai: new URL("../assets/provider-icons/openai.svg", import.meta.url).href,
-  qwen: new URL("../assets/provider-icons/qwen.svg", import.meta.url).href,
-  siliconflow: new URL("../assets/provider-icons/siliconflow.svg", import.meta.url).href,
-  stepfun: new URL("../assets/provider-icons/stepfun.svg", import.meta.url).href,
-  volcengine: new URL("../assets/provider-icons/volcengine.svg", import.meta.url).href,
-  xiaomi: new URL("../assets/provider-icons/xiaomi.svg", import.meta.url).href,
-  zhipu: new URL("../assets/provider-icons/zhipu.svg", import.meta.url).href
-};
+import { ProviderMark } from "./ProviderMark";
 
 export type ProviderFetchState = {
   status: "idle" | "loading" | "success" | "error";
@@ -60,7 +41,7 @@ type SettingsPanelProps = {
   keyStatuses: Record<string, { hasKey: boolean; last4: string | null }>;
   archivedThreads: TaskThread[];
   onDeleteProviderKey: (providerId: string) => void;
-  onFetchModels: (providerId: string) => void;
+  onFetchModels: (providerId: string, apiKey?: string) => void;
   onAddProvider: (label: string, baseUrl: string) => void;
   onClearUsage: () => void;
   onDeleteProvider: (providerId: string) => void;
@@ -278,7 +259,7 @@ export function SettingsPanel({
                   }`}
                 >
                   <span className="flex min-w-0 items-center gap-3">
-                    <ProviderMark provider={provider} fallbackLabel={providerLabel} />
+                    <ProviderMark provider={provider} fallbackLabel={providerLabel} size="md" />
                     <span className="min-w-0">
                       <span className="block truncate font-medium text-[#202123]">{model.label}</span>
                       <span className="mt-1 block truncate text-xs text-[#6e6e80]">
@@ -372,10 +353,10 @@ export function SettingsPanel({
                   aria-expanded={isExpanded}
                   aria-label={`${t("settings.configure")} ${providerLabel}`}
                   onClick={() => setExpandedProviderId(isExpanded ? "" : provider.id)}
-                  className="flex w-full items-center justify-between gap-4 px-4 py-2 text-left transition hover:bg-[#f7f7f8]"
+                  className="flex w-full items-center justify-between gap-4 px-4 py-1.5 text-left transition hover:bg-[#f7f7f8]"
                 >
                   <span className="flex min-w-0 items-center gap-3">
-                    <ProviderMark provider={provider} fallbackLabel={providerLabel} />
+                    <ProviderMark provider={provider} fallbackLabel={providerLabel} size="md" />
                     <span className="min-w-0">
                       <span className="flex min-w-0 flex-wrap items-center gap-2">
                         <span className="truncate text-sm font-semibold text-[#202123]">{providerLabel}</span>
@@ -463,7 +444,7 @@ export function SettingsPanel({
                       </label>
                     ) : null}
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center gap-2 overflow-hidden">
                       {requiresApiKey ? (
                         <>
                           <button
@@ -487,7 +468,7 @@ export function SettingsPanel({
                         type="button"
                         disabled={fetchState.status === "loading"}
                         className="inline-flex h-9 items-center justify-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
-                        onClick={() => onFetchModels(provider.id)}
+                        onClick={() => onFetchModels(provider.id, draftKey)}
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${fetchState.status === "loading" ? "animate-spin" : ""}`} />
                         {fetchState.status === "loading"
@@ -496,6 +477,16 @@ export function SettingsPanel({
                             : "Fetching"
                           : t("settings.fetchModels")}
                       </button>
+                      {fetchState.message ? (
+                        <span
+                          className={`min-w-0 max-w-[560px] truncate text-xs ${
+                            fetchState.status === "error" ? "text-[#b45309]" : "text-[#087443]"
+                          }`}
+                          title={fetchState.message}
+                        >
+                          {fetchState.message}
+                        </span>
+                      ) : null}
                       {provider.custom ? (
                         <button
                           type="button"
@@ -515,17 +506,8 @@ export function SettingsPanel({
                           ? "本地服务无需 API Key, 确认服务运行后可直接拉取模型"
                           : "Local services do not need an API key. Start the service, then fetch models."}
                     </p>
-                    {fetchState.message ? (
-                      <p
-                        className={`text-xs leading-5 ${
-                          fetchState.status === "error" ? "text-[#b45309]" : "text-[#087443]"
-                        }`}
-                      >
-                        {fetchState.message}
-                      </p>
-                    ) : null}
                     <div className="rounded-[14px] border border-[#ececf1] bg-white p-3">
-                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(440px,560px)] md:items-center">
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(560px,672px)] md:items-center">
                         <span>
                           <span className="block text-sm font-medium text-[#202123]">
                             {t("settings.providerModels")}
@@ -578,7 +560,7 @@ export function SettingsPanel({
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <ProviderMark provider={provider} fallbackLabel={provider.label} />
+                  <ProviderMark provider={provider} fallbackLabel={provider.label} size="md" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-[#202123]">
                       {provider.label}
@@ -827,7 +809,7 @@ function ProviderModelDropdown({
           aria-label={
             language === "zh-CN" ? `${providerLabel} 可用模型` : `${providerLabel} available models`
           }
-          className="inline-flex h-9 w-full min-w-0 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f7f8] disabled:text-[#8e8ea0] md:min-w-[440px]"
+          className="inline-flex h-9 w-full min-w-0 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f7f8] disabled:text-[#8e8ea0] md:min-w-[560px]"
         >
           <span className="truncate">{triggerLabel}</span>
           <ChevronDown className="h-4 w-4 shrink-0 text-[#6e6e80]" />
@@ -837,7 +819,7 @@ function ProviderModelDropdown({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[440px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+          className="z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[560px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
         >
           {models.map((model) => (
             <DropdownMenu.Item
@@ -856,49 +838,6 @@ function ProviderModelDropdown({
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
   );
-}
-
-function ProviderMark({
-  provider,
-  fallbackLabel
-}: {
-  provider: ForgeProvider | null;
-  fallbackLabel: string;
-}): ReactElement {
-  const accentColor = provider?.accentColor ?? "#6e6e80";
-  const icon = provider?.icon ?? getProviderInitials(fallbackLabel);
-  const iconUrl = provider?.iconAsset ? providerIconUrls[provider.iconAsset] : undefined;
-  const style = {
-    color: accentColor,
-    borderColor: accentColor
-  } as CSSProperties;
-
-  return (
-    <span
-      aria-hidden="true"
-      style={style}
-      className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-white p-1 text-[9px] font-bold tracking-normal"
-    >
-      {iconUrl ? <img src={iconUrl} alt="" className="h-full w-full object-contain" /> : icon}
-    </span>
-  );
-}
-
-function getProviderInitials(label: string): string {
-  const words = label
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (words.length === 0) {
-    return "API";
-  }
-
-  if (words.length === 1) {
-    return words[0].slice(0, 2).toUpperCase();
-  }
-
-  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
 }
 
 function StatusTile({

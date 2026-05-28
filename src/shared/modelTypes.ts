@@ -4,7 +4,7 @@ export type Language = "zh-CN" | "en-US";
 
 export type IntelligenceLevel = "low" | "medium" | "high" | "xhigh";
 
-export type SpeedMode = "fast" | "balanced" | "careful";
+export type SpeedMode = "fast" | "balanced";
 
 export type ReasoningControl =
   | { type: "none" }
@@ -20,6 +20,8 @@ export type ForgeProvider = {
   requestHeaders?: Record<string, string>;
   requiresBaseUrl: boolean;
   requiresApiKey?: boolean;
+  authHeader?: "authorization-bearer" | "api-key";
+  reasoningStyle?: "openai-reasoning" | "mimo-thinking";
   icon?: string;
   iconAsset?: string;
   accentColor?: string;

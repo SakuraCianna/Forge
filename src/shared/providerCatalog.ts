@@ -43,7 +43,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "moonshot",
-    label: "Moonshot AI / Kimi",
+    label: "月之暗面 / Kimi",
     kind: "openai-compatible",
     baseUrl: "https://api.moonshot.cn/v1",
     requiresBaseUrl: false,
@@ -53,7 +53,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "qwen-dashscope",
-    label: "Qwen / DashScope",
+    label: "通义千问 / 百炼",
     kind: "openai-compatible",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     requiresBaseUrl: false,
@@ -73,7 +73,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "zai",
-    label: "Z.AI",
+    label: "Z.AI 海外版",
     kind: "openai-compatible",
     baseUrl: "https://api.z.ai/api/paas/v4",
     requiresBaseUrl: false,
@@ -83,7 +83,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "zai-coding",
-    label: "Z.AI Coding Plan",
+    label: "Z.AI Coding Plan 海外版",
     kind: "openai-compatible",
     baseUrl: "https://api.z.ai/api/coding/paas/v4",
     requiresBaseUrl: false,
@@ -92,8 +92,18 @@ export const providerCatalog: ForgeProvider[] = [
     accentColor: "#0e7490"
   },
   {
-    id: "minimax",
+    id: "minimax-cn",
     label: "MiniMax",
+    kind: "openai-compatible",
+    baseUrl: "https://api.minimax.chat/v1",
+    requiresBaseUrl: false,
+    icon: "MM",
+    iconAsset: "minimax",
+    accentColor: "#111827"
+  },
+  {
+    id: "minimax",
+    label: "MiniMax 海外版",
     kind: "openai-compatible",
     baseUrl: "https://api.minimax.io/v1",
     requiresBaseUrl: false,
@@ -103,7 +113,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "siliconflow",
-    label: "SiliconFlow",
+    label: "硅基流动",
     kind: "openai-compatible",
     baseUrl: "https://api.siliconflow.cn/v1",
     requiresBaseUrl: false,
@@ -113,7 +123,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "volcengine-ark",
-    label: "Volcengine Ark",
+    label: "火山方舟",
     kind: "openai-compatible",
     baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     requiresBaseUrl: false,
@@ -123,7 +133,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "baidu-qianfan",
-    label: "Baidu Qianfan",
+    label: "百度千帆",
     kind: "openai-compatible",
     baseUrl: "https://qianfan.baidubce.com/v2",
     requiresBaseUrl: false,
@@ -133,7 +143,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "tencent-hunyuan",
-    label: "Tencent Hunyuan",
+    label: "腾讯混元",
     kind: "openai-compatible",
     baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
     requiresBaseUrl: false,
@@ -143,7 +153,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "stepfun",
-    label: "StepFun",
+    label: "阶跃星辰",
     kind: "openai-compatible",
     baseUrl: "https://api.stepfun.com/v1",
     requiresBaseUrl: false,
@@ -153,7 +163,7 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "modelscope",
-    label: "ModelScope",
+    label: "魔搭 ModelScope",
     kind: "openai-compatible",
     baseUrl: "https://api-inference.modelscope.cn/v1",
     requiresBaseUrl: false,
@@ -163,20 +173,24 @@ export const providerCatalog: ForgeProvider[] = [
   },
   {
     id: "xiaomi-mimo",
-    label: "Xiaomi MiMo",
+    label: "小米 MiMo",
     kind: "openai-compatible",
     baseUrl: "https://api.xiaomimimo.com/v1",
     requiresBaseUrl: false,
+    authHeader: "api-key",
+    reasoningStyle: "mimo-thinking",
     icon: "MI",
     iconAsset: "xiaomi",
     accentColor: "#ff6900"
   },
   {
     id: "xiaomi-mimo-token",
-    label: "Xiaomi MiMo Token Plan",
+    label: "小米 MiMo Token Plan",
     kind: "openai-compatible",
     baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
     requiresBaseUrl: false,
+    authHeader: "api-key",
+    reasoningStyle: "mimo-thinking",
     icon: "MI",
     iconAsset: "xiaomi",
     accentColor: "#ff6900"
@@ -224,6 +238,8 @@ export function hydrateProviderFromCatalog(provider: ForgeProvider): ForgeProvid
     modelListUrl: provider.modelListUrl ?? catalogProvider.modelListUrl,
     requestHeaders: provider.requestHeaders ?? catalogProvider.requestHeaders,
     requiresApiKey: provider.requiresApiKey ?? catalogProvider.requiresApiKey,
+    authHeader: provider.authHeader ?? catalogProvider.authHeader,
+    reasoningStyle: provider.reasoningStyle ?? catalogProvider.reasoningStyle,
     icon: provider.icon ?? catalogProvider.icon,
     iconAsset: provider.iconAsset ?? catalogProvider.iconAsset,
     accentColor: provider.accentColor ?? catalogProvider.accentColor

@@ -40,6 +40,15 @@ describe("provider model adapters", () => {
     expect(request.headers.Authorization).toBe("Bearer sk-test");
   });
 
+  it("builds Xiaomi MiMo model list requests with api-key auth", () => {
+    const xiaomiProvider = providerCatalog.find((provider) => provider.id === "xiaomi-mimo")!;
+    const request = buildModelListRequest(xiaomiProvider, "mimo-test");
+
+    expect(request.url).toBe("https://api.xiaomimimo.com/v1/models");
+    expect(request.headers.Authorization).toBeUndefined();
+    expect(request.headers["api-key"]).toBe("mimo-test");
+  });
+
   it("rejects non-ASCII values before they enter fetch headers", () => {
     expect(() => assertHeaderValue("Authorization", "Bearer API Key：sk-test")).toThrow(
       "non-ASCII characters"
@@ -78,6 +87,12 @@ describe("provider model adapters", () => {
     );
     expect(providerCatalog.find((provider) => provider.id === "zai-coding")?.baseUrl).toBe(
       "https://api.z.ai/api/coding/paas/v4"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "minimax-cn")?.baseUrl).toBe(
+      "https://api.minimax.chat/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "minimax")?.label).toBe(
+      "MiniMax 海外版"
     );
     expect(providerCatalog.find((provider) => provider.id === "xiaomi-mimo")?.baseUrl).toBe(
       "https://api.xiaomimimo.com/v1"
@@ -189,5 +204,23 @@ describe("provider model adapters", () => {
       enabled: false,
       capabilitySource: "provider-api"
     });
+  });
+
+  it("infers Xiaomi MiMo thinking support for adjustable models", () => {
+    const xiaomiProvider = providerCatalog.find((provider) => provider.id === "xiaomi-mimo")!;
+    const thinkingModel = toForgeModel(xiaomiProvider, {
+      id: "mimo-v2.5-pro",
+      label: "mimo-v2.5-pro"
+    });
+    const ttsModel = toForgeModel(xiaomiProvider, {
+      id: "mimo-v2.5-tts",
+      label: "mimo-v2.5-tts"
+    });
+
+    expect(thinkingModel.capabilities.reasoning).toEqual({
+      type: "effort",
+      values: ["low", "medium", "high", "xhigh"]
+    });
+    expect(ttsModel.capabilities.reasoning).toEqual({ type: "none" });
   });
 });

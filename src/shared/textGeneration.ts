@@ -24,6 +24,8 @@ type ProviderTextGenerationRequestOptions = Omit<TextGenerationRequestOptions, "
   baseUrl: string;
   requestHeaders?: Record<string, string>;
   requiresApiKey?: boolean;
+  authHeader?: ForgeProvider["authHeader"];
+  reasoningStyle?: ForgeProvider["reasoningStyle"];
 };
 
 const thinkingBudgetByLevel: Record<IntelligenceLevel, number> = {
@@ -56,7 +58,9 @@ export function buildTextGenerationRequest({
       input,
       intelligence,
       requestHeaders: provider.requestHeaders,
-      requiresApiKey: provider.requiresApiKey
+      requiresApiKey: provider.requiresApiKey,
+      authHeader: provider.authHeader,
+      reasoningStyle: provider.reasoningStyle
     });
   }
 
@@ -84,7 +88,9 @@ export function buildTextGenerationRequest({
     input,
     intelligence,
     requestHeaders: provider.requestHeaders,
-    requiresApiKey: provider.requiresApiKey
+    requiresApiKey: provider.requiresApiKey,
+    authHeader: provider.authHeader,
+    reasoningStyle: provider.reasoningStyle
   });
 }
 
@@ -136,7 +142,8 @@ function buildOpenAIRequest({
   input,
   intelligence,
   requestHeaders,
-  requiresApiKey
+  requiresApiKey,
+  authHeader
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
   const body: Record<string, unknown> = {
     model: model.modelName,
@@ -150,7 +157,7 @@ function buildOpenAIRequest({
     body.reasoning = { effort };
   }
 
-  return postJson(`${baseUrl}/responses`, apiKey, body, requestHeaders, requiresApiKey);
+  return postJson(`${baseUrl}/responses`, apiKey, body, requestHeaders, requiresApiKey, authHeader);
 }
 
 function buildAnthropicRequest({
@@ -236,7 +243,9 @@ function buildOpenAICompatibleRequest({
   input,
   intelligence,
   requestHeaders,
-  requiresApiKey
+  requiresApiKey,
+  authHeader,
+  reasoningStyle
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
   const body: Record<string, unknown> = {
     model: model.modelName,
@@ -248,11 +257,13 @@ function buildOpenAICompatibleRequest({
   };
   const effort = resolveEffort(model, intelligence);
 
-  if (effort) {
+  if (effort && reasoningStyle === "mimo-thinking") {
+    body.thinking = { type: intelligence === "low" ? "disabled" : "enabled" };
+  } else if (effort) {
     body.reasoning = { effort };
   }
 
-  return postJson(`${baseUrl}/chat/completions`, apiKey, body, requestHeaders, requiresApiKey);
+  return postJson(`${baseUrl}/chat/completions`, apiKey, body, requestHeaders, requiresApiKey, authHeader);
 }
 
 function postJson(
@@ -260,14 +271,17 @@ function postJson(
   apiKey: string,
   body: Record<string, unknown>,
   requestHeaders: Record<string, string> = {},
-  requiresApiKey = true
+  requiresApiKey = true,
+  authHeader: ForgeProvider["authHeader"] = "authorization-bearer"
 ): BuiltTextGenerationRequest {
   const headers: Record<string, string> = {
     ...validateHeaders(requestHeaders),
     "Content-Type": "application/json"
   };
 
-  if (requiresApiKey) {
+  if (requiresApiKey && authHeader === "api-key") {
+    headers["api-key"] = assertHeaderValue("api-key", normalizeApiKeyForHeader(apiKey));
+  } else if (requiresApiKey) {
     headers.Authorization = assertHeaderValue(
       "Authorization",
       `Bearer ${normalizeApiKeyForHeader(apiKey)}`

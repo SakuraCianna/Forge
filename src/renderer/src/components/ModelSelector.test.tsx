@@ -86,4 +86,55 @@ describe("ModelSelector", () => {
 
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });
+
+  it("shows only standard and fast speed choices, with the fast icon only when selected", async () => {
+    const user = userEvent.setup();
+    const settings = setLanguage(
+      mergeFetchedModels(createDefaultModelSettings(), [
+        {
+          id: "openai:gpt-5.5",
+          providerId: "openai",
+          label: "GPT-5.5",
+          modelName: "gpt-5.5",
+          enabled: true,
+          capabilities: {
+            reasoning: { type: "none" },
+            toolCalling: "unknown",
+            streaming: "unknown",
+            vision: "unknown"
+          },
+          capabilitySource: "provider-api"
+        }
+      ]),
+      "en-US"
+    );
+    const { container, rerender } = render(
+      <ModelSelector
+        settings={settings}
+        onSelectModel={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectSpeed={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector(".lucide-zap")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /GPT-5.5/ }));
+    await user.hover(screen.getByText("Speed"));
+
+    expect(await screen.findByRole("menuitem", { name: /Standard/ })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: /Fast/ })).toBeInTheDocument();
+    expect(screen.queryByText("Careful")).not.toBeInTheDocument();
+
+    rerender(
+      <ModelSelector
+        settings={{ ...settings, speed: "fast" }}
+        onSelectModel={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectSpeed={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector(".lucide-zap")).toBeInTheDocument();
+  });
 });

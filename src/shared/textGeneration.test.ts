@@ -174,6 +174,62 @@ describe("textGeneration", () => {
     });
   });
 
+  it("builds Xiaomi MiMo chat requests with api-key auth and thinking control", () => {
+    const provider: ForgeProvider = {
+      id: "xiaomi-mimo",
+      label: "小米 MiMo",
+      kind: "openai-compatible",
+      baseUrl: "https://api.xiaomimimo.com/v1",
+      requiresBaseUrl: false,
+      authHeader: "api-key",
+      reasoningStyle: "mimo-thinking"
+    };
+
+    const request = buildTextGenerationRequest({
+      provider,
+      model: { ...reasoningModel, providerId: "xiaomi-mimo", modelName: "mimo-v2.5-pro" },
+      apiKey: "mimo-key",
+      instructions: "You are Forge",
+      input: "Plan the change",
+      intelligence: "high"
+    });
+    const body = JSON.parse(request.init.body) as Record<string, unknown>;
+
+    expect(request.url).toBe("https://api.xiaomimimo.com/v1/chat/completions");
+    expect(request.init.headers.Authorization).toBeUndefined();
+    expect(request.init.headers["api-key"]).toBe("mimo-key");
+    expect(body).toMatchObject({
+      model: "mimo-v2.5-pro",
+      thinking: { type: "enabled" }
+    });
+    expect(body.reasoning).toBeUndefined();
+  });
+
+  it("maps low intelligence to disabled Xiaomi MiMo thinking", () => {
+    const provider: ForgeProvider = {
+      id: "xiaomi-mimo",
+      label: "小米 MiMo",
+      kind: "openai-compatible",
+      baseUrl: "https://api.xiaomimimo.com/v1",
+      requiresBaseUrl: false,
+      authHeader: "api-key",
+      reasoningStyle: "mimo-thinking"
+    };
+
+    const request = buildTextGenerationRequest({
+      provider,
+      model: { ...reasoningModel, providerId: "xiaomi-mimo", modelName: "mimo-v2.5-pro" },
+      apiKey: "mimo-key",
+      instructions: "You are Forge",
+      input: "Plan the change",
+      intelligence: "low"
+    });
+
+    expect(JSON.parse(request.init.body)).toMatchObject({
+      thinking: { type: "disabled" }
+    });
+  });
+
   it("omits authorization for local OpenAI-compatible providers without API keys", () => {
     const provider: ForgeProvider = {
       id: "ollama",

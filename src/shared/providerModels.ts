@@ -1,4 +1,4 @@
-import type { ForgeModel, ForgeProvider } from "./modelTypes.js";
+import type { ForgeModel, ForgeProvider, ReasoningControl } from "./modelTypes.js";
 
 export type ModelListRequest = {
   url: string;
@@ -39,11 +39,7 @@ export function buildModelListRequest(provider: ForgeProvider, apiKey: string): 
     };
   }
 
-  const headers: Record<string, string> = { ...extraHeaders };
-
-  if (provider.requiresApiKey !== false) {
-    headers.Authorization = `Bearer ${assertHeaderValue("Authorization", headerApiKey)}`;
-  }
+  const headers = applyAuthHeader({ ...extraHeaders }, provider, headerApiKey);
 
   return {
     url: provider.modelListUrl ?? `${baseUrl}/models`,
@@ -68,6 +64,8 @@ export function parseProviderModelList(provider: ForgeProvider, response: unknow
 }
 
 export function toForgeModel(provider: ForgeProvider, fetchedModel: FetchedModel): ForgeModel {
+  const capabilities = inferFetchedModelCapabilities(provider, fetchedModel.id);
+
   return {
     id: `${provider.id}:${fetchedModel.id}`,
     providerId: provider.id,
@@ -75,7 +73,7 @@ export function toForgeModel(provider: ForgeProvider, fetchedModel: FetchedModel
     modelName: fetchedModel.id,
     enabled: false,
     capabilities: {
-      reasoning: { type: "none" },
+      reasoning: capabilities.reasoning,
       toolCalling: "unknown",
       streaming: "unknown",
       vision: "unknown"
@@ -104,6 +102,53 @@ export function assertHeaderValue(headerName: string, value: string): string {
   }
 
   return value;
+}
+
+export function inferFetchedModelCapabilities(
+  provider: ForgeProvider,
+  modelName: string
+): { reasoning: ReasoningControl } {
+  const normalizedModelName = modelName.toLowerCase();
+
+  if (provider.reasoningStyle === "mimo-thinking" && isMimoThinkingModel(normalizedModelName)) {
+    return { reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] } };
+  }
+
+  if (provider.kind === "gemini" && /(^|[-.])2\.5([-_.]|$)/.test(normalizedModelName)) {
+    return { reasoning: { type: "budget", min: 0, max: 32768 } };
+  }
+
+  if (provider.id === "deepseek" && /(^|[-_])(reasoner|r1)([-_]|$)/.test(normalizedModelName)) {
+    return { reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] } };
+  }
+
+  return { reasoning: { type: "none" } };
+}
+
+function applyAuthHeader(
+  headers: Record<string, string>,
+  provider: ForgeProvider,
+  apiKey: string
+): Record<string, string> {
+  if (provider.requiresApiKey === false) {
+    return headers;
+  }
+
+  if (provider.authHeader === "api-key") {
+    headers["api-key"] = assertHeaderValue("api-key", apiKey);
+    return headers;
+  }
+
+  headers.Authorization = `Bearer ${assertHeaderValue("Authorization", apiKey)}`;
+  return headers;
+}
+
+function isMimoThinkingModel(normalizedModelName: string): boolean {
+  if (normalizedModelName.includes("tts")) {
+    return false;
+  }
+
+  return /^mimo-v(2|2\.5)(-(pro|omni|flash))?$/.test(normalizedModelName);
 }
 
 function validateHeaders(headers: Record<string, string>): Record<string, string> {

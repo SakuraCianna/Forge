@@ -5,6 +5,7 @@ import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelT
 import type { MessageKey } from "@/i18n/messages";
 import { useI18n } from "@/i18n/useI18n";
 import { getEnabledModels } from "@/state/modelSettings";
+import { ProviderMark } from "./ProviderMark";
 
 type ModelSelectorProps = {
   settings: ModelSettings;
@@ -15,7 +16,7 @@ type ModelSelectorProps = {
 };
 
 const intelligenceLevels: IntelligenceLevel[] = ["low", "medium", "high", "xhigh"];
-const speedModes: SpeedMode[] = ["fast", "balanced", "careful"];
+const speedModes: SpeedMode[] = ["balanced", "fast"];
 
 const intelligenceLabels: Record<IntelligenceLevel, MessageKey> = {
   low: "selector.low",
@@ -26,8 +27,7 @@ const intelligenceLabels: Record<IntelligenceLevel, MessageKey> = {
 
 const speedLabels: Record<SpeedMode, MessageKey> = {
   fast: "selector.fast",
-  balanced: "selector.balanced",
-  careful: "selector.careful"
+  balanced: "selector.balanced"
 };
 
 export function ModelSelector({
@@ -41,10 +41,16 @@ export function ModelSelector({
   const enabledModels = getEnabledModels(settings);
   const currentModel =
     enabledModels.find((model) => model.id === settings.currentModelId) ?? enabledModels[0] ?? null;
+  const providerById = new Map(settings.providers.map((provider) => [provider.id, provider]));
   const providerLabelById = new Map(
     settings.providers.map((provider) => [provider.id, provider.label.trim() || provider.id])
   );
+  const currentProvider = currentModel ? (providerById.get(currentModel.providerId) ?? null) : null;
+  const currentProviderLabel = currentModel
+    ? (providerLabelById.get(currentModel.providerId) ?? currentModel.providerId)
+    : "";
   const supportsReasoning = currentModel?.capabilities.reasoning.type !== "none";
+  const isFast = settings.speed === "fast";
   const intelligenceLabel = supportsReasoning
     ? t(intelligenceLabels[settings.intelligence])
     : t("selector.noReasoning");
@@ -57,11 +63,10 @@ export function ModelSelector({
       <button
         type="button"
         onClick={onOpenSettings}
-        className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 whitespace-nowrap rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-sm font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+        className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 whitespace-nowrap rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-xs font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
         aria-label={triggerLabel}
         title={triggerLabel}
       >
-        <Zap className="h-4 w-4 text-[#202123]" />
         <span className="truncate">{triggerLabel}</span>
       </button>
     );
@@ -72,11 +77,18 @@ export function ModelSelector({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 whitespace-nowrap rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-sm font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+          className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 whitespace-nowrap rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-xs font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
           aria-label={triggerLabel}
           title={triggerLabel}
         >
-          <Zap className="h-4 w-4 text-[#202123]" />
+          {isFast ? <Zap className="h-3.5 w-3.5 text-[#202123]" /> : null}
+          {currentProvider ? (
+            <ProviderMark
+              provider={currentProvider}
+              fallbackLabel={currentProviderLabel}
+              size="xs"
+            />
+          ) : null}
           <span className="truncate">{triggerLabel}</span>
         </button>
       </DropdownMenu.Trigger>
@@ -86,7 +98,7 @@ export function ModelSelector({
           sideOffset={8}
           className="z-50 w-72 rounded-[18px] border border-[#d9d9e3] bg-white p-2 text-[#202123] shadow-[0_20px_70px_rgba(0,0,0,0.14)]"
         >
-          <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#6e6e80]">
+          <DropdownMenu.Label className="px-2 py-1.5 text-xs text-[#6e6e80]">
             {t("selector.intelligence")}
           </DropdownMenu.Label>
           {supportsReasoning ? (
@@ -94,22 +106,29 @@ export function ModelSelector({
               <DropdownMenu.Item
                 key={level}
                 onSelect={() => onSelectIntelligence(level)}
-                className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#f7f7f8]"
+                className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-sm outline-none data-[highlighted]:bg-[#f7f7f8]"
               >
                 {t(intelligenceLabels[level])}
                 {settings.intelligence === level ? <Check className="h-4 w-4 text-[#202123]" /> : null}
               </DropdownMenu.Item>
             ))
           ) : (
-            <DropdownMenu.Item className="flex h-10 cursor-default items-center rounded-[12px] px-2 text-base text-[#6e6e80] outline-none">
+            <DropdownMenu.Item className="flex h-10 cursor-default items-center rounded-[12px] px-2 text-sm text-[#6e6e80] outline-none">
               {t("selector.noReasoning")}
             </DropdownMenu.Item>
           )}
           <DropdownMenu.Separator className="my-2 h-px bg-[#ececf1]" />
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#f7f7f8]">
+            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-sm outline-none data-[highlighted]:bg-[#f7f7f8]">
               <span className="inline-flex items-center gap-2">
-                <Zap className="h-4 w-4 text-[#202123]" />
+                {isFast ? <Zap className="h-3.5 w-3.5 text-[#202123]" /> : null}
+                {currentProvider ? (
+                  <ProviderMark
+                    provider={currentProvider}
+                    fallbackLabel={currentProviderLabel}
+                    size="xs"
+                  />
+                ) : null}
                 {currentModel?.label ?? t("selector.configureModel")}
               </span>
               <ChevronRight className="h-4 w-4 text-[#6e6e80]" />
@@ -119,7 +138,7 @@ export function ModelSelector({
                 sideOffset={10}
                 className="z-50 w-72 rounded-[18px] border border-[#d9d9e3] bg-white p-2 text-[#202123] shadow-[0_20px_70px_rgba(0,0,0,0.14)]"
               >
-                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#6e6e80]">
+                <DropdownMenu.Label className="px-2 py-1.5 text-xs text-[#6e6e80]">
                   {t("selector.model")}
                 </DropdownMenu.Label>
                 {enabledModels.map((model) => (
@@ -129,13 +148,13 @@ export function ModelSelector({
                     className="flex min-h-14 cursor-default items-center justify-between gap-3 rounded-[12px] px-2 py-2 outline-none data-[highlighted]:bg-[#f7f7f8]"
                   >
                     <span className="flex min-w-0 items-start gap-2">
-                      <span className="flex h-6 w-4 shrink-0 items-center justify-center">
-                        {model.capabilities.reasoning.type !== "none" ? (
-                          <Zap className="h-4 w-4 text-[#202123]" />
-                        ) : null}
-                      </span>
+                      <ProviderMark
+                        provider={providerById.get(model.providerId) ?? null}
+                        fallbackLabel={providerLabelById.get(model.providerId) ?? model.providerId}
+                        size="sm"
+                      />
                       <span className="min-w-0">
-                        <span className="block truncate text-base text-[#202123]">{model.label}</span>
+                        <span className="block truncate text-sm text-[#202123]">{model.label}</span>
                         <span className="mt-0.5 block truncate text-xs text-[#6e6e80]">
                           {t("selector.modelSource")} {providerLabelById.get(model.providerId) ?? model.providerId}
                         </span>
@@ -148,7 +167,7 @@ export function ModelSelector({
             </DropdownMenu.Portal>
           </DropdownMenu.Sub>
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#f7f7f8]">
+            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-sm outline-none data-[highlighted]:bg-[#f7f7f8]">
               <span>{t("selector.speed")}</span>
               <ChevronRight className="h-4 w-4 text-[#6e6e80]" />
             </DropdownMenu.SubTrigger>
@@ -157,14 +176,14 @@ export function ModelSelector({
                 sideOffset={10}
                 className="z-50 w-56 rounded-[18px] border border-[#d9d9e3] bg-white p-2 text-[#202123] shadow-[0_20px_70px_rgba(0,0,0,0.14)]"
               >
-                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#6e6e80]">
+                <DropdownMenu.Label className="px-2 py-1.5 text-xs text-[#6e6e80]">
                   {t("selector.speed")}
                 </DropdownMenu.Label>
                 {speedModes.map((speed) => (
                   <DropdownMenu.Item
                     key={speed}
                     onSelect={() => onSelectSpeed(speed)}
-                    className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#f7f7f8]"
+                    className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-sm outline-none data-[highlighted]:bg-[#f7f7f8]"
                   >
                     {t(speedLabels[speed])}
                     {settings.speed === speed ? <Check className="h-4 w-4 text-[#202123]" /> : null}

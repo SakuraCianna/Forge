@@ -12,8 +12,7 @@ type CreateInitialPlanEventsOptions = {
 
 const speedMessages: Record<SpeedMode, string> = {
   fast: "快速模式: 缩小代码扫描范围, 优先产出最小可用修改",
-  balanced: "均衡模式: 兼顾代码扫描范围和验证成本",
-  careful: "谨慎模式: 扩大代码扫描范围, 修改后优先运行测试和构建检查"
+  balanced: "标准模式: 兼顾代码扫描范围和验证成本"
 };
 
 export function createInitialPlanEvents({

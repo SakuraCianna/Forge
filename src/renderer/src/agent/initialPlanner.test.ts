@@ -6,7 +6,7 @@ describe("initialPlanner", () => {
     const events = createInitialPlanEvents({
       threadId: "thread-1",
       prompt: "实现设置持久化",
-      speed: "careful",
+      speed: "balanced",
       projectScan: {
         rootPath: "E:\\CodeHome\\Forge",
         files: [
@@ -28,7 +28,7 @@ describe("initialPlanner", () => {
       {
         id: "thread-1-plan-2",
         kind: "plan",
-        message: "谨慎模式: 扩大代码扫描范围, 修改后优先运行测试和构建检查",
+        message: "标准模式: 兼顾代码扫描范围和验证成本",
         createdAt: "2026-05-27T13:00:00.000Z"
       },
       {

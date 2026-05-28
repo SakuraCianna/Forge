@@ -42,8 +42,7 @@ type GenerateAgentAskOptions = {
 
 const maxFilesBySpeed = {
   fast: 24,
-  balanced: 60,
-  careful: 120
+  balanced: 60
 } as const;
 
 export async function generateAgentPlan({

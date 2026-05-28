@@ -1,4 +1,5 @@
 import { catalogModels, providerCatalog } from "@shared/providerCatalog";
+import { toForgeModel } from "@shared/providerModels";
 import type {
   ForgeProvider,
   ForgeModel,
@@ -13,7 +14,7 @@ const modelSettingsStorageKey = "forge.modelSettings";
 type PersistedModelSettings = {
   language?: Language;
   intelligence?: IntelligenceLevel;
-  speed?: SpeedMode;
+  speed?: SpeedMode | string;
   currentModelId?: string | null;
   providerBaseUrls?: Record<string, string>;
   customProviders?: PersistedCustomProvider[];
@@ -326,6 +327,7 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
     .filter((model) => model.providerId && model.modelName)
     .map((model) =>
       createDetectedModel(
+        providers,
         model.providerId,
         model.modelName,
         model.label || model.modelName
@@ -344,7 +346,7 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
     ...defaults,
     language: persisted.language ?? defaults.language,
     intelligence: persisted.intelligence ?? defaults.intelligence,
-    speed: persisted.speed ?? defaults.speed,
+    speed: normalizeSpeed(persisted.speed, defaults.speed),
     currentModelId,
     providers,
     models
@@ -352,6 +354,7 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
 }
 
 function createDetectedModel(
+  providers: ForgeProvider[],
   providerId: string,
   modelName: string,
   label: string
@@ -362,20 +365,36 @@ function createDetectedModel(
       model.modelName.toLowerCase() === modelName.toLowerCase()
   );
 
+  const provider = providers.find((candidate) => candidate.id === providerId);
+  const fetchedModel = provider ? toForgeModel(provider, { id: modelName, label }) : null;
+
   return {
-    id: `${providerId}:${modelName}`,
-    providerId,
-    label,
-    modelName,
+    ...(fetchedModel ?? {
+      id: `${providerId}:${modelName}`,
+      providerId,
+      label,
+      modelName,
+      enabled: true,
+      capabilities: {
+        reasoning: { type: "none" },
+        toolCalling: "unknown",
+        streaming: "unknown",
+        vision: "unknown"
+      },
+      capabilitySource: "provider-api" as const
+    }),
     enabled: true,
-    capabilities: catalogModel?.capabilities ?? {
+    capabilities: catalogModel?.capabilities ?? fetchedModel?.capabilities ?? {
       reasoning: { type: "none" },
       toolCalling: "unknown",
       streaming: "unknown",
       vision: "unknown"
-    },
-    capabilitySource: "provider-api"
+    }
   };
+}
+
+function normalizeSpeed(value: unknown, fallback: SpeedMode): SpeedMode {
+  return value === "fast" || value === "balanced" ? value : fallback;
 }
 
 function createCustomProviderId(label: string, existingIds: Set<string>): string {

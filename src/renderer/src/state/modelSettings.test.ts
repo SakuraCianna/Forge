@@ -53,6 +53,7 @@ describe("modelSettings", () => {
       "zhipu",
       "zai",
       "zai-coding",
+      "minimax-cn",
       "minimax",
       "siliconflow",
       "volcengine-ark",
@@ -95,7 +96,7 @@ describe("modelSettings", () => {
     let settings = createDefaultModelSettings();
 
     settings = setLanguage(settings, "en-US");
-    settings = setSpeed(settings, "careful");
+    settings = setSpeed(settings, "fast");
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
     ]);
@@ -106,9 +107,23 @@ describe("modelSettings", () => {
     const loaded = loadModelSettings(storage);
 
     expect(loaded.language).toBe("en-US");
-    expect(loaded.speed).toBe("careful");
+    expect(loaded.speed).toBe("fast");
     expect(loaded.currentModelId).toBe("openai:gpt-5.5");
     expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openai:gpt-5.5");
+  });
+
+  it("coerces legacy careful speed settings back to standard", () => {
+    const storage = createMemoryStorage(
+      JSON.stringify({
+        language: "en-US",
+        speed: "careful",
+        detectedModels: []
+      })
+    );
+
+    const loaded = loadModelSettings(storage);
+
+    expect(loaded.speed).toBe("balanced");
   });
 
   it("persists provider Base URL overrides", () => {
