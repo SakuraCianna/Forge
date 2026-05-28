@@ -23,6 +23,32 @@ import { windowChannels } from "../shared/ipcChannels.js";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
+function getSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): BrowserWindow | null {
+  return BrowserWindow.fromWebContents(event.sender);
+}
+
+function minimizeSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
+  getSenderWindow(event)?.minimize();
+}
+
+function toggleSenderWindowMaximize(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
+  const window = getSenderWindow(event);
+
+  if (!window) {
+    return;
+  }
+
+  if (window.isMaximized()) {
+    window.unmaximize();
+  } else {
+    window.maximize();
+  }
+}
+
+function closeSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
+  getSenderWindow(event)?.close();
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -120,27 +146,12 @@ void app.whenReady().then(() => {
     }
   );
 
-  ipcMain.handle(windowChannels.minimize, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.minimize();
-  });
-
-  ipcMain.handle(windowChannels.toggleMaximize, (event) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
-
-    if (!window) {
-      return;
-    }
-
-    if (window.isMaximized()) {
-      window.unmaximize();
-    } else {
-      window.maximize();
-    }
-  });
-
-  ipcMain.handle(windowChannels.close, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.close();
-  });
+  ipcMain.handle(windowChannels.minimize, (event) => minimizeSenderWindow(event));
+  ipcMain.handle(windowChannels.toggleMaximize, (event) => toggleSenderWindowMaximize(event));
+  ipcMain.handle(windowChannels.close, (event) => closeSenderWindow(event));
+  ipcMain.on(windowChannels.minimize, (event) => minimizeSenderWindow(event));
+  ipcMain.on(windowChannels.toggleMaximize, (event) => toggleSenderWindowMaximize(event));
+  ipcMain.on(windowChannels.close, (event) => closeSenderWindow(event));
 
   createWindow();
 

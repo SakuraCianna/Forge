@@ -54,16 +54,16 @@ export function TaskComposer({
   }, [submitSignal, submitTask]);
 
   return (
-    <section className="border-t border-[rgba(148,163,184,0.16)] bg-[#08111f]/96 px-5 py-4">
-      <div className="mx-auto rounded-[20px] border border-[rgba(148,163,184,0.18)] bg-[linear-gradient(180deg,rgba(15,26,42,0.96),rgba(12,22,37,0.98))] p-3 text-[#e5edf7] shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+    <section className="border-t border-[rgba(148,163,184,0.1)] bg-[#080d16]/96 px-5 py-4">
+      <div className="mx-auto max-w-[880px] rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(13,22,36,0.96),rgba(9,16,28,0.98))] p-3 text-[#e5edf7] shadow-[0_18px_58px_rgba(0,0,0,0.3)] backdrop-blur-xl transition focus-within:border-[rgba(95,134,255,0.45)]">
         <textarea
           ref={textareaRef}
           value={prompt}
           onChange={(event) => setPrompt(event.currentTarget.value)}
-          className="min-h-[76px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-6 outline-none placeholder:text-[#718198]"
+          className="min-h-[68px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-6 outline-none placeholder:text-[#718198]"
           placeholder={t("composer.placeholder")}
         />
-        <div className="mt-2 flex items-center justify-between">
+        <div className="mt-2 flex items-center justify-between gap-3">
           <ModelSelector
             settings={settings}
             onSelectModel={onSelectModel}

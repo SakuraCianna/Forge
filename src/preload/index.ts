@@ -28,9 +28,18 @@ import type { ProjectScanResult } from "../shared/projectTypes.js";
 contextBridge.exposeInMainWorld("forge", {
   appName: "Forge",
   windowControls: {
-    minimize: () => ipcRenderer.invoke(windowChannels.minimize),
-    toggleMaximize: () => ipcRenderer.invoke(windowChannels.toggleMaximize),
-    close: () => ipcRenderer.invoke(windowChannels.close)
+    minimize: () => {
+      ipcRenderer.send(windowChannels.minimize);
+      return Promise.resolve();
+    },
+    toggleMaximize: () => {
+      ipcRenderer.send(windowChannels.toggleMaximize);
+      return Promise.resolve();
+    },
+    close: () => {
+      ipcRenderer.send(windowChannels.close);
+      return Promise.resolve();
+    }
   },
   secrets: {
     saveProviderKey: (providerId: string, apiKey: string) =>

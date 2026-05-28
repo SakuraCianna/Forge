@@ -55,6 +55,7 @@ select {
   -webkit-app-region: drag;
 }
 
-.no-drag {
+.no-drag,
+.no-drag * {
   -webkit-app-region: no-drag;
 }

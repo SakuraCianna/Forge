@@ -116,21 +116,23 @@ export function ThreadWorkspace({
 
   if (!hasProject) {
     return (
-      <section className="flex h-full min-h-0 items-center justify-center rounded-[20px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(15,26,42,0.88),rgba(9,18,32,0.94))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-xl">
-        <div className="w-full max-w-3xl">
-          <div className="max-w-2xl">
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-[16px] border border-[#ff6b3d]/30 bg-[#ff6b3d]/12 text-[#ff8d6d] shadow-[0_0_44px_rgba(255,107,61,0.12)]">
-              <Layers className="h-7 w-7" />
+      <section className="flex h-full min-h-0 items-center justify-center px-6 py-8">
+        <div className="w-full max-w-[680px] text-center">
+          <div>
+            <div className="mx-auto mb-5 flex h-11 w-11 items-center justify-center rounded-[14px] border border-[#ff6b3d]/22 bg-[#ff6b3d]/10 text-[#ff8d6d]">
+              <Layers className="h-6 w-6" />
             </div>
-            <h1 className="text-3xl font-semibold leading-tight tracking-normal text-white">
+            <h1 className="text-[30px] font-semibold leading-tight tracking-normal text-white md:text-[32px]">
               {t("dashboard.title")}
             </h1>
-            <p className="mt-4 text-base leading-7 text-[#9fb0c7]">{t("dashboard.description")}</p>
-            <div className="mt-6 flex flex-wrap gap-3">
+            <p className="mx-auto mt-3 max-w-[540px] text-base leading-7 text-[#9fb0c7]">
+              {t("dashboard.description")}
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2.5">
               <button
                 type="button"
                 onClick={onPickProject}
-                className="inline-flex h-11 items-center gap-2 rounded-[14px] bg-[#ff6b3d] px-4 text-sm font-semibold text-[#08111f] shadow-[0_16px_36px_rgba(255,107,61,0.22)] transition hover:bg-[#ff815a] active:scale-[0.99]"
+                className="inline-flex h-10 items-center gap-2 rounded-[12px] bg-[#ff6b3d] px-4 text-sm font-semibold text-[#08111f] shadow-[0_14px_30px_rgba(255,107,61,0.18)] transition hover:bg-[#ff815a] active:scale-[0.99]"
               >
                 {t("dashboard.pickProject")}
                 <ArrowRight className="h-4 w-4" />
@@ -138,7 +140,7 @@ export function ThreadWorkspace({
               <button
                 type="button"
                 onClick={onOpenRecentProject}
-                className="inline-flex h-11 items-center rounded-[14px] border border-[rgba(148,163,184,0.18)] bg-[#0f1a2a] px-4 text-sm font-semibold text-[#dbe7f5] transition hover:border-[rgba(148,163,184,0.32)] hover:bg-[#16243a] active:scale-[0.99]"
+                className="inline-flex h-10 items-center rounded-[12px] border border-[rgba(148,163,184,0.18)] bg-[#0d1625] px-4 text-sm font-semibold text-[#dbe7f5] transition hover:border-[rgba(148,163,184,0.32)] hover:bg-[#132037] active:scale-[0.99]"
               >
                 {t("dashboard.openRecent")}
               </button>
