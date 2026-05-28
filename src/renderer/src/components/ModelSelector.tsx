@@ -11,6 +11,7 @@ type ModelSelectorProps = {
   onSelectModel: (modelId: string) => void;
   onSelectIntelligence: (level: IntelligenceLevel) => void;
   onSelectSpeed: (speed: SpeedMode) => void;
+  onOpenSettings?: () => void;
 };
 
 const intelligenceLevels: IntelligenceLevel[] = ["low", "medium", "high", "xhigh"];
@@ -33,7 +34,8 @@ export function ModelSelector({
   settings,
   onSelectModel,
   onSelectIntelligence,
-  onSelectSpeed
+  onSelectSpeed,
+  onOpenSettings
 }: ModelSelectorProps): ReactElement {
   const { t } = useI18n(settings.language);
   const enabledModels = getEnabledModels(settings);
@@ -46,6 +48,20 @@ export function ModelSelector({
   const triggerLabel = currentModel
     ? `${currentModel.label}  ${intelligenceLabel}`
     : t("selector.configureModel");
+
+  if (!currentModel && onOpenSettings) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        className="inline-flex h-9 items-center gap-2 rounded-[13px] border border-[rgba(148,163,184,0.18)] bg-[#0f1a2a] px-2.5 text-sm font-medium text-[#dbe7f5] transition hover:border-[rgba(148,163,184,0.32)] hover:bg-[#16243a] active:scale-[0.99]"
+        aria-label={triggerLabel}
+      >
+        <Zap className="h-4 w-4 text-[#ff8d6d]" />
+        <span>{triggerLabel}</span>
+      </button>
+    );
+  }
 
   return (
     <DropdownMenu.Root>

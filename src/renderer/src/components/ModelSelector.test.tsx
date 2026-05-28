@@ -24,4 +24,23 @@ describe("ModelSelector", () => {
     expect(within(menu).getAllByText("GPT-5.5").length).toBeGreaterThan(0);
     expect(screen.queryByText("Claude Sonnet")).not.toBeInTheDocument();
   });
+
+  it("opens settings directly when no model is enabled", async () => {
+    const user = userEvent.setup();
+    const onOpenSettings = vi.fn();
+
+    render(
+      <ModelSelector
+        settings={createDefaultModelSettings()}
+        onSelectModel={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectSpeed={vi.fn()}
+        onOpenSettings={onOpenSettings}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "配置模型" }));
+
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+  });
 });

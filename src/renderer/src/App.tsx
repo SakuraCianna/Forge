@@ -4,7 +4,7 @@ import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileType
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, type WorkbenchView } from "@/components/AppShell";
 import { ProjectHeader } from "@/components/ProjectHeader";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
@@ -74,6 +74,7 @@ export function App(): ReactElement {
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
+  const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
   const { t } = useI18n(settings.language);
 
   useEffect(() => {
@@ -148,6 +149,7 @@ export function App(): ReactElement {
     const project = createProjectFromPath(projectPath);
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, project));
+    setActiveView("workspace");
   }
 
   function openMostRecentProject(): void {
@@ -159,6 +161,7 @@ export function App(): ReactElement {
     }
 
     setCurrentProject(recentProject);
+    setActiveView("workspace");
   }
 
   async function scanProject(projectPath: string): Promise<void> {
@@ -551,17 +554,10 @@ export function App(): ReactElement {
     );
   }
 
-  return (
-    <AppShell
-      language={settings.language}
-      currentProjectName={currentProject?.name}
-      currentProjectPath={currentProject?.path}
-      onNewTask={() => setComposerFocusSignal((current) => current + 1)}
-      onRun={() => setComposerSubmitSignal((current) => current + 1)}
-      onPickProject={() => void pickProject()}
-    >
-      <div className="flex h-full min-h-0 overflow-hidden">
-        <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+  function renderWorkspaceView(): ReactElement {
+    return (
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+        {currentProject ? (
           <div className="px-5 pt-5">
             <ProjectHeader
               language={settings.language}
@@ -575,59 +571,180 @@ export function App(): ReactElement {
               onPickProject={() => void pickProject()}
               onRefreshGitStatus={() => void refreshProjectGitStatus()}
             />
-            {taskNotice ? (
-              <div className="mb-3 rounded-[14px] border border-[#ff6b3d]/28 bg-[#2a1620]/80 px-3 py-2 text-sm text-[#ffd0c0]">
-                {taskNotice}
-              </div>
-            ) : null}
+            {taskNotice ? <Notice message={taskNotice} /> : null}
           </div>
-          <div className="min-h-0 px-5 pb-4">
-            <ThreadWorkspace
-              language={settings.language}
-              hasProject={Boolean(currentProject)}
-              selectedThreadId={selectedThreadId}
-              threads={threads}
-              projectScan={projectScanResult}
-              previewFile={previewFile}
-              changePreview={
-                previewFile
-                  ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
-                  : null
-              }
-              changePreviews={changePreviews}
-              onSelectThread={setSelectedThreadId}
-              onPickProject={() => void pickProject()}
-              onOpenRecentProject={openMostRecentProject}
-              onQuickTask={submitTask}
-              onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
-              onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
-              onPreviewChange={(relativePath, nextContent) =>
-                void previewProjectFileChange(relativePath, nextContent)
-              }
-              onApplyChange={(relativePath, nextContent) =>
-                void applyProjectFileChange(relativePath, nextContent)
-              }
-              onDiscardChange={discardProjectFileChange}
-              onApplyAllChanges={() => void applyAllProjectFileChanges()}
-              onDiscardAllChanges={discardAllProjectFileChanges}
-              onGenerateFileChange={(relativePath, currentContent) =>
-                void generateProjectFileChange(relativePath, currentContent)
-              }
-              onGenerateSelectedFileChanges={(relativePaths) =>
-                void generateSelectedProjectFileChanges(relativePaths)
-              }
-            />
+        ) : taskNotice ? (
+          <div className="px-5 pt-5">
+            <Notice message={taskNotice} />
           </div>
-          <TaskComposer
-            settings={settings}
-            focusSignal={composerFocusSignal}
-            submitSignal={composerSubmitSignal}
-            onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
-            onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
-            onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
-            onSubmitTask={submitTask}
-          />
+        ) : null}
+        <div className={`min-h-0 px-5 pb-4 ${currentProject || taskNotice ? "" : "pt-5"}`}>
+          {renderThreadWorkspace()}
         </div>
+        <TaskComposer
+          settings={settings}
+          focusSignal={composerFocusSignal}
+          submitSignal={composerSubmitSignal}
+          onOpenSettings={() => setActiveView("settings")}
+          onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
+          onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
+          onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
+          onSubmitTask={submitTask}
+        />
+      </div>
+    );
+  }
+
+  function renderThreadWorkspace(): ReactElement {
+    return (
+      <ThreadWorkspace
+        language={settings.language}
+        hasProject={Boolean(currentProject)}
+        selectedThreadId={selectedThreadId}
+        threads={threads}
+        projectScan={projectScanResult}
+        previewFile={previewFile}
+        changePreview={
+          previewFile
+            ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
+            : null
+        }
+        changePreviews={changePreviews}
+        onSelectThread={setSelectedThreadId}
+        onPickProject={() => void pickProject()}
+        onOpenRecentProject={openMostRecentProject}
+        onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
+        onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
+        onPreviewChange={(relativePath, nextContent) =>
+          void previewProjectFileChange(relativePath, nextContent)
+        }
+        onApplyChange={(relativePath, nextContent) =>
+          void applyProjectFileChange(relativePath, nextContent)
+        }
+        onDiscardChange={discardProjectFileChange}
+        onApplyAllChanges={() => void applyAllProjectFileChanges()}
+        onDiscardAllChanges={discardAllProjectFileChanges}
+        onGenerateFileChange={(relativePath, currentContent) =>
+          void generateProjectFileChange(relativePath, currentContent)
+        }
+        onGenerateSelectedFileChanges={(relativePaths) =>
+          void generateSelectedProjectFileChanges(relativePaths)
+        }
+      />
+    );
+  }
+
+  function renderTasksView(): ReactElement {
+    return <div className="h-full min-h-0 p-5">{renderThreadWorkspace()}</div>;
+  }
+
+  function renderFilesView(): ReactElement {
+    return (
+      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-hidden rounded-[20px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(15,26,42,0.9),rgba(9,18,32,0.96))] shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+        <ViewHeader title={t("files.title")} description={t("files.description")} />
+        {!currentProject ? (
+          <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
+        ) : (
+          <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
+            <div className="min-h-0 overflow-auto border-r border-[rgba(148,163,184,0.16)] p-3">
+              {(projectScanResult?.files ?? []).slice(0, 80).map((file) => (
+                <button
+                  key={file.relativePath}
+                  type="button"
+                  onClick={() => void previewProjectFile(file.relativePath)}
+                  className={`block w-full truncate rounded-[12px] px-3 py-2 text-left text-sm ${
+                    previewFile?.relativePath === file.relativePath
+                      ? "bg-[#17243a] text-white"
+                      : "text-[#9fb0c7] hover:bg-[#121f33] hover:text-[#edf5ff]"
+                  }`}
+                >
+                  {file.relativePath}
+                </button>
+              ))}
+            </div>
+            <div className="min-h-0 overflow-auto p-4">
+              {previewFile ? (
+                <pre className="min-h-full whitespace-pre-wrap rounded-[16px] border border-[rgba(148,163,184,0.16)] bg-[#08111f]/82 p-4 font-mono text-xs leading-5 text-[#dbe7f5]">
+                  {previewFile.content}
+                </pre>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-[#8ea0b8]">
+                  {t("files.pickFile")}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  function renderSourceView(): ReactElement {
+    const changedFiles = gitStatus?.changedFiles ?? [];
+
+    return (
+      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(15,26,42,0.9),rgba(9,18,32,0.96))] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+        <ViewHeader title={t("source.title")} description={t("source.description")} />
+        {!currentProject ? (
+          <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
+        ) : (
+          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-[#0f1a2a]/82 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-white">{t("source.changedFiles")}</h2>
+                <button
+                  type="button"
+                  onClick={() => void refreshProjectGitStatus()}
+                  className="rounded-[12px] border border-[rgba(148,163,184,0.18)] bg-[#0c1727] px-3 py-1.5 text-xs text-[#dbe7f5] hover:bg-[#142238]"
+                >
+                  {t("projects.refreshGit")}
+                </button>
+              </div>
+              {gitStatus?.isRepo === false ? (
+                <p className="text-sm text-[#8ea0b8]">{t("projects.gitNotRepo")}</p>
+              ) : changedFiles.length > 0 ? (
+                <div className="space-y-1">
+                  {changedFiles.map((file) => (
+                    <div
+                      key={file}
+                      className="flex items-center justify-between gap-3 rounded-[12px] bg-[#08111f]/62 px-3 py-2 text-sm"
+                    >
+                      <span className="truncate text-[#dbe7f5]">{file}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[#8ea0b8]">{t("projects.gitClean")}</p>
+              )}
+            </div>
+            <div className="rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-[#0f1a2a]/82 p-4">
+              <label className="grid gap-2 text-sm text-[#8ea0b8]">
+                {t("projects.commitMessage")}
+                <input
+                  value={commitMessage}
+                  onChange={(event) => setCommitMessage(event.currentTarget.value)}
+                  className="h-10 rounded-[14px] border border-[rgba(148,163,184,0.18)] bg-[#08111f]/82 px-3 text-sm text-[#dbe7f5] outline-none transition focus:border-[#4f7cff]"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void commitCurrentProject(commitMessage)}
+                disabled={!gitStatus?.isRepo || changedFiles.length === 0}
+                className="mt-3 h-10 w-full rounded-[14px] bg-[#ff6b3d] text-sm font-semibold text-[#08111f] transition hover:bg-[#ff815a] disabled:cursor-not-allowed disabled:bg-[#17243a] disabled:text-[#718198]"
+              >
+                {t("projects.commit")}
+              </button>
+              {gitNotice ? <p className="mt-3 text-sm text-[#ffb49c]">{gitNotice}</p> : null}
+            </div>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  function renderSettingsView(): ReactElement {
+    return (
+      <div className="h-full min-h-0 p-5">
         <SettingsPanel
           settings={settings}
           keyStatuses={keyStatuses}
@@ -646,6 +763,95 @@ export function App(): ReactElement {
           }
         />
       </div>
+    );
+  }
+
+  function renderActiveView(): ReactElement {
+    if (activeView === "settings") {
+      return renderSettingsView();
+    }
+
+    if (activeView === "files") {
+      return renderFilesView();
+    }
+
+    if (activeView === "source") {
+      return renderSourceView();
+    }
+
+    if (activeView === "tasks") {
+      return renderTasksView();
+    }
+
+    return renderWorkspaceView();
+  }
+
+  return (
+    <AppShell
+      language={settings.language}
+      activeView={activeView}
+      currentProjectName={currentProject?.name}
+      currentProjectPath={currentProject?.path}
+      onNavigate={setActiveView}
+      onNewTask={() => {
+        setActiveView("workspace");
+        setComposerFocusSignal((current) => current + 1);
+      }}
+      onRun={() => {
+        setActiveView("workspace");
+        setComposerSubmitSignal((current) => current + 1);
+      }}
+      onPickProject={() => void pickProject()}
+    >
+      {renderActiveView()}
     </AppShell>
+  );
+}
+
+function Notice({ message }: { message: string }): ReactElement {
+  return (
+    <div className="mb-3 rounded-[14px] border border-[#ff6b3d]/28 bg-[#2a1620]/80 px-3 py-2 text-sm text-[#ffd0c0]">
+      {message}
+    </div>
+  );
+}
+
+function ViewHeader({
+  title,
+  description
+}: {
+  title: string;
+  description: string;
+}): ReactElement {
+  return (
+    <header className="border-b border-[rgba(148,163,184,0.16)] px-5 py-4">
+      <h1 className="text-xl font-semibold text-white">{title}</h1>
+      <p className="mt-1 text-sm text-[#8ea0b8]">{description}</p>
+    </header>
+  );
+}
+
+function EmptyAction({
+  message,
+  action,
+  onClick
+}: {
+  message: string;
+  action: string;
+  onClick: () => void;
+}): ReactElement {
+  return (
+    <div className="flex h-[calc(100%-86px)] items-center justify-center p-6">
+      <div className="text-center">
+        <p className="mb-4 text-sm text-[#8ea0b8]">{message}</p>
+        <button
+          type="button"
+          onClick={onClick}
+          className="rounded-[14px] bg-[#ff6b3d] px-4 py-2 text-sm font-semibold text-[#08111f] transition hover:bg-[#ff815a]"
+        >
+          {action}
+        </button>
+      </div>
+    </div>
   );
 }

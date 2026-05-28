@@ -61,7 +61,7 @@ export function SettingsPanel({
         : t("selector.careful");
 
   return (
-    <section className="min-h-0 w-80 shrink-0 overflow-auto border-l border-[rgba(148,163,184,0.16)] bg-[rgba(10,18,31,0.94)] px-4 py-5">
+    <section className="h-full min-h-0 overflow-auto rounded-[20px] border border-[rgba(148,163,184,0.16)] bg-[rgba(10,18,31,0.94)] px-5 py-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-base font-semibold text-white">

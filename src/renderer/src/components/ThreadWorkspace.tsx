@@ -10,10 +10,7 @@ import {
   GitPullRequest,
   Layers,
   Play,
-  SearchCode,
   Terminal,
-  TestTube2,
-  Wrench
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
@@ -33,7 +30,6 @@ type ThreadWorkspaceProps = {
   onSelectThread: (threadId: string) => void;
   onPickProject?: () => void;
   onOpenRecentProject?: () => void;
-  onQuickTask?: (prompt: string) => void;
   onRunCommand: (threadId: string, command: string) => void;
   onPreviewFile: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
@@ -59,7 +55,6 @@ export function ThreadWorkspace({
   onSelectThread,
   onPickProject,
   onOpenRecentProject,
-  onQuickTask,
   onRunCommand,
   onPreviewFile,
   onPreviewChange,
@@ -121,17 +116,17 @@ export function ThreadWorkspace({
 
   if (!hasProject) {
     return (
-      <section className="h-full min-h-0 overflow-auto rounded-[20px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(15,26,42,0.88),rgba(9,18,32,0.94))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-xl">
-        <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-center py-8">
-          <div className="mb-7 max-w-2xl">
-            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-[18px] border border-[#ff6b3d]/30 bg-[#ff6b3d]/12 text-[#ff8d6d] shadow-[0_0_44px_rgba(255,107,61,0.12)]">
+      <section className="flex h-full min-h-0 items-center justify-center rounded-[20px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(15,26,42,0.88),rgba(9,18,32,0.94))] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+        <div className="w-full max-w-3xl">
+          <div className="max-w-2xl">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-[16px] border border-[#ff6b3d]/30 bg-[#ff6b3d]/12 text-[#ff8d6d] shadow-[0_0_44px_rgba(255,107,61,0.12)]">
               <Layers className="h-7 w-7" />
             </div>
-            <h1 className="text-4xl font-semibold leading-tight tracking-normal text-white">
+            <h1 className="text-3xl font-semibold leading-tight tracking-normal text-white">
               {t("dashboard.title")}
             </h1>
             <p className="mt-4 text-base leading-7 text-[#9fb0c7]">{t("dashboard.description")}</p>
-            <div className="mt-7 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={onPickProject}
@@ -147,40 +142,6 @@ export function ThreadWorkspace({
               >
                 {t("dashboard.openRecent")}
               </button>
-            </div>
-          </div>
-
-          <div>
-            <h2 className="mb-3 text-sm font-semibold text-[#dbe7f5]">{t("dashboard.quickTasks")}</h2>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {[
-                { label: t("dashboard.analyze"), icon: SearchCode },
-                { label: t("dashboard.fixBuild"), icon: Wrench },
-                { label: t("dashboard.implementFeature"), icon: Code2 },
-                { label: t("dashboard.generateTests"), icon: TestTube2 }
-              ].map(({ label, icon: Icon }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => onQuickTask?.(label)}
-                  className="group rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-[linear-gradient(180deg,rgba(15,26,42,0.9),rgba(11,22,38,0.9))] p-4 text-left shadow-[0_16px_50px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:border-[#4f7cff]/48 hover:bg-[#142238] active:translate-y-0"
-                >
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#4f7cff]/12 text-[#82a1ff] transition group-hover:bg-[#4f7cff]/18">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="font-semibold text-white">{label}</div>
-                  <div className="mt-2 text-xs leading-5 text-[#8ea0b8]">
-                    {t("dashboard.description")}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-[18px] border border-[rgba(148,163,184,0.16)] bg-[#0f1a2a]/76 p-4">
-            <div className="text-sm font-semibold text-[#dbe7f5]">{t("dashboard.recentTasks")}</div>
-            <div className="mt-3 rounded-[14px] border border-dashed border-[rgba(148,163,184,0.18)] bg-[#08111f]/42 px-4 py-5 text-sm text-[#8ea0b8]">
-              {t("dashboard.noRecentTasks")}
             </div>
           </div>
         </div>

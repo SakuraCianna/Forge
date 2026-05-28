@@ -11,6 +11,7 @@ type TaskComposerProps = {
   onSelectIntelligence: (level: IntelligenceLevel) => void;
   onSelectSpeed: (speed: SpeedMode) => void;
   onSubmitTask: (prompt: string) => void;
+  onOpenSettings?: () => void;
   focusSignal?: number;
   submitSignal?: number;
 };
@@ -21,6 +22,7 @@ export function TaskComposer({
   onSelectIntelligence,
   onSelectSpeed,
   onSubmitTask,
+  onOpenSettings,
   focusSignal = 0,
   submitSignal = 0
 }: TaskComposerProps): ReactElement {
@@ -67,6 +69,7 @@ export function TaskComposer({
             onSelectModel={onSelectModel}
             onSelectIntelligence={onSelectIntelligence}
             onSelectSpeed={onSelectSpeed}
+            onOpenSettings={onOpenSettings}
           />
           <button
             type="button"

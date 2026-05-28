@@ -1,18 +1,14 @@
 import type { ComponentType, ReactElement, ReactNode } from "react";
 import {
-  ChevronDown,
   Code2,
   FileCode2,
   GitBranch,
   Hammer,
-  History,
   Maximize2,
   Minus,
   Play,
   Plus,
-  Search,
   Settings,
-  UserCircle,
   Workflow,
   X
 } from "lucide-react";
@@ -21,24 +17,30 @@ import { useI18n } from "@/i18n/useI18n";
 
 type AppShellProps = {
   language: Language;
+  activeView: WorkbenchView;
   currentProjectName?: string | null;
   currentProjectPath?: string | null;
+  onNavigate: (view: WorkbenchView) => void;
   onNewTask?: () => void;
   onRun?: () => void;
   onPickProject?: () => void;
   children: ReactNode;
 };
 
+export type WorkbenchView = "workspace" | "tasks" | "files" | "source" | "settings";
+
 type NavItem = {
-  key: string;
+  key: WorkbenchView;
   label: string;
   icon: ComponentType<{ className?: string }>;
 };
 
 export function AppShell({
   language,
+  activeView,
   currentProjectName,
   currentProjectPath,
+  onNavigate,
   onNewTask,
   onRun,
   onPickProject,
@@ -49,10 +51,7 @@ export function AppShell({
     { key: "workspace", label: t("nav.workspace"), icon: Workflow },
     { key: "tasks", label: t("nav.threads"), icon: Code2 },
     { key: "files", label: t("nav.files"), icon: FileCode2 },
-    { key: "search", label: t("nav.search"), icon: Search },
     { key: "source", label: t("nav.sourceControl"), icon: GitBranch },
-    { key: "history", label: t("nav.runHistory"), icon: History },
-    { key: "context", label: t("nav.context"), icon: Workflow },
     { key: "settings", label: t("nav.settings"), icon: Settings }
   ];
 
@@ -69,11 +68,11 @@ export function AppShell({
         <div className="flex min-w-0 items-center justify-center">
           <button
             type="button"
+            onClick={() => onNavigate("workspace")}
             className="no-drag inline-flex h-8 max-w-[320px] items-center gap-2 rounded-xl border border-[rgba(148,163,184,0.18)] bg-[#0f1a2a]/86 px-3 text-sm font-medium text-[#dbe7f5] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:border-[rgba(148,163,184,0.32)] hover:bg-[#142238] active:scale-[0.99]"
           >
             <span className="h-2 w-2 rounded-full bg-[#37d67a]" />
             <span className="truncate">{t("workspace.agentWorkspace")}</span>
-            <ChevronDown className="h-4 w-4 text-[#8ea0b8]" />
           </button>
         </div>
 
@@ -97,9 +96,10 @@ export function AppShell({
           <button
             type="button"
             aria-label={t("titlebar.userSettings")}
+            onClick={() => onNavigate("settings")}
             className="no-drag flex h-8 w-8 items-center justify-center rounded-xl border border-[rgba(148,163,184,0.16)] bg-[#0f1a2a] text-[#cbd8e8] transition hover:bg-[#16243a] active:scale-[0.98]"
           >
-            <UserCircle className="h-[18px] w-[18px]" />
+            <Settings className="h-[18px] w-[18px]" />
           </button>
           <WindowButton label={t("titlebar.minimize")} onClick={() => void window.forge.windowControls.minimize()}>
             <Minus className="h-4 w-4" />
@@ -135,12 +135,13 @@ export function AppShell({
           </button>
 
           <nav aria-label="Forge navigation" className="space-y-1">
-            {navItems.map((item, index) => (
+            {navItems.map((item) => (
               <button
                 key={item.key}
                 type="button"
+                onClick={() => onNavigate(item.key)}
                 className={`flex h-10 w-full items-center gap-2 rounded-[14px] px-3 text-left text-sm transition active:scale-[0.99] ${
-                  index === 0
+                  activeView === item.key
                     ? "bg-[#17243a] text-white shadow-[inset_3px_0_0_#4f7cff]"
                     : "text-[#9fb0c7] hover:bg-[#121f33] hover:text-[#edf5ff]"
                 }`}
@@ -150,16 +151,6 @@ export function AppShell({
               </button>
             ))}
           </nav>
-
-          <div className="mt-auto rounded-[16px] border border-[rgba(148,163,184,0.16)] bg-[#0d1828]/90 p-3 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-white">{t("app.localAgent")}</div>
-                <div className="mt-1 text-xs text-[#8ea0b8]">{t("app.keysLocal")}</div>
-              </div>
-              <span className="h-2.5 w-2.5 rounded-full bg-[#37d67a] shadow-[0_0_18px_rgba(55,214,122,0.5)]" />
-            </div>
-          </div>
         </aside>
 
         <main
