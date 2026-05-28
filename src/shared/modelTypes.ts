@@ -21,6 +21,7 @@ export type ForgeProvider = {
   requiresBaseUrl: boolean;
   requiresApiKey?: boolean;
   icon?: string;
+  iconAsset?: string;
   accentColor?: string;
   custom?: boolean;
 };

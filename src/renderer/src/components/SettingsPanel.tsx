@@ -30,6 +30,26 @@ import {
   type UsageRateMap
 } from "@/state/usage";
 
+const providerIconUrls: Record<string, string> = {
+  anthropic: new URL("../assets/provider-icons/anthropic.svg", import.meta.url).href,
+  baidu: new URL("../assets/provider-icons/baidu.svg", import.meta.url).href,
+  deepseek: new URL("../assets/provider-icons/deepseek.svg", import.meta.url).href,
+  gemini: new URL("../assets/provider-icons/gemini.svg", import.meta.url).href,
+  "github-copilot": new URL("../assets/provider-icons/github-copilot.svg", import.meta.url).href,
+  hunyuan: new URL("../assets/provider-icons/hunyuan.svg", import.meta.url).href,
+  minimax: new URL("../assets/provider-icons/minimax.svg", import.meta.url).href,
+  modelscope: new URL("../assets/provider-icons/modelscope.svg", import.meta.url).href,
+  moonshot: new URL("../assets/provider-icons/moonshot.svg", import.meta.url).href,
+  ollama: new URL("../assets/provider-icons/ollama.svg", import.meta.url).href,
+  openai: new URL("../assets/provider-icons/openai.svg", import.meta.url).href,
+  qwen: new URL("../assets/provider-icons/qwen.svg", import.meta.url).href,
+  siliconflow: new URL("../assets/provider-icons/siliconflow.svg", import.meta.url).href,
+  stepfun: new URL("../assets/provider-icons/stepfun.svg", import.meta.url).href,
+  volcengine: new URL("../assets/provider-icons/volcengine.svg", import.meta.url).href,
+  xiaomi: new URL("../assets/provider-icons/xiaomi.svg", import.meta.url).href,
+  zhipu: new URL("../assets/provider-icons/zhipu.svg", import.meta.url).href
+};
+
 export type ProviderFetchState = {
   status: "idle" | "loading" | "success" | "error";
   message?: string;
@@ -352,36 +372,38 @@ export function SettingsPanel({
                   aria-expanded={isExpanded}
                   aria-label={`${t("settings.configure")} ${providerLabel}`}
                   onClick={() => setExpandedProviderId(isExpanded ? "" : provider.id)}
-                  className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-[#f7f7f8]"
+                  className="flex w-full items-center justify-between gap-4 px-4 py-2 text-left transition hover:bg-[#f7f7f8]"
                 >
                   <span className="flex min-w-0 items-center gap-3">
                     <ProviderMark provider={provider} fallbackLabel={providerLabel} />
                     <span className="min-w-0">
-                      <span className="flex items-center gap-2">
+                      <span className="flex min-w-0 flex-wrap items-center gap-2">
                         <span className="truncate text-sm font-semibold text-[#202123]">{providerLabel}</span>
+                        <span
+                          className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-full px-1.5 text-xs ${
+                            !requiresApiKey || keyStatus.hasKey
+                              ? "bg-[#effaf6] text-[#087443]"
+                              : "bg-[#fff7ed] text-[#b45309]"
+                          }`}
+                        >
+                          {!requiresApiKey || keyStatus.hasKey ? (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : (
+                            <CircleAlert className="h-3.5 w-3.5" />
+                          )}
+                          {!requiresApiKey
+                            ? settings.language === "zh-CN"
+                              ? "本地服务"
+                              : "Local"
+                            : keyStatus.hasKey
+                            ? `${t("settings.connected")} ****${keyStatus.last4}`
+                            : t("settings.notConfigured")}
+                        </span>
                         {provider.custom ? (
                           <span className="rounded-full border border-[#ececf1] bg-[#f7f7f8] px-2 py-0.5 text-[11px] text-[#565869]">
                             {t("settings.customProvider")}
                           </span>
                         ) : null}
-                      </span>
-                      <span
-                        className={`mt-1 flex items-center gap-1.5 text-xs ${
-                          !requiresApiKey || keyStatus.hasKey ? "text-[#087443]" : "text-[#b45309]"
-                        }`}
-                      >
-                        {!requiresApiKey || keyStatus.hasKey ? (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        ) : (
-                          <CircleAlert className="h-3.5 w-3.5" />
-                        )}
-                        {!requiresApiKey
-                          ? settings.language === "zh-CN"
-                            ? "本地服务, 无需 API Key"
-                            : "Local service, no API key"
-                          : keyStatus.hasKey
-                          ? `${t("settings.connected")} ****${keyStatus.last4}`
-                          : t("settings.notConfigured")}
                       </span>
                     </span>
                   </span>
@@ -503,7 +525,7 @@ export function SettingsPanel({
                       </p>
                     ) : null}
                     <div className="rounded-[14px] border border-[#ececf1] bg-white p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(440px,560px)] md:items-center">
                         <span>
                           <span className="block text-sm font-medium text-[#202123]">
                             {t("settings.providerModels")}
@@ -805,7 +827,7 @@ function ProviderModelDropdown({
           aria-label={
             language === "zh-CN" ? `${providerLabel} 可用模型` : `${providerLabel} available models`
           }
-          className="inline-flex h-9 min-w-36 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123] disabled:cursor-not-allowed disabled:text-[#8e8ea0]"
+          className="inline-flex h-9 w-full min-w-0 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f7f8] disabled:text-[#8e8ea0] md:min-w-[440px]"
         >
           <span className="truncate">{triggerLabel}</span>
           <ChevronDown className="h-4 w-4 shrink-0 text-[#6e6e80]" />
@@ -815,7 +837,7 @@ function ProviderModelDropdown({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-50 max-h-80 min-w-[260px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+          className="z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[440px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
         >
           {models.map((model) => (
             <DropdownMenu.Item
@@ -845,6 +867,7 @@ function ProviderMark({
 }): ReactElement {
   const accentColor = provider?.accentColor ?? "#6e6e80";
   const icon = provider?.icon ?? getProviderInitials(fallbackLabel);
+  const iconUrl = provider?.iconAsset ? providerIconUrls[provider.iconAsset] : undefined;
   const style = {
     color: accentColor,
     borderColor: accentColor
@@ -854,9 +877,9 @@ function ProviderMark({
     <span
       aria-hidden="true"
       style={style}
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border bg-white text-[10px] font-bold tracking-normal"
+      className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-white p-1 text-[9px] font-bold tracking-normal"
     >
-      {icon}
+      {iconUrl ? <img src={iconUrl} alt="" className="h-full w-full object-contain" /> : icon}
     </span>
   );
 }

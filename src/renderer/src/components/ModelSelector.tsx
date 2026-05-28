@@ -59,6 +59,7 @@ export function ModelSelector({
         onClick={onOpenSettings}
         className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 whitespace-nowrap rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-sm font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
         aria-label={triggerLabel}
+        title={triggerLabel}
       >
         <Zap className="h-4 w-4 text-[#202123]" />
         <span className="truncate">{triggerLabel}</span>
@@ -73,6 +74,7 @@ export function ModelSelector({
           type="button"
           className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 whitespace-nowrap rounded-[13px] border border-[#d9d9e3] bg-white px-2.5 text-sm font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
           aria-label={triggerLabel}
+          title={triggerLabel}
         >
           <Zap className="h-4 w-4 text-[#202123]" />
           <span className="truncate">{triggerLabel}</span>

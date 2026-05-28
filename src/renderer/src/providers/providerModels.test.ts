@@ -99,8 +99,23 @@ describe("provider model adapters", () => {
     expect(hydrated).toMatchObject({
       modelListUrl: "http://localhost:11434/api/tags",
       requiresApiKey: false,
-      icon: "OL"
+      icon: "OL",
+      iconAsset: "ollama"
     });
+  });
+
+  it("requires a base URL when no explicit model list URL exists", () => {
+    expect(() =>
+      buildModelListRequest(
+        {
+          id: "custom-empty",
+          label: "Custom",
+          kind: "openai-compatible",
+          requiresBaseUrl: true
+        },
+        "sk-test"
+      )
+    ).toThrow("Custom Base URL is not configured");
   });
 
   it("builds an Anthropic model list request with Anthropic headers", () => {

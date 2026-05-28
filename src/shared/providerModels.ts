@@ -17,6 +17,10 @@ export function buildModelListRequest(provider: ForgeProvider, apiKey: string): 
   const headerApiKey = normalizeApiKeyForHeader(apiKey);
   const extraHeaders = validateHeaders(provider.requestHeaders ?? {});
 
+  if (!baseUrl && !provider.modelListUrl) {
+    throw new Error(`${provider.label} Base URL is not configured`);
+  }
+
   if (provider.kind === "anthropic") {
     return {
       url: provider.modelListUrl ?? `${baseUrl}/v1/models`,

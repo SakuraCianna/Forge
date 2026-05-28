@@ -41,4 +41,16 @@ describe("fetchProviderModels", () => {
       })
     ).rejects.toThrow("OpenAI model fetch failed: 401 Unauthorized - Unauthorized");
   });
+
+  it("wraps network failures with Base URL guidance", async () => {
+    await expect(
+      fetchProviderModels({
+        provider,
+        apiKey: "sk-test",
+        fetcher: async () => {
+          throw new TypeError("fetch failed");
+        }
+      })
+    ).rejects.toThrow("OpenAI model fetch failed: network request failed (fetch failed) Check Base URL");
+  });
 });

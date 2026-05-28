@@ -8,6 +8,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.openai.com/v1",
     requiresBaseUrl: false,
     icon: "AI",
+    iconAsset: "openai",
     accentColor: "#10a37f"
   },
   {
@@ -17,6 +18,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.anthropic.com",
     requiresBaseUrl: false,
     icon: "A",
+    iconAsset: "anthropic",
     accentColor: "#d97757"
   },
   {
@@ -26,6 +28,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://generativelanguage.googleapis.com",
     requiresBaseUrl: false,
     icon: "G",
+    iconAsset: "gemini",
     accentColor: "#1a73e8"
   },
   {
@@ -35,6 +38,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.deepseek.com",
     requiresBaseUrl: false,
     icon: "DS",
+    iconAsset: "deepseek",
     accentColor: "#4d6bfe"
   },
   {
@@ -44,6 +48,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.moonshot.cn/v1",
     requiresBaseUrl: false,
     icon: "K",
+    iconAsset: "moonshot",
     accentColor: "#1f6feb"
   },
   {
@@ -53,6 +58,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     requiresBaseUrl: false,
     icon: "Q",
+    iconAsset: "qwen",
     accentColor: "#615ced"
   },
   {
@@ -62,6 +68,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     requiresBaseUrl: false,
     icon: "GLM",
+    iconAsset: "zhipu",
     accentColor: "#315efb"
   },
   {
@@ -71,6 +78,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.z.ai/api/paas/v4",
     requiresBaseUrl: false,
     icon: "Z",
+    iconAsset: "zhipu",
     accentColor: "#0f766e"
   },
   {
@@ -80,6 +88,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.z.ai/api/coding/paas/v4",
     requiresBaseUrl: false,
     icon: "ZC",
+    iconAsset: "zhipu",
     accentColor: "#0e7490"
   },
   {
@@ -89,6 +98,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.minimax.io/v1",
     requiresBaseUrl: false,
     icon: "MM",
+    iconAsset: "minimax",
     accentColor: "#111827"
   },
   {
@@ -98,6 +108,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.siliconflow.cn/v1",
     requiresBaseUrl: false,
     icon: "SF",
+    iconAsset: "siliconflow",
     accentColor: "#00a36c"
   },
   {
@@ -107,6 +118,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     requiresBaseUrl: false,
     icon: "ARK",
+    iconAsset: "volcengine",
     accentColor: "#1664ff"
   },
   {
@@ -116,6 +128,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://qianfan.baidubce.com/v2",
     requiresBaseUrl: false,
     icon: "BD",
+    iconAsset: "baidu",
     accentColor: "#2932e1"
   },
   {
@@ -125,6 +138,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
     requiresBaseUrl: false,
     icon: "HY",
+    iconAsset: "hunyuan",
     accentColor: "#0052d9"
   },
   {
@@ -134,6 +148,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.stepfun.com/v1",
     requiresBaseUrl: false,
     icon: "ST",
+    iconAsset: "stepfun",
     accentColor: "#7c3aed"
   },
   {
@@ -143,6 +158,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api-inference.modelscope.cn/v1",
     requiresBaseUrl: false,
     icon: "MS",
+    iconAsset: "modelscope",
     accentColor: "#1677ff"
   },
   {
@@ -152,6 +168,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.xiaomimimo.com/v1",
     requiresBaseUrl: false,
     icon: "MI",
+    iconAsset: "xiaomi",
     accentColor: "#ff6900"
   },
   {
@@ -161,6 +178,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
     requiresBaseUrl: false,
     icon: "MI",
+    iconAsset: "xiaomi",
     accentColor: "#ff6900"
   },
   {
@@ -175,6 +193,7 @@ export const providerCatalog: ForgeProvider[] = [
     },
     requiresBaseUrl: false,
     icon: "GH",
+    iconAsset: "github-copilot",
     accentColor: "#24292f"
   },
   {
@@ -186,6 +205,7 @@ export const providerCatalog: ForgeProvider[] = [
     requiresBaseUrl: false,
     requiresApiKey: false,
     icon: "OL",
+    iconAsset: "ollama",
     accentColor: "#262626"
   }
 ];
@@ -205,6 +225,7 @@ export function hydrateProviderFromCatalog(provider: ForgeProvider): ForgeProvid
     requestHeaders: provider.requestHeaders ?? catalogProvider.requestHeaders,
     requiresApiKey: provider.requiresApiKey ?? catalogProvider.requiresApiKey,
     icon: provider.icon ?? catalogProvider.icon,
+    iconAsset: provider.iconAsset ?? catalogProvider.iconAsset,
     accentColor: provider.accentColor ?? catalogProvider.accentColor
   };
 }

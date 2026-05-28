@@ -110,6 +110,7 @@ export function TaskComposer({
             <button
               type="button"
               aria-label={copy.addProject}
+              title={copy.addProject}
               onClick={onPickProject}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
             >
@@ -128,6 +129,7 @@ export function TaskComposer({
           type="button"
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
           aria-label={t("composer.send")}
+          title={t("composer.send")}
           onClick={submitTask}
         >
           <ArrowUp className="h-5 w-5" />

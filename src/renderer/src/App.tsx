@@ -134,8 +134,8 @@ const enHeroPrompts = [
   "Ready to forge the next step?"
 ];
 
-const heroSwapAnimationMs = 650;
-const heroSwapIdleMs = 1500;
+const heroSwapAnimationMs = 900;
+const heroSwapIdleMs = 1000;
 
 export function App(): ReactElement {
   const [settings, setSettings] = useState(() => {
@@ -231,7 +231,7 @@ export function App(): ReactElement {
     }, heroSwapAnimationMs + heroSwapIdleMs);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeHeroPrompts.length]);
+  }, [activeHeroPrompts.length, heroPromptIndex]);
 
   useEffect(() => {
     if (!currentProject) {
@@ -993,7 +993,7 @@ export function App(): ReactElement {
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
         <div className="w-full max-w-[860px] -translate-y-[5vh]">
           <h1 className="mb-7 overflow-hidden whitespace-nowrap text-center text-[28px] font-medium leading-tight tracking-normal text-[#202123] md:text-[30px]">
-            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_650ms_ease-in-out] truncate align-bottom">
+            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_900ms_ease-in-out] truncate align-bottom">
               {activeHeroPrompts[heroPromptIndex]}
             </span>
           </h1>
@@ -1124,49 +1124,75 @@ export function App(): ReactElement {
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
         ) : (
-          <div className="grid gap-4 p-5 xl:grid-cols-[minmax(260px,360px)_minmax(0,1fr)_320px]">
-            <div className="rounded-[18px] border border-[#ececf1] bg-white p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <span className="min-w-0">
-                  <h2 className="text-sm font-semibold text-[#202123]">{t("source.changedFiles")}</h2>
-                  <span className="mt-1 block truncate text-xs text-[#8e8ea0]">{currentProject.path}</span>
-                </span>
+          <div className="grid h-[calc(100%-86px)] min-h-0 gap-4 p-5 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+            <div className="flex min-h-0 flex-col overflow-hidden rounded-[18px] border border-[#ececf1] bg-white">
+              <div className="border-b border-[#ececf1] px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <h2 className="text-sm font-semibold text-[#202123]">{t("source.changedFiles")}</h2>
+                    <span className="mt-1 block truncate text-xs text-[#8e8ea0]">{currentProject.path}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void refreshProjectGitStatus()}
+                    className="shrink-0 rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-1.5 text-xs text-[#202123] hover:bg-[#f7f7f8]"
+                  >
+                    {t("projects.refreshGit")}
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto p-2">
+                {gitStatus?.isRepo === false ? (
+                  <p className="px-2 py-2 text-sm text-[#6e6e80]">{t("projects.gitNotRepo")}</p>
+                ) : changedFiles.length > 0 ? (
+                  <div className="space-y-0.5">
+                    {changes.map((change) => (
+                      <button
+                        key={change.path}
+                        type="button"
+                        onClick={() => setSelectedGitPath(change.path)}
+                        className={`grid w-full grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-sm transition ${
+                          selectedChange?.path === change.path
+                            ? "bg-[#ececf1] text-[#202123]"
+                            : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+                        }`}
+                      >
+                        <span className="flex h-5 w-5 items-center justify-center rounded-[6px] border border-[#d9d9e3] bg-white font-mono text-[11px] text-[#6e6e80]">
+                          {formatGitStatusLetter(change.status)}
+                        </span>
+                        <span className="min-w-0 truncate">{change.path}</span>
+                        <span className="shrink-0 text-[11px] text-[#8e8ea0]">
+                          {formatGitStatus(change.status)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-2 py-2 text-sm text-[#6e6e80]">{t("projects.gitClean")}</p>
+                )}
+              </div>
+              <div className="border-t border-[#ececf1] p-3">
+                <label className="grid gap-2 text-sm text-[#6e6e80]">
+                  {t("projects.commitMessage")}
+                  <input
+                    value={commitMessage}
+                    onChange={(event) => setCommitMessage(event.currentTarget.value)}
+                    className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                  />
+                </label>
                 <button
                   type="button"
-                  onClick={() => void refreshProjectGitStatus()}
-                  className="rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-1.5 text-xs text-[#202123] hover:bg-[#f7f7f8]"
+                  onClick={() => void commitCurrentProject(commitMessage)}
+                  disabled={!gitStatus?.isRepo || changedFiles.length === 0}
+                  className="mt-3 h-10 w-full rounded-[14px] bg-[#202123] text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-[#ececf1] disabled:text-[#8e8ea0]"
                 >
-                  {t("projects.refreshGit")}
+                  {t("projects.commit")}
                 </button>
+                {gitNotice ? <p className="mt-3 text-sm text-[#b45309]">{gitNotice}</p> : null}
               </div>
-              {gitStatus?.isRepo === false ? (
-                <p className="text-sm text-[#6e6e80]">{t("projects.gitNotRepo")}</p>
-              ) : changedFiles.length > 0 ? (
-                <div className="space-y-1">
-                  {changes.map((change) => (
-                    <button
-                      key={change.path}
-                      type="button"
-                      onClick={() => setSelectedGitPath(change.path)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-[12px] px-3 py-2 text-left text-sm transition ${
-                        selectedChange?.path === change.path
-                          ? "bg-[#ececf1] text-[#202123]"
-                          : "bg-[#f7f7f8] text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
-                      }`}
-                    >
-                      <span className="min-w-0 truncate">{change.path}</span>
-                      <span className="shrink-0 rounded-full border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] font-medium text-[#6e6e80]">
-                        {formatGitStatus(change.status)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-[#6e6e80]">{t("projects.gitClean")}</p>
-              )}
             </div>
 
-            <div className="min-h-[420px] overflow-hidden rounded-[18px] border border-[#ececf1] bg-white">
+            <div className="min-h-[520px] overflow-hidden rounded-[18px] border border-[#ececf1] bg-white">
               <div className="border-b border-[#ececf1] px-4 py-3">
                 <h2 className="text-sm font-semibold text-[#202123]">{t("source.diffPreview")}</h2>
                 <p className="mt-1 truncate text-xs text-[#6e6e80]">
@@ -1174,34 +1200,14 @@ export function App(): ReactElement {
                 </p>
               </div>
               {selectedChange && selectedChange.diff.trim() ? (
-                <pre className="h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-5 text-[#202123]">
+                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-5 text-[#202123]">
                   {renderDiffPreview(selectedChange.diff)}
                 </pre>
               ) : (
-                <div className="flex h-[520px] items-center justify-center px-4 text-center text-sm text-[#6e6e80]">
+                <div className="flex h-[calc(100%-58px)] min-h-[520px] items-center justify-center px-4 text-center text-sm text-[#6e6e80]">
                   {t("source.noDiffPreview")}
                 </div>
               )}
-            </div>
-
-            <div className="rounded-[18px] border border-[#ececf1] bg-white p-4">
-              <label className="grid gap-2 text-sm text-[#6e6e80]">
-                {t("projects.commitMessage")}
-                <input
-                  value={commitMessage}
-                  onChange={(event) => setCommitMessage(event.currentTarget.value)}
-                  className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => void commitCurrentProject(commitMessage)}
-                disabled={!gitStatus?.isRepo || changedFiles.length === 0}
-                className="mt-3 h-10 w-full rounded-[14px] bg-[#202123] text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-[#ececf1] disabled:text-[#8e8ea0]"
-              >
-                {t("projects.commit")}
-              </button>
-              {gitNotice ? <p className="mt-3 text-sm text-[#b45309]">{gitNotice}</p> : null}
             </div>
           </div>
         )}
@@ -1402,6 +1408,26 @@ function formatGitStatus(status: string): string {
   }
 
   return "modified";
+}
+
+function formatGitStatusLetter(status: string): string {
+  if (status === "??") {
+    return "U";
+  }
+
+  if (status.includes("D")) {
+    return "D";
+  }
+
+  if (status.includes("R")) {
+    return "R";
+  }
+
+  if (status.includes("A")) {
+    return "A";
+  }
+
+  return "M";
 }
 
 function Notice({ message }: { message: string }): ReactElement {

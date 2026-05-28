@@ -31,10 +31,18 @@ export async function fetchModelsForProvider({
   }
 
   const request = buildModelListRequest(hydratedProvider, apiKey ?? "");
-  const response = await fetcher(request.url, {
-    method: "GET",
-    headers: request.headers
-  });
+  let response: Response;
+
+  try {
+    response = await fetcher(request.url, {
+      method: "GET",
+      headers: request.headers
+    });
+  } catch (error) {
+    throw new Error(createNetworkErrorMessage(hydratedProvider, request.url, error), {
+      cause: error
+    });
+  }
 
   if (!response.ok) {
     const detail = await readErrorDetail(response);
@@ -47,6 +55,18 @@ export async function fetchModelsForProvider({
   return parseProviderModelList(hydratedProvider, body).map((model) =>
     toForgeModel(hydratedProvider, model)
   );
+}
+
+function createNetworkErrorMessage(provider: ForgeProvider, url: string, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+
+  return [
+    `${provider.label} model fetch failed: network request failed`,
+    detail ? `(${detail})` : "",
+    `Check Base URL, proxy/network access, and whether this provider exposes ${url}.`
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 async function readErrorDetail(response: Response): Promise<string> {

@@ -119,4 +119,20 @@ describe("providerModelService", () => {
       })
     ).rejects.toThrow("OpenAI model fetch failed: 401 Unauthorized - bad key");
   });
+
+  it("turns network failures into actionable model fetch errors", async () => {
+    await expect(
+      fetchModelsForProvider({
+        provider,
+        keyVault: {
+          readProviderKey: async () => "sk-test"
+        },
+        fetcher: async () => {
+          throw new TypeError("fetch failed");
+        }
+      })
+    ).rejects.toThrow(
+      "OpenAI model fetch failed: network request failed (fetch failed) Check Base URL"
+    );
+  });
 });

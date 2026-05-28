@@ -171,6 +171,16 @@ describe("SettingsPanel", () => {
     expect(onSelectModel).toHaveBeenCalledWith("openai:gpt-4.1");
   });
 
+  it("disables provider model dropdowns before models are fetched", async () => {
+    const user = userEvent.setup();
+
+    renderSettingsPanel();
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+
+    expect(screen.getByRole("button", { name: /OpenAI available models/ })).toBeDisabled();
+  });
+
   it("does not ask local Ollama profiles for an API key", async () => {
     const user = userEvent.setup();
 
