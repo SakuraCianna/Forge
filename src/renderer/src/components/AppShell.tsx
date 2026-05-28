@@ -31,7 +31,9 @@ type AppShellProps = {
   projects?: ForgeProject[];
   threads?: TaskThread[];
   onArchiveAllChats?: () => void;
+  onArchiveProjectChats?: (projectPath: string) => void;
   onArchiveThread?: (threadId: string) => void;
+  onCreateProjectWorktree?: (projectPath: string) => void;
   onNavigate: (view: WorkbenchView) => void;
   onNewTask?: () => void;
   onNewProjectChat?: (projectPath: string) => void;
@@ -41,6 +43,7 @@ type AppShellProps = {
   onRenameProject?: (projectPath: string) => void;
   onSelectProject?: (projectPath: string) => void;
   onSelectThread?: (threadId: string) => void;
+  onTogglePinProject?: (projectPath: string) => void;
   onTogglePinThread?: (threadId: string) => void;
   children: ReactNode;
 };
@@ -68,6 +71,7 @@ type ShellCopy = {
   removeProject: string;
   renameProject: string;
   threadOptions: (title: string) => string;
+  unpinProject: string;
 };
 
 export function AppShell({
@@ -78,7 +82,9 @@ export function AppShell({
   projects = [],
   threads = [],
   onArchiveAllChats,
+  onArchiveProjectChats,
   onArchiveThread,
+  onCreateProjectWorktree,
   onNavigate,
   onNewTask,
   onNewProjectChat,
@@ -87,6 +93,7 @@ export function AppShell({
   onRenameProject,
   onSelectProject,
   onSelectThread,
+  onTogglePinProject,
   onTogglePinThread,
   children
 }: AppShellProps): ReactElement {
@@ -286,7 +293,10 @@ export function AppShell({
                 >
                   <FolderOpen className="h-4 w-4 shrink-0" />
                   <span className="min-w-0">
-                    <span className="block truncate text-[#202123]">{displayName}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-[#202123]">
+                      {project.pinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-[#6e6e80]" /> : null}
+                      <span className="truncate">{displayName}</span>
+                    </span>
                     <span className="block truncate text-xs text-[#8e8ea0]">{project.path}</span>
                   </span>
                 </button>
@@ -311,15 +321,20 @@ export function AppShell({
                     </button>
                   </DropdownMenu.Trigger>
                   <MenuContent align="start" sideOffset={6}>
-                    <MenuItem>
+                    <MenuItem onSelect={() => onTogglePinProject?.(project.path)}>
                       <Pin className="h-4 w-4" />
-                      {copy.pinProject}
+                      {project.pinned ? copy.unpinProject : copy.pinProject}
                     </MenuItem>
-                    <MenuItem onSelect={() => onNavigate("source")}>
+                    <MenuItem
+                      onSelect={() => {
+                        onSelectProject?.(project.path);
+                        onNavigate("source");
+                      }}
+                    >
                       <GitBranch className="h-4 w-4" />
                       {copy.openInSource}
                     </MenuItem>
-                    <MenuItem>
+                    <MenuItem onSelect={() => onCreateProjectWorktree?.(project.path)}>
                       <FolderPlus className="h-4 w-4" />
                       {copy.createWorktree}
                     </MenuItem>
@@ -327,7 +342,7 @@ export function AppShell({
                       <Edit3 className="h-4 w-4" />
                       {copy.renameProject}
                     </MenuItem>
-                    <MenuItem onSelect={() => onArchiveAllChats?.()}>
+                    <MenuItem onSelect={() => onArchiveProjectChats?.(project.path)}>
                       <Archive className="h-4 w-4" />
                       {copy.archiveProjectChats}
                     </MenuItem>
@@ -494,7 +509,8 @@ function getShellCopy(language: Language): ShellCopy {
       projectOptions: "项目更多选项",
       removeProject: "移除",
       renameProject: "重命名项目",
-      threadOptions: (title) => `对话更多选项 ${title}`
+      threadOptions: (title) => `对话更多选项 ${title}`,
+      unpinProject: "取消置顶项目"
     };
   }
 
@@ -512,6 +528,7 @@ function getShellCopy(language: Language): ShellCopy {
     projectOptions: "Project options",
     removeProject: "Remove",
     renameProject: "Rename project",
-    threadOptions: (title) => `Conversation options ${title}`
+    threadOptions: (title) => `Conversation options ${title}`,
+    unpinProject: "Unpin project"
   };
 }

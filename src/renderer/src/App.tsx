@@ -39,11 +39,13 @@ import {
   createProjectFromPath,
   loadRecentProjects,
   saveRecentProjects,
+  toggleProjectPinned,
   type ForgeProject
 } from "@/state/projects";
 import {
   appendThreadEvents,
   archiveAllThreads,
+  archiveProjectThreads,
   archiveThread,
   createThreadFromSettings,
   restoreThread,
@@ -343,6 +345,34 @@ export function App(): ReactElement {
     if (currentProject?.path === projectPath) {
       setCurrentProject(null);
     }
+  }
+
+  function togglePinnedProject(projectPath: string): void {
+    setRecentProjects((current) => {
+      const nextProjects = toggleProjectPinned(current, projectPath);
+      const updatedProject = nextProjects.find((project) => project.path === projectPath);
+
+      if (updatedProject) {
+        setCurrentProject((currentProjectValue) =>
+          currentProjectValue?.path === projectPath ? updatedProject : currentProjectValue
+        );
+      }
+
+      return nextProjects;
+    });
+  }
+
+  function archiveProjectConversations(projectPath: string): void {
+    setThreads((current) => archiveProjectThreads(current, projectPath));
+  }
+
+  function createProjectWorktree(projectPath: string): void {
+    selectProject(projectPath);
+    setTaskNotice(
+      settings.language === "zh-CN"
+        ? "永久工作树入口已记录, 后续会接入 Git worktree 自动创建"
+        : "Permanent worktree action recorded. Git worktree creation will be wired next."
+    );
   }
 
   function renameProject(projectPath: string): void {
@@ -646,6 +676,7 @@ export function App(): ReactElement {
       const askThread: TaskThread = {
         ...result.thread,
         mode: "ask",
+        projectPath: null,
         status: "running",
         events: [
           {
@@ -699,29 +730,34 @@ export function App(): ReactElement {
     }
 
     setTaskNotice(null);
+    const projectThread: TaskThread = {
+      ...result.thread,
+      mode: "project",
+      projectPath: currentProject.path
+    };
     const planEvents = createInitialPlanEvents({
-      threadId: result.thread.id,
-      prompt: result.thread.prompt,
-      speed: result.thread.speed,
+      threadId: projectThread.id,
+      prompt: projectThread.prompt,
+      speed: projectThread.speed,
       projectScan: projectScanResult
     });
-    const plannedThread = appendThreadEvents([result.thread], result.thread.id, planEvents, "running")[0];
-    const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
+    const plannedThread = appendThreadEvents([projectThread], projectThread.id, planEvents, "running")[0];
+    const selectedModel = settings.models.find((model) => model.id === projectThread.modelId);
     const selectedProvider = selectedModel
       ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
       : null;
 
     setThreads((current) => [plannedThread, ...current]);
-    setSelectedThreadId(result.thread.id);
+    setSelectedThreadId(projectThread.id);
 
     if (!selectedModel || !selectedProvider) {
-      appendThreadError(result.thread.id, "未找到当前模型或提供商配置");
+      appendThreadError(projectThread.id, "未找到当前模型或提供商配置");
       return;
     }
 
     void generateThreadPlan({
-      threadId: result.thread.id,
-      taskPrompt: result.thread.prompt,
+      threadId: projectThread.id,
+      taskPrompt: projectThread.prompt,
       model: selectedModel,
       provider: selectedProvider,
       projectScan: projectScanResult
@@ -1192,12 +1228,14 @@ export function App(): ReactElement {
         setThreads((current) => archiveAllThreads(current));
         setSelectedThreadId(null);
       }}
+      onArchiveProjectChats={archiveProjectConversations}
       onArchiveThread={(threadId) => {
         setThreads((current) => archiveThread(current, threadId));
         if (selectedThreadId === threadId) {
           setSelectedThreadId(null);
         }
       }}
+      onCreateProjectWorktree={createProjectWorktree}
       onNavigate={setActiveView}
       onNewTask={() => {
         setActiveView("workspace");
@@ -1222,6 +1260,7 @@ export function App(): ReactElement {
         setSelectedThreadId(threadId);
         setActiveView("workspace");
       }}
+      onTogglePinProject={togglePinnedProject}
       onTogglePinThread={(threadId) => setThreads((current) => toggleThreadPinned(current, threadId))}
     >
       {renderActiveView()}

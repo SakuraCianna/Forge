@@ -7,6 +7,7 @@ import {
 import {
   appendThreadEvents,
   archiveAllThreads,
+  archiveProjectThreads,
   archiveThread,
   createThreadFromSettings,
   restoreThread,
@@ -127,6 +128,33 @@ describe("taskThreads", () => {
 
     threads = archiveAllThreads(threads);
     expect(threads.every((thread) => thread.archived)).toBe(true);
+  });
+
+  it("archives only conversations for a selected project", () => {
+    let settings = createDefaultModelSettings();
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
+    ]);
+    const first = createThreadFromSettings(settings, "Project Forge", deps);
+    const second = createThreadFromSettings(settings, "Project Aiko", {
+      createId: () => "thread-2",
+      now: deps.now
+    });
+
+    if (!first.ok || !second.ok) {
+      throw new Error("Expected threads");
+    }
+
+    const threads = archiveProjectThreads(
+      [
+        { ...first.thread, projectPath: "E:\\CodeHome\\Forge" },
+        { ...second.thread, projectPath: "E:\\CodeHome\\Aiko" }
+      ],
+      "E:\\CodeHome\\Forge"
+    );
+
+    expect(threads.find((thread) => thread.id === "thread-1")?.archived).toBe(true);
+    expect(threads.find((thread) => thread.id === "thread-2")?.archived).toBeUndefined();
   });
 });
 

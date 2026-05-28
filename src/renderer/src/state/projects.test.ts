@@ -4,7 +4,8 @@ import {
   createProjectFromPath,
   getProjectDisplayName,
   loadRecentProjects,
-  saveRecentProjects
+  saveRecentProjects,
+  toggleProjectPinned
 } from "./projects";
 
 function createMemoryStorage(): Storage {
@@ -60,5 +61,20 @@ describe("projects", () => {
 
     expect(getProjectDisplayName(first, [first, second])).toBe("Forge (CodeHome)");
     expect(getProjectDisplayName(second, [first, second])).toBe("Forge (Archive)");
+  });
+
+  it("pins projects above recent projects and can unpin them", () => {
+    const forge = createProjectFromPath("E:\\CodeHome\\Forge", "2026-05-27T13:00:00.000Z");
+    const aiko = createProjectFromPath("E:\\CodeHome\\Aiko", "2026-05-27T15:00:00.000Z");
+
+    let projects = toggleProjectPinned([aiko, forge], forge.path);
+
+    expect(projects.map((project) => project.name)).toEqual(["Forge", "Aiko"]);
+    expect(projects[0].pinned).toBe(true);
+
+    projects = toggleProjectPinned(projects, forge.path);
+
+    expect(projects.map((project) => project.name)).toEqual(["Aiko", "Forge"]);
+    expect(projects.find((project) => project.name === "Forge")?.pinned).toBe(false);
   });
 });

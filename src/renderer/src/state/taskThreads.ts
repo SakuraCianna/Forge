@@ -24,6 +24,7 @@ export type TaskThread = {
   pinned?: boolean;
   archived?: boolean;
   mode?: "ask" | "project";
+  projectPath?: string | null;
   events: TaskThreadEvent[];
 };
 
@@ -121,4 +122,10 @@ export function restoreThread(threads: TaskThread[], threadId: string): TaskThre
 
 export function archiveAllThreads(threads: TaskThread[]): TaskThread[] {
   return threads.map((thread) => ({ ...thread, archived: true, pinned: false }));
+}
+
+export function archiveProjectThreads(threads: TaskThread[], projectPath: string): TaskThread[] {
+  return threads.map((thread) =>
+    thread.projectPath === projectPath ? { ...thread, archived: true, pinned: false } : thread
+  );
 }

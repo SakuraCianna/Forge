@@ -5,6 +5,7 @@ export type ForgeProject = {
   name: string;
   path: string;
   openedAt: string;
+  pinned?: boolean;
 };
 
 export function createProjectFromPath(path: string, openedAt = new Date().toISOString()): ForgeProject {
@@ -20,7 +21,15 @@ export function createProjectFromPath(path: string, openedAt = new Date().toISOS
 
 export function addRecentProject(projects: ForgeProject[], project: ForgeProject): ForgeProject[] {
   const withoutDuplicate = projects.filter((candidate) => candidate.path !== project.path);
-  return [project, ...withoutDuplicate].slice(0, maxRecentProjects);
+  return sortProjects([project, ...withoutDuplicate]).slice(0, maxRecentProjects);
+}
+
+export function toggleProjectPinned(projects: ForgeProject[], projectPath: string): ForgeProject[] {
+  return sortProjects(
+    projects.map((project) =>
+      project.path === projectPath ? { ...project, pinned: !project.pinned } : project
+    )
+  );
 }
 
 export function getProjectDisplayName(project: ForgeProject, projects: ForgeProject[]): string {
@@ -56,8 +65,20 @@ export function loadRecentProjects(storage: Storage): ForgeProject[] {
     const parsed = JSON.parse(rawValue) as ForgeProject[];
     return Array.isArray(parsed) ? parsed.filter(isForgeProject) : [];
   } catch {
-    return [];
+      return [];
   }
+}
+
+function sortProjects(projects: ForgeProject[]): ForgeProject[] {
+  return [...projects].sort((left, right) => {
+    const pinnedDelta = Number(Boolean(right.pinned)) - Number(Boolean(left.pinned));
+
+    if (pinnedDelta !== 0) {
+      return pinnedDelta;
+    }
+
+    return Date.parse(right.openedAt) - Date.parse(left.openedAt);
+  });
 }
 
 function isForgeProject(value: unknown): value is ForgeProject {

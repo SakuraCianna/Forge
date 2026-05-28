@@ -45,8 +45,11 @@ describe("AppShell", () => {
     const user = userEvent.setup();
     const onPickProject = vi.fn();
     const onArchiveAllChats = vi.fn();
+    const onArchiveProjectChats = vi.fn();
     const onNewProjectChat = vi.fn();
     const onArchiveThread = vi.fn();
+    const onCreateProjectWorktree = vi.fn();
+    const onTogglePinProject = vi.fn();
 
     render(
       <AppShell
@@ -67,10 +70,13 @@ describe("AppShell", () => {
           }
         ]}
         onArchiveAllChats={onArchiveAllChats}
+        onArchiveProjectChats={onArchiveProjectChats}
         onArchiveThread={onArchiveThread}
+        onCreateProjectWorktree={onCreateProjectWorktree}
         onNavigate={() => undefined}
         onNewProjectChat={onNewProjectChat}
         onPickProject={onPickProject}
+        onTogglePinProject={onTogglePinProject}
       >
         <section>Workbench</section>
       </AppShell>
@@ -85,6 +91,18 @@ describe("AppShell", () => {
 
     await user.click(screen.getByRole("button", { name: "New chat in Forge" }));
     expect(onNewProjectChat).toHaveBeenCalledWith("E:\\CodeHome\\Forge");
+
+    await user.click(screen.getByRole("button", { name: "Project options Forge" }));
+    await user.click(screen.getByRole("menuitem", { name: "Pin project" }));
+    expect(onTogglePinProject).toHaveBeenCalledWith("E:\\CodeHome\\Forge");
+
+    await user.click(screen.getByRole("button", { name: "Project options Forge" }));
+    await user.click(screen.getByRole("menuitem", { name: "Create permanent worktree" }));
+    expect(onCreateProjectWorktree).toHaveBeenCalledWith("E:\\CodeHome\\Forge");
+
+    await user.click(screen.getByRole("button", { name: "Project options Forge" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive conversations" }));
+    expect(onArchiveProjectChats).toHaveBeenCalledWith("E:\\CodeHome\\Forge");
 
     await user.click(screen.getByRole("button", { name: "Conversation options Build Forge" }));
     await user.click(screen.getByRole("menuitem", { name: "Archive conversation" }));
