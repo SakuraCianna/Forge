@@ -16,7 +16,6 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
       onDeleteProviderKey={vi.fn()}
       onFetchModels={vi.fn()}
       onAddProvider={vi.fn()}
-      onAddManualModel={vi.fn()}
       onDeleteProvider={vi.fn()}
       onSaveProviderKey={vi.fn()}
       onSetLanguage={vi.fn()}
@@ -60,26 +59,22 @@ describe("SettingsPanel", () => {
     expect(onSaveProviderKey).toHaveBeenCalledWith("openai", "sk-secret");
   });
 
-  it("edits provider Base URLs and adds manual models", async () => {
+  it("edits provider Base URLs without manual model entry", async () => {
     const user = userEvent.setup();
     const onUpdateProviderBaseUrl = vi.fn();
-    const onAddManualModel = vi.fn();
     const settings = setLanguage(createDefaultModelSettings(), "en-US");
 
-    renderSettingsPanel({ settings, onAddManualModel, onUpdateProviderBaseUrl });
+    renderSettingsPanel({ settings, onUpdateProviderBaseUrl });
 
     await user.click(screen.getByRole("button", { name: /API profiles/ }));
-    await user.click(screen.getByRole("button", { name: "Configure OpenRouter" }));
-    await user.clear(screen.getByLabelText("OpenRouter Base URL"));
-    await user.type(screen.getByLabelText("OpenRouter Base URL"), "https://gateway.example/v1");
-    await user.type(screen.getByLabelText("OpenRouter model ID"), "moonshot-v1");
-    await user.click(screen.getByRole("button", { name: "Add model OpenRouter" }));
+    await user.clear(screen.getByLabelText("OpenAI Base URL"));
+    await user.type(screen.getByLabelText("OpenAI Base URL"), "https://gateway.example/v1");
 
     expect(onUpdateProviderBaseUrl).toHaveBeenLastCalledWith(
-      "openrouter",
+      "openai",
       "https://gateway.example/v1"
     );
-    expect(onAddManualModel).toHaveBeenCalledWith("openrouter", "moonshot-v1");
+    expect(screen.queryByLabelText(/model ID/)).not.toBeInTheDocument();
   });
 
   it("adds custom OpenAI-compatible API profiles without a fixed key limit", async () => {

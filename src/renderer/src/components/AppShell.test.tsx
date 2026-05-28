@@ -21,6 +21,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("main", { name: "Forge workbench" })).toHaveTextContent(
       "Workbench"
     );
+    expect(screen.queryByRole("button", { name: "Threads" })).not.toBeInTheDocument();
   });
 
   it("routes sidebar buttons to real workbench views", async () => {

@@ -1,6 +1,5 @@
 import type { ComponentType, ReactElement, ReactNode } from "react";
 import {
-  Code2,
   FileCode2,
   FolderOpen,
   GitBranch,
@@ -23,7 +22,7 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-export type WorkbenchView = "workspace" | "tasks" | "files" | "source" | "settings";
+export type WorkbenchView = "workspace" | "files" | "source" | "settings";
 
 type NavItem = {
   key: WorkbenchView;
@@ -43,7 +42,6 @@ export function AppShell({
 }: AppShellProps): ReactElement {
   const { t } = useI18n(language);
   const navItems: NavItem[] = [
-    { key: "tasks", label: t("nav.threads"), icon: Code2 },
     { key: "files", label: t("nav.files"), icon: FileCode2 },
     { key: "source", label: t("nav.sourceControl"), icon: GitBranch }
   ];

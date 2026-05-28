@@ -2,18 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   addCustomProvider,
   createDefaultModelSettings,
-  addManualModel,
   deleteCustomProvider,
   getEnabledModels,
   loadModelSettings,
   mergeFetchedModels,
+  removeProviderModels,
   saveModelSettings,
   setCurrentModel,
   setLanguage,
   setSpeed,
   updateProviderLabel,
-  updateProviderBaseUrl,
-  updateModelEnabled
+  updateProviderBaseUrl
 } from "./modelSettings";
 
 function createMemoryStorage(initialValue?: string): Storage {
@@ -36,24 +35,27 @@ function createMemoryStorage(initialValue?: string): Storage {
 }
 
 describe("modelSettings", () => {
-  it("starts with Chinese defaults and all known models available", () => {
+  it("starts with Chinese defaults and no models before the user fetches them", () => {
     const settings = createDefaultModelSettings();
 
     expect(settings.language).toBe("zh-CN");
     expect(settings.intelligence).toBe("high");
     expect(settings.speed).toBe("balanced");
-    expect(settings.currentModelId).toBe("openai:gpt-5.5");
-    expect(getEnabledModels(settings).map((model) => model.id)).toEqual([
-      "openai:gpt-5.5",
-      "anthropic:claude-sonnet",
-      "gemini:gemini-2.5-pro"
+    expect(settings.currentModelId).toBeNull();
+    expect(getEnabledModels(settings)).toEqual([]);
+    expect(settings.providers.map((provider) => provider.id)).toEqual([
+      "openai",
+      "anthropic",
+      "gemini"
     ]);
   });
 
-  it("keeps detected models available without a manual enable step", () => {
+  it("keeps fetched models available without a manual enable step", () => {
     let settings = createDefaultModelSettings();
 
-    settings = updateModelEnabled(settings, "anthropic:claude-sonnet", false);
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("anthropic", "claude-sonnet", "Claude Sonnet")
+    ]);
 
     expect(getEnabledModels(settings).map((model) => model.id)).toContain(
       "anthropic:claude-sonnet"
@@ -63,6 +65,9 @@ describe("modelSettings", () => {
   it("keeps the current model pointed at an enabled model", () => {
     let settings = createDefaultModelSettings();
 
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
+    ]);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
 
     expect(settings.currentModelId).toBe("openai:gpt-5.5");
@@ -74,6 +79,9 @@ describe("modelSettings", () => {
 
     settings = setLanguage(settings, "en-US");
     settings = setSpeed(settings, "careful");
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
+    ]);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
 
     saveModelSettings(storage, settings);
@@ -90,26 +98,29 @@ describe("modelSettings", () => {
     const storage = createMemoryStorage();
     let settings = createDefaultModelSettings();
 
-    settings = updateProviderBaseUrl(settings, "openrouter", "https://example.com/api/v1");
+    settings = addCustomProvider(settings, "OpenRouter", "https://openrouter.ai/api/v1");
+    settings = updateProviderBaseUrl(settings, "custom-openrouter", "https://example.com/api/v1");
     saveModelSettings(storage, settings);
 
     const loaded = loadModelSettings(storage);
 
-    expect(loaded.providers.find((provider) => provider.id === "openrouter")?.baseUrl).toBe(
+    expect(loaded.providers.find((provider) => provider.id === "custom-openrouter")?.baseUrl).toBe(
       "https://example.com/api/v1"
     );
   });
 
-  it("adds manual provider models and restores them from storage", () => {
+  it("persists fetched provider models and restores them from storage", () => {
     const storage = createMemoryStorage();
     let settings = createDefaultModelSettings();
 
-    settings = addManualModel(settings, "openrouter", "moonshot-v1");
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
+    ]);
     saveModelSettings(storage, settings);
 
     const loaded = loadModelSettings(storage);
 
-    expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openrouter:moonshot-v1");
+    expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openai:gpt-5.5");
     expect(loaded.currentModelId).toBe("openai:gpt-5.5");
   });
 
@@ -128,7 +139,9 @@ describe("modelSettings", () => {
     });
 
     settings = updateProviderLabel(settings, "custom-cherry-gateway", "Campus Gateway");
-    settings = addManualModel(settings, "custom-cherry-gateway", "deepseek-chat");
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("custom-cherry-gateway", "deepseek-chat", "deepseek-chat")
+    ]);
     saveModelSettings(storage, settings);
 
     const loaded = loadModelSettings(storage);
@@ -147,7 +160,9 @@ describe("modelSettings", () => {
     let settings = createDefaultModelSettings();
 
     settings = addCustomProvider(settings, "Cherry Gateway", "https://gateway.example/v1");
-    settings = addManualModel(settings, "custom-cherry-gateway", "deepseek-chat");
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("custom-cherry-gateway", "deepseek-chat", "deepseek-chat")
+    ]);
     settings = deleteCustomProvider(settings, "custom-cherry-gateway");
 
     expect(settings.providers.some((provider) => provider.id === "custom-cherry-gateway")).toBe(false);
@@ -158,14 +173,26 @@ describe("modelSettings", () => {
     expect(unchanged.providers.some((provider) => provider.id === "openai")).toBe(true);
   });
 
+  it("removes provider models when the provider key is deleted", () => {
+    let settings = createDefaultModelSettings();
+
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
+    ]);
+    settings = removeProviderModels(settings, "openai");
+
+    expect(settings.currentModelId).toBeNull();
+    expect(settings.models).toEqual([]);
+  });
+
   it("falls back to defaults when persisted settings are invalid", () => {
     const storage = createMemoryStorage("{ bad json");
 
     const loaded = loadModelSettings(storage);
 
     expect(loaded.language).toBe("zh-CN");
-    expect(loaded.currentModelId).toBe("openai:gpt-5.5");
-    expect(getEnabledModels(loaded).length).toBeGreaterThan(0);
+    expect(loaded.currentModelId).toBeNull();
+    expect(getEnabledModels(loaded)).toEqual([]);
   });
 
   it("merges fetched provider models as immediately available", () => {
@@ -192,3 +219,20 @@ describe("modelSettings", () => {
     expect(getEnabledModels(settings).map((model) => model.id)).toContain("openai:gpt-5.6");
   });
 });
+
+function createFetchedModel(providerId: string, modelName: string, label: string) {
+  return {
+    id: `${providerId}:${modelName}`,
+    providerId,
+    label,
+    modelName,
+    enabled: false,
+    capabilities: {
+      reasoning: { type: "none" as const },
+      toolCalling: "unknown" as const,
+      streaming: "unknown" as const,
+      vision: "unknown" as const
+    },
+    capabilitySource: "provider-api" as const
+  };
+}

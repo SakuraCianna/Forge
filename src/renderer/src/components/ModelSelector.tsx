@@ -41,6 +41,9 @@ export function ModelSelector({
   const enabledModels = getEnabledModels(settings);
   const currentModel =
     enabledModels.find((model) => model.id === settings.currentModelId) ?? enabledModels[0] ?? null;
+  const providerLabelById = new Map(
+    settings.providers.map((provider) => [provider.id, provider.label.trim() || provider.id])
+  );
   const supportsReasoning = currentModel?.capabilities.reasoning.type !== "none";
   const intelligenceLabel = supportsReasoning
     ? t(intelligenceLabels[settings.intelligence])
@@ -121,13 +124,20 @@ export function ModelSelector({
                   <DropdownMenu.Item
                     key={model.id}
                     onSelect={() => onSelectModel(model.id)}
-                    className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#f7f7f8]"
+                    className="flex min-h-14 cursor-default items-center justify-between gap-3 rounded-[12px] px-2 py-2 outline-none data-[highlighted]:bg-[#f7f7f8]"
                   >
-                    <span className="inline-flex items-center gap-2">
-                      {model.capabilities.reasoning.type !== "none" ? (
-                        <Zap className="h-4 w-4 text-[#202123]" />
-                      ) : null}
-                      {model.label}
+                    <span className="flex min-w-0 items-start gap-2">
+                      <span className="flex h-6 w-4 shrink-0 items-center justify-center">
+                        {model.capabilities.reasoning.type !== "none" ? (
+                          <Zap className="h-4 w-4 text-[#202123]" />
+                        ) : null}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-base text-[#202123]">{model.label}</span>
+                        <span className="mt-0.5 block truncate text-xs text-[#6e6e80]">
+                          {t("selector.modelSource")} {providerLabelById.get(model.providerId) ?? model.providerId}
+                        </span>
+                      </span>
                     </span>
                     {currentModel?.id === model.id ? <Check className="h-4 w-4 text-[#202123]" /> : null}
                   </DropdownMenu.Item>

@@ -17,6 +17,7 @@ type PersistedModelSettings = {
   currentModelId?: string | null;
   providerBaseUrls?: Record<string, string>;
   customProviders?: PersistedCustomProvider[];
+  detectedModels?: PersistedDetectedModel[];
   manualModels?: PersistedManualModel[];
 };
 
@@ -32,14 +33,20 @@ type PersistedManualModel = {
   label: string;
 };
 
+type PersistedDetectedModel = {
+  providerId: string;
+  modelName: string;
+  label: string;
+};
+
 export function createDefaultModelSettings(): ModelSettings {
   return {
     language: "zh-CN",
     intelligence: "high",
     speed: "balanced",
-    currentModelId: catalogModels[0]?.id ?? null,
+    currentModelId: null,
     providers: providerCatalog.map((provider) => ({ ...provider })),
-    models: catalogModels.map((model) => ({ ...model, enabled: true }))
+    models: []
   };
 }
 
@@ -99,17 +106,28 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
   const nextModels = [...settings.models];
 
   for (const fetchedModel of fetchedModels) {
+    const catalogModel = catalogModels.find(
+      (model) =>
+        model.providerId === fetchedModel.providerId &&
+        model.modelName.toLowerCase() === fetchedModel.modelName.toLowerCase()
+    );
+    const modelWithKnownCapabilities = catalogModel
+      ? {
+          ...fetchedModel,
+          capabilities: catalogModel.capabilities
+        }
+      : fetchedModel;
     const existingModel = existingModelsById.get(fetchedModel.id);
 
     if (existingModel) {
       const nextModel = {
-        ...fetchedModel,
+        ...modelWithKnownCapabilities,
         enabled: true
       };
       const index = nextModels.findIndex((model) => model.id === fetchedModel.id);
       nextModels[index] = nextModel;
     } else {
-      nextModels.push({ ...fetchedModel, enabled: true });
+      nextModels.push({ ...modelWithKnownCapabilities, enabled: true });
     }
   }
 
@@ -196,6 +214,19 @@ export function deleteCustomProvider(settings: ModelSettings, providerId: string
   };
 }
 
+export function removeProviderModels(settings: ModelSettings, providerId: string): ModelSettings {
+  const models = settings.models.filter((model) => model.providerId !== providerId);
+  const currentModelId = models.some((model) => model.id === settings.currentModelId)
+    ? settings.currentModelId
+    : (models[0]?.id ?? null);
+
+  return {
+    ...settings,
+    models,
+    currentModelId
+  };
+}
+
 export function addManualModel(settings: ModelSettings, providerId: string, modelName: string): ModelSettings {
   const normalizedModelName = modelName.trim();
 
@@ -236,8 +267,8 @@ export function saveModelSettings(storage: Storage, settings: ModelSettings): vo
         label: provider.label,
         baseUrl: provider.baseUrl
       })),
-    manualModels: settings.models
-      .filter((model) => model.capabilitySource === "manual")
+    detectedModels: settings.models
+      .filter((model) => model.capabilitySource === "provider-api" || model.capabilitySource === "probe")
       .map((model) => ({
         providerId: model.providerId,
         modelName: model.modelName,
@@ -283,17 +314,16 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
     })),
     ...customProviders
   ];
-  const manualModels = (persisted.manualModels ?? [])
+  const detectedModels = (persisted.detectedModels ?? [])
     .filter((model) => model.providerId && model.modelName)
     .map((model) =>
-      createManualModel(
+      createDetectedModel(
         model.providerId,
         model.modelName,
-        model.label || model.modelName,
-        true
+        model.label || model.modelName
       )
     );
-  const models = [...defaults.models, ...manualModels].map((model) => ({
+  const models = detectedModels.map((model) => ({
     ...model,
     enabled: true
   }));
@@ -310,6 +340,33 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
     currentModelId,
     providers,
     models
+  };
+}
+
+function createDetectedModel(
+  providerId: string,
+  modelName: string,
+  label: string
+): ForgeModel {
+  const catalogModel = catalogModels.find(
+    (model) =>
+      model.providerId === providerId &&
+      model.modelName.toLowerCase() === modelName.toLowerCase()
+  );
+
+  return {
+    id: `${providerId}:${modelName}`,
+    providerId,
+    label,
+    modelName,
+    enabled: true,
+    capabilities: catalogModel?.capabilities ?? {
+      reasoning: { type: "none" },
+      toolCalling: "unknown",
+      streaming: "unknown",
+      vision: "unknown"
+    },
+    capabilitySource: "provider-api"
   };
 }
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultModelSettings,
-  setCurrentModel,
-  updateModelEnabled
+  mergeFetchedModels,
+  setCurrentModel
 } from "./modelSettings";
 import { appendThreadEvents, createThreadFromSettings } from "./taskThreads";
 
@@ -32,7 +32,9 @@ describe("taskThreads", () => {
 
   it("creates a task thread with the selected model, intelligence, speed, and initial event", () => {
     let settings = createDefaultModelSettings();
-    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
+    ]);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
 
     const result = createThreadFromSettings(settings, "实现设置持久化", deps);
@@ -62,7 +64,9 @@ describe("taskThreads", () => {
 
   it("appends events to a matching thread and updates its status", () => {
     let settings = createDefaultModelSettings();
-    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
+    ]);
     const result = createThreadFromSettings(settings, "实现设置持久化", deps);
 
     if (!result.ok) {
@@ -90,3 +94,20 @@ describe("taskThreads", () => {
     ]);
   });
 });
+
+function createFetchedModel(providerId: string, modelName: string, label: string) {
+  return {
+    id: `${providerId}:${modelName}`,
+    providerId,
+    label,
+    modelName,
+    enabled: false,
+    capabilities: {
+      reasoning: { type: "none" as const },
+      toolCalling: "unknown" as const,
+      streaming: "unknown" as const,
+      vision: "unknown" as const
+    },
+    capabilitySource: "provider-api" as const
+  };
+}

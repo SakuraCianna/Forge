@@ -32,7 +32,6 @@ type SettingsPanelProps = {
   onDeleteProviderKey: (providerId: string) => void;
   onFetchModels: (providerId: string) => void;
   onAddProvider: (label: string, baseUrl: string) => void;
-  onAddManualModel: (providerId: string, modelName: string) => void;
   onClearUsage: () => void;
   onDeleteProvider: (providerId: string) => void;
   onSaveProviderKey: (providerId: string, apiKey: string) => void;
@@ -61,7 +60,6 @@ export function SettingsPanel({
   onDeleteProviderKey,
   onFetchModels,
   onAddProvider,
-  onAddManualModel,
   onClearUsage,
   onDeleteProvider,
   onSaveProviderKey,
@@ -79,7 +77,6 @@ export function SettingsPanel({
   const [expandedProviderId, setExpandedProviderId] = useState(settings.providers[0]?.id ?? "");
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({});
   const [draftBaseUrls, setDraftBaseUrls] = useState<Record<string, string>>({});
-  const [manualModelDrafts, setManualModelDrafts] = useState<Record<string, string>>({});
   const [newProviderLabel, setNewProviderLabel] = useState("");
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState("");
   const availableModels = settings.models;
@@ -221,24 +218,36 @@ export function SettingsPanel({
         </div>
 
         <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
-          {settings.models.map((model, index) => (
-            <div
-              key={model.id}
-              className={`flex items-center justify-between gap-4 bg-white px-4 py-3 text-sm transition hover:bg-[#f7f7f8] ${
-                index === 0 ? "" : "border-t border-[#ececf1]"
-              }`}
-            >
-              <span className="min-w-0">
-                <span className="block truncate font-medium text-[#202123]">{model.label}</span>
-                <span className="mt-1 block truncate text-xs text-[#6e6e80]">
-                  {model.providerId} / {model.capabilitySource}
-                </span>
-              </span>
-              <span className="shrink-0 rounded-full border border-[#c3eadc] bg-[#effaf6] px-2 py-1 text-xs font-medium text-[#087443]">
-                {t("settings.available")}
-              </span>
+          {settings.models.length > 0 ? (
+            settings.models.map((model, index) => {
+              const providerLabel =
+                settings.providers.find((provider) => provider.id === model.providerId)?.label ??
+                model.providerId;
+
+              return (
+                <div
+                  key={model.id}
+                  className={`flex items-center justify-between gap-4 bg-white px-4 py-3 text-sm transition hover:bg-[#f7f7f8] ${
+                    index === 0 ? "" : "border-t border-[#ececf1]"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-[#202123]">{model.label}</span>
+                    <span className="mt-1 block truncate text-xs text-[#6e6e80]">
+                      {t("selector.modelSource")} {providerLabel}
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-full border border-[#c3eadc] bg-[#effaf6] px-2 py-1 text-xs font-medium text-[#087443]">
+                    {t("settings.available")}
+                  </span>
+                </div>
+              );
+            })
+          ) : (
+            <div className="px-4 py-10 text-center text-sm leading-6 text-[#6e6e80]">
+              {t("settings.noDetectedModels")}
             </div>
-          ))}
+          )}
         </div>
       </SectionFrame>
     );
@@ -293,7 +302,6 @@ export function SettingsPanel({
             const keyStatus = keyStatuses[provider.id] ?? { hasKey: false, last4: null };
             const draftKey = draftKeys[provider.id] ?? "";
             const draftBaseUrl = draftBaseUrls[provider.id] ?? provider.baseUrl ?? "";
-            const manualModelDraft = manualModelDrafts[provider.id] ?? "";
             const isExpanded = expandedProviderId === provider.id;
             const providerLabel = provider.label.trim() || t("settings.customProvider");
 
@@ -423,34 +431,9 @@ export function SettingsPanel({
                       ) : null}
                     </div>
 
-                    <label className="grid gap-1.5 text-xs text-[#6e6e80]">
-                      {providerLabel} {t("settings.manualModel")}
-                      <div className="flex gap-2">
-                        <input
-                          value={manualModelDraft}
-                          onChange={(event) => {
-                            const nextValue = event.currentTarget.value;
-                            setManualModelDrafts((current) => ({
-                              ...current,
-                              [provider.id]: nextValue
-                            }));
-                          }}
-                          className="h-10 min-w-0 flex-1 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
-                        />
-                        <button
-                          type="button"
-                          aria-label={`${t("settings.addModel")} ${providerLabel}`}
-                          className="inline-flex h-10 items-center gap-1.5 rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
-                          onClick={() => {
-                            onAddManualModel(provider.id, manualModelDraft);
-                            setManualModelDrafts((current) => ({ ...current, [provider.id]: "" }));
-                          }}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          {t("settings.addModel")}
-                        </button>
-                      </div>
-                    </label>
+                    <p className="text-xs leading-5 text-[#6e6e80]">
+                      {t("settings.fetchModelsHint")}
+                    </p>
                   </div>
                 ) : null}
               </article>

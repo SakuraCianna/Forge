@@ -1,14 +1,29 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultModelSettings, updateModelEnabled } from "@/state/modelSettings";
+import { createDefaultModelSettings, mergeFetchedModels } from "@/state/modelSettings";
 import { TaskComposer } from "./TaskComposer";
 
 describe("TaskComposer", () => {
   it("submits the typed task prompt", async () => {
     const user = userEvent.setup();
     const onSubmitTask = vi.fn();
-    const settings = updateModelEnabled(createDefaultModelSettings(), "openai:gpt-5.5", true);
+    const settings = mergeFetchedModels(createDefaultModelSettings(), [
+      {
+        id: "openai:gpt-5.5",
+        providerId: "openai",
+        label: "GPT-5.5",
+        modelName: "gpt-5.5",
+        enabled: true,
+        capabilities: {
+          reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] },
+          toolCalling: true,
+          streaming: true,
+          vision: true
+        },
+        capabilitySource: "provider-api"
+      }
+    ]);
 
     render(
       <TaskComposer

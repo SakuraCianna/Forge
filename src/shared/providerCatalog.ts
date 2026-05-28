@@ -21,19 +21,6 @@ export const providerCatalog: ForgeProvider[] = [
     kind: "gemini",
     baseUrl: "https://generativelanguage.googleapis.com",
     requiresBaseUrl: false
-  },
-  {
-    id: "openrouter",
-    label: "OpenRouter",
-    kind: "openai-compatible",
-    baseUrl: "https://openrouter.ai/api/v1",
-    requiresBaseUrl: false
-  },
-  {
-    id: "custom-openai-compatible",
-    label: "OpenAI Compatible",
-    kind: "openai-compatible",
-    requiresBaseUrl: true
   }
 ];
 

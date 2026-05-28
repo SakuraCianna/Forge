@@ -14,11 +14,11 @@ import { useI18n } from "@/i18n/useI18n";
 import { removeFileChangePreview, upsertFileChangePreview } from "@/state/fileChanges";
 import {
   addCustomProvider,
-  addManualModel,
   createDefaultModelSettings,
   deleteCustomProvider,
   loadModelSettings,
   mergeFetchedModels,
+  removeProviderModels,
   saveModelSettings,
   setCurrentModel,
   setIntelligence,
@@ -114,7 +114,12 @@ export function App(): ReactElement {
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
+  const [heroPromptIndex, setHeroPromptIndex] = useState(0);
   const { t } = useI18n(settings.language);
+  const heroPrompts =
+    settings.language === "zh-CN"
+      ? ["我们该做什么？", "要修复哪个问题？", "想实现什么功能？", "需要解释哪段代码？"]
+      : ["What should we build?", "What should we fix?", "What feature is next?", "What code should we explain?"];
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -135,6 +140,14 @@ export function App(): ReactElement {
   useEffect(() => {
     savePersonalizationSettings(window.localStorage, personalization);
   }, [personalization]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setHeroPromptIndex((current) => (current + 1) % heroPrompts.length);
+    }, 2600);
+
+    return () => window.clearInterval(intervalId);
+  }, [heroPrompts.length]);
 
   useEffect(() => {
     if (!currentProject) {
@@ -172,6 +185,7 @@ export function App(): ReactElement {
 
   async function deleteProviderKey(providerId: string): Promise<void> {
     await window.forge.secrets.deleteProviderKey(providerId);
+    setSettings((current) => removeProviderModels(current, providerId));
     await refreshProviderKeyStatus(providerId);
   }
 
@@ -672,7 +686,9 @@ export function App(): ReactElement {
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
         <div className="w-full max-w-[860px] -translate-y-[5vh]">
           <h1 className="mb-7 text-center text-[28px] font-medium leading-tight tracking-normal text-[#202123] md:text-[30px]">
-            {t("composer.newChatTitle")}
+            <span key={heroPromptIndex} className="inline-block animate-[forge-title-swap_2.6s_ease-in-out]">
+              {heroPrompts[heroPromptIndex]}
+            </span>
           </h1>
           {taskNotice ? (
             <div className="mx-auto mb-4 max-w-[760px]">
@@ -741,10 +757,6 @@ export function App(): ReactElement {
         }
       />
     );
-  }
-
-  function renderTasksView(): ReactElement {
-    return <div className="h-full min-h-0 p-5">{renderThreadWorkspace()}</div>;
   }
 
   function renderFilesView(): ReactElement {
@@ -862,9 +874,6 @@ export function App(): ReactElement {
           onAddProvider={(label, baseUrl) =>
             setSettings((current) => addCustomProvider(current, label, baseUrl))
           }
-          onAddManualModel={(providerId, modelName) =>
-            setSettings((current) => addManualModel(current, providerId, modelName))
-          }
           onDeleteProvider={(providerId) => {
             setSettings((current) => deleteCustomProvider(current, providerId));
             void deleteProviderKey(providerId);
@@ -901,10 +910,6 @@ export function App(): ReactElement {
 
     if (activeView === "source") {
       return renderSourceView();
-    }
-
-    if (activeView === "tasks") {
-      return renderTasksView();
     }
 
     return renderWorkspaceView();
