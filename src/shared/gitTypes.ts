@@ -1,6 +1,13 @@
+export type ProjectGitFileChange = {
+  path: string;
+  status: string;
+  diff: string;
+};
+
 export type ProjectGitStatus = {
   isRepo: boolean;
   changedFiles: string[];
+  changes: ProjectGitFileChange[];
   rawStatus: string;
 };
 

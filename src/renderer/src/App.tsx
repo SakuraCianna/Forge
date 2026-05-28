@@ -157,6 +157,7 @@ export function App(): ReactElement {
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
   const [changePreviews, setChangePreviews] = useState<ProjectFileChangePreview[]>([]);
   const [gitStatus, setGitStatus] = useState<ProjectGitStatus | null>(null);
+  const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
   const [gitNotice, setGitNotice] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
   const [threads, setThreads] = useState<TaskThread[]>([]);
@@ -235,6 +236,7 @@ export function App(): ReactElement {
       setPreviewFile(null);
       setChangePreviews([]);
       setGitStatus(null);
+      setSelectedGitPath(null);
       setGitNotice(null);
       return;
     }
@@ -242,6 +244,19 @@ export function App(): ReactElement {
     void scanProject(currentProject.path);
     void refreshProjectGitStatus(currentProject.path);
   }, [currentProject]);
+
+  useEffect(() => {
+    const changes = gitStatus?.changes ?? [];
+
+    if (changes.length === 0) {
+      setSelectedGitPath(null);
+      return;
+    }
+
+    if (!selectedGitPath || !changes.some((change) => change.path === selectedGitPath)) {
+      setSelectedGitPath(changes[0].path);
+    }
+  }, [gitStatus, selectedGitPath]);
 
   useEffect(() => {
     for (const provider of settings.providers) {
@@ -1096,6 +1111,9 @@ export function App(): ReactElement {
 
   function renderSourceView(): ReactElement {
     const changedFiles = gitStatus?.changedFiles ?? [];
+    const changes = gitStatus?.changes ?? [];
+    const selectedChange =
+      changes.find((change) => change.path === selectedGitPath) ?? changes[0] ?? null;
 
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -1103,10 +1121,13 @@ export function App(): ReactElement {
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
         ) : (
-          <div className="grid gap-4 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4 p-5 xl:grid-cols-[minmax(260px,360px)_minmax(0,1fr)_320px]">
             <div className="rounded-[18px] border border-[#ececf1] bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-[#202123]">{t("source.changedFiles")}</h2>
+                <span className="min-w-0">
+                  <h2 className="text-sm font-semibold text-[#202123]">{t("source.changedFiles")}</h2>
+                  <span className="mt-1 block truncate text-xs text-[#8e8ea0]">{currentProject.path}</span>
+                </span>
                 <button
                   type="button"
                   onClick={() => void refreshProjectGitStatus()}
@@ -1119,19 +1140,47 @@ export function App(): ReactElement {
                 <p className="text-sm text-[#6e6e80]">{t("projects.gitNotRepo")}</p>
               ) : changedFiles.length > 0 ? (
                 <div className="space-y-1">
-                  {changedFiles.map((file) => (
-                    <div
-                      key={file}
-                      className="flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f7f8] px-3 py-2 text-sm"
+                  {changes.map((change) => (
+                    <button
+                      key={change.path}
+                      type="button"
+                      onClick={() => setSelectedGitPath(change.path)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-[12px] px-3 py-2 text-left text-sm transition ${
+                        selectedChange?.path === change.path
+                          ? "bg-[#ececf1] text-[#202123]"
+                          : "bg-[#f7f7f8] text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
+                      }`}
                     >
-                      <span className="truncate text-[#202123]">{file}</span>
-                    </div>
+                      <span className="min-w-0 truncate">{change.path}</span>
+                      <span className="shrink-0 rounded-full border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] font-medium text-[#6e6e80]">
+                        {formatGitStatus(change.status)}
+                      </span>
+                    </button>
                   ))}
                 </div>
               ) : (
                 <p className="text-sm text-[#6e6e80]">{t("projects.gitClean")}</p>
               )}
             </div>
+
+            <div className="min-h-[420px] overflow-hidden rounded-[18px] border border-[#ececf1] bg-white">
+              <div className="border-b border-[#ececf1] px-4 py-3">
+                <h2 className="text-sm font-semibold text-[#202123]">{t("source.diffPreview")}</h2>
+                <p className="mt-1 truncate text-xs text-[#6e6e80]">
+                  {selectedChange?.path ?? t("source.selectChangedFile")}
+                </p>
+              </div>
+              {selectedChange && selectedChange.diff.trim() ? (
+                <pre className="h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-5 text-[#202123]">
+                  {renderDiffPreview(selectedChange.diff)}
+                </pre>
+              ) : (
+                <div className="flex h-[520px] items-center justify-center px-4 text-center text-sm text-[#6e6e80]">
+                  {t("source.noDiffPreview")}
+                </div>
+              )}
+            </div>
+
             <div className="rounded-[18px] border border-[#ececf1] bg-white p-4">
               <label className="grid gap-2 text-sm text-[#6e6e80]">
                 {t("projects.commitMessage")}
@@ -1288,6 +1337,67 @@ function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPa
   }
 
   return candidate;
+}
+
+function renderDiffPreview(diff: string): ReactElement[] {
+  const lines = diff.split(/\r?\n/);
+  const visibleLines = lines.slice(0, 600);
+  const truncated = lines.length > visibleLines.length;
+  const renderedLines = visibleLines.map((line, index) => (
+    <span key={`${index}-${line}`} className={`block whitespace-pre ${getDiffLineClass(line)}`}>
+      {line || " "}
+    </span>
+  ));
+
+  if (truncated) {
+    renderedLines.push(
+      <span key="diff-truncated" className="block whitespace-pre text-[#8e8ea0]">
+        ... diff truncated
+      </span>
+    );
+  }
+
+  return renderedLines;
+}
+
+function getDiffLineClass(line: string): string {
+  if (line.startsWith("+") && !line.startsWith("+++")) {
+    return "bg-[#eefaf3] text-[#087443]";
+  }
+
+  if (line.startsWith("-") && !line.startsWith("---")) {
+    return "bg-[#fff1f2] text-[#b42318]";
+  }
+
+  if (line.startsWith("@@")) {
+    return "bg-[#f0f5ff] text-[#3451b2]";
+  }
+
+  if (line.startsWith("diff --git")) {
+    return "font-semibold text-[#202123]";
+  }
+
+  return "text-[#565869]";
+}
+
+function formatGitStatus(status: string): string {
+  if (status === "??") {
+    return "new";
+  }
+
+  if (status.includes("D")) {
+    return "deleted";
+  }
+
+  if (status.includes("R")) {
+    return "renamed";
+  }
+
+  if (status.includes("A")) {
+    return "added";
+  }
+
+  return "modified";
 }
 
 function Notice({ message }: { message: string }): ReactElement {

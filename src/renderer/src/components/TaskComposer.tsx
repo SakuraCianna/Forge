@@ -89,8 +89,10 @@ export function TaskComposer({
 
   const inputPanel = (
     <div
-      className={`rounded-[20px] border border-[#d9d9e3] bg-white p-3 text-[#202123] transition focus-within:border-[#202123] ${
-        isHero ? "shadow-[0_8px_34px_rgba(0,0,0,0.10)]" : "shadow-[0_12px_36px_rgba(0,0,0,0.08)]"
+      className={`bg-white p-3 text-[#202123] transition focus-within:border-[#202123] ${
+        isHero
+          ? "rounded-t-[22px] border-0 shadow-none"
+          : "rounded-[20px] border border-[#d9d9e3] shadow-[0_12px_36px_rgba(0,0,0,0.08)]"
       }`}
     >
       <textarea
@@ -137,7 +139,7 @@ export function TaskComposer({
   if (isHero) {
     return (
       <section className="w-full">
-        <div className="mx-auto max-w-[760px] overflow-hidden rounded-[22px] bg-[#f7f7f8] shadow-[0_16px_48px_rgba(0,0,0,0.08)]">
+        <div className="mx-auto max-w-[760px] overflow-visible rounded-[22px] border border-[#d9d9e3] bg-white shadow-[0_18px_54px_rgba(0,0,0,0.10)] transition focus-within:border-[#202123]">
           {inputPanel}
           {renderContextSelector()}
         </div>
@@ -164,7 +166,7 @@ export function TaskComposer({
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className="flex h-12 w-full items-center gap-2 px-4 text-left text-sm text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
+            className="flex h-12 w-full items-center gap-2 rounded-b-[22px] border-t border-[#ececf1] bg-white px-4 text-left text-sm text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123]"
           >
             {contextMode === "ask" ? (
               <BotMessageSquare className="h-4 w-4 shrink-0" />
@@ -179,7 +181,7 @@ export function TaskComposer({
           <DropdownMenu.Content
             align="start"
             sideOffset={8}
-            className="z-50 w-[min(720px,calc(100vw-64px))] rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+            className="z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[18px] border border-[#d9d9e3] bg-white p-2 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
           >
             <ContextItem
               selected={contextMode === "ask"}

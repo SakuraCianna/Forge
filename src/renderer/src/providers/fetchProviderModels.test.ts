@@ -39,6 +39,6 @@ describe("fetchProviderModels", () => {
         apiKey: "bad-key",
         fetcher: async () => new Response("Unauthorized", { status: 401, statusText: "Unauthorized" })
       })
-    ).rejects.toThrow("OpenAI model fetch failed: 401 Unauthorized");
+    ).rejects.toThrow("OpenAI model fetch failed: 401 Unauthorized - Unauthorized");
   });
 });

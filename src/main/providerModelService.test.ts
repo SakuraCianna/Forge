@@ -43,4 +43,49 @@ describe("providerModelService", () => {
       })
     ).rejects.toThrow("OpenAI API Key is not configured");
   });
+
+  it("fetches models for providers that do not require an API key", async () => {
+    const ollamaProvider: ForgeProvider = {
+      id: "ollama",
+      label: "Ollama",
+      kind: "openai-compatible",
+      baseUrl: "http://localhost:11434/v1",
+      modelListUrl: "http://localhost:11434/api/tags",
+      requiresBaseUrl: false,
+      requiresApiKey: false
+    };
+
+    const models = await fetchModelsForProvider({
+      provider: ollamaProvider,
+      keyVault: {
+        readProviderKey: async () => null
+      },
+      fetcher: async (url, init) => {
+        expect(url).toBe("http://localhost:11434/api/tags");
+        expect(init.headers).toMatchObject({});
+
+        return new Response(JSON.stringify({ models: [{ name: "qwen2.5-coder:7b" }] }), {
+          status: 200
+        });
+      }
+    });
+
+    expect(models[0]).toMatchObject({
+      id: "ollama:qwen2.5-coder:7b",
+      providerId: "ollama",
+      modelName: "qwen2.5-coder:7b"
+    });
+  });
+
+  it("includes upstream error details when model fetching fails", async () => {
+    await expect(
+      fetchModelsForProvider({
+        provider,
+        keyVault: {
+          readProviderKey: async () => "sk-test"
+        },
+        fetcher: async () => new Response("bad key", { status: 401, statusText: "Unauthorized" })
+      })
+    ).rejects.toThrow("OpenAI model fetch failed: 401 Unauthorized - bad key");
+  });
 });

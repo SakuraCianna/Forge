@@ -60,6 +60,10 @@ describe("ProjectHeader", () => {
         gitStatus={{
           isRepo: true,
           changedFiles: ["src/App.tsx", "src/main/index.ts"],
+          changes: [
+            { path: "src/App.tsx", status: "M", diff: "+changed\n" },
+            { path: "src/main/index.ts", status: "M", diff: "+changed\n" }
+          ],
           rawStatus: " M src/App.tsx\n M src/main/index.ts\n"
         }}
         commitMessage=""

@@ -327,6 +327,7 @@ export function SettingsPanel({
             const isExpanded = expandedProviderId === provider.id;
             const providerLabel = provider.label.trim() || t("settings.customProvider");
             const fetchState = providerFetchStates[provider.id] ?? { status: "idle" as const };
+            const requiresApiKey = provider.requiresApiKey !== false;
 
             return (
               <article
@@ -351,15 +352,19 @@ export function SettingsPanel({
                     </span>
                     <span
                       className={`mt-1 flex items-center gap-1.5 text-xs ${
-                        keyStatus.hasKey ? "text-[#087443]" : "text-[#b45309]"
+                        !requiresApiKey || keyStatus.hasKey ? "text-[#087443]" : "text-[#b45309]"
                       }`}
                     >
-                      {keyStatus.hasKey ? (
+                      {!requiresApiKey || keyStatus.hasKey ? (
                         <CheckCircle2 className="h-3.5 w-3.5" />
                       ) : (
                         <CircleAlert className="h-3.5 w-3.5" />
                       )}
-                      {keyStatus.hasKey
+                      {!requiresApiKey
+                        ? settings.language === "zh-CN"
+                          ? "本地服务, 无需 API Key"
+                          : "Local service, no API key"
+                        : keyStatus.hasKey
                         ? `${t("settings.connected")} ****${keyStatus.last4}`
                         : t("settings.notConfigured")}
                     </span>
@@ -402,38 +407,44 @@ export function SettingsPanel({
                       />
                     </label>
 
-                    <label className="grid gap-1.5 text-xs text-[#6e6e80]">
-                      {providerLabel} API Key
-                      <input
-                        type="password"
-                        value={draftKey}
-                        onChange={(event) => {
-                          const nextValue = event.currentTarget.value;
-                          setDraftKeys((current) => ({
-                            ...current,
-                            [provider.id]: nextValue
-                          }));
-                        }}
-                        className="h-10 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
-                      />
-                    </label>
+                    {requiresApiKey ? (
+                      <label className="grid gap-1.5 text-xs text-[#6e6e80]">
+                        {providerLabel} API Key
+                        <input
+                          type="password"
+                          value={draftKey}
+                          onChange={(event) => {
+                            const nextValue = event.currentTarget.value;
+                            setDraftKeys((current) => ({
+                              ...current,
+                              [provider.id]: nextValue
+                            }));
+                          }}
+                          className="h-10 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
+                        />
+                      </label>
+                    ) : null}
 
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        aria-label={`${t("settings.saveKey")} ${providerLabel} API Key`}
-                        className="inline-flex h-9 items-center justify-center rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
-                        onClick={() => onSaveProviderKey(provider.id, draftKey)}
-                      >
-                        {t("settings.saveKey")}
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 items-center justify-center rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
-                        onClick={() => onDeleteProviderKey(provider.id)}
-                      >
-                        {t("settings.deleteKey")}
-                      </button>
+                      {requiresApiKey ? (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`${t("settings.saveKey")} ${providerLabel} API Key`}
+                            className="inline-flex h-9 items-center justify-center rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                            onClick={() => onSaveProviderKey(provider.id, draftKey)}
+                          >
+                            {t("settings.saveKey")}
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex h-9 items-center justify-center rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                            onClick={() => onDeleteProviderKey(provider.id)}
+                          >
+                            {t("settings.deleteKey")}
+                          </button>
+                        </>
+                      ) : null}
                       <button
                         type="button"
                         disabled={fetchState.status === "loading"}
@@ -460,7 +471,11 @@ export function SettingsPanel({
                     </div>
 
                     <p className="text-xs leading-5 text-[#6e6e80]">
-                      {t("settings.fetchModelsHint")}
+                      {requiresApiKey
+                        ? t("settings.fetchModelsHint")
+                        : settings.language === "zh-CN"
+                          ? "本地服务无需 API Key, 确认服务运行后可直接拉取模型"
+                          : "Local services do not need an API key. Start the service, then fetch models."}
                     </p>
                     {fetchState.message ? (
                       <p

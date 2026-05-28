@@ -16,7 +16,10 @@ export type ForgeProvider = {
   label: string;
   kind: ProviderKind;
   baseUrl?: string;
+  modelListUrl?: string;
+  requestHeaders?: Record<string, string>;
   requiresBaseUrl: boolean;
+  requiresApiKey?: boolean;
   custom?: boolean;
 };
 

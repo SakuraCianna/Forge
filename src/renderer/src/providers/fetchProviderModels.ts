@@ -25,9 +25,21 @@ export async function fetchProviderModels({
   });
 
   if (!response.ok) {
-    throw new Error(`${provider.label} model fetch failed: ${response.status} ${response.statusText}`);
+    const detail = await readErrorDetail(response);
+    throw new Error(`${provider.label} model fetch failed: ${response.status} ${response.statusText}${detail}`);
   }
 
   const body = (await response.json()) as unknown;
   return parseProviderModelList(provider, body).map((model) => toForgeModel(provider, model));
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    const detail = text.trim().slice(0, 300);
+
+    return detail ? ` - ${detail}` : "";
+  } catch {
+    return "";
+  }
 }

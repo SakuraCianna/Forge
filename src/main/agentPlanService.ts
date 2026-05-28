@@ -53,14 +53,14 @@ export async function generateAgentPlan({
 }: GenerateAgentPlanOptions): Promise<AgentPlanResult> {
   const apiKey = await keyVault.readProviderKey(request.provider.id);
 
-  if (!apiKey) {
+  if (request.provider.requiresApiKey !== false && !apiKey) {
     throw new Error(`${request.provider.label} API Key is not configured`);
   }
 
   const generationRequest = buildTextGenerationRequest({
     provider: request.provider,
     model: request.model,
-    apiKey,
+    apiKey: apiKey ?? "",
     instructions: createAgentPlanInstructions(request.personalization),
     input: createAgentPlanInput(request),
     intelligence: request.intelligence
@@ -98,14 +98,14 @@ export async function generateAgentFileChange({
 }: GenerateAgentFileChangeOptions): Promise<AgentFileChangeResult> {
   const apiKey = await keyVault.readProviderKey(request.provider.id);
 
-  if (!apiKey) {
+  if (request.provider.requiresApiKey !== false && !apiKey) {
     throw new Error(`${request.provider.label} API Key is not configured`);
   }
 
   const generationRequest = buildTextGenerationRequest({
     provider: request.provider,
     model: request.model,
-    apiKey,
+    apiKey: apiKey ?? "",
     instructions: createAgentFileChangeInstructions(request.personalization),
     input: createAgentFileChangeInput(request),
     intelligence: request.intelligence
@@ -144,14 +144,14 @@ export async function generateAgentAsk({
 }: GenerateAgentAskOptions): Promise<AgentAskResult> {
   const apiKey = await keyVault.readProviderKey(request.provider.id);
 
-  if (!apiKey) {
+  if (request.provider.requiresApiKey !== false && !apiKey) {
     throw new Error(`${request.provider.label} API Key is not configured`);
   }
 
   const generationRequest = buildTextGenerationRequest({
     provider: request.provider,
     model: request.model,
-    apiKey,
+    apiKey: apiKey ?? "",
     instructions: createAskInstructions(request.personalization),
     input: createAskInput(request),
     intelligence: request.intelligence

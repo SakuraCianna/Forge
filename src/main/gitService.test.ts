@@ -10,6 +10,26 @@ describe("gitService", () => {
         return { exitCode: 0, stdout: "true\n", stderr: "" };
       }
 
+      if (args[0] === "diff" && args.includes("--cached")) {
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+
+      if (args[0] === "diff" && args.includes("src/App.tsx")) {
+        return {
+          exitCode: 0,
+          stdout: "diff --git a/src/App.tsx b/src/App.tsx\n+changed\n",
+          stderr: ""
+        };
+      }
+
+      if (args[0] === "diff" && args.includes("src/new.ts")) {
+        return {
+          exitCode: 1,
+          stdout: "diff --git a/src/new.ts b/src/new.ts\n+new\n",
+          stderr: ""
+        };
+      }
+
       return {
         exitCode: 0,
         stdout: " M src/App.tsx\n?? src/new.ts\n",
@@ -20,6 +40,18 @@ describe("gitService", () => {
     await expect(getProjectGitStatus({ projectRoot, runGit })).resolves.toEqual({
       isRepo: true,
       changedFiles: ["src/App.tsx", "src/new.ts"],
+      changes: [
+        {
+          path: "src/App.tsx",
+          status: "M",
+          diff: "diff --git a/src/App.tsx b/src/App.tsx\n+changed\n"
+        },
+        {
+          path: "src/new.ts",
+          status: "??",
+          diff: "diff --git a/src/new.ts b/src/new.ts\n+new\n"
+        }
+      ],
       rawStatus: " M src/App.tsx\n?? src/new.ts\n"
     });
   });
@@ -30,6 +62,7 @@ describe("gitService", () => {
     await expect(getProjectGitStatus({ projectRoot, runGit })).resolves.toEqual({
       isRepo: false,
       changedFiles: [],
+      changes: [],
       rawStatus: ""
     });
   });
@@ -39,6 +72,8 @@ describe("gitService", () => {
       .fn()
       .mockResolvedValueOnce({ exitCode: 0, stdout: "true\n", stderr: "" })
       .mockResolvedValueOnce({ exitCode: 0, stdout: " M src/App.tsx\n", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "diff --git a/src/App.tsx b/src/App.tsx\n", stderr: "" })
       .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "" })
       .mockResolvedValueOnce({ exitCode: 0, stdout: "[main abc] update\n", stderr: "" })
       .mockResolvedValueOnce({ exitCode: 0, stdout: "true\n", stderr: "" })
@@ -52,11 +87,13 @@ describe("gitService", () => {
 
     expect(runGit.mock.calls.map(([args]) => args)).toEqual([
       ["rev-parse", "--is-inside-work-tree"],
-      ["status", "--short"],
+      ["status", "--porcelain"],
+      ["diff", "--cached", "--", "src/App.tsx"],
+      ["diff", "--", "src/App.tsx"],
       ["add", "-A"],
       ["commit", "-m", "update files"],
       ["rev-parse", "--is-inside-work-tree"],
-      ["status", "--short"]
+      ["status", "--porcelain"]
     ]);
     expect(result.output).toContain("[main abc] update");
     expect(result.status.changedFiles).toEqual([]);

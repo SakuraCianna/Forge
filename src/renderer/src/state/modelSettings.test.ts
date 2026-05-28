@@ -46,7 +46,15 @@ describe("modelSettings", () => {
     expect(settings.providers.map((provider) => provider.id)).toEqual([
       "openai",
       "anthropic",
-      "gemini"
+      "gemini",
+      "zhipu",
+      "zai",
+      "zai-coding",
+      "minimax",
+      "xiaomi-mimo",
+      "xiaomi-mimo-token",
+      "github-models",
+      "ollama"
     ]);
   });
 

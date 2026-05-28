@@ -1,4 +1,5 @@
 import type { ForgeModel, ForgeProvider, IntelligenceLevel, ProviderKind } from "./modelTypes.js";
+import { assertHeaderValue, normalizeApiKeyForHeader } from "./providerModels.js";
 import type { TokenUsage } from "./usageTypes.js";
 
 export type TextGenerationRequestOptions = {
@@ -21,6 +22,8 @@ export type BuiltTextGenerationRequest = {
 
 type ProviderTextGenerationRequestOptions = Omit<TextGenerationRequestOptions, "provider"> & {
   baseUrl: string;
+  requestHeaders?: Record<string, string>;
+  requiresApiKey?: boolean;
 };
 
 const thinkingBudgetByLevel: Record<IntelligenceLevel, number> = {
@@ -45,18 +48,44 @@ export function buildTextGenerationRequest({
   }
 
   if (provider.kind === "openai") {
-    return buildOpenAIRequest({ baseUrl, model, apiKey, instructions, input, intelligence });
+    return buildOpenAIRequest({
+      baseUrl,
+      model,
+      apiKey,
+      instructions,
+      input,
+      intelligence,
+      requestHeaders: provider.requestHeaders,
+      requiresApiKey: provider.requiresApiKey
+    });
   }
 
   if (provider.kind === "anthropic") {
-    return buildAnthropicRequest({ baseUrl, model, apiKey, instructions, input, intelligence });
+    return buildAnthropicRequest({
+      baseUrl,
+      model,
+      apiKey,
+      instructions,
+      input,
+      intelligence,
+      requestHeaders: provider.requestHeaders
+    });
   }
 
   if (provider.kind === "gemini") {
     return buildGeminiRequest({ baseUrl, model, apiKey, instructions, input, intelligence });
   }
 
-  return buildOpenAICompatibleRequest({ baseUrl, model, apiKey, instructions, input, intelligence });
+  return buildOpenAICompatibleRequest({
+    baseUrl,
+    model,
+    apiKey,
+    instructions,
+    input,
+    intelligence,
+    requestHeaders: provider.requestHeaders,
+    requiresApiKey: provider.requiresApiKey
+  });
 }
 
 export function extractGeneratedText(providerKind: ProviderKind, response: unknown): string {
@@ -105,7 +134,9 @@ function buildOpenAIRequest({
   apiKey,
   instructions,
   input,
-  intelligence
+  intelligence,
+  requestHeaders,
+  requiresApiKey
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
   const body: Record<string, unknown> = {
     model: model.modelName,
@@ -119,7 +150,7 @@ function buildOpenAIRequest({
     body.reasoning = { effort };
   }
 
-  return postJson(`${baseUrl}/responses`, apiKey, body);
+  return postJson(`${baseUrl}/responses`, apiKey, body, requestHeaders, requiresApiKey);
 }
 
 function buildAnthropicRequest({
@@ -128,7 +159,8 @@ function buildAnthropicRequest({
   apiKey,
   instructions,
   input,
-  intelligence
+  intelligence,
+  requestHeaders
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
   const body: Record<string, unknown> = {
     model: model.modelName,
@@ -153,7 +185,8 @@ function buildAnthropicRequest({
     init: {
       method: "POST",
       headers: {
-        "x-api-key": apiKey,
+        ...validateHeaders(requestHeaders ?? {}),
+        "x-api-key": assertHeaderValue("x-api-key", normalizeApiKeyForHeader(apiKey)),
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json"
       },
@@ -201,7 +234,9 @@ function buildOpenAICompatibleRequest({
   apiKey,
   instructions,
   input,
-  intelligence
+  intelligence,
+  requestHeaders,
+  requiresApiKey
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
   const body: Record<string, unknown> = {
     model: model.modelName,
@@ -217,18 +252,33 @@ function buildOpenAICompatibleRequest({
     body.reasoning = { effort };
   }
 
-  return postJson(`${baseUrl}/chat/completions`, apiKey, body);
+  return postJson(`${baseUrl}/chat/completions`, apiKey, body, requestHeaders, requiresApiKey);
 }
 
-function postJson(url: string, apiKey: string, body: Record<string, unknown>): BuiltTextGenerationRequest {
+function postJson(
+  url: string,
+  apiKey: string,
+  body: Record<string, unknown>,
+  requestHeaders: Record<string, string> = {},
+  requiresApiKey = true
+): BuiltTextGenerationRequest {
+  const headers: Record<string, string> = {
+    ...validateHeaders(requestHeaders),
+    "Content-Type": "application/json"
+  };
+
+  if (requiresApiKey) {
+    headers.Authorization = assertHeaderValue(
+      "Authorization",
+      `Bearer ${normalizeApiKeyForHeader(apiKey)}`
+    );
+  }
+
   return {
     url,
     init: {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
+      headers,
       body: JSON.stringify(body)
     }
   };
@@ -449,4 +499,10 @@ function trimTrailingSlash(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function validateHeaders(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).map(([name, value]) => [name, assertHeaderValue(name, value)])
+  );
 }

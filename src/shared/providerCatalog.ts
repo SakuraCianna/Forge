@@ -21,6 +21,69 @@ export const providerCatalog: ForgeProvider[] = [
     kind: "gemini",
     baseUrl: "https://generativelanguage.googleapis.com",
     requiresBaseUrl: false
+  },
+  {
+    id: "zhipu",
+    label: "智谱 AI",
+    kind: "openai-compatible",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    requiresBaseUrl: false
+  },
+  {
+    id: "zai",
+    label: "Z.AI",
+    kind: "openai-compatible",
+    baseUrl: "https://api.z.ai/api/paas/v4",
+    requiresBaseUrl: false
+  },
+  {
+    id: "zai-coding",
+    label: "Z.AI Coding Plan",
+    kind: "openai-compatible",
+    baseUrl: "https://api.z.ai/api/coding/paas/v4",
+    requiresBaseUrl: false
+  },
+  {
+    id: "minimax",
+    label: "MiniMax",
+    kind: "openai-compatible",
+    baseUrl: "https://api.minimax.io/v1",
+    requiresBaseUrl: false
+  },
+  {
+    id: "xiaomi-mimo",
+    label: "Xiaomi MiMo",
+    kind: "openai-compatible",
+    baseUrl: "https://api.xiaomimimo.com/v1",
+    requiresBaseUrl: false
+  },
+  {
+    id: "xiaomi-mimo-token",
+    label: "Xiaomi MiMo Token Plan",
+    kind: "openai-compatible",
+    baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+    requiresBaseUrl: false
+  },
+  {
+    id: "github-models",
+    label: "GitHub Models / Copilot",
+    kind: "openai-compatible",
+    baseUrl: "https://models.github.ai/inference",
+    modelListUrl: "https://models.github.ai/catalog/models",
+    requestHeaders: {
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    requiresBaseUrl: false
+  },
+  {
+    id: "ollama",
+    label: "Ollama",
+    kind: "openai-compatible",
+    baseUrl: "http://localhost:11434/v1",
+    modelListUrl: "http://localhost:11434/api/tags",
+    requiresBaseUrl: false,
+    requiresApiKey: false
   }
 ];
 

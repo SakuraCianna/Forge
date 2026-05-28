@@ -163,6 +163,7 @@ describe("textGeneration", () => {
     });
 
     expect(request.url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(request.init.headers.Authorization).toBe("Bearer sk-router");
     expect(JSON.parse(request.init.body)).toEqual({
       model: "some-model",
       messages: [
@@ -171,6 +172,50 @@ describe("textGeneration", () => {
       ],
       stream: false
     });
+  });
+
+  it("omits authorization for local OpenAI-compatible providers without API keys", () => {
+    const provider: ForgeProvider = {
+      id: "ollama",
+      label: "Ollama",
+      kind: "openai-compatible",
+      baseUrl: "http://localhost:11434/v1",
+      requiresBaseUrl: false,
+      requiresApiKey: false
+    };
+
+    const request = buildTextGenerationRequest({
+      provider,
+      model: { ...plainModel, providerId: "ollama", modelName: "qwen2.5-coder:7b" },
+      apiKey: "",
+      instructions: "You are Forge",
+      input: "Plan the change",
+      intelligence: "medium"
+    });
+
+    expect(request.url).toBe("http://localhost:11434/v1/chat/completions");
+    expect(request.init.headers.Authorization).toBeUndefined();
+  });
+
+  it("stops before fetch when an API key contains non-ASCII header characters", () => {
+    const provider: ForgeProvider = {
+      id: "openrouter",
+      label: "OpenRouter",
+      kind: "openai-compatible",
+      baseUrl: "https://openrouter.ai/api/v1",
+      requiresBaseUrl: false
+    };
+
+    expect(() =>
+      buildTextGenerationRequest({
+        provider,
+        model: plainModel,
+        apiKey: "API Key：sk-router",
+        instructions: "You are Forge",
+        input: "Plan the change",
+        intelligence: "medium"
+      })
+    ).toThrow("non-ASCII characters");
   });
 
   it("extracts generated text from supported provider responses", () => {

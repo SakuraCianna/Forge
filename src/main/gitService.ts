@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import type {
+  ProjectGitFileChange,
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
   ProjectGitStatus,
@@ -34,19 +35,23 @@ export async function getProjectGitStatus({
     return {
       isRepo: false,
       changedFiles: [],
+      changes: [],
       rawStatus: ""
     };
   }
 
-  const status = await runGit(["status", "--short"], cwd);
+  const status = await runGit(["status", "--porcelain"], cwd);
 
   if (status.exitCode !== 0) {
     throw new Error(status.stderr.trim() || "git status failed");
   }
 
+  const changes = await readGitChanges(status.stdout, cwd, runGit);
+
   return {
     isRepo: true,
-    changedFiles: parseGitStatusFiles(status.stdout),
+    changedFiles: changes.map((change) => change.path),
+    changes,
     rawStatus: status.stdout
   };
 }
@@ -129,14 +134,53 @@ function runGitCommand(args: string[], cwd: string): Promise<GitCommandResult> {
   });
 }
 
-function parseGitStatusFiles(output: string): string[] {
+async function readGitChanges(
+  output: string,
+  cwd: string,
+  runGit: GitRunner
+): Promise<ProjectGitFileChange[]> {
+  const entries = parseGitStatusEntries(output);
+
+  return Promise.all(
+    entries.map(async (entry) => ({
+      ...entry,
+      diff: await readGitDiff(entry, cwd, runGit)
+    }))
+  );
+}
+
+async function readGitDiff(
+  entry: Omit<ProjectGitFileChange, "diff">,
+  cwd: string,
+  runGit: GitRunner
+): Promise<string> {
+  if (entry.status === "??") {
+    const noIndexDiff = await runGit(["diff", "--no-index", "--", "/dev/null", entry.path], cwd);
+
+    if (noIndexDiff.exitCode === 0 || noIndexDiff.exitCode === 1) {
+      return noIndexDiff.stdout;
+    }
+
+    return noIndexDiff.stderr.trim();
+  }
+
+  const stagedDiff = await runGit(["diff", "--cached", "--", entry.path], cwd);
+  const unstagedDiff = await runGit(["diff", "--", entry.path], cwd);
+
+  return [stagedDiff.stdout, unstagedDiff.stdout].filter(Boolean).join("\n");
+}
+
+function parseGitStatusEntries(output: string): Array<Omit<ProjectGitFileChange, "diff">> {
   return output
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter(Boolean)
     .map((line) => {
-      const filePath = line.slice(3).trim();
-      const renameArrowIndex = filePath.lastIndexOf(" -> ");
-      return renameArrowIndex >= 0 ? filePath.slice(renameArrowIndex + 4) : filePath;
+      const status = line.slice(0, 2).trim() || line.slice(0, 2);
+      const rawPath = line.slice(3).trim();
+      const renameArrowIndex = rawPath.lastIndexOf(" -> ");
+      const path = renameArrowIndex >= 0 ? rawPath.slice(renameArrowIndex + 4) : rawPath;
+
+      return { path, status };
     });
 }

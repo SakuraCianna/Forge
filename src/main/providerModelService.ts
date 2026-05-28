@@ -24,20 +24,34 @@ export async function fetchModelsForProvider({
 }: FetchModelsForProviderOptions): Promise<ForgeModel[]> {
   const apiKey = await keyVault.readProviderKey(provider.id);
 
-  if (!apiKey) {
+  if (provider.requiresApiKey !== false && !apiKey) {
     throw new Error(`${provider.label} API Key is not configured`);
   }
 
-  const request = buildModelListRequest(provider, apiKey);
+  const request = buildModelListRequest(provider, apiKey ?? "");
   const response = await fetcher(request.url, {
     method: "GET",
     headers: request.headers
   });
 
   if (!response.ok) {
-    throw new Error(`${provider.label} model fetch failed: ${response.status} ${response.statusText}`);
+    const detail = await readErrorDetail(response);
+    throw new Error(
+      `${provider.label} model fetch failed: ${response.status} ${response.statusText}${detail}`
+    );
   }
 
   const body = (await response.json()) as unknown;
   return parseProviderModelList(provider, body).map((model) => toForgeModel(provider, model));
+}
+
+async function readErrorDetail(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    const detail = text.trim().slice(0, 300);
+
+    return detail ? ` - ${detail}` : "";
+  } catch {
+    return "";
+  }
 }
