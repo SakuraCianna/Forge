@@ -72,6 +72,7 @@ describe("SettingsPanel", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: "Configure OpenRouter" }));
     await user.clear(screen.getByLabelText("OpenRouter Base URL"));
     await user.type(screen.getByLabelText("OpenRouter Base URL"), "https://gateway.example/v1");
     await user.type(screen.getByLabelText("OpenRouter model ID"), "moonshot-v1");

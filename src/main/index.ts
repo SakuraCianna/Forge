@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from "electron";
+import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import { registerAgentHandlers } from "./agentIpc.js";
 import { generateAgentFileChange, generateAgentPlan } from "./agentPlanService.js";
@@ -19,6 +19,7 @@ import { pickProjectDirectory } from "./projectPicker.js";
 import { scanProjectFiles } from "./projectScanner.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
 import { registerProviderModelHandlers } from "./providerModelsIpc.js";
+import { windowChannels } from "../shared/ipcChannels.js";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -29,7 +30,8 @@ function createWindow(): void {
     minWidth: 1040,
     minHeight: 680,
     title: "Forge",
-    backgroundColor: "#101114",
+    frame: false,
+    backgroundColor: "#08111f",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
@@ -51,6 +53,8 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+
   const keyVault = createKeyVault({
     directory: join(app.getPath("userData"), "secrets"),
     codec: {
@@ -115,6 +119,28 @@ void app.whenReady().then(() => {
       ipcMain.handle(channel, handler);
     }
   );
+
+  ipcMain.handle(windowChannels.minimize, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
+
+  ipcMain.handle(windowChannels.toggleMaximize, (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+
+    if (!window) {
+      return;
+    }
+
+    if (window.isMaximized()) {
+      window.unmaximize();
+    } else {
+      window.maximize();
+    }
+  });
+
+  ipcMain.handle(windowChannels.close, (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
 
   createWindow();
 

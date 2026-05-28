@@ -1,6 +1,5 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
-import { FolderKanban, MessageSquareText, Settings } from "lucide-react";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
@@ -73,12 +72,9 @@ export function App(): ReactElement {
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
+  const [composerFocusSignal, setComposerFocusSignal] = useState(0);
+  const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
   const { t } = useI18n(settings.language);
-  const sidebarItems = [
-    { label: t("nav.projects"), icon: FolderKanban },
-    { label: t("nav.threads"), icon: MessageSquareText },
-    { label: t("nav.settings"), icon: Settings }
-  ];
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -152,6 +148,17 @@ export function App(): ReactElement {
     const project = createProjectFromPath(projectPath);
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, project));
+  }
+
+  function openMostRecentProject(): void {
+    const recentProject = recentProjects[0];
+
+    if (!recentProject) {
+      void pickProject();
+      return;
+    }
+
+    setCurrentProject(recentProject);
   }
 
   async function scanProject(projectPath: string): Promise<void> {
@@ -547,24 +554,15 @@ export function App(): ReactElement {
   return (
     <AppShell
       language={settings.language}
-      sidebar={sidebarItems.map(({ label, icon: Icon }, index) => (
-        <button
-          key={label}
-          className={`flex h-9 w-full items-center gap-2 rounded-md px-2.5 text-left transition ${
-            index === 0
-              ? "bg-white text-[#1f2328] shadow-sm ring-1 ring-[#dce3eb]"
-              : "text-[#5f6875] hover:bg-white/72 hover:text-[#1f2328]"
-          }`}
-          type="button"
-        >
-          <Icon className="h-4 w-4" />
-          <span className="truncate">{label}</span>
-        </button>
-      ))}
+      currentProjectName={currentProject?.name}
+      currentProjectPath={currentProject?.path}
+      onNewTask={() => setComposerFocusSignal((current) => current + 1)}
+      onRun={() => setComposerSubmitSignal((current) => current + 1)}
+      onPickProject={() => void pickProject()}
     >
-      <div className="grid h-screen min-h-0 grid-cols-[minmax(0,1fr)_382px] overflow-hidden">
-        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-[#fbfcfe]">
-          <div className="px-6 pt-5">
+      <div className="flex h-full min-h-0 overflow-hidden">
+        <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+          <div className="px-5 pt-5">
             <ProjectHeader
               language={settings.language}
               project={currentProject}
@@ -578,14 +576,15 @@ export function App(): ReactElement {
               onRefreshGitStatus={() => void refreshProjectGitStatus()}
             />
             {taskNotice ? (
-              <div className="mb-3 rounded-md border border-[#f2c48b] bg-[#fff7ed] px-3 py-2 text-sm text-[#9a4d00]">
+              <div className="mb-3 rounded-[14px] border border-[#ff6b3d]/28 bg-[#2a1620]/80 px-3 py-2 text-sm text-[#ffd0c0]">
                 {taskNotice}
               </div>
             ) : null}
           </div>
-          <div className="min-h-0 px-6 pb-4">
+          <div className="min-h-0 px-5 pb-4">
             <ThreadWorkspace
               language={settings.language}
+              hasProject={Boolean(currentProject)}
               selectedThreadId={selectedThreadId}
               threads={threads}
               projectScan={projectScanResult}
@@ -597,6 +596,9 @@ export function App(): ReactElement {
               }
               changePreviews={changePreviews}
               onSelectThread={setSelectedThreadId}
+              onPickProject={() => void pickProject()}
+              onOpenRecentProject={openMostRecentProject}
+              onQuickTask={submitTask}
               onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
               onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
               onPreviewChange={(relativePath, nextContent) =>
@@ -618,6 +620,8 @@ export function App(): ReactElement {
           </div>
           <TaskComposer
             settings={settings}
+            focusSignal={composerFocusSignal}
+            submitSignal={composerSubmitSignal}
             onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
             onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
             onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}

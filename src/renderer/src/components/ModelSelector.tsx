@@ -52,10 +52,10 @@ export function ModelSelector({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="inline-flex h-9 items-center gap-2 rounded-md border border-[#d9e0e8] bg-[#f6f8fb] px-2.5 text-sm font-medium text-[#3f4752] transition hover:bg-[#edf1f5]"
+          className="inline-flex h-9 items-center gap-2 rounded-[13px] border border-[rgba(148,163,184,0.18)] bg-[#0f1a2a] px-2.5 text-sm font-medium text-[#dbe7f5] transition hover:border-[rgba(148,163,184,0.32)] hover:bg-[#16243a] active:scale-[0.99]"
           aria-label={triggerLabel}
         >
-          <Zap className="h-4 w-4" />
+          <Zap className="h-4 w-4 text-[#ff8d6d]" />
           <span>{triggerLabel}</span>
         </button>
       </DropdownMenu.Trigger>
@@ -63,9 +63,9 @@ export function ModelSelector({
         <DropdownMenu.Content
           align="start"
           sideOffset={8}
-          className="z-50 w-72 rounded-xl border border-[#d9e0e8] bg-white p-2 text-[#202124] shadow-[0_24px_70px_rgba(31,35,40,0.18)]"
+          className="z-50 w-72 rounded-[18px] border border-[rgba(148,163,184,0.18)] bg-[#0f1a2a]/96 p-2 text-[#e5edf7] shadow-[0_28px_90px_rgba(0,0,0,0.42)] backdrop-blur-xl"
         >
-          <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#7a828e]">
+          <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#8ea0b8]">
             {t("selector.intelligence")}
           </DropdownMenu.Label>
           {supportsReasoning ? (
@@ -73,71 +73,73 @@ export function ModelSelector({
               <DropdownMenu.Item
                 key={level}
                 onSelect={() => onSelectIntelligence(level)}
-                className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]"
+                className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#17243a]"
               >
                 {t(intelligenceLabels[level])}
-                {settings.intelligence === level ? <Check className="h-4 w-4" /> : null}
+                {settings.intelligence === level ? <Check className="h-4 w-4 text-[#ff8d6d]" /> : null}
               </DropdownMenu.Item>
             ))
           ) : (
-            <DropdownMenu.Item className="flex h-10 cursor-default items-center rounded-md px-2 text-base outline-none">
+            <DropdownMenu.Item className="flex h-10 cursor-default items-center rounded-[12px] px-2 text-base text-[#8ea0b8] outline-none">
               {t("selector.noReasoning")}
             </DropdownMenu.Item>
           )}
-          <DropdownMenu.Separator className="my-2 h-px bg-[#e4e9ef]" />
+          <DropdownMenu.Separator className="my-2 h-px bg-[rgba(148,163,184,0.16)]" />
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]">
+            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#17243a]">
               <span className="inline-flex items-center gap-2">
-                <Zap className="h-4 w-4" />
+                <Zap className="h-4 w-4 text-[#ff8d6d]" />
                 {currentModel?.label ?? t("selector.configureModel")}
               </span>
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4 text-[#8ea0b8]" />
             </DropdownMenu.SubTrigger>
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 sideOffset={10}
-                className="z-50 w-72 rounded-xl border border-[#d9e0e8] bg-white p-2 text-[#202124] shadow-[0_24px_70px_rgba(31,35,40,0.18)]"
+                className="z-50 w-72 rounded-[18px] border border-[rgba(148,163,184,0.18)] bg-[#0f1a2a]/96 p-2 text-[#e5edf7] shadow-[0_28px_90px_rgba(0,0,0,0.42)] backdrop-blur-xl"
               >
-                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#7a828e]">
+                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#8ea0b8]">
                   {t("selector.model")}
                 </DropdownMenu.Label>
                 {enabledModels.map((model) => (
                   <DropdownMenu.Item
                     key={model.id}
                     onSelect={() => onSelectModel(model.id)}
-                    className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]"
+                    className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#17243a]"
                   >
                     <span className="inline-flex items-center gap-2">
-                      {model.capabilities.reasoning.type !== "none" ? <Zap className="h-4 w-4" /> : null}
+                      {model.capabilities.reasoning.type !== "none" ? (
+                        <Zap className="h-4 w-4 text-[#ff8d6d]" />
+                      ) : null}
                       {model.label}
                     </span>
-                    {currentModel?.id === model.id ? <Check className="h-4 w-4" /> : null}
+                    {currentModel?.id === model.id ? <Check className="h-4 w-4 text-[#ff8d6d]" /> : null}
                   </DropdownMenu.Item>
                 ))}
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </DropdownMenu.Sub>
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]">
+            <DropdownMenu.SubTrigger className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#17243a]">
               <span>{t("selector.speed")}</span>
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4 text-[#8ea0b8]" />
             </DropdownMenu.SubTrigger>
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 sideOffset={10}
-                className="z-50 w-56 rounded-xl border border-[#d9e0e8] bg-white p-2 text-[#202124] shadow-[0_24px_70px_rgba(31,35,40,0.18)]"
+                className="z-50 w-56 rounded-[18px] border border-[rgba(148,163,184,0.18)] bg-[#0f1a2a]/96 p-2 text-[#e5edf7] shadow-[0_28px_90px_rgba(0,0,0,0.42)] backdrop-blur-xl"
               >
-                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#7a828e]">
+                <DropdownMenu.Label className="px-2 py-1.5 text-sm text-[#8ea0b8]">
                   {t("selector.speed")}
                 </DropdownMenu.Label>
                 {speedModes.map((speed) => (
                   <DropdownMenu.Item
                     key={speed}
                     onSelect={() => onSelectSpeed(speed)}
-                    className="flex h-10 cursor-default items-center justify-between rounded-md px-2 text-base outline-none data-[highlighted]:bg-[#f0f3f7]"
+                    className="flex h-10 cursor-default items-center justify-between rounded-[12px] px-2 text-base outline-none data-[highlighted]:bg-[#17243a]"
                   >
                     {t(speedLabels[speed])}
-                    {settings.speed === speed ? <Check className="h-4 w-4" /> : null}
+                    {settings.speed === speed ? <Check className="h-4 w-4 text-[#ff8d6d]" /> : null}
                   </DropdownMenu.Item>
                 ))}
               </DropdownMenu.SubContent>

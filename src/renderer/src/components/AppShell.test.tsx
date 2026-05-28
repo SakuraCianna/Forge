@@ -5,7 +5,7 @@ import { AppShell } from "./AppShell";
 describe("AppShell", () => {
   it("exposes a navigable desktop workbench structure", () => {
     render(
-      <AppShell language="en-US" sidebar={<button type="button">Projects</button>}>
+      <AppShell language="en-US" currentProjectName="Forge" currentProjectPath="E:\\CodeHome\\Forge">
         <section>Workbench</section>
       </AppShell>
     );

@@ -6,7 +6,8 @@ import {
   gitChannels,
   keyVaultChannels,
   projectChannels,
-  providerModelChannels
+  providerModelChannels,
+  windowChannels
 } from "../shared/ipcChannels.js";
 import type {
   AgentFileChangeResult,
@@ -26,6 +27,11 @@ import type { ProjectScanResult } from "../shared/projectTypes.js";
 
 contextBridge.exposeInMainWorld("forge", {
   appName: "Forge",
+  windowControls: {
+    minimize: () => ipcRenderer.invoke(windowChannels.minimize),
+    toggleMaximize: () => ipcRenderer.invoke(windowChannels.toggleMaximize),
+    close: () => ipcRenderer.invoke(windowChannels.close)
+  },
   secrets: {
     saveProviderKey: (providerId: string, apiKey: string) =>
       ipcRenderer.invoke(keyVaultChannels.save, providerId, apiKey),

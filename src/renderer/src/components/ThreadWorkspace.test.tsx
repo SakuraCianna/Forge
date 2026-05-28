@@ -59,7 +59,7 @@ describe("ThreadWorkspace", () => {
 
     expect(screen.getAllByText("实现设置持久化")).toHaveLength(2);
     expect(screen.getByText(/openai:gpt-5.5/)).toBeInTheDocument();
-    expect(screen.getByText("任务已创建, 等待 Forge 生成执行计划")).toBeInTheDocument();
+    expect(screen.getAllByText("任务已创建, 等待 Forge 生成执行计划").length).toBeGreaterThan(0);
   });
 
   it("submits a command for the selected thread", async () => {
@@ -80,6 +80,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: "命令" }));
     await user.type(screen.getByLabelText("命令"), "npm test");
     await user.click(screen.getByRole("button", { name: "运行命令" }));
 
@@ -123,10 +124,11 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: "变更" }));
     await user.click(screen.getByRole("button", { name: "src/App.tsx" }));
 
     expect(onPreviewFile).toHaveBeenCalledWith("src/App.tsx");
-    expect(screen.getByText("export const App = () => null;")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("new")).toBeInTheDocument();
     expect(screen.getByText("- old")).toBeInTheDocument();
     expect(screen.getByText("+ new")).toBeInTheDocument();
   });
@@ -160,6 +162,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: "变更" }));
     await user.clear(screen.getByLabelText("编辑内容"));
     await user.type(screen.getByLabelText("编辑内容"), "new");
     await user.click(screen.getByRole("button", { name: "生成 diff" }));
@@ -198,6 +201,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: "Changes" }));
     await user.click(screen.getByRole("button", { name: "Generate AI edit" }));
 
     expect(onGenerateFileChange).toHaveBeenCalledWith("src/App.tsx", "old");
@@ -253,6 +257,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: "Changes" }));
     expect(screen.getByText("Pending changes")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Pending change src/main.tsx" }));
     await user.click(screen.getByRole("button", { name: "Discard change" }));
@@ -300,6 +305,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: "Changes" }));
     await user.click(screen.getByRole("button", { name: "Apply all changes" }));
     await user.click(screen.getByRole("button", { name: "Discard all changes" }));
 
@@ -333,6 +339,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    await user.click(screen.getByRole("button", { name: "Changes" }));
     await user.click(screen.getByLabelText("Select src/App.tsx for AI edit"));
     await user.click(screen.getByLabelText("Select src/main.tsx for AI edit"));
     await user.click(screen.getByRole("button", { name: "Generate AI edits for selected" }));

@@ -32,3 +32,9 @@ export const fileChannels = {
   previewTextUpdate: "forge:file:preview-text-update",
   writeText: "forge:file:write-text"
 } as const;
+
+export const windowChannels = {
+  minimize: "forge:window:minimize",
+  toggleMaximize: "forge:window:toggle-maximize",
+  close: "forge:window:close"
+} as const;

@@ -20,6 +20,11 @@ declare global {
   interface Window {
     forge: {
       appName: string;
+      windowControls: {
+        minimize: () => Promise<void>;
+        toggleMaximize: () => Promise<void>;
+        close: () => Promise<void>;
+      };
       secrets: {
         saveProviderKey: (providerId: string, apiKey: string) => Promise<void>;
         getProviderKeyStatus: (
