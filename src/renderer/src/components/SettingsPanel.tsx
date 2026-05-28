@@ -1,4 +1,4 @@
-import type { ComponentType, ReactElement } from "react";
+import type { ComponentType, CSSProperties, ReactElement } from "react";
 import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -18,7 +18,7 @@ import {
   SlidersHorizontal,
   Trash2
 } from "lucide-react";
-import type { Language, ModelSettings } from "@shared/modelTypes";
+import type { ForgeModel, ForgeProvider, Language, ModelSettings } from "@shared/modelTypes";
 import type { UsageEvent } from "@shared/usageTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { PersonalizationSettings } from "@/state/personalization";
@@ -51,6 +51,7 @@ type SettingsPanelProps = {
   onUpdateProviderLabel: (providerId: string, label: string) => void;
   onUpdateUsageRate: (providerId: string, rate: UsageRate) => void;
   onRestoreArchivedThread: (threadId: string) => void;
+  onSelectModel: (modelId: string) => void;
   personalization: PersonalizationSettings;
   providerFetchStates: Record<string, ProviderFetchState>;
   usageEvents: UsageEvent[];
@@ -82,6 +83,7 @@ export function SettingsPanel({
   onUpdateProviderLabel,
   onUpdateUsageRate,
   onRestoreArchivedThread,
+  onSelectModel,
   personalization,
   providerFetchStates,
   usageEvents,
@@ -242,27 +244,37 @@ export function SettingsPanel({
         <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
           {settings.models.length > 0 ? (
             settings.models.map((model, index) => {
-              const providerLabel =
-                settings.providers.find((provider) => provider.id === model.providerId)?.label ??
-                model.providerId;
+              const provider =
+                settings.providers.find((candidate) => candidate.id === model.providerId) ?? null;
+              const providerLabel = provider?.label ?? model.providerId;
 
               return (
-                <div
+                <button
+                  type="button"
                   key={model.id}
-                  className={`flex items-center justify-between gap-4 bg-white px-4 py-3 text-sm transition hover:bg-[#f7f7f8] ${
+                  onClick={() => onSelectModel(model.id)}
+                  className={`flex w-full items-center justify-between gap-4 bg-white px-4 py-3 text-left text-sm transition hover:bg-[#f7f7f8] ${
                     index === 0 ? "" : "border-t border-[#ececf1]"
                   }`}
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-[#202123]">{model.label}</span>
-                    <span className="mt-1 block truncate text-xs text-[#6e6e80]">
-                      {t("selector.modelSource")} {providerLabel}
+                  <span className="flex min-w-0 items-center gap-3">
+                    <ProviderMark provider={provider} fallbackLabel={providerLabel} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-[#202123]">{model.label}</span>
+                      <span className="mt-1 block truncate text-xs text-[#6e6e80]">
+                        {t("selector.modelSource")} {providerLabel}
+                      </span>
                     </span>
                   </span>
-                  <span className="shrink-0 rounded-full border border-[#c3eadc] bg-[#effaf6] px-2 py-1 text-xs font-medium text-[#087443]">
-                    {t("settings.available")}
+                  <span className="flex shrink-0 items-center gap-2">
+                    {settings.currentModelId === model.id ? (
+                      <Check className="h-4 w-4 text-[#202123]" />
+                    ) : null}
+                    <span className="rounded-full border border-[#c3eadc] bg-[#effaf6] px-2 py-1 text-xs font-medium text-[#087443]">
+                      {t("settings.available")}
+                    </span>
                   </span>
-                </div>
+                </button>
               );
             })
           ) : (
@@ -328,6 +340,7 @@ export function SettingsPanel({
             const providerLabel = provider.label.trim() || t("settings.customProvider");
             const fetchState = providerFetchStates[provider.id] ?? { status: "idle" as const };
             const requiresApiKey = provider.requiresApiKey !== false;
+            const providerModels = settings.models.filter((model) => model.providerId === provider.id);
 
             return (
               <article
@@ -341,32 +354,35 @@ export function SettingsPanel({
                   onClick={() => setExpandedProviderId(isExpanded ? "" : provider.id)}
                   className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-[#f7f7f8]"
                 >
-                  <span className="min-w-0">
-                    <span className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-[#202123]">{providerLabel}</span>
-                      {provider.custom ? (
-                        <span className="rounded-full border border-[#ececf1] bg-[#f7f7f8] px-2 py-0.5 text-[11px] text-[#565869]">
-                          {t("settings.customProvider")}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span
-                      className={`mt-1 flex items-center gap-1.5 text-xs ${
-                        !requiresApiKey || keyStatus.hasKey ? "text-[#087443]" : "text-[#b45309]"
-                      }`}
-                    >
-                      {!requiresApiKey || keyStatus.hasKey ? (
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      ) : (
-                        <CircleAlert className="h-3.5 w-3.5" />
-                      )}
-                      {!requiresApiKey
-                        ? settings.language === "zh-CN"
-                          ? "本地服务, 无需 API Key"
-                          : "Local service, no API key"
-                        : keyStatus.hasKey
-                        ? `${t("settings.connected")} ****${keyStatus.last4}`
-                        : t("settings.notConfigured")}
+                  <span className="flex min-w-0 items-center gap-3">
+                    <ProviderMark provider={provider} fallbackLabel={providerLabel} />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-sm font-semibold text-[#202123]">{providerLabel}</span>
+                        {provider.custom ? (
+                          <span className="rounded-full border border-[#ececf1] bg-[#f7f7f8] px-2 py-0.5 text-[11px] text-[#565869]">
+                            {t("settings.customProvider")}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span
+                        className={`mt-1 flex items-center gap-1.5 text-xs ${
+                          !requiresApiKey || keyStatus.hasKey ? "text-[#087443]" : "text-[#b45309]"
+                        }`}
+                      >
+                        {!requiresApiKey || keyStatus.hasKey ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        ) : (
+                          <CircleAlert className="h-3.5 w-3.5" />
+                        )}
+                        {!requiresApiKey
+                          ? settings.language === "zh-CN"
+                            ? "本地服务, 无需 API Key"
+                            : "Local service, no API key"
+                          : keyStatus.hasKey
+                          ? `${t("settings.connected")} ****${keyStatus.last4}`
+                          : t("settings.notConfigured")}
+                      </span>
                     </span>
                   </span>
                   <ChevronDown
@@ -486,6 +502,27 @@ export function SettingsPanel({
                         {fetchState.message}
                       </p>
                     ) : null}
+                    <div className="rounded-[14px] border border-[#ececf1] bg-white p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span>
+                          <span className="block text-sm font-medium text-[#202123]">
+                            {t("settings.providerModels")}
+                          </span>
+                          <span className="mt-1 block text-xs text-[#6e6e80]">
+                            {providerModels.length > 0
+                              ? `${providerModels.length} ${t("settings.availableModels")}`
+                              : t("settings.providerModelsEmpty")}
+                          </span>
+                        </span>
+                        <ProviderModelDropdown
+                          currentModelId={settings.currentModelId}
+                          language={settings.language}
+                          models={providerModels}
+                          providerLabel={providerLabel}
+                          onSelectModel={onSelectModel}
+                        />
+                      </div>
+                    </div>
                   </div>
                 ) : null}
               </article>
@@ -518,11 +555,16 @@ export function SettingsPanel({
                   index === 0 ? "" : "border-t border-[#ececf1]"
                 }`}
               >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-[#202123]">{provider.label}</div>
-                  <div className="mt-1 text-xs text-[#6e6e80]">
-                    {formatInteger(usage.totalTokens)} tokens / {usage.requests} requests
-                  </div>
+                <div className="flex min-w-0 items-center gap-3">
+                  <ProviderMark provider={provider} fallbackLabel={provider.label} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-[#202123]">
+                      {provider.label}
+                    </span>
+                    <span className="mt-1 block text-xs text-[#6e6e80]">
+                      {formatInteger(usage.totalTokens)} tokens / {usage.requests} requests
+                    </span>
+                  </span>
                 </div>
                 <PriceInput
                   label={t("settings.inputPrice")}
@@ -730,6 +772,110 @@ function InlineDropdown<T extends string>({
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
   );
+}
+
+function ProviderModelDropdown({
+  currentModelId,
+  language,
+  models,
+  providerLabel,
+  onSelectModel
+}: {
+  currentModelId: string | null;
+  language: Language;
+  models: ForgeModel[];
+  providerLabel: string;
+  onSelectModel: (modelId: string) => void;
+}): ReactElement {
+  const currentProviderModel = models.find((model) => model.id === currentModelId) ?? null;
+  const triggerLabel =
+    models.length === 0
+      ? language === "zh-CN"
+        ? "暂无模型"
+        : "No models"
+      : currentProviderModel?.label ??
+        (language === "zh-CN" ? `查看 ${models.length} 个模型` : `View ${models.length} models`);
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          disabled={models.length === 0}
+          aria-label={
+            language === "zh-CN" ? `${providerLabel} 可用模型` : `${providerLabel} available models`
+          }
+          className="inline-flex h-9 min-w-36 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123] disabled:cursor-not-allowed disabled:text-[#8e8ea0]"
+        >
+          <span className="truncate">{triggerLabel}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-[#6e6e80]" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 max-h-80 min-w-[260px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+        >
+          {models.map((model) => (
+            <DropdownMenu.Item
+              key={model.id}
+              onSelect={() => onSelectModel(model.id)}
+              className="grid min-h-10 cursor-default select-none grid-cols-[minmax(0,1fr)_18px] items-center gap-3 rounded-[10px] px-2.5 py-2 outline-none transition data-[highlighted]:bg-[#f7f7f8]"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{model.label}</span>
+                <span className="block truncate text-xs text-[#8e8ea0]">{model.modelName}</span>
+              </span>
+              {model.id === currentModelId ? <Check className="h-4 w-4" /> : <span />}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function ProviderMark({
+  provider,
+  fallbackLabel
+}: {
+  provider: ForgeProvider | null;
+  fallbackLabel: string;
+}): ReactElement {
+  const accentColor = provider?.accentColor ?? "#6e6e80";
+  const icon = provider?.icon ?? getProviderInitials(fallbackLabel);
+  const style = {
+    color: accentColor,
+    borderColor: accentColor
+  } as CSSProperties;
+
+  return (
+    <span
+      aria-hidden="true"
+      style={style}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border bg-white text-[10px] font-bold tracking-normal"
+    >
+      {icon}
+    </span>
+  );
+}
+
+function getProviderInitials(label: string): string {
+  const words = label
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return "API";
+  }
+
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
 }
 
 function StatusTile({

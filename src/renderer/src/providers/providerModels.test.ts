@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ForgeProvider } from "@shared/modelTypes";
-import { providerCatalog } from "@shared/providerCatalog";
+import { hydrateProviderFromCatalog, providerCatalog } from "@shared/providerCatalog";
 import {
   assertHeaderValue,
   buildModelListRequest,
@@ -58,6 +58,21 @@ describe("provider model adapters", () => {
   });
 
   it("keeps official and plan-specific provider base URLs distinct", () => {
+    expect(providerCatalog.find((provider) => provider.id === "deepseek")?.baseUrl).toBe(
+      "https://api.deepseek.com"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "moonshot")?.baseUrl).toBe(
+      "https://api.moonshot.cn/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "qwen-dashscope")?.baseUrl).toBe(
+      "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "siliconflow")?.baseUrl).toBe(
+      "https://api.siliconflow.cn/v1"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "volcengine-ark")?.baseUrl).toBe(
+      "https://ark.cn-beijing.volces.com/api/v3"
+    );
     expect(providerCatalog.find((provider) => provider.id === "zai")?.baseUrl).toBe(
       "https://api.z.ai/api/paas/v4"
     );
@@ -70,6 +85,22 @@ describe("provider model adapters", () => {
     expect(providerCatalog.find((provider) => provider.id === "xiaomi-mimo-token")?.baseUrl).toBe(
       "https://token-plan-cn.xiaomimimo.com/v1"
     );
+  });
+
+  it("hydrates stale built-in provider objects from the catalog", () => {
+    const hydrated = hydrateProviderFromCatalog({
+      id: "ollama",
+      label: "Ollama",
+      kind: "openai-compatible",
+      baseUrl: "http://localhost:11434/v1",
+      requiresBaseUrl: false
+    });
+
+    expect(hydrated).toMatchObject({
+      modelListUrl: "http://localhost:11434/api/tags",
+      requiresApiKey: false,
+      icon: "OL"
+    });
   });
 
   it("builds an Anthropic model list request with Anthropic headers", () => {

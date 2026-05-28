@@ -77,6 +77,37 @@ describe("providerModelService", () => {
     });
   });
 
+  it("hydrates built-in provider metadata before checking key requirements", async () => {
+    const staleOllamaProvider: ForgeProvider = {
+      id: "ollama",
+      label: "Ollama",
+      kind: "openai-compatible",
+      baseUrl: "http://localhost:11434/v1",
+      requiresBaseUrl: false
+    };
+
+    const models = await fetchModelsForProvider({
+      provider: staleOllamaProvider,
+      keyVault: {
+        readProviderKey: async () => null
+      },
+      fetcher: async (url, init) => {
+        expect(url).toBe("http://localhost:11434/api/tags");
+        expect(init.headers).toEqual({});
+
+        return new Response(JSON.stringify({ models: [{ name: "deepseek-coder:6.7b" }] }), {
+          status: 200
+        });
+      }
+    });
+
+    expect(models[0]).toMatchObject({
+      id: "ollama:deepseek-coder:6.7b",
+      providerId: "ollama",
+      modelName: "deepseek-coder:6.7b"
+    });
+  });
+
   it("includes upstream error details when model fetching fails", async () => {
     await expect(
       fetchModelsForProvider({

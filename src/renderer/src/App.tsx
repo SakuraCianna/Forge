@@ -134,6 +134,9 @@ const enHeroPrompts = [
   "Ready to forge the next step?"
 ];
 
+const heroSwapAnimationMs = 650;
+const heroSwapIdleMs = 1500;
+
 export function App(): ReactElement {
   const [settings, setSettings] = useState(() => {
     if (typeof window === "undefined") {
@@ -223,11 +226,11 @@ export function App(): ReactElement {
   }, [personalization]);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
+    const timeoutId = window.setTimeout(() => {
       setHeroPromptIndex((current) => (current + 1) % activeHeroPrompts.length);
-    }, 2600);
+    }, heroSwapAnimationMs + heroSwapIdleMs);
 
-    return () => window.clearInterval(intervalId);
+    return () => window.clearTimeout(timeoutId);
   }, [activeHeroPrompts.length]);
 
   useEffect(() => {
@@ -990,7 +993,7 @@ export function App(): ReactElement {
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
         <div className="w-full max-w-[860px] -translate-y-[5vh]">
           <h1 className="mb-7 overflow-hidden whitespace-nowrap text-center text-[28px] font-medium leading-tight tracking-normal text-[#202123] md:text-[30px]">
-            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_2.6s_ease-in-out] truncate align-bottom">
+            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_650ms_ease-in-out] truncate align-bottom">
               {activeHeroPrompts[heroPromptIndex]}
             </span>
           </h1>
@@ -1224,6 +1227,7 @@ export function App(): ReactElement {
           }}
           onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
           onSetLanguage={setInterfaceLanguage}
+          onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
           onUpdateProviderBaseUrl={(providerId, baseUrl) =>
             setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
           }

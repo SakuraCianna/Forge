@@ -1,4 +1,5 @@
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
+import { hydrateProviderFromCatalog } from "../shared/providerCatalog.js";
 import {
   buildModelListRequest,
   parseProviderModelList,
@@ -22,13 +23,14 @@ export async function fetchModelsForProvider({
   keyVault,
   fetcher = fetch
 }: FetchModelsForProviderOptions): Promise<ForgeModel[]> {
-  const apiKey = await keyVault.readProviderKey(provider.id);
+  const hydratedProvider = hydrateProviderFromCatalog(provider);
+  const apiKey = await keyVault.readProviderKey(hydratedProvider.id);
 
-  if (provider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${provider.label} API Key is not configured`);
+  if (hydratedProvider.requiresApiKey !== false && !apiKey) {
+    throw new Error(`${hydratedProvider.label} API Key is not configured`);
   }
 
-  const request = buildModelListRequest(provider, apiKey ?? "");
+  const request = buildModelListRequest(hydratedProvider, apiKey ?? "");
   const response = await fetcher(request.url, {
     method: "GET",
     headers: request.headers
@@ -37,12 +39,14 @@ export async function fetchModelsForProvider({
   if (!response.ok) {
     const detail = await readErrorDetail(response);
     throw new Error(
-      `${provider.label} model fetch failed: ${response.status} ${response.statusText}${detail}`
+      `${hydratedProvider.label} model fetch failed: ${response.status} ${response.statusText}${detail}`
     );
   }
 
   const body = (await response.json()) as unknown;
-  return parseProviderModelList(provider, body).map((model) => toForgeModel(provider, model));
+  return parseProviderModelList(hydratedProvider, body).map((model) =>
+    toForgeModel(hydratedProvider, model)
+  );
 }
 
 async function readErrorDetail(response: Response): Promise<string> {

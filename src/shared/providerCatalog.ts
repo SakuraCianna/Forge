@@ -6,63 +6,162 @@ export const providerCatalog: ForgeProvider[] = [
     label: "OpenAI",
     kind: "openai",
     baseUrl: "https://api.openai.com/v1",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "AI",
+    accentColor: "#10a37f"
   },
   {
     id: "anthropic",
     label: "Anthropic",
     kind: "anthropic",
     baseUrl: "https://api.anthropic.com",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "A",
+    accentColor: "#d97757"
   },
   {
     id: "gemini",
     label: "Gemini",
     kind: "gemini",
     baseUrl: "https://generativelanguage.googleapis.com",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "G",
+    accentColor: "#1a73e8"
+  },
+  {
+    id: "deepseek",
+    label: "DeepSeek",
+    kind: "openai-compatible",
+    baseUrl: "https://api.deepseek.com",
+    requiresBaseUrl: false,
+    icon: "DS",
+    accentColor: "#4d6bfe"
+  },
+  {
+    id: "moonshot",
+    label: "Moonshot AI / Kimi",
+    kind: "openai-compatible",
+    baseUrl: "https://api.moonshot.cn/v1",
+    requiresBaseUrl: false,
+    icon: "K",
+    accentColor: "#1f6feb"
+  },
+  {
+    id: "qwen-dashscope",
+    label: "Qwen / DashScope",
+    kind: "openai-compatible",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    requiresBaseUrl: false,
+    icon: "Q",
+    accentColor: "#615ced"
   },
   {
     id: "zhipu",
     label: "智谱 AI",
     kind: "openai-compatible",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "GLM",
+    accentColor: "#315efb"
   },
   {
     id: "zai",
     label: "Z.AI",
     kind: "openai-compatible",
     baseUrl: "https://api.z.ai/api/paas/v4",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "Z",
+    accentColor: "#0f766e"
   },
   {
     id: "zai-coding",
     label: "Z.AI Coding Plan",
     kind: "openai-compatible",
     baseUrl: "https://api.z.ai/api/coding/paas/v4",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "ZC",
+    accentColor: "#0e7490"
   },
   {
     id: "minimax",
     label: "MiniMax",
     kind: "openai-compatible",
     baseUrl: "https://api.minimax.io/v1",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "MM",
+    accentColor: "#111827"
+  },
+  {
+    id: "siliconflow",
+    label: "SiliconFlow",
+    kind: "openai-compatible",
+    baseUrl: "https://api.siliconflow.cn/v1",
+    requiresBaseUrl: false,
+    icon: "SF",
+    accentColor: "#00a36c"
+  },
+  {
+    id: "volcengine-ark",
+    label: "Volcengine Ark",
+    kind: "openai-compatible",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    requiresBaseUrl: false,
+    icon: "ARK",
+    accentColor: "#1664ff"
+  },
+  {
+    id: "baidu-qianfan",
+    label: "Baidu Qianfan",
+    kind: "openai-compatible",
+    baseUrl: "https://qianfan.baidubce.com/v2",
+    requiresBaseUrl: false,
+    icon: "BD",
+    accentColor: "#2932e1"
+  },
+  {
+    id: "tencent-hunyuan",
+    label: "Tencent Hunyuan",
+    kind: "openai-compatible",
+    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
+    requiresBaseUrl: false,
+    icon: "HY",
+    accentColor: "#0052d9"
+  },
+  {
+    id: "stepfun",
+    label: "StepFun",
+    kind: "openai-compatible",
+    baseUrl: "https://api.stepfun.com/v1",
+    requiresBaseUrl: false,
+    icon: "ST",
+    accentColor: "#7c3aed"
+  },
+  {
+    id: "modelscope",
+    label: "ModelScope",
+    kind: "openai-compatible",
+    baseUrl: "https://api-inference.modelscope.cn/v1",
+    requiresBaseUrl: false,
+    icon: "MS",
+    accentColor: "#1677ff"
   },
   {
     id: "xiaomi-mimo",
     label: "Xiaomi MiMo",
     kind: "openai-compatible",
     baseUrl: "https://api.xiaomimimo.com/v1",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "MI",
+    accentColor: "#ff6900"
   },
   {
     id: "xiaomi-mimo-token",
     label: "Xiaomi MiMo Token Plan",
     kind: "openai-compatible",
     baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "MI",
+    accentColor: "#ff6900"
   },
   {
     id: "github-models",
@@ -74,7 +173,9 @@ export const providerCatalog: ForgeProvider[] = [
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28"
     },
-    requiresBaseUrl: false
+    requiresBaseUrl: false,
+    icon: "GH",
+    accentColor: "#24292f"
   },
   {
     id: "ollama",
@@ -83,9 +184,30 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "http://localhost:11434/v1",
     modelListUrl: "http://localhost:11434/api/tags",
     requiresBaseUrl: false,
-    requiresApiKey: false
+    requiresApiKey: false,
+    icon: "OL",
+    accentColor: "#262626"
   }
 ];
+
+export function hydrateProviderFromCatalog(provider: ForgeProvider): ForgeProvider {
+  const catalogProvider = providerCatalog.find((candidate) => candidate.id === provider.id);
+
+  if (!catalogProvider) {
+    return provider;
+  }
+
+  return {
+    ...catalogProvider,
+    ...provider,
+    baseUrl: provider.baseUrl ?? catalogProvider.baseUrl,
+    modelListUrl: provider.modelListUrl ?? catalogProvider.modelListUrl,
+    requestHeaders: provider.requestHeaders ?? catalogProvider.requestHeaders,
+    requiresApiKey: provider.requiresApiKey ?? catalogProvider.requiresApiKey,
+    icon: provider.icon ?? catalogProvider.icon,
+    accentColor: provider.accentColor ?? catalogProvider.accentColor
+  };
+}
 
 export const catalogModels: ForgeModel[] = [
   {

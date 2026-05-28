@@ -6,6 +6,7 @@ import type {
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
+import { hydrateProviderFromCatalog } from "../shared/providerCatalog.js";
 import {
   buildTextGenerationRequest,
   extractGeneratedText,
@@ -51,14 +52,15 @@ export async function generateAgentPlan({
   fetcher = fetch,
   now = () => new Date().toISOString()
 }: GenerateAgentPlanOptions): Promise<AgentPlanResult> {
-  const apiKey = await keyVault.readProviderKey(request.provider.id);
+  const provider = hydrateProviderFromCatalog(request.provider);
+  const apiKey = await keyVault.readProviderKey(provider.id);
 
-  if (request.provider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${request.provider.label} API Key is not configured`);
+  if (provider.requiresApiKey !== false && !apiKey) {
+    throw new Error(`${provider.label} API Key is not configured`);
   }
 
   const generationRequest = buildTextGenerationRequest({
-    provider: request.provider,
+    provider,
     model: request.model,
     apiKey: apiKey ?? "",
     instructions: createAgentPlanInstructions(request.personalization),
@@ -69,20 +71,20 @@ export async function generateAgentPlan({
 
   if (!response.ok) {
     throw new Error(
-      `${request.provider.label} agent request failed: ${response.status} ${response.statusText}`
+      `${provider.label} agent request failed: ${response.status} ${response.statusText}`
     );
   }
 
   const body = (await response.json()) as unknown;
-  const text = extractGeneratedText(request.provider.kind, body).trim();
-  const usage = extractTokenUsage(request.provider.kind, body);
+  const text = extractGeneratedText(provider.kind, body).trim();
+  const usage = extractTokenUsage(provider.kind, body);
 
   if (!text) {
-    throw new Error(`${request.provider.label} returned an empty agent response`);
+    throw new Error(`${provider.label} returned an empty agent response`);
   }
 
   return {
-    providerId: request.provider.id,
+    providerId: provider.id,
     modelId: request.model.id,
     text,
     createdAt: now(),
@@ -96,14 +98,15 @@ export async function generateAgentFileChange({
   fetcher = fetch,
   now = () => new Date().toISOString()
 }: GenerateAgentFileChangeOptions): Promise<AgentFileChangeResult> {
-  const apiKey = await keyVault.readProviderKey(request.provider.id);
+  const provider = hydrateProviderFromCatalog(request.provider);
+  const apiKey = await keyVault.readProviderKey(provider.id);
 
-  if (request.provider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${request.provider.label} API Key is not configured`);
+  if (provider.requiresApiKey !== false && !apiKey) {
+    throw new Error(`${provider.label} API Key is not configured`);
   }
 
   const generationRequest = buildTextGenerationRequest({
-    provider: request.provider,
+    provider,
     model: request.model,
     apiKey: apiKey ?? "",
     instructions: createAgentFileChangeInstructions(request.personalization),
@@ -114,20 +117,20 @@ export async function generateAgentFileChange({
 
   if (!response.ok) {
     throw new Error(
-      `${request.provider.label} file change request failed: ${response.status} ${response.statusText}`
+      `${provider.label} file change request failed: ${response.status} ${response.statusText}`
     );
   }
 
   const body = (await response.json()) as unknown;
-  const nextContent = stripMarkdownCodeFence(extractGeneratedText(request.provider.kind, body));
-  const usage = extractTokenUsage(request.provider.kind, body);
+  const nextContent = stripMarkdownCodeFence(extractGeneratedText(provider.kind, body));
+  const usage = extractTokenUsage(provider.kind, body);
 
   if (!nextContent.trim()) {
-    throw new Error(`${request.provider.label} returned an empty file change`);
+    throw new Error(`${provider.label} returned an empty file change`);
   }
 
   return {
-    providerId: request.provider.id,
+    providerId: provider.id,
     modelId: request.model.id,
     relativePath: request.relativePath,
     nextContent,
@@ -142,14 +145,15 @@ export async function generateAgentAsk({
   fetcher = fetch,
   now = () => new Date().toISOString()
 }: GenerateAgentAskOptions): Promise<AgentAskResult> {
-  const apiKey = await keyVault.readProviderKey(request.provider.id);
+  const provider = hydrateProviderFromCatalog(request.provider);
+  const apiKey = await keyVault.readProviderKey(provider.id);
 
-  if (request.provider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${request.provider.label} API Key is not configured`);
+  if (provider.requiresApiKey !== false && !apiKey) {
+    throw new Error(`${provider.label} API Key is not configured`);
   }
 
   const generationRequest = buildTextGenerationRequest({
-    provider: request.provider,
+    provider,
     model: request.model,
     apiKey: apiKey ?? "",
     instructions: createAskInstructions(request.personalization),
@@ -160,20 +164,20 @@ export async function generateAgentAsk({
 
   if (!response.ok) {
     throw new Error(
-      `${request.provider.label} ask request failed: ${response.status} ${response.statusText}`
+      `${provider.label} ask request failed: ${response.status} ${response.statusText}`
     );
   }
 
   const body = (await response.json()) as unknown;
-  const text = extractGeneratedText(request.provider.kind, body).trim();
-  const usage = extractTokenUsage(request.provider.kind, body);
+  const text = extractGeneratedText(provider.kind, body).trim();
+  const usage = extractTokenUsage(provider.kind, body);
 
   if (!text) {
-    throw new Error(`${request.provider.label} returned an empty ask response`);
+    throw new Error(`${provider.label} returned an empty ask response`);
   }
 
   return {
-    providerId: request.provider.id,
+    providerId: provider.id,
     modelId: request.model.id,
     text,
     createdAt: now(),

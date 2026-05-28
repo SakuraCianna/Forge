@@ -20,6 +20,8 @@ export type ForgeProvider = {
   requestHeaders?: Record<string, string>;
   requiresBaseUrl: boolean;
   requiresApiKey?: boolean;
+  icon?: string;
+  accentColor?: string;
   custom?: boolean;
 };
 

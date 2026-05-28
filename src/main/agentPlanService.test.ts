@@ -103,6 +103,59 @@ describe("agentPlanService", () => {
     ).rejects.toThrow("OpenAI API Key is not configured");
   });
 
+  it("hydrates no-key local providers before agent requests", async () => {
+    const ollamaProvider: ForgeProvider = {
+      id: "ollama",
+      label: "Ollama",
+      kind: "openai-compatible",
+      baseUrl: "http://localhost:11434/v1",
+      requiresBaseUrl: false
+    };
+    const ollamaModel: ForgeModel = {
+      id: "ollama:qwen2.5-coder:7b",
+      providerId: "ollama",
+      label: "qwen2.5-coder:7b",
+      modelName: "qwen2.5-coder:7b",
+      enabled: true,
+      capabilities: {
+        reasoning: { type: "none" },
+        toolCalling: "unknown",
+        streaming: "unknown",
+        vision: "unknown"
+      },
+      capabilitySource: "provider-api"
+    };
+    const fetcher = vi.fn(async (_url, init) => {
+      expect(init.headers).not.toHaveProperty("Authorization");
+
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "Local plan" } }],
+          usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 }
+        })
+      );
+    });
+
+    const result = await generateAgentPlan({
+      request: {
+        ...request,
+        provider: ollamaProvider,
+        model: ollamaModel
+      },
+      keyVault: { readProviderKey: async () => null },
+      fetcher
+    });
+
+    const [url] = fetcher.mock.calls[0];
+    expect(url).toBe("http://localhost:11434/v1/chat/completions");
+    expect(result).toMatchObject({
+      providerId: "ollama",
+      modelId: "ollama:qwen2.5-coder:7b",
+      text: "Local plan",
+      usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 }
+    });
+  });
+
   it("generates full replacement content for a selected file", async () => {
     const fetcher = vi.fn(
       async () =>

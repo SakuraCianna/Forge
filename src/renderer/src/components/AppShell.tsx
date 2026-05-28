@@ -472,7 +472,7 @@ function MenuItem({
 }
 
 function getInitialSidebarWidth(): number {
-  return clampSidebarWidth(220, getSidebarMaxWidth());
+  return getSidebarMaxWidth();
 }
 
 function getSidebarMaxWidth(): number {

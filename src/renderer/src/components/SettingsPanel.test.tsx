@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultModelSettings, setLanguage } from "@/state/modelSettings";
+import { createDefaultModelSettings, mergeFetchedModels, setLanguage } from "@/state/modelSettings";
 import { createDefaultPersonalizationSettings } from "@/state/personalization";
 import { SettingsPanel } from "./SettingsPanel";
 
@@ -19,6 +19,7 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
       onDeleteProvider={vi.fn()}
       onSaveProviderKey={vi.fn()}
       onSetLanguage={vi.fn()}
+      onSelectModel={vi.fn()}
       onUpdatePersonalization={vi.fn()}
       onUpdateProviderBaseUrl={vi.fn()}
       onUpdateProviderLabel={vi.fn()}
@@ -139,6 +140,46 @@ describe("SettingsPanel", () => {
     expect(screen.getByText("OpenAI API Key is not configured")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Fetch models" })[0]);
     expect(onFetchModels).toHaveBeenCalledWith("openai");
+  });
+
+  it("shows fetched models inside each provider profile and selects one", async () => {
+    const user = userEvent.setup();
+    const onSelectModel = vi.fn();
+    const settings = mergeFetchedModels(setLanguage(createDefaultModelSettings(), "en-US"), [
+      {
+        id: "openai:gpt-4.1",
+        providerId: "openai",
+        label: "GPT-4.1",
+        modelName: "gpt-4.1",
+        enabled: true,
+        capabilities: {
+          reasoning: { type: "none" },
+          toolCalling: "unknown",
+          streaming: "unknown",
+          vision: "unknown"
+        },
+        capabilitySource: "provider-api"
+      }
+    ]);
+
+    renderSettingsPanel({ settings, onSelectModel });
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+    await user.click(screen.getByRole("button", { name: /OpenAI available models/ }));
+    await user.click(screen.getByRole("menuitem", { name: /GPT-4.1/ }));
+
+    expect(onSelectModel).toHaveBeenCalledWith("openai:gpt-4.1");
+  });
+
+  it("does not ask local Ollama profiles for an API key", async () => {
+    const user = userEvent.setup();
+
+    renderSettingsPanel();
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+    await user.click(screen.getByRole("button", { name: /Configure Ollama/ }));
+
+    expect(screen.queryByLabelText(/^Ollama API Key$/)).not.toBeInTheDocument();
   });
 
   it("lists archived conversations and restores them", async () => {
