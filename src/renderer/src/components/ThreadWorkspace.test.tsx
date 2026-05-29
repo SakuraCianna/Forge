@@ -567,6 +567,54 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByLabelText("命令")).toHaveValue("");
   });
 
+  it("shows command history on the commands tab", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Review command history",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "ran 199 tests",
+                  stderr: "failed tests",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    expect(screen.getByText("Command history")).toBeInTheDocument();
+    expect(screen.getByText("npm test")).toBeInTheDocument();
+    expect(screen.getByText("exit 1")).toBeInTheDocument();
+    expect(screen.getByText("stderr")).toBeInTheDocument();
+    expect(screen.getByText("failed tests")).toBeInTheDocument();
+  });
+
   it("shows scanned project files and previews selected content", async () => {
     const user = userEvent.setup();
     const onPreviewFile = vi.fn();

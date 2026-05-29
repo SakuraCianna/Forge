@@ -965,31 +965,126 @@ export function ThreadWorkspace({
   }
 
   function renderCommandsTab(): ReactElement {
+    const commandHistoryCopy =
+      language === "zh-CN"
+        ? {
+            title: "命令历史",
+            empty: "暂无命令输出",
+            exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
+            timedOut: "已超时",
+            stdout: "stdout",
+            stderr: "stderr"
+          }
+        : {
+            title: "Command history",
+            empty: "No command output yet",
+            exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
+            timedOut: "Timed out",
+            stdout: "stdout",
+            stderr: "stderr"
+          };
+    const commandHistory =
+      selectedThread?.events
+        .filter((event) => event.commandResult)
+        .map((event) => ({
+          id: event.id,
+          createdAt: event.createdAt,
+          result: event.commandResult as CommandRunResult
+        }))
+        .reverse() ?? [];
+
     return (
-      <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
-        <label className="grid gap-3 text-sm text-[#202123]">
-          <span className="flex items-center gap-2 font-semibold text-[#202123]">
+      <div className="space-y-4">
+        <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
+          <label className="grid gap-3 text-sm text-[#202123]">
+            <span className="flex items-center gap-2 font-semibold text-[#202123]">
+              <Terminal className="h-4 w-4 text-[#565869]" />
+              {t("threads.command")}
+            </span>
+            <div className="flex gap-2">
+              <input
+                value={command}
+                onChange={(event) => setCommand(event.currentTarget.value)}
+                className="h-10 flex-1 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
+                placeholder="npm test"
+              />
+              <button
+                type="button"
+                onClick={submitCommand}
+                className="inline-flex h-10 items-center gap-2 rounded-[14px] bg-[#202123] px-4 text-sm font-semibold text-white hover:bg-black active:scale-[0.99]"
+              >
+                <Play className="h-4 w-4 fill-current" />
+                {t("threads.runCommand")}
+              </button>
+            </div>
+          </label>
+        </section>
+        <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#202123]">
             <Terminal className="h-4 w-4 text-[#565869]" />
-            {t("threads.command")}
-          </span>
-          <div className="flex gap-2">
-            <input
-              value={command}
-              onChange={(event) => setCommand(event.currentTarget.value)}
-              className="h-10 flex-1 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
-              placeholder="npm test"
-            />
-            <button
-              type="button"
-              onClick={submitCommand}
-              className="inline-flex h-10 items-center gap-2 rounded-[14px] bg-[#202123] px-4 text-sm font-semibold text-white hover:bg-black active:scale-[0.99]"
-            >
-              <Play className="h-4 w-4 fill-current" />
-              {t("threads.runCommand")}
-            </button>
-          </div>
-        </label>
-      </section>
+            {commandHistoryCopy.title}
+          </h2>
+          {commandHistory.length > 0 ? (
+            <div className="space-y-3">
+              {commandHistory.map(({ id, createdAt, result }) => (
+                <article
+                  key={id}
+                  className="rounded-[16px] border border-[#ececf1] bg-[#fafafa] p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="break-words font-mono text-sm font-semibold text-[#202123]">
+                        {result.command}
+                      </p>
+                      <p className="mt-1 text-[11px] text-[#8e8ea0]">{createdAt}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-1.5">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                          result.exitCode === 0 && !result.timedOut
+                            ? "border-[#c3eadc] bg-[#effaf6] text-[#087443]"
+                            : "border-[#f4c7ab] bg-[#fff7ed] text-[#9a3412]"
+                        }`}
+                      >
+                        {commandHistoryCopy.exit(result.exitCode)}
+                      </span>
+                      {result.timedOut ? (
+                        <span className="rounded-full border border-[#f4c7ab] bg-[#fff7ed] px-2 py-0.5 text-[11px] text-[#9a3412]">
+                          {commandHistoryCopy.timedOut}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  {result.stdout.trim() ? (
+                    <div className="mt-3">
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+                        {commandHistoryCopy.stdout}
+                      </div>
+                      <pre className="max-h-36 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-3 font-mono text-[11px] leading-4 text-[#f8fafc]">
+                        {formatCommandOutputSnippet(result.stdout)}
+                      </pre>
+                    </div>
+                  ) : null}
+                  {result.stderr.trim() ? (
+                    <div className="mt-3">
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+                        {commandHistoryCopy.stderr}
+                      </div>
+                      <pre className="max-h-36 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-3 font-mono text-[11px] leading-4 text-[#9a3412]">
+                        {formatCommandOutputSnippet(result.stderr)}
+                      </pre>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[16px] border border-dashed border-[#d9d9e3] px-4 py-8 text-center text-sm text-[#6e6e80]">
+              {commandHistoryCopy.empty}
+            </div>
+          )}
+        </section>
+      </div>
     );
   }
 
