@@ -386,6 +386,46 @@ describe("taskThreads", () => {
     expect(completedThreads[0].status).toBe("completed");
     expect(stillRunningThreads[0].status).toBe("running");
   });
+
+  it("blocks the thread when completed work reaches a manual or commit gate", () => {
+    const thread = {
+      id: "thread-1",
+      title: "Agent task",
+      prompt: "Agent task",
+      status: "running" as const,
+      modelId: "openai:gpt-5.5",
+      intelligence: "high" as const,
+      speed: "balanced" as const,
+      createdAt: "2026-05-27T13:00:00.000Z",
+      events: [],
+      agentActions: [
+        {
+          id: "action-1",
+          stepId: "step-1",
+          kind: "run-command" as const,
+          label: "Run npm test",
+          status: "running" as const,
+          command: "npm test"
+        },
+        {
+          id: "action-2",
+          stepId: "step-2",
+          kind: "commit" as const,
+          label: "Commit changes",
+          status: "pending" as const
+        }
+      ]
+    };
+
+    const threads = updateThreadAgentActionStatus(
+      [thread],
+      "thread-1",
+      "action-1",
+      "completed"
+    );
+
+    expect(threads[0].status).toBe("blocked");
+  });
 });
 
 function createFetchedModel(providerId: string, modelName: string, label: string) {

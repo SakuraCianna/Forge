@@ -215,6 +215,17 @@ function getThreadStatusForAgentActions(
     return "completed";
   }
 
+  const nextIncompleteAction = actions.find(
+    (action) => action.status !== "completed" && action.status !== "skipped"
+  );
+
+  if (
+    nextIncompleteAction?.status === "pending" &&
+    (nextIncompleteAction.kind === "manual" || nextIncompleteAction.kind === "commit")
+  ) {
+    return "blocked";
+  }
+
   return currentStatus;
 }
 
