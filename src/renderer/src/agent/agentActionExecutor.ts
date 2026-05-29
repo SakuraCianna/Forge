@@ -49,6 +49,41 @@ export function getRunnablePendingAgentActions(actions: AgentAction[]): AgentAct
   return runnableActions;
 }
 
+export type AgentActionBatchResult = {
+  completed: number;
+  stoppedAt: AgentAction | null;
+  finalStatus: AgentAction["status"];
+};
+
+export async function runAgentActionBatch(
+  actions: AgentAction[],
+  runAction: (action: AgentAction) => AgentAction["status"] | Promise<AgentAction["status"]>
+): Promise<AgentActionBatchResult> {
+  let completed = 0;
+  let finalStatus: AgentAction["status"] = "completed";
+
+  for (const action of actions) {
+    const status = await runAction(action);
+    finalStatus = status;
+
+    if (status !== "completed") {
+      return {
+        completed,
+        stoppedAt: action,
+        finalStatus
+      };
+    }
+
+    completed += 1;
+  }
+
+  return {
+    completed,
+    stoppedAt: null,
+    finalStatus
+  };
+}
+
 export function isRunnableAgentAction(action: AgentAction): boolean {
   if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
     return true;

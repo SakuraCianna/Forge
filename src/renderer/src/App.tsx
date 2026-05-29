@@ -12,7 +12,7 @@ import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer, type ComposerContextMode } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
-import { resolveAgentActionExecution } from "@/agent/agentActionExecutor";
+import { resolveAgentActionExecution, runAgentActionBatch } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
 import {
   createFailureFixTaskPrompt,
@@ -1154,7 +1154,10 @@ export function App(): ReactElement {
     setThreads((current) => updateThreadAgentActionStatus(current, threadId, actionId, status));
   }
 
-  async function runAgentAction(threadId: string, action: AgentAction): Promise<void> {
+  async function runAgentAction(
+    threadId: string,
+    action: AgentAction
+  ): Promise<AgentAction["status"]> {
     const execution = resolveAgentActionExecution(action);
 
     if (execution.kind === "manual-gate") {
@@ -1177,37 +1180,36 @@ export function App(): ReactElement {
           }
         ])
       );
-      return;
+      return "pending";
     }
 
     updateAgentActionStatus(threadId, action.id, "running");
 
     if (execution.kind === "open-file") {
-      await openAgentFileAction(threadId, action.id, execution.relativePath);
+      return await openAgentFileAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "generate-file-change") {
-      await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
+      return await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "run-command") {
-      await runThreadCommand(threadId, execution.command, action.id);
-    } else {
-      updateAgentActionStatus(threadId, action.id, "completed");
+      return await runThreadCommand(threadId, execution.command, action.id);
     }
+
+    updateAgentActionStatus(threadId, action.id, "completed");
+    return "completed";
   }
 
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
-    for (const action of actions) {
-      await runAgentAction(threadId, action);
-    }
+    await runAgentActionBatch(actions, (action) => runAgentAction(threadId, action));
   }
 
   async function generateAgentFileChangeAction(
     threadId: string,
     actionId: string,
     relativePath: string
-  ): Promise<void> {
+  ): Promise<AgentAction["status"]> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
       updateAgentActionStatus(threadId, actionId, "failed");
-      return;
+      return "failed";
     }
 
     try {
@@ -1219,7 +1221,9 @@ export function App(): ReactElement {
       setFileFormatterMode(isMarkdownPreviewPath(file.relativePath) ? "rendered" : "raw");
 
       const generated = await generateProjectFileChange(file.relativePath, file.content, threadId);
-      updateAgentActionStatus(threadId, actionId, generated ? "completed" : "failed");
+      const status = generated ? "completed" : "failed";
+      updateAgentActionStatus(threadId, actionId, status);
+      return status;
     } catch (error) {
       updateAgentActionStatus(threadId, actionId, "failed");
       appendThreadError(
@@ -1230,6 +1234,7 @@ export function App(): ReactElement {
           error instanceof Error ? error.message : String(error)
         )
       );
+      return "failed";
     }
   }
 
@@ -1237,16 +1242,17 @@ export function App(): ReactElement {
     threadId: string,
     actionId: string,
     relativePath: string
-  ): Promise<void> {
+  ): Promise<AgentAction["status"]> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
       updateAgentActionStatus(threadId, actionId, "failed");
-      return;
+      return "failed";
     }
 
     try {
       await previewProjectFile(relativePath);
       updateAgentActionStatus(threadId, actionId, "completed");
+      return "completed";
     } catch (error) {
       updateAgentActionStatus(threadId, actionId, "failed");
       appendThreadError(
@@ -1257,6 +1263,7 @@ export function App(): ReactElement {
           error instanceof Error ? error.message : String(error)
         )
       );
+      return "failed";
     }
   }
 
@@ -1264,13 +1271,13 @@ export function App(): ReactElement {
     threadId: string,
     command: string,
     actionId?: string
-  ): Promise<void> {
+  ): Promise<AgentAction["status"]> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
       if (actionId) {
         updateAgentActionStatus(threadId, actionId, "failed");
       }
-      return;
+      return "failed";
     }
 
     setTaskNotice(null);
@@ -1293,12 +1300,11 @@ export function App(): ReactElement {
         timeoutMs: 120000
       });
 
+      const status =
+        result.exitCode === 0 && !result.timedOut && !result.cancelled ? "completed" : "failed";
+
       if (actionId) {
-        updateAgentActionStatus(
-          threadId,
-          actionId,
-          result.exitCode === 0 && !result.timedOut && !result.cancelled ? "completed" : "failed"
-        );
+        updateAgentActionStatus(threadId, actionId, status);
       }
 
       setThreads((current) =>
@@ -1306,9 +1312,10 @@ export function App(): ReactElement {
           current,
           threadId,
           [createCommandFinishedEvent({ threadId, result })],
-          result.exitCode === 0 && !result.timedOut && !result.cancelled ? "running" : "blocked"
+          status === "completed" ? "running" : "blocked"
         )
       );
+      return status;
     } catch (error) {
       if (actionId) {
         updateAgentActionStatus(threadId, actionId, "failed");
@@ -1321,6 +1328,7 @@ export function App(): ReactElement {
           error instanceof Error ? error.message : String(error)
         )
       );
+      return "failed";
     }
   }
 

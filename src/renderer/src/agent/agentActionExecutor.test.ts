@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import {
   findNextPendingAgentAction,
   getRunnablePendingAgentActions,
-  resolveAgentActionExecution
+  resolveAgentActionExecution,
+  runAgentActionBatch
 } from "./agentActionExecutor";
 
 describe("agentActionExecutor", () => {
@@ -108,6 +109,44 @@ describe("agentActionExecutor", () => {
         })
       ])
     ).toEqual([]);
+  });
+
+  it("runs safe action batches in order and stops after the first non-completed action", async () => {
+    const first = createAction({ id: "action-1", kind: "inspect-file", target: "src/App.tsx" });
+    const second = createAction({ id: "action-2", kind: "run-command", command: "npm test" });
+    const third = createAction({ id: "action-3", kind: "run-command", command: "npm run build" });
+    const runAction = vi
+      .fn<(action: AgentAction) => Promise<AgentAction["status"]>>()
+      .mockResolvedValueOnce("completed")
+      .mockResolvedValueOnce("failed")
+      .mockResolvedValueOnce("completed");
+
+    const result = await runAgentActionBatch([first, second, third], runAction);
+
+    expect(result).toEqual({
+      completed: 1,
+      stoppedAt: second,
+      finalStatus: "failed"
+    });
+    expect(runAction).toHaveBeenCalledTimes(2);
+    expect(runAction).toHaveBeenNthCalledWith(1, first);
+    expect(runAction).toHaveBeenNthCalledWith(2, second);
+  });
+
+  it("runs every action in a safe batch when each action completes", async () => {
+    const first = createAction({ id: "action-1", kind: "inspect-file", target: "src/App.tsx" });
+    const second = createAction({ id: "action-2", kind: "run-command", command: "npm test" });
+    const runAction =
+      vi.fn<(action: AgentAction) => Promise<AgentAction["status"]>>().mockResolvedValue("completed");
+
+    const result = await runAgentActionBatch([first, second], runAction);
+
+    expect(result).toEqual({
+      completed: 2,
+      stoppedAt: null,
+      finalStatus: "completed"
+    });
+    expect(runAction).toHaveBeenCalledTimes(2);
   });
 });
 
