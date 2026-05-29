@@ -945,6 +945,69 @@ export function App(): ReactElement {
     }
   }
 
+  async function generateFailureFixPlan(threadId: string, action: AgentAction): Promise<void> {
+    const thread = threads.find((candidate) => candidate.id === threadId);
+
+    if (!thread) {
+      return;
+    }
+
+    if (!currentProject || !projectScanResult) {
+      setTaskNotice(t("projects.required"));
+      appendThreadError(
+        threadId,
+        settings.language === "zh-CN"
+          ? "需要先打开并索引项目, 才能根据失败动作生成修复计划"
+          : "Open and scan a project before generating a fix plan for a failed action."
+      );
+      return;
+    }
+
+    const model = settings.models.find((candidate) => candidate.id === thread.modelId);
+    const provider = model
+      ? settings.providers.find((candidate) => candidate.id === model.providerId)
+      : null;
+
+    if (!model || !provider) {
+      appendThreadError(
+        threadId,
+        settings.language === "zh-CN"
+          ? "未找到当前模型或提供商配置"
+          : "Current model or provider configuration was not found."
+      );
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    setTaskNotice(null);
+    setThreads((current) =>
+      appendThreadEvents(
+        current,
+        threadId,
+        [
+          {
+            id: `${threadId}-failure-fix-${action.id}-${createdAt}`,
+            kind: "plan",
+            message:
+              settings.language === "zh-CN"
+                ? `正在根据失败动作生成修复计划: ${action.label}`
+                : `Generating a fix plan for failed action: ${action.label}`,
+            createdAt
+          }
+        ],
+        "running"
+      )
+    );
+
+    await generateThreadPlan({
+      threadId,
+      taskPrompt: createFailureFixTaskPrompt(thread, action),
+      model,
+      provider,
+      projectScan: projectScanResult
+    });
+  }
+
   async function generateAskResponse({
     threadId,
     prompt,
@@ -1316,6 +1379,7 @@ export function App(): ReactElement {
         onOpenRecentProject={openMostRecentProject}
         onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
         onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
+        onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
         onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
         onPreviewChange={(relativePath, nextContent) =>
@@ -1729,6 +1793,25 @@ function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPa
   }
 
   return candidate;
+}
+
+function createFailureFixTaskPrompt(thread: TaskThread, action: AgentAction): string {
+  const failureDetails = [
+    `Failed action: ${action.label}`,
+    `Action kind: ${action.kind}`,
+    action.command ? `Failed command: ${action.command}` : null,
+    action.target ? `Target: ${action.target}` : null
+  ].filter((line): line is string => Boolean(line));
+
+  return [
+    `Original task: ${thread.prompt}`,
+    "",
+    ...failureDetails,
+    "",
+    "Generate a recovery execution plan for this failure.",
+    "First identify the likely cause, then inspect the smallest useful files, propose focused edits, and finish with verification commands.",
+    "Keep the plan safe: do not skip tests, do not hide the failure, and stop before any manual review or commit step."
+  ].join("\n");
 }
 
 function renderDiffPreview(diff: string): ReactElement[] {

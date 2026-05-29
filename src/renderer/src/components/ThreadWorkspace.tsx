@@ -38,6 +38,7 @@ type ThreadWorkspaceProps = {
   onOpenRecentProject?: () => void;
   onRunAgentAction?: (threadId: string, action: AgentAction) => void;
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
+  onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onRunCommand: (threadId: string, command: string) => void;
   onPreviewFile: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
@@ -65,6 +66,7 @@ export function ThreadWorkspace({
   onOpenRecentProject,
   onRunAgentAction,
   onRunAgentActions,
+  onGenerateFailureFix,
   onRunCommand,
   onPreviewFile,
   onPreviewChange,
@@ -298,6 +300,18 @@ export function ThreadWorkspace({
             queueStoppedAt: (label: string) => `Queue stopped at ${label}`,
             generateEdit: "Generate edit"
           };
+    const recoveryActionCopy =
+      language === "zh-CN"
+        ? {
+            viewLogs: "查看日志",
+            retryFailed: "重试失败动作",
+            generateFixPlan: "生成修复计划"
+          }
+        : {
+            viewLogs: "View logs",
+            retryFailed: "Retry failed action",
+            generateFixPlan: "Generate fix plan"
+          };
     const queueStats = getQueueStats(agentActions);
     const queueBlockerAction = getQueueBlockerAction(agentActions);
     const queueBlocked =
@@ -473,6 +487,33 @@ export function ThreadWorkspace({
                 <p className="text-sm font-medium leading-5 text-[#9a3412]">
                   {actionQueueCopy.queueStoppedAt(queueBlockerAction.label)}
                 </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("logs")}
+                    className="h-7 rounded-[10px] border border-[#f4c7ab] bg-white px-2 text-[11px] font-medium text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+                  >
+                    {recoveryActionCopy.viewLogs}
+                  </button>
+                  {selectedThread && onRunAgentAction ? (
+                    <button
+                      type="button"
+                      onClick={() => onRunAgentAction(selectedThread.id, queueBlockerAction)}
+                      className="h-7 rounded-[10px] border border-[#f4c7ab] bg-white px-2 text-[11px] font-medium text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+                    >
+                      {recoveryActionCopy.retryFailed}
+                    </button>
+                  ) : null}
+                  {selectedThread && onGenerateFailureFix ? (
+                    <button
+                      type="button"
+                      onClick={() => onGenerateFailureFix(selectedThread.id, queueBlockerAction)}
+                      className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+                    >
+                      {recoveryActionCopy.generateFixPlan}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
             {runnablePendingActions.length > 0 ? (

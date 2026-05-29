@@ -380,6 +380,59 @@ describe("ThreadWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers recovery actions for a failed agent action", async () => {
+    const user = userEvent.setup();
+    const onGenerateFailureFix = vi.fn();
+    const onRunAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Recover failed command",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "failed",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onGenerateFailureFix={onGenerateFailureFix}
+        onRunAgentAction={onRunAgentAction}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "View logs" }));
+    expect(screen.queryByText("Agent action queue")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Plan" }));
+    await user.click(screen.getByRole("button", { name: "Retry failed action" }));
+    expect(onRunAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1" })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Generate fix plan" }));
+    expect(onGenerateFailureFix).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1" })
+    );
+  });
+
   it("submits a command for the selected thread", async () => {
     const user = userEvent.setup();
     const onRunCommand = vi.fn();
