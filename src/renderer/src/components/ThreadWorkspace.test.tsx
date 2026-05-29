@@ -95,8 +95,9 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("Running command")).toBeInTheDocument();
-    expect(screen.getByText("npm run build")).toBeInTheDocument();
+    const header = screen.getByRole("banner");
+    expect(within(header).getByText("Running command")).toBeInTheDocument();
+    expect(within(header).getByText("npm run build")).toBeInTheDocument();
   });
 
   it("opens command history from the thread header activity summary", async () => {
@@ -136,12 +137,53 @@ describe("ThreadWorkspace", () => {
 
     expect(screen.queryByText("Command history")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Running command.*npm run build/ }));
+    const header = screen.getByRole("banner");
+    await user.click(within(header).getByRole("button", { name: /Running command.*npm run build/ }));
 
     expect(screen.getByText("Command history")).toBeInTheDocument();
     const commandHistory = screen.getByText("Command history").closest("section");
     expect(commandHistory).not.toBeNull();
     expect(within(commandHistory!).getByText("npm run build")).toBeInTheDocument();
+  });
+
+  it("surfaces background thread command activity in the thread list", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          thread,
+          {
+            ...thread,
+            id: "thread-2",
+            title: "Background build",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-started",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandRun: {
+                  command: "npm run build",
+                  status: "running"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Background build.*Running command.*npm run build/ })
+    ).toBeInTheDocument();
   });
 
   it("surfaces the latest failed command in the thread header", () => {
@@ -181,9 +223,10 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("Last failure")).toBeInTheDocument();
-    expect(screen.getByText("npm test")).toBeInTheDocument();
-    expect(screen.getByText("exit 1")).toBeInTheDocument();
+    const header = screen.getByRole("banner");
+    expect(within(header).getByText("Last failure")).toBeInTheDocument();
+    expect(within(header).getByText("npm test")).toBeInTheDocument();
+    expect(within(header).getByText("exit 1")).toBeInTheDocument();
   });
 
   it("shows the generated agent action queue on the plan tab", () => {

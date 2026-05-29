@@ -205,21 +205,45 @@ export function ThreadWorkspace({
           {t("threads.listTitle")}
         </h2>
         <div className="space-y-1.5">
-          {threads.map((thread) => (
-            <button
-              key={thread.id}
-              type="button"
+          {threads.map((thread) => {
+            const threadListActivity = getThreadActivitySummary(thread.events, language);
+
+            return (
+              <button
+                key={thread.id}
+                type="button"
                 onClick={() => onSelectThread(thread.id)}
                 className={`w-full rounded-[14px] border px-3 py-2.5 text-left text-[12px] transition active:scale-[0.99] ${
                   thread.id === selectedThread.id
-                  ? "border-transparent bg-[#ececf1] text-[#202123]"
-                  : "border-transparent text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
-              }`}
-            >
-              <span className="block truncate font-medium">{thread.title}</span>
-              <span className="mt-1 block text-xs text-[#8e8ea0]">{thread.status}</span>
-            </button>
-          ))}
+                    ? "border-transparent bg-[#ececf1] text-[#202123]"
+                    : "border-transparent text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+                }`}
+              >
+                <span className="block truncate font-medium">{thread.title}</span>
+                <span className="mt-1 flex min-w-0 items-center gap-1 text-xs text-[#8e8ea0]">
+                  {threadListActivity ? (
+                    <>
+                      <span
+                        className={`shrink-0 font-medium ${
+                          threadListActivity.kind === "running" ? "text-[#1d4ed8]" : "text-[#9a3412]"
+                        }`}
+                      >
+                        {threadListActivity.label}
+                      </span>
+                      <span className="min-w-0 truncate font-mono text-[11px]">
+                        {threadListActivity.command}
+                      </span>
+                      {threadListActivity.meta ? (
+                        <span className="shrink-0">{threadListActivity.meta}</span>
+                      ) : null}
+                    </>
+                  ) : (
+                    thread.status
+                  )}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </aside>
 
