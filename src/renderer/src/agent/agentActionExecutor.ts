@@ -44,6 +44,10 @@ export function getRunnablePendingAgentActions(actions: AgentAction[]): AgentAct
     }
 
     runnableActions.push(action);
+
+    if (action.kind === "edit-file") {
+      break;
+    }
   }
 
   return runnableActions;

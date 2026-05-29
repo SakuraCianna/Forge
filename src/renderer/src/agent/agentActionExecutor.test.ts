@@ -61,7 +61,7 @@ describe("agentActionExecutor", () => {
     expect(findNextPendingAgentAction([first])).toBeNull();
   });
 
-  it("returns the safe pending action run until a manual gate", () => {
+  it("returns the safe pending action run until an edit preview or manual gate", () => {
     const completed = createAction({ id: "action-1", status: "completed", kind: "inspect-file" });
     const inspect = createAction({
       id: "action-2",
@@ -93,7 +93,34 @@ describe("agentActionExecutor", () => {
       getRunnablePendingAgentActions([completed, inspect, edit, verify, commit, afterCommit]).map(
         (action) => action.id
       )
-    ).toEqual(["action-2", "action-3", "action-4"]);
+    ).toEqual(["action-2", "action-3"]);
+  });
+
+  it("continues through verification commands when no edit preview is in the current batch", () => {
+    const inspect = createAction({
+      id: "action-1",
+      status: "completed",
+      kind: "inspect-file",
+      target: "src/App.tsx"
+    });
+    const test = createAction({
+      id: "action-2",
+      status: "pending",
+      kind: "run-command",
+      command: "npm test"
+    });
+    const build = createAction({
+      id: "action-3",
+      status: "pending",
+      kind: "run-command",
+      command: "npm run build"
+    });
+    const commit = createAction({ id: "action-4", status: "pending", kind: "commit" });
+
+    expect(getRunnablePendingAgentActions([inspect, test, build, commit]).map((action) => action.id)).toEqual([
+      "action-2",
+      "action-3"
+    ]);
   });
 
   it("does not auto-run when the next pending action needs manual review", () => {
