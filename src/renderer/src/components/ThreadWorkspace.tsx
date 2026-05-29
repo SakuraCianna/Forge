@@ -16,6 +16,7 @@ import type { Language } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
+import { findNextPendingAgentAction } from "@/agent/agentActionExecutor";
 import { useI18n } from "@/i18n/useI18n";
 import type { TaskThread } from "@/state/taskThreads";
 
@@ -257,6 +258,7 @@ export function ThreadWorkspace({
             pending: "待执行",
             open: "打开",
             run: "运行",
+            runNext: "运行下一步",
             generateEdit: "生成修改"
           }
         : {
@@ -265,8 +267,10 @@ export function ThreadWorkspace({
             pending: "Pending",
             open: "Open",
             run: "Run",
+            runNext: "Run next action",
             generateEdit: "Generate edit"
           };
+    const nextPendingAction = findNextPendingAgentAction(agentActions);
 
     function renderAgentActionControl(action: AgentAction): ReactElement | null {
       if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
@@ -373,10 +377,22 @@ export function ThreadWorkspace({
 
         <aside className="space-y-4">
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#202123]">
-              <Play className="h-4 w-4 text-[#565869]" />
-              {actionQueueCopy.title}
-            </h2>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-[#202123]">
+                <Play className="h-4 w-4 text-[#565869]" />
+                {actionQueueCopy.title}
+              </h2>
+              {nextPendingAction && selectedThread && onRunAgentAction ? (
+                <button
+                  type="button"
+                  aria-label="Run next agent action"
+                  onClick={() => onRunAgentAction(selectedThread.id, nextPendingAction)}
+                  className="h-7 shrink-0 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                >
+                  {actionQueueCopy.runNext}
+                </button>
+              ) : null}
+            </div>
             {agentActions.length > 0 ? (
               <div className="space-y-2">
                 {agentActions.map((action) => (

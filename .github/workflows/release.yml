@@ -33,7 +33,7 @@ jobs:
       - name: Run lint
         run: npm run lint
 
-      - name: Build installer
+      - name: Build MSI installer
         run: npm run dist:win
 
       - name: Create GitHub Release
@@ -43,8 +43,8 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           $ErrorActionPreference = "Stop"
-          $files = Get-ChildItem -Path release -File | Select-Object -ExpandProperty FullName
+          $files = Get-ChildItem -Path release -Filter *.msi -File | Select-Object -ExpandProperty FullName
           if (-not $files) {
-            throw "No release files found in release directory"
+            throw "No MSI installer found in release directory"
           }
           gh release create $env:TAG_NAME $files --title "Forge $env:TAG_NAME" --generate-notes

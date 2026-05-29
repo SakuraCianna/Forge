@@ -10,7 +10,7 @@ type PackageJson = {
     productName?: string;
     directories?: { output?: string };
     files?: string[];
-    win?: { target?: string[]; signAndEditExecutable?: boolean };
+    win?: { icon?: string; target?: string[]; signAndEditExecutable?: boolean };
   };
 };
 
@@ -29,7 +29,7 @@ describe("package config", () => {
       appId: "dev.forge.app",
       productName: "Forge",
       directories: { output: "release" },
-      win: { target: ["nsis", "zip"], signAndEditExecutable: false }
+      win: { icon: "build/icon.ico", target: ["msi"], signAndEditExecutable: false }
     });
     expect(pkg.build?.files).toContain("out/**/*");
   });

@@ -162,6 +162,56 @@ describe("ThreadWorkspace", () => {
     );
   });
 
+  it("runs the next pending agent action from the queue", async () => {
+    const user = userEvent.setup();
+    const onRunAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Step through agent queue",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect src/App.tsx",
+                status: "completed",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "edit-file",
+                label: "Edit src/App.tsx",
+                status: "pending",
+                target: "src/App.tsx"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentAction={onRunAgentAction}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Run next agent action" }));
+
+    expect(onRunAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-2", kind: "edit-file" })
+    );
+  });
+
   it("submits a command for the selected thread", async () => {
     const user = userEvent.setup();
     const onRunCommand = vi.fn();

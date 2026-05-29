@@ -21,3 +21,7 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
 
   return { kind: "complete" };
 }
+
+export function findNextPendingAgentAction(actions: AgentAction[]): AgentAction | null {
+  return actions.find((action) => action.status === "pending") ?? null;
+}

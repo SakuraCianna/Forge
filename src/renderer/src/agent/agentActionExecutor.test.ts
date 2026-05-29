@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentAction } from "@shared/agentExecutionPlan";
-import { resolveAgentActionExecution } from "./agentActionExecutor";
+import { findNextPendingAgentAction, resolveAgentActionExecution } from "./agentActionExecutor";
 
 describe("agentActionExecutor", () => {
   it("opens files for inspect actions", () => {
@@ -37,6 +37,15 @@ describe("agentActionExecutor", () => {
     expect(resolveAgentActionExecution(createAction({ kind: "edit-file" }))).toEqual({
       kind: "complete"
     });
+  });
+
+  it("finds the next pending action in queue order", () => {
+    const first = createAction({ id: "action-1", status: "completed" });
+    const second = createAction({ id: "action-2", status: "pending" });
+    const third = createAction({ id: "action-3", status: "pending" });
+
+    expect(findNextPendingAgentAction([first, second, third])).toBe(second);
+    expect(findNextPendingAgentAction([first])).toBeNull();
   });
 });
 
