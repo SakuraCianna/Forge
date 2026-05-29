@@ -82,6 +82,7 @@ export function ThreadWorkspace({
   const [draftContent, setDraftContent] = useState("");
   const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("plan");
+  const [selectedAgentActionId, setSelectedAgentActionId] = useState<string | null>(null);
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
   const allChangePreviews = changePreviews ?? (changePreview ? [changePreview] : []);
@@ -312,6 +313,40 @@ export function ThreadWorkspace({
             retryFailed: "Retry failed action",
             generateFixPlan: "Generate fix plan"
           };
+    const actionDetailsCopy =
+      language === "zh-CN"
+        ? {
+            title: "动作详情",
+            kind: "类型",
+            status: "状态",
+            target: "目标",
+            command: "命令",
+            nextStep: "下一步",
+            noTarget: "无目标",
+            selectAction: (label: string) => `选择动作 ${label}`,
+            completed: "已完成",
+            failed: "查看日志, 重试, 或生成修复计划",
+            running: "正在等待命令或文件操作完成",
+            ready: "可以运行",
+            manualGate: "需要人工审查",
+            skipped: "已跳过"
+          }
+        : {
+            title: "Action details",
+            kind: "Kind",
+            status: "Status",
+            target: "Target",
+            command: "Command",
+            nextStep: "Next step",
+            noTarget: "No target",
+            selectAction: (label: string) => `Select action ${label}`,
+            completed: "Completed",
+            failed: "Review logs, retry, or generate a fix plan",
+            running: "Waiting for the command or file operation to finish",
+            ready: "Ready to run",
+            manualGate: "Manual review required",
+            skipped: "Skipped"
+          };
     const queueStats = getQueueStats(agentActions);
     const queueBlockerAction = getQueueBlockerAction(agentActions);
     const queueBlocked =
@@ -323,6 +358,12 @@ export function ThreadWorkspace({
     const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
     const activeGateAction =
       nextPendingAction && !isRunnableAgentAction(nextPendingAction) ? nextPendingAction : nextGateAction;
+    const selectedAgentAction =
+      agentActions.find((action) => action.id === selectedAgentActionId) ??
+      queueBlockerAction ??
+      nextPendingAction ??
+      agentActions[0] ??
+      null;
 
     function getActionStatusLabel(action: AgentAction): string {
       if (action.status === "pending" && (action.kind === "manual" || action.kind === "commit")) {
@@ -403,6 +444,73 @@ export function ThreadWorkspace({
       }
 
       return null;
+    }
+
+    function getActionNextStep(action: AgentAction): string {
+      if (action.status === "completed") {
+        return actionDetailsCopy.completed;
+      }
+
+      if (action.status === "failed") {
+        return actionDetailsCopy.failed;
+      }
+
+      if (action.status === "running") {
+        return actionDetailsCopy.running;
+      }
+
+      if (action.status === "skipped") {
+        return actionDetailsCopy.skipped;
+      }
+
+      if (action.kind === "manual" || action.kind === "commit") {
+        return actionDetailsCopy.manualGate;
+      }
+
+      if (isRunnableAgentAction(action)) {
+        return actionDetailsCopy.ready;
+      }
+
+      return actionQueueCopy.pending;
+    }
+
+    function renderAgentActionDetails(action: AgentAction): ReactElement {
+      const detailRows = [
+        { label: actionDetailsCopy.kind, value: action.kind },
+        { label: actionDetailsCopy.status, value: getActionStatusLabel(action) },
+        { label: actionDetailsCopy.target, value: action.target ?? actionDetailsCopy.noTarget },
+        ...(action.command ? [{ label: actionDetailsCopy.command, value: action.command }] : [])
+      ];
+
+      return (
+        <section
+          aria-label={actionDetailsCopy.title}
+          className="rounded-[18px] border border-[#ececf1] bg-white p-4"
+        >
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#202123]">
+            <Layers className="h-4 w-4 text-[#565869]" />
+            {actionDetailsCopy.title}
+          </h2>
+          <p className="text-sm font-medium leading-5 text-[#202123]">{action.label}</p>
+          <dl className="mt-3 grid gap-2">
+            {detailRows.map((row) => (
+              <div
+                key={row.label}
+                className="grid grid-cols-[72px_minmax(0,1fr)] gap-2 rounded-[12px] bg-[#fafafa] px-2.5 py-2 text-xs"
+              >
+                <dt className="text-[#8e8ea0]">{row.label}</dt>
+                <dd className="min-w-0 break-words font-medium text-[#202123]">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="mt-3 rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+              {actionDetailsCopy.nextStep}
+            </div>
+            <p className="mt-1 text-sm leading-5 text-[#202123]">{getActionNextStep(action)}</p>
+          </div>
+        </section>
+      );
     }
 
     return (
@@ -541,39 +649,49 @@ export function ThreadWorkspace({
             {agentActions.length > 0 ? (
               <div className="space-y-2">
                 {agentActions.map((action) => (
-                  <div
+                  <article
                     key={action.id}
-                    className={`rounded-[14px] border px-3 py-2 ${
-                      action.kind === "manual" || action.kind === "commit"
-                        ? "border-[#f4c7ab] bg-[#fffaf5]"
-                        : "border-[#ececf1] bg-[#fafafa]"
+                    className={`rounded-[14px] border px-3 py-2 transition ${
+                      selectedAgentAction?.id === action.id
+                        ? "border-[#202123] bg-white shadow-sm"
+                        : action.kind === "manual" || action.kind === "commit"
+                          ? "border-[#f4c7ab] bg-[#fffaf5]"
+                          : "border-[#ececf1] bg-[#fafafa]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="min-w-0 text-sm font-medium leading-5 text-[#202123]">
-                        {action.label}
+                    <button
+                      type="button"
+                      aria-label={actionDetailsCopy.selectAction(action.label)}
+                      onClick={() => setSelectedAgentActionId(action.id)}
+                      className="block w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 text-sm font-medium leading-5 text-[#202123]">
+                          {action.label}
+                        </p>
+                        <span
+                          className={`shrink-0 rounded-full border bg-white px-2 py-0.5 text-[11px] ${
+                            action.kind === "manual" || action.kind === "commit"
+                              ? "border-[#f4c7ab] text-[#b45309]"
+                              : "border-[#d9d9e3] text-[#6e6e80]"
+                          }`}
+                        >
+                          {getActionStatusLabel(action)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-[#8e8ea0]">
+                        {action.kind}
                       </p>
-                      <span
-                        className={`shrink-0 rounded-full border bg-white px-2 py-0.5 text-[11px] ${
-                          action.kind === "manual" || action.kind === "commit"
-                            ? "border-[#f4c7ab] text-[#b45309]"
-                            : "border-[#d9d9e3] text-[#6e6e80]"
-                        }`}
-                      >
-                        {getActionStatusLabel(action)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-[#8e8ea0]">
-                      {action.kind}
-                    </p>
+                    </button>
                     {renderAgentActionControl(action)}
-                  </div>
+                  </article>
                 ))}
               </div>
             ) : (
               <p className="text-sm leading-6 text-[#6e6e80]">{actionQueueCopy.empty}</p>
             )}
           </section>
+          {selectedAgentAction ? renderAgentActionDetails(selectedAgentAction) : null}
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold text-[#202123]">{t("thread.agentOutput")}</h2>
             <p className="text-sm leading-6 text-[#6e6e80]">

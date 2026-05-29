@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { TaskThread } from "@/state/taskThreads";
@@ -101,7 +101,7 @@ describe("ThreadWorkspace", () => {
     );
 
     expect(screen.getByText("Agent action queue")).toBeInTheDocument();
-    expect(screen.getByText("Inspect src/App.tsx")).toBeInTheDocument();
+    expect(screen.getAllByText("Inspect src/App.tsx").length).toBeGreaterThan(0);
     expect(screen.getByText("Run npm test")).toBeInTheDocument();
   });
 
@@ -160,6 +160,59 @@ describe("ThreadWorkspace", () => {
       "thread-1",
       expect.objectContaining({ id: "action-2", command: "npm test" })
     );
+  });
+
+  it("shows details for the selected agent action", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Inspect action details",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect src/App.tsx",
+                status: "pending",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const details = screen.getByRole("region", { name: "Action details" });
+    expect(within(details).getByText("Inspect src/App.tsx")).toBeInTheDocument();
+    expect(within(details).getByText("Target")).toBeInTheDocument();
+    expect(within(details).getByText("src/App.tsx")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Select action Run npm test" }));
+
+    expect(within(details).getByText("Run npm test")).toBeInTheDocument();
+    expect(within(details).getByText("Command")).toBeInTheDocument();
+    expect(within(details).getByText("npm test")).toBeInTheDocument();
+    expect(within(details).getByText("Ready to run")).toBeInTheDocument();
   });
 
   it("runs the next pending agent action from the queue", async () => {
@@ -314,9 +367,9 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("Manual review required")).toBeInTheDocument();
-    expect(screen.getByText("Review diff")).toBeInTheDocument();
-    expect(screen.getAllByText("Review gate")).toHaveLength(2);
+    expect(screen.getAllByText("Manual review required").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Review diff").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Review gate").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByRole("button", { name: "Run next agent action" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Continue safe agent actions" })
