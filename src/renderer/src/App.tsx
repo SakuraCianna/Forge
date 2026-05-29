@@ -1471,6 +1471,9 @@ export function App(): ReactElement {
         onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
         onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
         onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
+        onCompleteAgentAction={(threadId, action) =>
+          updateAgentActionStatus(threadId, action.id, "completed")
+        }
         onOpenSourceControl={() => setActiveView("source")}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
         onCancelCommand={(threadId, runId) => void cancelThreadCommand(threadId, runId)}

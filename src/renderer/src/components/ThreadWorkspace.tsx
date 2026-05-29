@@ -40,6 +40,7 @@ type ThreadWorkspaceProps = {
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
+  onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
   onOpenSourceControl?: () => void;
   onRunCommand: (threadId: string, command: string) => void;
   onCancelCommand?: (threadId: string, runId: string) => void;
@@ -85,6 +86,7 @@ export function ThreadWorkspace({
   onRunAgentActions,
   onGenerateFailureFix,
   onGenerateCommandFix,
+  onCompleteAgentAction,
   onOpenSourceControl,
   onRunCommand,
   onCancelCommand,
@@ -468,6 +470,7 @@ export function ThreadWorkspace({
             manualGate: "需要人工审查",
             manualGateBody: (label: string) => `请先处理 ${label}, Forge 不会自动越过这个门禁`,
             reviewGate: "审查门禁",
+            markReviewComplete: "完成审查",
             openSourceControl: "打开源代码管理",
             ready: "就绪",
             progress: (completed: number, total: number) => `已完成 ${completed} / ${total} 个动作`,
@@ -489,6 +492,7 @@ export function ThreadWorkspace({
             manualGateBody: (label: string) =>
               `Handle ${label} before Forge continues. This gate will not be auto-run.`,
             reviewGate: "Review gate",
+            markReviewComplete: "Mark review complete",
             openSourceControl: "Open source control",
             ready: "Ready",
             progress: (completed: number, total: number) =>
@@ -1098,6 +1102,15 @@ export function ThreadWorkspace({
                     className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
                   >
                     {actionQueueCopy.openSourceControl}
+                  </button>
+                ) : null}
+                {activeGateAction.kind === "manual" && selectedThread && onCompleteAgentAction ? (
+                  <button
+                    type="button"
+                    onClick={() => onCompleteAgentAction(selectedThread.id, activeGateAction)}
+                    className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+                  >
+                    {actionQueueCopy.markReviewComplete}
                   </button>
                 ) : null}
               </div>

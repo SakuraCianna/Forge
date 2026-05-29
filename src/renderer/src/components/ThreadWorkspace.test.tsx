@@ -835,6 +835,55 @@ describe("ThreadWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("marks a manual review gate complete so the queue can continue", async () => {
+    const user = userEvent.setup();
+    const onCompleteAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Review before verification",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "manual",
+                label: "Review diff",
+                status: "pending"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onCompleteAgentAction={onCompleteAgentAction}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Mark review complete" }));
+
+    expect(onCompleteAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", kind: "manual" })
+    );
+  });
+
   it("opens source control from a pending commit gate", async () => {
     const user = userEvent.setup();
     const onOpenSourceControl = vi.fn();
