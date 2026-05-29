@@ -14,6 +14,10 @@ import { TaskComposer, type ComposerContextMode } from "@/components/TaskCompose
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import { resolveAgentActionExecution } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
+import {
+  createFailureFixTaskPrompt,
+  findLatestCommandResultForAction
+} from "@/agent/failureFixPrompt";
 import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
 import { removeFileChangePreview, upsertFileChangePreview } from "@/state/fileChanges";
@@ -1001,7 +1005,11 @@ export function App(): ReactElement {
 
     await generateThreadPlan({
       threadId,
-      taskPrompt: createFailureFixTaskPrompt(thread, action),
+      taskPrompt: createFailureFixTaskPrompt(
+        thread,
+        action,
+        findLatestCommandResultForAction(thread.events, action)
+      ),
       model,
       provider,
       projectScan: projectScanResult
@@ -1793,25 +1801,6 @@ function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPa
   }
 
   return candidate;
-}
-
-function createFailureFixTaskPrompt(thread: TaskThread, action: AgentAction): string {
-  const failureDetails = [
-    `Failed action: ${action.label}`,
-    `Action kind: ${action.kind}`,
-    action.command ? `Failed command: ${action.command}` : null,
-    action.target ? `Target: ${action.target}` : null
-  ].filter((line): line is string => Boolean(line));
-
-  return [
-    `Original task: ${thread.prompt}`,
-    "",
-    ...failureDetails,
-    "",
-    "Generate a recovery execution plan for this failure.",
-    "First identify the likely cause, then inspect the smallest useful files, propose focused edits, and finish with verification commands.",
-    "Keep the plan safe: do not skip tests, do not hide the failure, and stop before any manual review or commit step."
-  ].join("\n");
 }
 
 function renderDiffPreview(diff: string): ReactElement[] {
