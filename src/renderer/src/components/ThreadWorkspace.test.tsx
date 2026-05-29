@@ -62,6 +62,85 @@ describe("ThreadWorkspace", () => {
     expect(screen.getAllByText("任务已创建, 等待 Forge 生成执行计划").length).toBeGreaterThan(0);
   });
 
+  it("surfaces a running command in the thread header", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Watch running command",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-started",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandRun: {
+                  command: "npm run build",
+                  status: "running"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Running command")).toBeInTheDocument();
+    expect(screen.getByText("npm run build")).toBeInTheDocument();
+  });
+
+  it("surfaces the latest failed command in the thread header", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Review failed command",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "ran 10 tests",
+                  stderr: "failed tests",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Last failure")).toBeInTheDocument();
+    expect(screen.getByText("npm test")).toBeInTheDocument();
+    expect(screen.getByText("exit 1")).toBeInTheDocument();
+  });
+
   it("shows the generated agent action queue on the plan tab", () => {
     render(
       <ThreadWorkspace
@@ -609,10 +688,12 @@ describe("ThreadWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Commands" }));
 
     expect(screen.getByText("Command history")).toBeInTheDocument();
-    expect(screen.getByText("npm test")).toBeInTheDocument();
-    expect(screen.getByText("exit 1")).toBeInTheDocument();
-    expect(screen.getByText("stderr")).toBeInTheDocument();
-    expect(screen.getByText("failed tests")).toBeInTheDocument();
+    const commandHistory = screen.getByText("Command history").closest("section");
+    expect(commandHistory).not.toBeNull();
+    expect(within(commandHistory!).getByText("npm test")).toBeInTheDocument();
+    expect(within(commandHistory!).getByText("exit 1")).toBeInTheDocument();
+    expect(within(commandHistory!).getByText("stderr")).toBeInTheDocument();
+    expect(within(commandHistory!).getByText("failed tests")).toBeInTheDocument();
   });
 
   it("shows a running command in the command history", async () => {
@@ -652,8 +733,10 @@ describe("ThreadWorkspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Commands" }));
 
-    expect(screen.getByText("npm run build")).toBeInTheDocument();
-    expect(screen.getByText("running")).toBeInTheDocument();
+    const commandHistory = screen.getByText("Command history").closest("section");
+    expect(commandHistory).not.toBeNull();
+    expect(within(commandHistory!).getByText("npm run build")).toBeInTheDocument();
+    expect(within(commandHistory!).getByText("running")).toBeInTheDocument();
   });
 
   it("generates a fix plan from a failed command history entry", async () => {

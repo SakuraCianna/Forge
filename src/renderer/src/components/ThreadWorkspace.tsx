@@ -60,6 +60,13 @@ type CommandHistoryEntry = {
   result: CommandRunResult;
 };
 
+type ThreadActivitySummary = {
+  kind: "running" | "failure";
+  label: string;
+  command: string;
+  meta: string | null;
+};
+
 export function ThreadWorkspace({
   language,
   hasProject = true,
@@ -100,6 +107,10 @@ export function ThreadWorkspace({
       null)
     : null;
   const canEditPreview = Boolean(onPreviewChange || onApplyChange || onGenerateFileChange);
+  const threadActivitySummary = useMemo(
+    () => (selectedThread ? getThreadActivitySummary(selectedThread.events, language) : null),
+    [language, selectedThread]
+  );
   const duration = useMemo(() => {
     if (!selectedThread) {
       return "0m";
@@ -226,6 +237,24 @@ export function ThreadWorkspace({
                 <span className="rounded-full border border-[#ececf1] bg-[#f7f7f8] px-2.5 py-1 text-[#6e6e80]">
                   {t("threads.model")}: {selectedThread.modelId}
                 </span>
+                {threadActivitySummary ? (
+                  <span
+                    className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 ${
+                      threadActivitySummary.kind === "running"
+                        ? "border-[#bfdbfe] bg-[#eff6ff] text-[#1d4ed8]"
+                        : "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
+                    }`}
+                  >
+                    <Terminal className="h-3.5 w-3.5 shrink-0" />
+                    <span className="shrink-0 font-medium">{threadActivitySummary.label}</span>
+                    <span className="max-w-[220px] truncate font-mono text-[11px]">
+                      {threadActivitySummary.command}
+                    </span>
+                    {threadActivitySummary.meta ? (
+                      <span className="shrink-0 opacity-80">{threadActivitySummary.meta}</span>
+                    ) : null}
+                  </span>
+                ) : null}
               </div>
               <h1 className="truncate text-xl font-semibold leading-7 tracking-normal text-[#202123]">
                 {selectedThread.title}
@@ -1228,6 +1257,80 @@ function getQueueBlockerAction(actions: AgentAction[]): AgentAction | null {
     }
 
     return null;
+  }
+
+  return null;
+}
+
+function getThreadActivitySummary(
+  events: TaskThreadEvent[],
+  language: Language
+): ThreadActivitySummary | null {
+  const copy =
+    language === "zh-CN"
+      ? {
+          running: "运行中",
+          failure: "最近失败",
+          timedOut: "已超时",
+          exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`
+        }
+      : {
+          running: "Running command",
+          failure: "Last failure",
+          timedOut: "timed out",
+          exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`
+        };
+  const runningCommand = findLatestUnfinishedCommandRun(events);
+
+  if (runningCommand) {
+    return {
+      kind: "running",
+      label: copy.running,
+      command: runningCommand,
+      meta: null
+    };
+  }
+
+  const failedResult = findLatestFailedCommandResult(events);
+
+  if (!failedResult) {
+    return null;
+  }
+
+  return {
+    kind: "failure",
+    label: copy.failure,
+    command: failedResult.command,
+    meta: failedResult.timedOut ? copy.timedOut : copy.exit(failedResult.exitCode)
+  };
+}
+
+function findLatestUnfinishedCommandRun(events: TaskThreadEvent[]): string | null {
+  const finishedCommands = new Set<string>();
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+
+    if (event?.commandResult) {
+      finishedCommands.add(event.commandResult.command);
+      continue;
+    }
+
+    if (event?.commandRun && !finishedCommands.has(event.commandRun.command)) {
+      return event.commandRun.command;
+    }
+  }
+
+  return null;
+}
+
+function findLatestFailedCommandResult(events: TaskThreadEvent[]): CommandRunResult | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const result = events[index]?.commandResult;
+
+    if (result && (result.timedOut || result.exitCode !== 0)) {
+      return result;
+    }
   }
 
   return null;
