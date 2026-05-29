@@ -293,6 +293,7 @@ function buildOpenAICompatibleRequest({
       { role: "system", content: instructions },
       { role: "user", content: input }
     ],
+    max_tokens: 4096,
     stream: false
   };
   const effort = resolveEffort(model, intelligence);

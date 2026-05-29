@@ -231,4 +231,41 @@ describe("ModelSelector", () => {
     expect(menuContent).toHaveClass("max-h-[min(300px,calc(100vh-120px))]");
     expect(menuContent).toHaveClass("forge-scrollbar-none");
   });
+
+  it("uses larger text inside model menus", async () => {
+    const user = userEvent.setup();
+    let settings = setLanguage(
+      mergeFetchedModels(createDefaultModelSettings(), [
+        {
+          id: "deepseek:deepseek-v4-flash",
+          providerId: "deepseek",
+          label: "deepseek-v4-flash",
+          modelName: "deepseek-v4-flash",
+          enabled: true,
+          capabilities: {
+            reasoning: { type: "none" },
+            toolCalling: "unknown",
+            streaming: "unknown",
+            vision: "unknown"
+          },
+          capabilitySource: "provider-api"
+        }
+      ]),
+      "en-US"
+    );
+    settings = updateModelEnabled(settings, "deepseek:deepseek-v4-flash", true);
+
+    render(
+      <ModelSelector
+        settings={settings}
+        onSelectModel={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectSpeed={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /deepseek-v4-flash/ }));
+
+    expect(screen.getByRole("menuitem", { name: /deepseek-v4-flash/ })).toHaveClass("text-[12px]");
+  });
 });

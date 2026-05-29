@@ -31,6 +31,7 @@ export type TaskThreadEvent = {
   kind: TaskThreadEventKind;
   message: string;
   createdAt: string;
+  completedAt?: string;
   commandRun?: CommandRunState;
   commandResult?: CommandRunResult;
 };
@@ -153,7 +154,14 @@ export function cancelThread(
 export function appendThreadResultDelta(
   threads: TaskThread[],
   threadId: string,
-  delta: { eventId: string; createdAt: string; delta: string; done: boolean }
+  delta: {
+    eventId: string;
+    createdAt: string;
+    completedAt?: string;
+    delta: string;
+    done: boolean;
+    finalText?: string;
+  }
 ): TaskThread[] {
   return threads.map((thread) => {
     if (thread.id !== threadId) {
@@ -166,7 +174,8 @@ export function appendThreadResultDelta(
           event.id === delta.eventId
             ? {
                 ...event,
-                message: `${event.message}${delta.delta}`
+                message: delta.finalText ?? `${event.message}${delta.delta}`,
+                completedAt: delta.completedAt ?? event.completedAt
               }
             : event
         )
@@ -175,8 +184,9 @@ export function appendThreadResultDelta(
           {
             id: delta.eventId,
             kind: "result" as const,
-            message: delta.delta,
-            createdAt: delta.createdAt
+            message: delta.finalText ?? delta.delta,
+            createdAt: delta.createdAt,
+            completedAt: delta.completedAt
           }
         ];
 

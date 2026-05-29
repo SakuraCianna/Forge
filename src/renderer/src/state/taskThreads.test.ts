@@ -217,6 +217,40 @@ describe("taskThreads", () => {
     });
   });
 
+  it("reconciles the final streamed answer when renderer deltas were missed", () => {
+    const thread: TaskThread = {
+      id: "thread-1",
+      title: "Project question",
+      prompt: "What did this project do?",
+      status: "running",
+      modelId: "openai:gpt-5.5",
+      intelligence: "high",
+      speed: "balanced",
+      createdAt: "2026-05-27T13:00:00.000Z",
+      events: []
+    };
+
+    const partial = appendThreadResultDelta([thread], "thread-1", {
+      eventId: "answer-1",
+      createdAt: "2026-05-27T13:01:00.000Z",
+      delta: "The project uses OpenAI /",
+      done: false
+    });
+    const reconciled = appendThreadResultDelta(partial, "thread-1", {
+      eventId: "answer-1",
+      createdAt: "2026-05-27T13:01:00.000Z",
+      completedAt: "2026-05-27T13:01:08.000Z",
+      delta: "",
+      done: true,
+      finalText: "The project uses OpenAI / DeepSeek compatible providers."
+    });
+
+    expect(reconciled[0].events[0]).toMatchObject({
+      message: "The project uses OpenAI / DeepSeek compatible providers.",
+      completedAt: "2026-05-27T13:01:08.000Z"
+    });
+  });
+
   it("pins, archives, restores, and archives all conversations without losing events", () => {
     let settings = createDefaultModelSettings();
     settings = mergeFetchedModels(settings, [

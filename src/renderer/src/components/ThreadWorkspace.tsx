@@ -218,9 +218,6 @@ export function ThreadWorkspace({
       <section className="h-full min-h-0 overflow-auto px-5 py-7">
         <div className="mx-auto flex min-h-full max-w-[920px] flex-col gap-7">
           <article className="ml-auto max-w-[72%] rounded-[18px] bg-[#f3f3f3] px-4 py-3 text-sm leading-6 text-[#202123]">
-            <div className="mb-1 text-[11px] text-[#8e8ea0]">
-              {language === "zh-CN" ? "用户请求" : "Request"}
-            </div>
             <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
           </article>
 
@@ -398,7 +395,10 @@ export function ThreadWorkspace({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2 text-[11px] text-[#8e8ea0]">
             <span className="shrink-0">{label}</span>
-            <span className="truncate">{event.createdAt}</span>
+            <span className="truncate">{formatEventTimestamp(event.completedAt ?? event.createdAt)}</span>
+            {event.kind === "result" ? (
+              <span className="shrink-0">{formatLlmWorkDuration(event)}</span>
+            ) : null}
           </div>
           <div className="mt-1">
             {event.kind === "result" && !runningCommand && !result ? (
@@ -2119,6 +2119,40 @@ function getCommandHistoryEntries(events: TaskThreadEvent[]): CommandHistoryEntr
 
 function getCommandRunKey(command: string, runId?: string): string {
   return runId ? `run:${runId}` : `command:${command}`;
+}
+
+function formatEventTimestamp(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value.replace("T", " ").replace(/\.\d{3}Z$/, "");
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function formatLlmWorkDuration(event: TaskThreadEvent): string {
+  const started = Date.parse(event.createdAt);
+  const completed = Date.parse(event.completedAt ?? event.createdAt);
+
+  if (Number.isNaN(started) || Number.isNaN(completed)) {
+    return "LLM 0s";
+  }
+
+  const seconds = Math.max(0, Math.ceil((completed - started) / 1000));
+
+  if (seconds < 60) {
+    return `LLM ${seconds}s`;
+  }
+
+  return `LLM ${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 function formatCommandOutputSnippet(value: string): string {

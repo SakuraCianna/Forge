@@ -72,6 +72,38 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByText("欢迎回来")).toBeInTheDocument();
   });
 
+  it("keeps compact user prompts minimal and formats assistant timing", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        threads={[
+          {
+            ...thread,
+            prompt: "What did this project do?",
+            events: [
+              {
+                id: "answer",
+                kind: "result",
+                message: "It builds a desktop coding workbench.",
+                createdAt: "2026-05-27T13:01:02.333Z",
+                completedAt: "2026-05-27T13:01:09.900Z"
+              }
+            ]
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    expect(screen.getByText("What did this project do?")).toBeInTheDocument();
+    expect(screen.queryByText("Request")).not.toBeInTheDocument();
+    expect(screen.getByText(/2026-05-27 \d{2}:01:09/)).toBeInTheDocument();
+    expect(screen.getByText(/LLM 8s/)).toBeInTheDocument();
+    expect(screen.queryByText(/T13:01/)).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no task threads", () => {
     render(
       <ThreadWorkspace

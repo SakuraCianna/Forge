@@ -11,7 +11,7 @@ import { FilePreviewRenderer } from "@/components/FilePreviewRenderer";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
-import { TaskComposer, type ComposerContextMode } from "@/components/TaskComposer";
+import { TaskComposer } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import {
   resolveAgentActionExecution,
@@ -208,7 +208,6 @@ export function App(): ReactElement {
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
-  const [composerContextMode, setComposerContextMode] = useState<ComposerContextMode>("project");
   const [providerFetchStates, setProviderFetchStates] = useState<Record<string, ProviderFetchState>>({});
   const [usageEvents, setUsageEvents] = useState<UsageEvent[]>(() => {
     if (typeof window === "undefined") {
@@ -519,7 +518,6 @@ export function App(): ReactElement {
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, project));
     setActiveView("workspace");
-    setComposerContextMode("project");
   }
 
   function selectProject(projectPath: string): void {
@@ -535,7 +533,6 @@ export function App(): ReactElement {
     setSelectedThreadId(
       threads.find((thread) => !thread.archived && thread.projectPath === projectPath)?.id ?? null
     );
-    setComposerContextMode("project");
     setActiveView("workspace");
   }
 
@@ -613,7 +610,6 @@ export function App(): ReactElement {
 
     setCurrentProject(recentProject);
     setMissingProjectPath(null);
-    setComposerContextMode("project");
     setActiveView("workspace");
   }
 
@@ -895,7 +891,7 @@ export function App(): ReactElement {
   }
 
   function submitTask(prompt: string): void {
-    if (composerContextMode === "ask" || isDirectAnswerPrompt(prompt)) {
+    if (isDirectAnswerPrompt(prompt)) {
       const result = createThreadFromSettings(settings, prompt);
 
       if (!result.ok) {
@@ -907,8 +903,8 @@ export function App(): ReactElement {
 
       const askThread: TaskThread = {
         ...result.thread,
-        mode: composerContextMode === "project" ? "project" : "ask",
-        projectPath: composerContextMode === "project" ? (currentProject?.path ?? null) : null,
+        mode: currentProject ? "project" : undefined,
+        projectPath: currentProject?.path ?? null,
         status: "running",
         events: []
       };
@@ -932,7 +928,7 @@ export function App(): ReactElement {
         prompt: result.thread.prompt,
         model: selectedModel,
         provider: selectedProvider,
-        projectScan: composerContextMode === "project" && currentProject ? projectScanResult : null
+        projectScan: currentProject ? projectScanResult : null
       });
       return;
     }
@@ -1170,6 +1166,7 @@ export function App(): ReactElement {
       speed: settings.speed,
       prompt
     };
+    const streamStartedAt = new Date().toISOString();
     const streamEventId = `${threadId}-ask-stream-${Date.now()}`;
     let unsubscribeStream: (() => void) | null = null;
 
@@ -1184,7 +1181,7 @@ export function App(): ReactElement {
         setThreads((current) =>
           appendThreadResultDelta(current, threadId, {
             eventId: streamEventId,
-            createdAt: new Date().toISOString(),
+            createdAt: streamStartedAt,
             delta: chunk.delta,
             done: false
           })
@@ -1209,15 +1206,18 @@ export function App(): ReactElement {
         if (receivedDelta) {
           return appendThreadResultDelta(current, threadId, {
             eventId: streamEventId,
-            createdAt: answer.createdAt,
+            createdAt: streamStartedAt,
+            completedAt: answer.createdAt,
             delta: "",
-            done: true
+            done: true,
+            finalText: answer.text
           });
         }
 
         return appendThreadResultDelta(current, threadId, {
           eventId: streamEventId,
-          createdAt: answer.createdAt,
+          createdAt: streamStartedAt,
+          completedAt: answer.createdAt,
           delta: answer.text,
           done: true
         });
@@ -1568,19 +1568,15 @@ export function App(): ReactElement {
       <TaskComposer
         busy={activeThread?.status === "running"}
         settings={settings}
-        contextMode={composerContextMode}
+        generalPreferences={generalPreferences}
         focusSignal={composerFocusSignal}
         placeholder={variant === "hero" ? t("composer.heroPlaceholder") : undefined}
-        projectName={currentProject?.name}
-        projectPath={currentProject?.path}
-        projects={recentProjects}
         submitSignal={composerSubmitSignal}
         variant={variant}
         onCancelTask={cancelActiveThread}
         onOpenSettings={() => setActiveView("settings")}
         onPickProject={() => void pickProject()}
-        onSelectContextMode={setComposerContextMode}
-        onSelectProject={selectProject}
+        onUpdateGeneralPreferences={setGeneralPreferences}
         onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
         onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
         onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
@@ -1957,7 +1953,6 @@ export function App(): ReactElement {
       onNewProjectChat={(projectPath) => {
         selectProject(projectPath);
         setSelectedThreadId(null);
-        setComposerContextMode("project");
         setComposerFocusSignal((current) => current + 1);
       }}
       onRun={() => {
@@ -1979,10 +1974,7 @@ export function App(): ReactElement {
             setRecentProjects((current) =>
               addRecentProject(current, { ...project, openedAt: new Date().toISOString() })
             );
-            setComposerContextMode("project");
           }
-        } else if (thread) {
-          setComposerContextMode("ask");
         }
 
         setSelectedThreadId(threadId);

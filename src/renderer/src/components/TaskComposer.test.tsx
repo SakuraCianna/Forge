@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { createDefaultGeneralPreferences } from "@/state/generalPreferences";
 import { createDefaultModelSettings, mergeFetchedModels, updateModelEnabled } from "@/state/modelSettings";
 import { TaskComposer } from "./TaskComposer";
 
@@ -72,48 +73,37 @@ describe("TaskComposer", () => {
     expect(textbox).toHaveValue("Line one\n");
   });
 
-  it("selects an existing project from the composer context menu", async () => {
-    const user = userEvent.setup();
-    const onSelectProject = vi.fn();
+  it("keeps the add control visible in the dock composer", () => {
     const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
 
     render(
       <TaskComposer
         settings={settings}
-        contextMode="project"
-        projects={[
-          { name: "Forge", path: "E:\\CodeHome\\Forge", openedAt: "2026-05-27T13:00:00.000Z" },
-          { name: "Aiko", path: "E:\\CodeHome\\Aiko", openedAt: "2026-05-27T14:00:00.000Z" }
-        ]}
-        projectName="Forge"
-        onSelectContextMode={vi.fn()}
-        onSelectProject={onSelectProject}
+        generalPreferences={{ ...createDefaultGeneralPreferences(), autoReview: false }}
+        onUpdateGeneralPreferences={vi.fn()}
         onSelectIntelligence={vi.fn()}
         onSelectModel={vi.fn()}
         onSelectSpeed={vi.fn()}
         onSubmitTask={vi.fn()}
-        variant="hero"
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /Current project Forge/ }));
-    await user.click(screen.getByRole("menuitem", { name: /Aiko/ }));
-
-    expect(onSelectProject).toHaveBeenCalledWith("E:\\CodeHome\\Aiko");
+    expect(screen.getByRole("button", { name: "Add project" })).toBeInTheDocument();
+    expect(screen.getByTestId("composer-left-controls")).toContainElement(
+      screen.getByRole("button", { name: "Default permission" })
+    );
   });
 
-  it("offers a chat-only conversation mode from the composer context menu", async () => {
+  it("offers permission choices without exposing chat-only separation", async () => {
     const user = userEvent.setup();
-    const onSelectContextMode = vi.fn();
+    const onUpdateGeneralPreferences = vi.fn();
     const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
 
     render(
       <TaskComposer
         settings={settings}
-        contextMode="project"
-        projects={[]}
-        onSelectContextMode={onSelectContextMode}
-        onSelectProject={vi.fn()}
+        generalPreferences={{ ...createDefaultGeneralPreferences(), autoReview: false }}
+        onUpdateGeneralPreferences={onUpdateGeneralPreferences}
         onSelectIntelligence={vi.fn()}
         onSelectModel={vi.fn()}
         onSelectSpeed={vi.fn()}
@@ -122,10 +112,17 @@ describe("TaskComposer", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /Enter project workspace/ }));
-    await user.click(screen.getByRole("menuitem", { name: /Chat only/ }));
+    expect(screen.queryByText(/Chat only/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Default permission" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Full access/ }));
 
-    expect(onSelectContextMode).toHaveBeenCalledWith("ask");
+    expect(onUpdateGeneralPreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultPermission: true,
+        autoReview: true,
+        fullAccess: true
+      })
+    );
   });
 
   it("keeps the hero composer controls borderless inside the input box", () => {
@@ -165,7 +162,7 @@ describe("TaskComposer", () => {
       />
     );
 
-    expect(screen.getByRole("textbox")).toHaveClass("min-h-[28px]");
+    expect(screen.getByRole("textbox")).toHaveClass("min-h-[22px]");
     await user.click(screen.getByRole("button", { name: "Stop response" }));
 
     expect(onCancelTask).toHaveBeenCalledOnce();

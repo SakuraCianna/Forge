@@ -1,33 +1,31 @@
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, BotMessageSquare, Check, ChevronDown, FolderOpen, Plus, Square } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Hand, Plus, ShieldAlert, ShieldCheck, Square } from "lucide-react";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
-import type { ForgeProject } from "@/state/projects";
-import { getProjectDisplayName } from "@/state/projects";
+import {
+  createDefaultGeneralPreferences,
+  type GeneralPreferences
+} from "@/state/generalPreferences";
 import { ModelSelector } from "./ModelSelector";
 
-export type ComposerContextMode = "ask" | "project";
+type ComposerPermissionMode = "default" | "auto" | "full";
 
 type TaskComposerProps = {
   busy?: boolean;
   settings: ModelSettings;
-  contextMode?: ComposerContextMode;
+  generalPreferences?: GeneralPreferences;
   onCancelTask?: () => void;
-  onSelectContextMode?: (mode: ComposerContextMode) => void;
   onSelectModel: (modelId: string) => void;
   onSelectIntelligence: (level: IntelligenceLevel) => void;
-  onSelectProject?: (projectPath: string) => void;
   onSelectSpeed: (speed: SpeedMode) => void;
   onSubmitTask: (prompt: string) => void;
   onOpenSettings?: () => void;
   onPickProject?: () => void;
+  onUpdateGeneralPreferences?: (preferences: GeneralPreferences) => void;
   focusSignal?: number;
   placeholder?: string;
-  projectName?: string | null;
-  projectPath?: string | null;
-  projects?: ForgeProject[];
   submitSignal?: number;
   variant?: "dock" | "hero";
 };
@@ -35,21 +33,17 @@ type TaskComposerProps = {
 export function TaskComposer({
   busy = false,
   settings,
-  contextMode = "project",
+  generalPreferences,
   onCancelTask,
-  onSelectContextMode,
   onSelectModel,
   onSelectIntelligence,
-  onSelectProject,
   onSelectSpeed,
   onSubmitTask,
   onOpenSettings,
   onPickProject,
+  onUpdateGeneralPreferences,
   focusSignal = 0,
   placeholder,
-  projectName,
-  projectPath,
-  projects = [],
   submitSignal = 0,
   variant = "dock"
 }: TaskComposerProps): ReactElement {
@@ -59,14 +53,7 @@ export function TaskComposer({
   const isHero = variant === "hero";
   const placeholderText = placeholder ?? t("composer.placeholder");
   const copy = getComposerCopy(settings.language);
-  const selectedProjectByPath = projects.find((project) => project.path === projectPath);
-  const selectedProjectByName = projectName
-    ? projects.find((project) => project.name === projectName)
-    : undefined;
-  const selectedProject =
-    selectedProjectByPath ??
-    selectedProjectByName ??
-    (projectName && projectPath ? { name: projectName, path: projectPath, openedAt: "" } : null);
+  const resolvedGeneralPreferences = generalPreferences ?? createDefaultGeneralPreferences();
 
   const submitTask = useCallback((): void => {
     const normalizedPrompt = prompt.trim();
@@ -121,7 +108,7 @@ export function TaskComposer({
     <div
       className={`bg-white p-1.5 text-[#202123] transition focus-within:border-[#202123] ${
         isHero
-          ? "rounded-t-[18px] border-0 shadow-none"
+          ? "rounded-[18px] border-0 shadow-none"
           : "rounded-[18px] border border-[#d9d9e3] shadow-[0_10px_28px_rgba(0,0,0,0.08)]"
       }`}
     >
@@ -130,8 +117,8 @@ export function TaskComposer({
         value={prompt}
         onChange={(event) => setPrompt(event.currentTarget.value)}
         onKeyDown={handlePromptKeyDown}
-        className={`w-full resize-none bg-transparent px-1.5 py-1.5 text-[10px] leading-4 outline-none placeholder:text-[#b4b4bf] ${
-          isHero ? "min-h-[32px]" : "min-h-[28px]"
+        className={`w-full resize-none bg-transparent px-1.5 py-0.5 text-[10px] leading-4 outline-none placeholder:text-[#b4b4bf] ${
+          isHero ? "min-h-[28px]" : "min-h-[22px]"
         }`}
         placeholder={placeholderText}
       />
@@ -139,18 +126,25 @@ export function TaskComposer({
         data-testid="composer-control-row"
         className="mt-1 flex items-center justify-between gap-2 overflow-visible"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
-          {isHero ? (
-            <button
-              type="button"
-              aria-label={copy.addProject}
-              title={copy.addProject}
-              onClick={onPickProject}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          ) : null}
+        <div
+          data-testid="composer-left-controls"
+          className="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible"
+        >
+          <button
+            type="button"
+            aria-label={copy.addProject}
+            title={copy.addProject}
+            onClick={onPickProject}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+          {renderPermissionSelector()}
+        </div>
+        <div
+          data-testid="composer-right-controls"
+          className="flex min-w-0 items-center justify-end gap-1.5 overflow-visible"
+        >
           <ModelSelector
             settings={settings}
             onSelectModel={onSelectModel}
@@ -158,16 +152,16 @@ export function TaskComposer({
             onSelectSpeed={onSelectSpeed}
             onOpenSettings={onOpenSettings}
           />
+          <button
+            type="button"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
+            aria-label={busy ? copy.stopResponse : t("composer.send")}
+            title={busy ? copy.stopResponse : t("composer.send")}
+            onClick={handlePrimaryAction}
+          >
+            {busy ? <Square className="h-3.5 w-3.5 fill-current" /> : <ArrowUp className="h-4 w-4" />}
+          </button>
         </div>
-        <button
-          type="button"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
-          aria-label={busy ? copy.stopResponse : t("composer.send")}
-          title={busy ? copy.stopResponse : t("composer.send")}
-          onClick={handlePrimaryAction}
-        >
-          {busy ? <Square className="h-3.5 w-3.5 fill-current" /> : <ArrowUp className="h-4 w-4" />}
-        </button>
       </div>
     </div>
   );
@@ -177,39 +171,34 @@ export function TaskComposer({
       <section className="w-full">
         <div className="mx-auto max-w-[680px] overflow-visible rounded-[18px] border border-[#d9d9e3] bg-white shadow-[0_14px_42px_rgba(0,0,0,0.10)] transition focus-within:border-[#202123]">
           {inputPanel}
-          {renderContextSelector()}
         </div>
       </section>
     );
   }
 
   return (
-    <section className="border-t border-[#ececf1] bg-white px-5 py-3">
+    <section className="bg-white px-5 py-2">
       <div className="mx-auto max-w-[880px]">{inputPanel}</div>
     </section>
   );
 
-  function renderContextSelector(): ReactElement {
-    const triggerLabel =
-      contextMode === "ask"
-        ? copy.askOnly
-        : selectedProject
-          ? `${t("composer.projectContext")} ${getProjectDisplayName(selectedProject, projects)}`
-          : t("composer.enterProject");
+  function renderPermissionSelector(): ReactElement {
+    const permissionMode = getPermissionMode(resolvedGeneralPreferences);
+    const permissionOption = getPermissionOption(copy, permissionMode);
 
     return (
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className="flex h-9 w-full items-center gap-2 rounded-b-[18px] border-t border-[#ececf1] bg-white px-3 text-left text-[9px] text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123]"
+            className={`inline-flex h-7 min-w-0 max-w-[190px] items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium transition hover:bg-[#f7f7f8] active:scale-[0.99] ${
+              permissionMode === "full" ? "text-[#f05a1a]" : "text-[#565869]"
+            }`}
+            aria-label={permissionOption.label}
+            title={permissionOption.label}
           >
-            {contextMode === "ask" ? (
-              <BotMessageSquare className="h-4 w-4 shrink-0" />
-            ) : (
-              <FolderOpen className="h-4 w-4 shrink-0" />
-            )}
-            <span className="min-w-0 flex-1 truncate">{triggerLabel}</span>
+            <permissionOption.Icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{permissionOption.label}</span>
             <ChevronDown className="h-4 w-4 shrink-0" />
           </button>
         </DropdownMenu.Trigger>
@@ -217,44 +206,25 @@ export function TaskComposer({
           <DropdownMenu.Content
             align="start"
             sideOffset={8}
-            className="forge-dropdown-content forge-dropdown-fast z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[11px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
+            className="forge-dropdown-content forge-dropdown-fast z-50 w-44 rounded-[12px] border border-[#d9d9e3] bg-white p-1 text-[12px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
-            <ContextItem
-              selected={contextMode === "ask"}
-              onSelect={() => onSelectContextMode?.("ask")}
-            >
-              <BotMessageSquare className="h-4 w-4" />
-              <span className="min-w-0">
-                <span className="block truncate">{copy.askOnly}</span>
-                <span className="block truncate text-[11px] text-[#6e6e80]">{copy.askHint}</span>
-              </span>
-            </ContextItem>
-            <DropdownMenu.Separator className="my-1 h-px bg-[#ececf1]" />
-            {projects.map((project) => {
-              const displayName = getProjectDisplayName(project, projects);
+            {(["default", "auto", "full"] as const).map((mode) => {
+              const option = getPermissionOption(copy, mode);
 
               return (
-                <ContextItem
-                  key={project.path}
-                  selected={contextMode === "project" && project.path === projectPath}
-                  onSelect={() => {
-                    onSelectContextMode?.("project");
-                    onSelectProject?.(project.path);
-                  }}
+                <DropdownMenu.Item
+                  key={mode}
+                  onSelect={() => onUpdateGeneralPreferences?.(applyPermissionMode(resolvedGeneralPreferences, mode))}
+                  className="flex h-8 cursor-default items-center justify-between gap-2 rounded-[9px] px-2 outline-none data-[highlighted]:bg-[#f7f7f8]"
                 >
-                  <FolderOpen className="h-4 w-4" />
-                  <span className="min-w-0">
-                    <span className="block truncate">{displayName}</span>
-                    <span className="block truncate text-[11px] text-[#6e6e80]">{project.path}</span>
+                  <span className="inline-flex min-w-0 items-center gap-2">
+                    <option.Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{option.label}</span>
                   </span>
-                </ContextItem>
+                  {permissionMode === mode ? <Check className="h-4 w-4 shrink-0 text-[#202123]" /> : null}
+                </DropdownMenu.Item>
               );
             })}
-            <DropdownMenu.Separator className="my-1 h-px bg-[#ececf1]" />
-            <ContextItem onSelect={onPickProject}>
-              <Plus className="h-4 w-4" />
-              <span>{copy.addProject}</span>
-            </ContextItem>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
@@ -262,45 +232,70 @@ export function TaskComposer({
   }
 }
 
-function ContextItem({
-  children,
-  onSelect,
-  selected = false
-}: {
-  children: ReactNode;
-  onSelect?: () => void;
-  selected?: boolean;
-}): ReactElement {
-  return (
-    <DropdownMenu.Item
-      onSelect={onSelect}
-      className="grid min-h-9 cursor-default select-none grid-cols-[18px_minmax(0,1fr)_18px] items-center gap-2 rounded-[10px] px-2 py-1 outline-none transition data-[highlighted]:bg-[#f7f7f8]"
-    >
-      {children}
-      {selected ? <Check className="h-4 w-4 text-[#202123]" /> : <span />}
-    </DropdownMenu.Item>
-  );
-}
-
 function getComposerCopy(language: ModelSettings["language"]): {
   addProject: string;
-  askHint: string;
-  askOnly: string;
+  autoReviewPermission: string;
+  defaultPermission: string;
+  fullAccessPermission: string;
   stopResponse: string;
 } {
   if (language === "zh-CN") {
     return {
       addProject: "新增项目",
-      askHint: "仅对话, 不读取项目文件",
-      askOnly: "仅对话",
+      autoReviewPermission: "自动审查",
+      defaultPermission: "默认权限",
+      fullAccessPermission: "完全访问权限",
       stopResponse: "停止回答"
     };
   }
 
   return {
     addProject: "Add project",
-    askHint: "Chat only, no project files",
-    askOnly: "Chat only",
+    autoReviewPermission: "Auto review",
+    defaultPermission: "Default permission",
+    fullAccessPermission: "Full access",
     stopResponse: "Stop response"
   };
+}
+
+function getPermissionMode(preferences: GeneralPreferences): ComposerPermissionMode {
+  if (preferences.fullAccess) {
+    return "full";
+  }
+
+  if (preferences.autoReview) {
+    return "auto";
+  }
+
+  return "default";
+}
+
+function applyPermissionMode(
+  preferences: GeneralPreferences,
+  mode: ComposerPermissionMode
+): GeneralPreferences {
+  return {
+    ...preferences,
+    defaultPermission: true,
+    autoReview: mode === "auto" || mode === "full",
+    fullAccess: mode === "full"
+  };
+}
+
+function getPermissionOption(
+  copy: ReturnType<typeof getComposerCopy>,
+  mode: ComposerPermissionMode
+): {
+  Icon: typeof Hand;
+  label: string;
+} {
+  if (mode === "full") {
+    return { Icon: ShieldAlert, label: copy.fullAccessPermission };
+  }
+
+  if (mode === "auto") {
+    return { Icon: ShieldCheck, label: copy.autoReviewPermission };
+  }
+
+  return { Icon: Hand, label: copy.defaultPermission };
 }

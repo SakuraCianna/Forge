@@ -233,6 +233,7 @@ describe("textGeneration", () => {
         { role: "system", content: "You are Forge" },
         { role: "user", content: "Plan the change" }
       ],
+      max_tokens: 4096,
       stream: false
     });
   });
