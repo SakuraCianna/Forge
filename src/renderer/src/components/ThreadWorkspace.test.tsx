@@ -272,6 +272,120 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByText("Run npm test")).toBeInTheDocument();
   });
 
+  it("does not claim tests are ready without a real command result", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[thread]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText("npm test ready")).not.toBeInTheDocument();
+    expect(screen.getByText("No verification commands have finished yet")).toBeInTheDocument();
+  });
+
+  it("shows the latest verification command result on the plan tab", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Verify command result",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-result",
+                kind: "result",
+                message: "Command finished",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 0,
+                  stdout: "221 passed",
+                  stderr: "",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const verification = screen.getByText("Verification").closest("section");
+    expect(verification).not.toBeNull();
+    expect(within(verification!).getByText("npm test")).toBeInTheDocument();
+    expect(within(verification!).getByText("exit 0")).toBeInTheDocument();
+    expect(within(verification!).getByText("221 passed")).toBeInTheDocument();
+  });
+
+  it("shows recent command output in the agent timeline", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Timeline output",
+            events: [
+              ...thread.events,
+              {
+                id: "event-plan-old",
+                kind: "plan",
+                message: "Old event",
+                createdAt: "2026-05-27T13:01:00.000Z"
+              },
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm run build",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "compiled renderer",
+                  stderr: "type error",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const timeline = screen.getByText("Agent timeline").closest("section");
+    expect(timeline).not.toBeNull();
+    expect(within(timeline!).getByText("npm run build")).toBeInTheDocument();
+    expect(within(timeline!).getByText("exit 1")).toBeInTheDocument();
+    expect(within(timeline!).getByText("compiled renderer")).toBeInTheDocument();
+    expect(within(timeline!).getByText("type error")).toBeInTheDocument();
+  });
+
   it("runs command actions and opens file actions from the agent queue", async () => {
     const user = userEvent.setup();
     const onRunAgentAction = vi.fn();

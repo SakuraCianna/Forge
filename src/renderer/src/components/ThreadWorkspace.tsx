@@ -423,8 +423,34 @@ export function ThreadWorkspace({
   }
 
   function renderPlanTab(): ReactElement {
-    const timelineEvents = selectedThread?.events.slice(0, 5) ?? [];
+    const timelineEvents = selectedThread?.events.slice(-8) ?? [];
     const agentActions = selectedThread?.agentActions ?? [];
+    const latestVerificationResult = findLatestCommandRunResult(selectedThread?.events ?? []);
+    const latestVerificationSucceeded = Boolean(
+      latestVerificationResult &&
+        latestVerificationResult.exitCode === 0 &&
+        !latestVerificationResult.timedOut
+    );
+    const planCopy =
+      language === "zh-CN"
+        ? {
+            agentTimeline: "Agent 时间线",
+            verification: "验证",
+            noVerification: "还没有完成的验证命令",
+            exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
+            stdout: "stdout",
+            stderr: "stderr",
+            timedOut: "已超时"
+          }
+        : {
+            agentTimeline: "Agent timeline",
+            verification: "Verification",
+            noVerification: "No verification commands have finished yet",
+            exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
+            stdout: "stdout",
+            stderr: "stderr",
+            timedOut: "timed out"
+          };
     const actionQueueCopy =
       language === "zh-CN"
         ? {
@@ -749,7 +775,7 @@ export function ThreadWorkspace({
         <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[#202123]">
             <GitPullRequest className="h-4 w-4 text-[#565869]" />
-            {t("thread.tabs.plan")}
+            {planCopy.agentTimeline}
           </h2>
           <div className="space-y-4">
             {timelineEvents.map((event, index) => {
@@ -766,6 +792,49 @@ export function ThreadWorkspace({
                   <div className="min-w-0 pb-2">
                     <div className="text-xs uppercase tracking-[0.08em] text-[#8e8ea0]">{event.kind}</div>
                     <p className="mt-1 text-sm leading-6 text-[#202123]">{event.message}</p>
+                    {event.commandResult ? (
+                      <div className="mt-2 rounded-[14px] border border-[#ececf1] bg-[#fafafa] p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="break-words font-mono text-[12px] font-semibold text-[#202123]">
+                            {event.commandResult.command}
+                          </span>
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                              event.commandResult.exitCode === 0 && !event.commandResult.timedOut
+                                ? "border-[#c3eadc] bg-[#effaf6] text-[#087443]"
+                                : "border-[#f4c7ab] bg-[#fff7ed] text-[#9a3412]"
+                            }`}
+                          >
+                            {planCopy.exit(event.commandResult.exitCode)}
+                          </span>
+                          {event.commandResult.timedOut ? (
+                            <span className="rounded-full border border-[#f4c7ab] bg-[#fff7ed] px-2 py-0.5 text-[11px] text-[#9a3412]">
+                              {planCopy.timedOut}
+                            </span>
+                          ) : null}
+                        </div>
+                        {event.commandResult.stdout.trim() ? (
+                          <div className="mt-2">
+                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+                              {planCopy.stdout}
+                            </div>
+                            <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-2 font-mono text-[11px] leading-4 text-[#f8fafc]">
+                              {formatCommandOutputSnippet(event.commandResult.stdout)}
+                            </pre>
+                          </div>
+                        ) : null}
+                        {event.commandResult.stderr.trim() ? (
+                          <div className="mt-2">
+                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#9a3412]">
+                              {planCopy.stderr}
+                            </div>
+                            <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-2 font-mono text-[11px] leading-4 text-[#9a3412]">
+                              {formatCommandOutputSnippet(event.commandResult.stderr)}
+                            </pre>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -924,17 +993,45 @@ export function ThreadWorkspace({
           </section>
           {selectedAgentAction ? renderAgentActionDetails(selectedAgentAction, selectedCommandResult) : null}
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
-            <h2 className="mb-3 text-sm font-semibold text-[#202123]">{t("thread.agentOutput")}</h2>
-            <p className="text-sm leading-6 text-[#6e6e80]">
-              {selectedThread?.events.at(-1)?.message ?? t("threads.emptyBody")}
-            </p>
-          </section>
-          <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
-            <h2 className="mb-3 text-sm font-semibold text-[#202123]">{t("thread.testResults")}</h2>
-            <div className="flex items-center gap-2 rounded-[14px] bg-[#effaf6] px-3 py-2 text-sm text-[#087443]">
-              <CheckCircle2 className="h-4 w-4" />
-              npm test ready
-            </div>
+            <h2 className="mb-3 text-sm font-semibold text-[#202123]">{planCopy.verification}</h2>
+            {latestVerificationResult ? (
+              <div
+                className={`rounded-[14px] border px-3 py-2 text-sm ${
+                  latestVerificationResult.exitCode === 0 && !latestVerificationResult.timedOut
+                    ? "border-[#c3eadc] bg-[#effaf6] text-[#087443]"
+                    : "border-[#f4c7ab] bg-[#fff7ed] text-[#9a3412]"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {latestVerificationSucceeded ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : (
+                    <Terminal className="h-4 w-4" />
+                  )}
+                  <span className="break-words font-mono text-[12px] font-semibold">
+                    {latestVerificationResult.command}
+                  </span>
+                </div>
+                <div className="mt-1 text-[12px] font-medium">
+                  {planCopy.exit(latestVerificationResult.exitCode)}
+                  {latestVerificationResult.timedOut ? `, ${planCopy.timedOut}` : ""}
+                </div>
+                {latestVerificationResult.stdout.trim() ? (
+                  <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-2 font-mono text-[11px] leading-4 text-[#f8fafc]">
+                    {formatCommandOutputSnippet(latestVerificationResult.stdout)}
+                  </pre>
+                ) : null}
+                {latestVerificationResult.stderr.trim() ? (
+                  <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-2 font-mono text-[11px] leading-4 text-[#9a3412]">
+                    {formatCommandOutputSnippet(latestVerificationResult.stderr)}
+                  </pre>
+                ) : null}
+              </div>
+            ) : (
+              <div className="rounded-[14px] border border-dashed border-[#d9d9e3] px-3 py-3 text-sm leading-5 text-[#6e6e80]">
+                {planCopy.noVerification}
+              </div>
+            )}
           </section>
         </aside>
       </div>
@@ -1468,6 +1565,18 @@ function findLatestCommandResult(
     const result = events[index]?.commandResult;
 
     if (result?.command === command) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+function findLatestCommandRunResult(events: TaskThreadEvent[]): CommandRunResult | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const result = events[index]?.commandResult;
+
+    if (result) {
       return result;
     }
   }
