@@ -1,13 +1,6 @@
-import type { TaskThreadEvent } from "@/state/taskThreads";
+import type { CommandRunResult, TaskThreadEvent } from "@/state/taskThreads";
 
-export type CommandResult = {
-  command: string;
-  cwd: string;
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-};
+export type CommandResult = CommandRunResult;
 
 type CreateCommandStartedEventOptions = {
   threadId: string;
@@ -55,6 +48,7 @@ export function createCommandFinishedEvent({
     id: `${threadId}-command-finished-${createdAt}`,
     kind: result.exitCode === 0 && !result.timedOut ? "result" : "error",
     message: sections.join("\n"),
+    commandResult: result,
     createdAt
   };
 }

@@ -215,6 +215,61 @@ describe("ThreadWorkspace", () => {
     expect(within(details).getByText("Ready to run")).toBeInTheDocument();
   });
 
+  it("shows the latest output for a matching command action", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Inspect command output",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "ran 10 tests",
+                  stderr: "failed tests",
+                  timedOut: false
+                }
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "failed",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const details = screen.getByRole("region", { name: "Action details" });
+    expect(within(details).getByText("Last command output")).toBeInTheDocument();
+    expect(within(details).getByText("Exit code")).toBeInTheDocument();
+    expect(within(details).getByText("1")).toBeInTheDocument();
+    expect(within(details).getByText("stderr")).toBeInTheDocument();
+    expect(within(details).getByText("failed tests")).toBeInTheDocument();
+  });
+
   it("runs the next pending agent action from the queue", async () => {
     const user = userEvent.setup();
     const onRunAgentAction = vi.fn();

@@ -6,11 +6,21 @@ export type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
 
 export type TaskThreadEventKind = "plan" | "command" | "file" | "error" | "result";
 
+export type CommandRunResult = {
+  command: string;
+  cwd: string;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+};
+
 export type TaskThreadEvent = {
   id: string;
   kind: TaskThreadEventKind;
   message: string;
   createdAt: string;
+  commandResult?: CommandRunResult;
 };
 
 export type TaskThread = {

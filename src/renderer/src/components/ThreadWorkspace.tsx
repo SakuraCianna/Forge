@@ -22,7 +22,7 @@ import {
   isRunnableAgentAction
 } from "@/agent/agentActionExecutor";
 import { useI18n } from "@/i18n/useI18n";
-import type { TaskThread } from "@/state/taskThreads";
+import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
 
 type ThreadWorkspaceProps = {
   language: Language;
@@ -324,6 +324,12 @@ export function ThreadWorkspace({
             nextStep: "下一步",
             noTarget: "无目标",
             selectAction: (label: string) => `选择动作 ${label}`,
+            commandOutput: "最近命令输出",
+            exitCode: "退出码",
+            cwd: "目录",
+            stdout: "stdout",
+            stderr: "stderr",
+            timedOut: "已超时",
             completed: "已完成",
             failed: "查看日志, 重试, 或生成修复计划",
             running: "正在等待命令或文件操作完成",
@@ -340,6 +346,12 @@ export function ThreadWorkspace({
             nextStep: "Next step",
             noTarget: "No target",
             selectAction: (label: string) => `Select action ${label}`,
+            commandOutput: "Last command output",
+            exitCode: "Exit code",
+            cwd: "cwd",
+            stdout: "stdout",
+            stderr: "stderr",
+            timedOut: "Timed out",
             completed: "Completed",
             failed: "Review logs, retry, or generate a fix plan",
             running: "Waiting for the command or file operation to finish",
@@ -364,6 +376,9 @@ export function ThreadWorkspace({
       nextPendingAction ??
       agentActions[0] ??
       null;
+    const selectedCommandResult = selectedAgentAction?.command
+      ? findLatestCommandResult(selectedThread?.events ?? [], selectedAgentAction.command)
+      : null;
 
     function getActionStatusLabel(action: AgentAction): string {
       if (action.status === "pending" && (action.kind === "manual" || action.kind === "commit")) {
@@ -474,7 +489,10 @@ export function ThreadWorkspace({
       return actionQueueCopy.pending;
     }
 
-    function renderAgentActionDetails(action: AgentAction): ReactElement {
+    function renderAgentActionDetails(
+      action: AgentAction,
+      commandResult: CommandRunResult | null
+    ): ReactElement {
       const detailRows = [
         { label: actionDetailsCopy.kind, value: action.kind },
         { label: actionDetailsCopy.status, value: getActionStatusLabel(action) },
@@ -509,6 +527,53 @@ export function ThreadWorkspace({
             </div>
             <p className="mt-1 text-sm leading-5 text-[#202123]">{getActionNextStep(action)}</p>
           </div>
+          {commandResult ? (
+            <div className="mt-3 border-t border-[#ececf1] pt-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+                {actionDetailsCopy.commandOutput}
+              </h3>
+              <dl className="mt-2 grid gap-2 text-xs">
+                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.exitCode}</dt>
+                  <dd className="font-medium text-[#202123]">
+                    {commandResult.exitCode === null ? "null" : commandResult.exitCode}
+                  </dd>
+                </div>
+                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.cwd}</dt>
+                  <dd className="min-w-0 break-words font-medium text-[#202123]">
+                    {commandResult.cwd}
+                  </dd>
+                </div>
+                {commandResult.timedOut ? (
+                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.timedOut}</dt>
+                    <dd className="font-medium text-[#9a3412]">true</dd>
+                  </div>
+                ) : null}
+              </dl>
+              {commandResult.stdout.trim() ? (
+                <div className="mt-2">
+                  <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
+                    {actionDetailsCopy.stdout}
+                  </div>
+                  <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-2 font-mono text-[11px] leading-4 text-[#f8fafc]">
+                    {formatCommandOutputSnippet(commandResult.stdout)}
+                  </pre>
+                </div>
+              ) : null}
+              {commandResult.stderr.trim() ? (
+                <div className="mt-2">
+                  <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
+                    {actionDetailsCopy.stderr}
+                  </div>
+                  <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-2 font-mono text-[11px] leading-4 text-[#9a3412]">
+                    {formatCommandOutputSnippet(commandResult.stderr)}
+                  </pre>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       );
     }
@@ -691,7 +756,7 @@ export function ThreadWorkspace({
               <p className="text-sm leading-6 text-[#6e6e80]">{actionQueueCopy.empty}</p>
             )}
           </section>
-          {selectedAgentAction ? renderAgentActionDetails(selectedAgentAction) : null}
+          {selectedAgentAction ? renderAgentActionDetails(selectedAgentAction, selectedCommandResult) : null}
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold text-[#202123]">{t("thread.agentOutput")}</h2>
             <p className="text-sm leading-6 text-[#6e6e80]">
@@ -1008,4 +1073,30 @@ function getQueueBlockerAction(actions: AgentAction[]): AgentAction | null {
   }
 
   return null;
+}
+
+function findLatestCommandResult(
+  events: TaskThreadEvent[],
+  command: string
+): CommandRunResult | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const result = events[index]?.commandResult;
+
+    if (result?.command === command) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+function formatCommandOutputSnippet(value: string): string {
+  const trimmed = value.trim();
+  const maxLength = 900;
+
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, maxLength)}\n... output truncated`;
 }

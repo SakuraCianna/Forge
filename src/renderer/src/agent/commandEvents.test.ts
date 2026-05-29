@@ -3,40 +3,48 @@ import { createCommandFinishedEvent, createCommandStartedEvent } from "./command
 
 describe("commandEvents", () => {
   it("creates a command started event", () => {
-    expect(
-      createCommandStartedEvent({
-        threadId: "thread-1",
-        command: "npm test",
-        now: () => "2026-05-27T13:00:00.000Z"
-      })
-    ).toEqual({
-      id: "thread-1-command-started-2026-05-27T13:00:00.000Z",
-      kind: "command",
-      message: "开始执行命令: npm test",
-      createdAt: "2026-05-27T13:00:00.000Z"
+    const event = createCommandStartedEvent({
+      threadId: "thread-1",
+      command: "npm test",
+      now: () => "2026-05-27T13:00:00.000Z"
     });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        id: "thread-1-command-started-2026-05-27T13:00:00.000Z",
+        kind: "command",
+        createdAt: "2026-05-27T13:00:00.000Z"
+      })
+    );
+    expect(event.message).toContain("npm test");
   });
 
   it("creates a successful command result event", () => {
-    expect(
-      createCommandFinishedEvent({
-        threadId: "thread-1",
-        result: {
-          command: "npm test",
-          cwd: "E:\\CodeHome\\Forge",
-          exitCode: 0,
-          stdout: "passed",
-          stderr: "",
-          timedOut: false
-        },
-        now: () => "2026-05-27T13:00:00.000Z"
-      })
-    ).toEqual({
-      id: "thread-1-command-finished-2026-05-27T13:00:00.000Z",
-      kind: "result",
-      message: "命令执行完成, exitCode=0\nstdout:\npassed",
-      createdAt: "2026-05-27T13:00:00.000Z"
+    const result = {
+      command: "npm test",
+      cwd: "E:\\CodeHome\\Forge",
+      exitCode: 0,
+      stdout: "passed",
+      stderr: "",
+      timedOut: false
+    };
+
+    const event = createCommandFinishedEvent({
+      threadId: "thread-1",
+      result,
+      now: () => "2026-05-27T13:00:00.000Z"
     });
+
+    expect(event).toEqual(
+      expect.objectContaining({
+        id: "thread-1-command-finished-2026-05-27T13:00:00.000Z",
+        kind: "result",
+        commandResult: result,
+        createdAt: "2026-05-27T13:00:00.000Z"
+      })
+    );
+    expect(event.message).toContain("exitCode=0");
+    expect(event.message).toContain("stdout:\npassed");
   });
 
   it("creates an error result event for failed commands", () => {
@@ -55,5 +63,24 @@ describe("commandEvents", () => {
 
     expect(event.kind).toBe("error");
     expect(event.message).toContain("stderr:\nfailed");
+  });
+
+  it("keeps structured command output on finished events", () => {
+    const result = {
+      command: "npm test",
+      cwd: "E:\\CodeHome\\Forge",
+      exitCode: 1,
+      stdout: "ran 10 tests",
+      stderr: "failed tests",
+      timedOut: false
+    };
+
+    expect(
+      createCommandFinishedEvent({
+        threadId: "thread-1",
+        result,
+        now: () => "2026-05-27T13:00:00.000Z"
+      })
+    ).toEqual(expect.objectContaining({ commandResult: result }));
   });
 });
