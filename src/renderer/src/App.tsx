@@ -63,6 +63,7 @@ import {
   attachThreadAgentActions,
   appendThreadEvents,
   appendCommandRunOutput,
+  appendThreadResultDelta,
   archiveAllThreads,
   archiveProjectThreads,
   archiveThread,
@@ -92,7 +93,7 @@ import {
   type CodeFormatResult,
   type CodeFormatterMode
 } from "@/state/codeFormatting";
-import { isPlainChatPrompt } from "@/state/conversationRouting";
+import { isDirectAnswerPrompt } from "@/state/conversationRouting";
 import {
   createDefaultGeneralPreferences,
   loadGeneralPreferences,
@@ -894,7 +895,7 @@ export function App(): ReactElement {
   }
 
   function submitTask(prompt: string): void {
-    if (composerContextMode === "ask" || isPlainChatPrompt(prompt)) {
+    if (composerContextMode === "ask" || isDirectAnswerPrompt(prompt)) {
       const result = createThreadFromSettings(settings, prompt);
 
       if (!result.ok) {
@@ -906,17 +907,10 @@ export function App(): ReactElement {
 
       const askThread: TaskThread = {
         ...result.thread,
-        mode: "ask",
+        mode: composerContextMode === "project" ? "project" : "ask",
         projectPath: composerContextMode === "project" ? (currentProject?.path ?? null) : null,
         status: "running",
-        events: [
-          {
-            id: `${result.thread.id}-ask-started`,
-            kind: "plan",
-            message: settings.language === "zh-CN" ? "ASK 对话已创建, 正在生成回答" : "ASK chat created. Generating an answer.",
-            createdAt: result.thread.createdAt
-          }
-        ]
+        events: []
       };
       const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
       const selectedProvider = selectedModel
@@ -937,7 +931,8 @@ export function App(): ReactElement {
         threadId: result.thread.id,
         prompt: result.thread.prompt,
         model: selectedModel,
-        provider: selectedProvider
+        provider: selectedProvider,
+        projectScan: composerContextMode === "project" && currentProject ? projectScanResult : null
       });
       return;
     }
@@ -1157,22 +1152,47 @@ export function App(): ReactElement {
     threadId,
     prompt,
     model,
-    provider
+    provider,
+    projectScan
   }: {
     threadId: string;
     prompt: string;
     model: ForgeModel;
     provider: ForgeProvider;
+    projectScan?: ProjectScanResult | null;
   }): Promise<void> {
+    const request = {
+      provider,
+      model,
+      intelligence: settings.intelligence,
+      personalization: createPersonalizationPrompt(personalization),
+      projectScan,
+      speed: settings.speed,
+      prompt
+    };
+    const streamEventId = `${threadId}-ask-stream-${Date.now()}`;
+    let unsubscribeStream: (() => void) | null = null;
+
     try {
-      const answer = await window.forge.agent.generateAsk({
-        provider,
-        model,
-        intelligence: settings.intelligence,
-        personalization: createPersonalizationPrompt(personalization),
-        speed: settings.speed,
-        prompt
+      let receivedDelta = false;
+      unsubscribeStream = window.forge.agent.onAskStreamChunk((chunk) => {
+        if (chunk.requestId !== streamEventId || chunk.type !== "delta") {
+          return;
+        }
+
+        receivedDelta = true;
+        setThreads((current) =>
+          appendThreadResultDelta(current, threadId, {
+            eventId: streamEventId,
+            createdAt: new Date().toISOString(),
+            delta: chunk.delta,
+            done: false
+          })
+        );
       });
+      const answer = await window.forge.agent.generateAskStream(streamEventId, request);
+      unsubscribeStream();
+      unsubscribeStream = null;
 
       if (cancelledThreadIdsRef.current.has(threadId)) {
         return;
@@ -1185,29 +1205,33 @@ export function App(): ReactElement {
         usage: answer.usage,
         createdAt: answer.createdAt
       });
-      setThreads((current) =>
-        appendThreadEvents(
-          current,
-          threadId,
-          [
-            {
-              id: `${threadId}-ask-${answer.createdAt}`,
-              kind: "result",
-              message: answer.text,
-              createdAt: answer.createdAt
-            }
-          ],
-          "completed"
-        )
-      );
+      setThreads((current) => {
+        if (receivedDelta) {
+          return appendThreadResultDelta(current, threadId, {
+            eventId: streamEventId,
+            createdAt: answer.createdAt,
+            delta: "",
+            done: true
+          });
+        }
+
+        return appendThreadResultDelta(current, threadId, {
+          eventId: streamEventId,
+          createdAt: answer.createdAt,
+          delta: answer.text,
+          done: true
+        });
+      });
     } catch (error) {
+      unsubscribeStream?.();
+
       if (cancelledThreadIdsRef.current.has(threadId)) {
         return;
       }
 
       appendThreadError(
         threadId,
-        `ASK 对话失败: ${formatRemoteModelError(settings.language, error)}`
+        `回答失败: ${formatRemoteModelError(settings.language, error)}`
       );
     }
   }

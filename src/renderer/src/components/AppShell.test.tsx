@@ -180,4 +180,35 @@ describe("AppShell", () => {
       "Ask only"
     );
   });
+
+  it("uses compact Codex-style sidebar rows for projects and conversations", () => {
+    render(
+      <AppShell
+        language="en-US"
+        activeView="workspace"
+        currentProjectPath="E:\\CodeHome\\Forge"
+        projects={[{ name: "Forge", path: "E:\\CodeHome\\Forge", openedAt: "2026-05-27T13:00:00.000Z" }]}
+        threads={[
+          {
+            id: "project-thread",
+            title: "Project task",
+            prompt: "Project task",
+            status: "running",
+            modelId: "openai:gpt-5.5",
+            intelligence: "high",
+            speed: "balanced",
+            createdAt: "2026-05-27T13:00:00.000Z",
+            projectPath: "E:\\CodeHome\\Forge",
+            events: []
+          }
+        ]}
+        onNavigate={() => undefined}
+      >
+        <section>Workbench</section>
+      </AppShell>
+    );
+
+    expect(screen.getByTestId("sidebar-project-row-E:\\CodeHome\\Forge")).toHaveClass("h-8");
+    expect(screen.getByTestId("sidebar-thread-row-project-thread")).toHaveClass("h-7");
+  });
 });

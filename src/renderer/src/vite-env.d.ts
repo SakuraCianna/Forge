@@ -3,6 +3,7 @@
 import type { CommandOutputChunk } from "@shared/commandTypes";
 import type {
   AgentFileChangeResult,
+  AgentAskStreamChunk,
   AgentAskResult,
   AgentPlanResult,
   GenerateAgentAskRequest,
@@ -44,6 +45,11 @@ declare global {
           request: GenerateAgentFileChangeRequest
         ) => Promise<AgentFileChangeResult>;
         generateAsk: (request: GenerateAgentAskRequest) => Promise<AgentAskResult>;
+        generateAskStream: (
+          requestId: string,
+          request: GenerateAgentAskRequest
+        ) => Promise<AgentAskResult>;
+        onAskStreamChunk: (listener: (chunk: AgentAskStreamChunk) => void) => () => void;
       };
       projects: {
         pickDirectory: () => Promise<string | null>;

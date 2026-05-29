@@ -11,7 +11,9 @@ export const providerModelChannels = {
 export const agentChannels = {
   generatePlan: "forge:agent:generate-plan",
   generateFileChange: "forge:agent:generate-file-change",
-  generateAsk: "forge:agent:generate-ask"
+  generateAsk: "forge:agent:generate-ask",
+  generateAskStream: "forge:agent:generate-ask-stream",
+  askStreamChunk: "forge:agent:ask-stream-chunk"
 } as const;
 
 export const projectChannels = {

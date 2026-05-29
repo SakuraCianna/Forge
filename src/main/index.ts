@@ -1,7 +1,12 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import { registerAgentHandlers } from "./agentIpc.js";
-import { generateAgentAsk, generateAgentFileChange, generateAgentPlan } from "./agentPlanService.js";
+import {
+  generateAgentAsk,
+  generateAgentAskStream,
+  generateAgentFileChange,
+  generateAgentPlan
+} from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
 import { cancelProjectCommand, runProjectCommand } from "./commandRunner.js";
 import { registerGitHandlers } from "./gitIpc.js";
@@ -124,7 +129,8 @@ void app.whenReady().then(() => {
     (request) => generateAgentAsk({ request, keyVault }),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
-    }
+    },
+    (request, onDelta) => generateAgentAskStream({ request, keyVault, onDelta })
   );
 
   registerProjectHandlers(

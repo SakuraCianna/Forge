@@ -11,6 +11,7 @@ import {
 } from "../shared/ipcChannels.js";
 import type {
   AgentFileChangeResult,
+  AgentAskStreamChunk,
   AgentAskResult,
   AgentPlanResult,
   GenerateAgentAskRequest,
@@ -63,7 +64,18 @@ contextBridge.exposeInMainWorld("forge", {
     ): Promise<AgentFileChangeResult> =>
       ipcRenderer.invoke(agentChannels.generateFileChange, request),
     generateAsk: (request: GenerateAgentAskRequest): Promise<AgentAskResult> =>
-      ipcRenderer.invoke(agentChannels.generateAsk, request)
+      ipcRenderer.invoke(agentChannels.generateAsk, request),
+    generateAskStream: (
+      requestId: string,
+      request: GenerateAgentAskRequest
+    ): Promise<AgentAskResult> =>
+      ipcRenderer.invoke(agentChannels.generateAskStream, requestId, request),
+    onAskStreamChunk: (listener: (chunk: AgentAskStreamChunk) => void) => {
+      const handler = (_event: IpcRendererEvent, chunk: AgentAskStreamChunk) => listener(chunk);
+      ipcRenderer.on(agentChannels.askStreamChunk, handler);
+
+      return () => ipcRenderer.removeListener(agentChannels.askStreamChunk, handler);
+    }
   },
   projects: {
     pickDirectory: () => ipcRenderer.invoke(projectChannels.pickDirectory),

@@ -102,7 +102,7 @@ describe("TaskComposer", () => {
     expect(onSelectProject).toHaveBeenCalledWith("E:\\CodeHome\\Aiko");
   });
 
-  it("offers an ASK-only conversation mode from the composer context menu", async () => {
+  it("offers a chat-only conversation mode from the composer context menu", async () => {
     const user = userEvent.setup();
     const onSelectContextMode = vi.fn();
     const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
@@ -123,7 +123,7 @@ describe("TaskComposer", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /Enter project workspace/ }));
-    await user.click(screen.getByRole("menuitem", { name: /ASK only conversation/ }));
+    await user.click(screen.getByRole("menuitem", { name: /Chat only/ }));
 
     expect(onSelectContextMode).toHaveBeenCalledWith("ask");
   });
@@ -165,7 +165,7 @@ describe("TaskComposer", () => {
       />
     );
 
-    expect(screen.getByRole("textbox")).toHaveClass("min-h-[34px]");
+    expect(screen.getByRole("textbox")).toHaveClass("min-h-[28px]");
     await user.click(screen.getByRole("button", { name: "Stop response" }));
 
     expect(onCancelTask).toHaveBeenCalledOnce();

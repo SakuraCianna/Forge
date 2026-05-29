@@ -195,7 +195,7 @@ export function AppShell({
       <div className="grid min-h-0 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)] overflow-hidden">
         <aside
           data-testid="app-sidebar"
-          className={`relative flex min-h-0 flex-col border-r border-[#ececf1] p-3 ${
+          className={`relative flex min-h-0 flex-col border-r border-[#ececf1] p-2.5 ${
             hasWallpaper ? "bg-white/58" : "bg-[#f7f7f8]/90 backdrop-blur"
           }`}
         >
@@ -209,7 +209,7 @@ export function AppShell({
                 onNavigate("workspace");
               }
             }}
-            className="mb-2 flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] text-[#202123] transition hover:bg-[#ececf1] active:scale-[0.99]"
+            className="mb-1.5 flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[12px] text-[#202123] transition hover:bg-[#ececf1] active:scale-[0.99]"
           >
             <Plus className="h-4 w-4" />
             <span className="truncate">{t("nav.newChat")}</span>
@@ -221,7 +221,7 @@ export function AppShell({
                 key={item.key}
                 type="button"
                 onClick={() => onNavigate(item.key)}
-                className={`flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] transition active:scale-[0.99] ${
+                className={`flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[12px] transition active:scale-[0.99] ${
                   activeView === item.key
                     ? "bg-[#ececf1] text-[#202123]"
                     : "text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
@@ -241,7 +241,7 @@ export function AppShell({
               type="button"
               onClick={() => onNavigate("settings")}
               title={t("nav.settings")}
-              className={`flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] transition active:scale-[0.99] ${
+              className={`flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[12px] transition active:scale-[0.99] ${
                 activeView === "settings"
                   ? "bg-[#ececf1] text-[#202123]"
                   : "text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
@@ -284,8 +284,8 @@ export function AppShell({
           : [];
 
     return (
-      <section className="mt-5 min-w-0">
-        <div className="mb-1 flex h-8 items-center justify-between px-3">
+      <section className="mt-4 min-w-0">
+        <div className="mb-0.5 flex h-7 items-center justify-between px-2.5">
           <span className="text-[10px] text-[#8e8ea0]">{t("nav.projects")}</span>
           <span className="flex items-center gap-1">
             <DropdownMenu.Root>
@@ -294,7 +294,7 @@ export function AppShell({
                   type="button"
                   aria-label={copy.projectOptions}
                   title={language === "zh-CN" ? "更多" : "More"}
-                  className="flex h-7 w-7 items-center justify-center rounded-[10px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
+                  className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
                 >
                   <Ellipsis className="h-4 w-4" />
                 </button>
@@ -311,7 +311,7 @@ export function AppShell({
               aria-label={copy.addProject}
               title={copy.addProject}
               onClick={onPickProject}
-              className="flex h-7 w-7 items-center justify-center rounded-[10px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
+              className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
             >
               <FolderPlus className="h-4 w-4" />
             </button>
@@ -327,25 +327,23 @@ export function AppShell({
             return (
               <div
                 key={project.path}
-                className="space-y-1"
+                className="space-y-0.5"
               >
                 <div
-                  className={`group grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-[12px] pr-1 transition ${
+                  className={`group grid h-8 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-[10px] pr-0.5 transition ${
                     selected ? "bg-[#ececf1]" : "hover:bg-[#ececf1]"
                   }`}
                 >
                 <button
                   type="button"
+                  data-testid={`sidebar-project-row-${project.path}`}
                   onClick={() => onSelectProject?.(project.path)}
-                  className="flex min-w-0 items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[10px] text-[#565869]"
+                  className="flex h-8 min-w-0 items-center gap-2 rounded-[10px] px-2 text-left text-[12px] text-[#565869]"
                 >
                   <FolderOpen className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0">
-                    <span className="flex min-w-0 items-center gap-1.5 text-[#202123]">
-                      {project.pinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-[#6e6e80]" /> : null}
-                      <span className="truncate">{displayName}</span>
-                    </span>
-                    <span className="block truncate text-[10px] text-[#8e8ea0]">{project.path}</span>
+                  <span className="flex min-w-0 items-center gap-1.5 text-[#202123]">
+                    {project.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
+                    <span className="truncate">{displayName}</span>
                   </span>
                 </button>
 
@@ -354,7 +352,7 @@ export function AppShell({
                   aria-label={copy.newProjectChat(displayName)}
                   title={t("nav.newChat")}
                   onClick={() => onNewProjectChat?.(project.path)}
-                  className="flex h-7 w-7 items-center justify-center rounded-[9px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                  className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
                 >
                   <SquarePen className="h-4 w-4" />
                 </button>
@@ -365,7 +363,7 @@ export function AppShell({
                       type="button"
                       aria-label={`${copy.projectOptions} ${displayName}`}
                       title={language === "zh-CN" ? "更多" : "More"}
-                      className="flex h-7 w-7 items-center justify-center rounded-[9px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                      className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
                     >
                       <Ellipsis className="h-4 w-4" />
                     </button>
@@ -409,18 +407,19 @@ export function AppShell({
                   <div
                     role="group"
                     aria-label={`${displayName} conversations`}
-                    className="ml-7 space-y-1 border-l border-[#ececf1] pl-2"
+                    className="ml-6 space-y-0.5 border-l border-[#ececf1] pl-1.5"
                   >
                     {projectThreads.map((thread) => (
                       <button
                         key={thread.id}
                         type="button"
+                        data-testid={`sidebar-thread-row-${thread.id}`}
                         onClick={() => onSelectThread?.(thread.id)}
-                        className="flex min-w-0 items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[10px] text-[#565869] transition hover:bg-[#ececf1]"
+                        className="flex h-7 min-w-0 items-center gap-2 rounded-[9px] px-2 text-left text-[12px] text-[#565869] transition hover:bg-[#ececf1]"
                       >
-                        <MessageSquare className="h-4 w-4 shrink-0" />
+                        <MessageSquare className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate text-[#202123]">{thread.title}</span>
-                        {thread.pinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-[#6e6e80]" /> : null}
+                        {thread.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
                       </button>
                     ))}
                   </div>
@@ -457,22 +456,23 @@ export function AppShell({
     }
 
     return (
-      <section className="mt-5 min-w-0">
-        <div className="mb-1 px-3 text-[10px] text-[#8e8ea0]">{copy.conversations}</div>
-        <div role="group" aria-label="Global conversations" className="space-y-1">
+      <section className="mt-4 min-w-0">
+        <div className="mb-0.5 px-2.5 text-[10px] text-[#8e8ea0]">{copy.conversations}</div>
+        <div role="group" aria-label="Global conversations" className="space-y-0.5">
           {globalThreads.map((thread) => (
             <div
               key={thread.id}
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-[12px] pr-1 transition hover:bg-[#ececf1]"
+              className="group grid h-7 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-[9px] pr-0.5 transition hover:bg-[#ececf1]"
             >
               <button
                 type="button"
+                data-testid={`sidebar-thread-row-${thread.id}`}
                 onClick={() => onSelectThread?.(thread.id)}
-                className="flex min-w-0 items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[10px] text-[#565869]"
+                className="flex h-7 min-w-0 items-center gap-2 rounded-[9px] px-2 text-left text-[12px] text-[#565869]"
               >
-                <MessageSquare className="h-4 w-4 shrink-0" />
+                <MessageSquare className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate text-[#202123]">{thread.title}</span>
-                {thread.pinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-[#6e6e80]" /> : null}
+                {thread.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
               </button>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
@@ -480,7 +480,7 @@ export function AppShell({
                     type="button"
                     aria-label={copy.threadOptions(thread.title)}
                     title={language === "zh-CN" ? "更多" : "More"}
-                    className="flex h-7 w-7 items-center justify-center rounded-[9px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                    className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
                   >
                     <Ellipsis className="h-4 w-4" />
                   </button>

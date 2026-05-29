@@ -119,7 +119,7 @@ export function TaskComposer({
 
   const inputPanel = (
     <div
-      className={`bg-white p-2 text-[#202123] transition focus-within:border-[#202123] ${
+      className={`bg-white p-1.5 text-[#202123] transition focus-within:border-[#202123] ${
         isHero
           ? "rounded-t-[18px] border-0 shadow-none"
           : "rounded-[18px] border border-[#d9d9e3] shadow-[0_10px_28px_rgba(0,0,0,0.08)]"
@@ -131,13 +131,13 @@ export function TaskComposer({
         onChange={(event) => setPrompt(event.currentTarget.value)}
         onKeyDown={handlePromptKeyDown}
         className={`w-full resize-none bg-transparent px-1.5 py-1.5 text-[10px] leading-4 outline-none placeholder:text-[#b4b4bf] ${
-          isHero ? "min-h-[36px]" : "min-h-[34px]"
+          isHero ? "min-h-[32px]" : "min-h-[28px]"
         }`}
         placeholder={placeholderText}
       />
       <div
         data-testid="composer-control-row"
-        className="mt-1.5 flex items-center justify-between gap-2 overflow-visible"
+        className="mt-1 flex items-center justify-between gap-2 overflow-visible"
       >
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
           {isHero ? (
@@ -184,7 +184,7 @@ export function TaskComposer({
   }
 
   return (
-    <section className="border-t border-[#ececf1] bg-white px-5 py-4">
+    <section className="border-t border-[#ececf1] bg-white px-5 py-3">
       <div className="mx-auto max-w-[880px]">{inputPanel}</div>
     </section>
   );
@@ -291,16 +291,16 @@ function getComposerCopy(language: ModelSettings["language"]): {
   if (language === "zh-CN") {
     return {
       addProject: "新增项目",
-      askHint: "纯聊天, 不读取项目文件",
-      askOnly: "ASK 独立对话",
+      askHint: "仅对话, 不读取项目文件",
+      askOnly: "仅对话",
       stopResponse: "停止回答"
     };
   }
 
   return {
     addProject: "Add project",
-    askHint: "Plain chat, no project files",
-    askOnly: "ASK only conversation",
+    askHint: "Chat only, no project files",
+    askOnly: "Chat only",
     stopResponse: "Stop response"
   };
 }

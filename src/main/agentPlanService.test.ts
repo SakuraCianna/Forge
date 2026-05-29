@@ -5,7 +5,12 @@ import type {
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
-import { generateAgentAsk, generateAgentFileChange, generateAgentPlan } from "./agentPlanService.js";
+import {
+  generateAgentAsk,
+  generateAgentAskStream,
+  generateAgentFileChange,
+  generateAgentPlan
+} from "./agentPlanService.js";
 
 const provider: ForgeProvider = {
   id: "openai",
@@ -237,7 +242,7 @@ describe("agentPlanService", () => {
     });
   });
 
-  it("generates a direct ASK-mode answer without project context", async () => {
+  it("generates a direct answer without project context", async () => {
     const fetcher = vi.fn(
       async () =>
         new Response(
@@ -274,5 +279,93 @@ describe("agentPlanService", () => {
         fetcher
       })
     ).rejects.toThrow("OpenAI returned HTML instead of JSON");
+  });
+
+  it("streams OpenAI-compatible ask deltas as they arrive", async () => {
+    const compatibleProvider: ForgeProvider = {
+      ...provider,
+      id: "deepseek",
+      kind: "openai-compatible",
+      baseUrl: "https://api.deepseek.com",
+      label: "DeepSeek"
+    };
+    const compatibleRequest: GenerateAgentAskRequest = {
+      ...askRequest,
+      provider: compatibleProvider,
+      model: {
+        ...model,
+        providerId: "deepseek",
+        id: "deepseek:deepseek-v4-flash",
+        modelName: "deepseek-v4-flash"
+      }
+    };
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          [
+            'data: {"choices":[{"delta":{"content":"**项目"}}]}',
+            "",
+            'data: {"choices":[{"delta":{"content":"概览**"}}]}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n"),
+          { headers: { "content-type": "text/event-stream" } }
+        )
+    );
+    const deltas: string[] = [];
+
+    const result = await generateAgentAskStream({
+      request: compatibleRequest,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher,
+      onDelta: (delta) => deltas.push(delta)
+    });
+
+    const [_url, init] = fetcher.mock.calls[0];
+    expect(JSON.parse(String(init.body)).stream).toBe(true);
+    expect(deltas).toEqual(["**项目", "概览**"]);
+    expect(result.text).toBe("**项目概览**");
+  });
+
+  it("falls back to a single delta for providers without SSE ask streaming", async () => {
+    const geminiProvider: ForgeProvider = {
+      ...provider,
+      id: "gemini",
+      kind: "gemini",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      label: "Gemini"
+    };
+    const geminiRequest: GenerateAgentAskRequest = {
+      ...askRequest,
+      provider: geminiProvider,
+      model: {
+        ...model,
+        providerId: "gemini",
+        id: "gemini:gemini-2.5-pro",
+        modelName: "gemini-2.5-pro"
+      }
+    };
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: "项目回答" }] } }]
+          })
+        )
+    );
+    const deltas: string[] = [];
+
+    const result = await generateAgentAskStream({
+      request: geminiRequest,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher,
+      onDelta: (delta) => deltas.push(delta)
+    });
+
+    const [_url, init] = fetcher.mock.calls[0];
+    expect(JSON.parse(String(init.body)).stream).toBeUndefined();
+    expect(deltas).toEqual(["项目回答"]);
+    expect(result.text).toBe("项目回答");
   });
 });

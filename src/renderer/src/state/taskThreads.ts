@@ -150,6 +150,44 @@ export function cancelThread(
   );
 }
 
+export function appendThreadResultDelta(
+  threads: TaskThread[],
+  threadId: string,
+  delta: { eventId: string; createdAt: string; delta: string; done: boolean }
+): TaskThread[] {
+  return threads.map((thread) => {
+    if (thread.id !== threadId) {
+      return thread;
+    }
+
+    const existingEvent = thread.events.find((event) => event.id === delta.eventId);
+    const events = existingEvent
+      ? thread.events.map((event) =>
+          event.id === delta.eventId
+            ? {
+                ...event,
+                message: `${event.message}${delta.delta}`
+              }
+            : event
+        )
+      : [
+          ...thread.events,
+          {
+            id: delta.eventId,
+            kind: "result" as const,
+            message: delta.delta,
+            createdAt: delta.createdAt
+          }
+        ];
+
+    return {
+      ...thread,
+      status: delta.done ? "completed" : "running",
+      events
+    };
+  });
+}
+
 export function appendCommandRunOutput(
   threads: TaskThread[],
   output: CommandOutputChunk

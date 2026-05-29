@@ -8,6 +8,7 @@ import {
 import {
   attachThreadAgentActions,
   appendCommandRunOutput,
+  appendThreadResultDelta,
   appendThreadEvents,
   archiveAllThreads,
   archiveProjectThreads,
@@ -179,6 +180,41 @@ describe("taskThreads", () => {
     expect(threads[0].events[0].commandRun?.stdout).toBeUndefined();
     expect(withStderr[0].events[0].commandRun?.stdout).toBe("first line\n");
     expect(withStderr[0].events[0].commandRun?.stderr).toBe("warning line\n");
+  });
+
+  it("streams assistant answer deltas into one markdown result event", () => {
+    const thread: TaskThread = {
+      id: "thread-1",
+      title: "Project question",
+      prompt: "我这个项目里面做了什么",
+      status: "running",
+      modelId: "openai:gpt-5.5",
+      intelligence: "high",
+      speed: "balanced",
+      createdAt: "2026-05-27T13:00:00.000Z",
+      events: []
+    };
+
+    const first = appendThreadResultDelta([thread], "thread-1", {
+      eventId: "answer-1",
+      createdAt: "2026-05-27T13:01:00.000Z",
+      delta: "**项目概览**",
+      done: false
+    });
+    const second = appendThreadResultDelta(first, "thread-1", {
+      eventId: "answer-1",
+      createdAt: "2026-05-27T13:01:00.000Z",
+      delta: "\n\n- 已接入模型配置",
+      done: true
+    });
+
+    expect(second[0].status).toBe("completed");
+    expect(second[0].events).toHaveLength(1);
+    expect(second[0].events[0]).toMatchObject({
+      id: "answer-1",
+      kind: "result",
+      message: "**项目概览**\n\n- 已接入模型配置"
+    });
   });
 
   it("pins, archives, restores, and archives all conversations without losing events", () => {

@@ -28,6 +28,7 @@ export type GenerateAgentAskRequest = {
   model: ForgeModel;
   intelligence: IntelligenceLevel;
   personalization?: string;
+  projectScan?: ProjectScanResult | null;
   speed: SpeedMode;
   prompt: string;
 };
@@ -68,3 +69,8 @@ export type AgentAskResult = {
   createdAt: string;
   usage?: TokenUsage;
 };
+
+export type AgentAskStreamChunk =
+  | { requestId: string; type: "delta"; delta: string }
+  | { requestId: string; type: "done"; result: AgentAskResult }
+  | { requestId: string; type: "error"; message: string };
