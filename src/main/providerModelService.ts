@@ -51,7 +51,7 @@ export async function fetchModelsForProvider({
     );
   }
 
-  const body = (await response.json()) as unknown;
+  const body = await readJsonBody(hydratedProvider.label, response);
   return parseProviderModelList(hydratedProvider, body).map((model) =>
     toForgeModel(hydratedProvider, model)
   );
@@ -78,7 +78,7 @@ async function runtimeFetch(url: string, init: RequestInit): Promise<Response> {
         return electron.net.fetch(url, init);
       }
     } catch {
-      // Fall through to global fetch when Electron's network stack is unavailable in tests.
+      // Electron 网络栈在测试中不可用时回退到全局 fetch
     }
   }
 
@@ -97,5 +97,28 @@ async function readErrorDetail(response: Response): Promise<string> {
     return detail ? ` - ${detail}` : "";
   } catch {
     return "";
+  }
+}
+
+async function readJsonBody(providerLabel: string, response: Response): Promise<unknown> {
+  const text = await response.text();
+  const trimmedText = text.trim();
+
+  if (!trimmedText) {
+    throw new Error(`${providerLabel} returned an empty response`);
+  }
+
+  try {
+    return JSON.parse(trimmedText) as unknown;
+  } catch {
+    if (trimmedText.startsWith("<")) {
+      throw new Error(
+        `${providerLabel} returned HTML instead of JSON. Check Base URL and model API compatibility.`
+      );
+    }
+
+    throw new Error(
+      `${providerLabel} returned invalid JSON. Check Base URL and model API compatibility.`
+    );
   }
 }

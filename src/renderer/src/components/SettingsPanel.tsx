@@ -816,7 +816,6 @@ export function SettingsPanel({
                           className={`min-w-0 flex-1 truncate whitespace-nowrap text-xs ${
                             fetchState.status === "error" ? "text-[#b45309]" : "text-[#087443]"
                           }`}
-                          title={fetchState.message}
                         >
                           {fetchState.message}
                         </span>

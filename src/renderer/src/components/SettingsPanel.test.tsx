@@ -237,6 +237,7 @@ describe("SettingsPanel", () => {
       "truncate",
       "whitespace-nowrap"
     );
+    expect(screen.getByText(/Unexpected token/)).not.toHaveAttribute("title");
   });
 
   it("edits usage rates from collapsed provider groups and personalization settings", async () => {

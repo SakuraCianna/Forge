@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
@@ -66,6 +66,7 @@ import {
   archiveAllThreads,
   archiveProjectThreads,
   archiveThread,
+  cancelThread,
   completeNextPendingAgentAction,
   createThreadFromSettings,
   restoreThread,
@@ -86,9 +87,12 @@ import {
 } from "@/state/usage";
 import {
   formatCodePreview,
+  getAvailableCodeFormatterModes,
+  getDefaultCodeFormatterMode,
   type CodeFormatResult,
   type CodeFormatterMode
 } from "@/state/codeFormatting";
+import { isPlainChatPrompt } from "@/state/conversationRouting";
 import {
   createDefaultGeneralPreferences,
   loadGeneralPreferences,
@@ -238,6 +242,7 @@ export function App(): ReactElement {
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
   const [heroPromptIndex, setHeroPromptIndex] = useState(0);
   const { t } = useI18n(settings.language);
+  const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
   const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
@@ -410,7 +415,7 @@ export function App(): ReactElement {
         ...current,
         [providerId]: {
           status: "error",
-          message: error instanceof Error ? error.message : String(error)
+          message: formatRemoteModelError(settings.language, error)
         }
       }));
     }
@@ -482,7 +487,7 @@ export function App(): ReactElement {
         }
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatRemoteModelError(settings.language, error);
 
       setProviderFetchStates((current) => ({
         ...current,
@@ -688,7 +693,7 @@ export function App(): ReactElement {
       relativePath
     });
     setPreviewFile(file);
-    setFileFormatterMode(isMarkdownPreviewPath(file.relativePath) ? "rendered" : "raw");
+    setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
   }
 
   async function previewProjectFileChange(relativePath: string, nextContent: string): Promise<void> {
@@ -889,7 +894,7 @@ export function App(): ReactElement {
   }
 
   function submitTask(prompt: string): void {
-    if (composerContextMode === "ask") {
+    if (composerContextMode === "ask" || isPlainChatPrompt(prompt)) {
       const result = createThreadFromSettings(settings, prompt);
 
       if (!result.ok) {
@@ -902,7 +907,7 @@ export function App(): ReactElement {
       const askThread: TaskThread = {
         ...result.thread,
         mode: "ask",
-        projectPath: null,
+        projectPath: composerContextMode === "project" ? (currentProject?.path ?? null) : null,
         status: "running",
         events: [
           {
@@ -919,6 +924,7 @@ export function App(): ReactElement {
         : null;
 
       setTaskNotice(null);
+      cancelledThreadIdsRef.current.delete(result.thread.id);
       setThreads((current) => [askThread, ...current]);
       setSelectedThreadId(result.thread.id);
 
@@ -956,6 +962,7 @@ export function App(): ReactElement {
     }
 
     setTaskNotice(null);
+    cancelledThreadIdsRef.current.delete(result.thread.id);
     const projectThread: TaskThread = {
       ...result.thread,
       mode: "project",
@@ -1026,6 +1033,10 @@ export function App(): ReactElement {
         projectScan
       });
 
+      if (cancelledThreadIdsRef.current.has(threadId)) {
+        return;
+      }
+
       recordUsageEvent({
         kind: "plan",
         providerId: plan.providerId,
@@ -1044,9 +1055,13 @@ export function App(): ReactElement {
         )
       );
     } catch (error) {
+      if (cancelledThreadIdsRef.current.has(threadId)) {
+        return;
+      }
+
       appendThreadError(
         threadId,
-        `模型计划生成失败: ${error instanceof Error ? error.message : String(error)}`
+        `模型计划生成失败: ${formatRemoteModelError(settings.language, error)}`
       );
     }
   }
@@ -1159,6 +1174,10 @@ export function App(): ReactElement {
         prompt
       });
 
+      if (cancelledThreadIdsRef.current.has(threadId)) {
+        return;
+      }
+
       recordUsageEvent({
         kind: "ask",
         providerId: answer.providerId,
@@ -1182,11 +1201,30 @@ export function App(): ReactElement {
         )
       );
     } catch (error) {
+      if (cancelledThreadIdsRef.current.has(threadId)) {
+        return;
+      }
+
       appendThreadError(
         threadId,
-        `ASK 对话失败: ${error instanceof Error ? error.message : String(error)}`
+        `ASK 对话失败: ${formatRemoteModelError(settings.language, error)}`
       );
     }
+  }
+
+  function cancelActiveThread(): void {
+    if (!selectedThreadId) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    cancelledThreadIdsRef.current.add(selectedThreadId);
+    setThreads((current) =>
+      cancelThread(current, selectedThreadId, {
+        createdAt,
+        message: settings.language === "zh-CN" ? "已终止" : "Stopped"
+      })
+    );
   }
 
   function appendThreadError(threadId: string, message: string): void {
@@ -1317,7 +1355,7 @@ export function App(): ReactElement {
         relativePath
       });
       setPreviewFile(file);
-      setFileFormatterMode(isMarkdownPreviewPath(file.relativePath) ? "rendered" : "raw");
+      setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
 
       const generated = await generateProjectFileChange(file.relativePath, file.content, threadId);
       const status = generated ? "completed" : "failed";
@@ -1498,8 +1536,13 @@ export function App(): ReactElement {
   }
 
   function renderTaskComposer(variant: "dock" | "hero"): ReactElement {
+    const activeThread = selectedThreadId
+      ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
+      : null;
+
     return (
       <TaskComposer
+        busy={activeThread?.status === "running"}
         settings={settings}
         contextMode={composerContextMode}
         focusSignal={composerFocusSignal}
@@ -1509,6 +1552,7 @@ export function App(): ReactElement {
         projects={recentProjects}
         submitSignal={composerSubmitSignal}
         variant={variant}
+        onCancelTask={cancelActiveThread}
         onOpenSettings={() => setActiveView("settings")}
         onPickProject={() => void pickProject()}
         onSelectContextMode={setComposerContextMode}
@@ -1600,14 +1644,17 @@ export function App(): ReactElement {
           ? "Markdown 渲染预览"
           : "Rendered Markdown preview"
         : formatPreviewStatus(formattedPreview, settings.language);
-    const isMarkdownPreview = previewFile ? isMarkdownPreviewPath(previewFile.relativePath) : false;
-    const formatterOptions: Array<{ value: CodeFormatterMode; label: string }> = [
-      { value: "raw", label: settings.language === "zh-CN" ? "原始" : "Raw" },
-      { value: "prettier", label: "Prettier" },
-      ...(isMarkdownPreview
-        ? [{ value: "rendered" as const, label: settings.language === "zh-CN" ? "渲染" : "Rendered" }]
-        : [])
-    ];
+    const formatterOptions: Array<{ value: CodeFormatterMode; label: string }> = previewFile
+      ? getAvailableCodeFormatterModes(previewFile.relativePath).map((mode) => ({
+          value: mode,
+          label:
+            mode === "prettier"
+              ? "Prettier"
+              : settings.language === "zh-CN"
+                ? "渲染"
+                : "Rendered"
+        }))
+      : [];
 
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-hidden rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -1646,17 +1693,25 @@ export function App(): ReactElement {
                         {formatterMessage}
                       </span>
                     </span>
-                    <label className="flex shrink-0 items-center gap-2 text-[12px] text-[#6e6e80]">
-                      {settings.language === "zh-CN" ? "格式化" : "Formatter"}
-                      <InlineSelectMenu<CodeFormatterMode>
-                        ariaLabel={settings.language === "zh-CN" ? "代码格式化" : "Code formatter"}
-                        value={fileFormatterMode}
-                        options={formatterOptions}
-                        onChange={setFileFormatterMode}
-                        triggerClassName="min-w-32 text-[12px]"
-                        contentClassName="text-[12px]"
-                      />
-                    </label>
+                    {formatterOptions.length > 0 ? (
+                      <label className="flex shrink-0 items-center gap-2 text-[12px] text-[#6e6e80]">
+                        {settings.language === "zh-CN" ? "格式化" : "Formatter"}
+                        {formatterOptions.length > 1 ? (
+                          <InlineSelectMenu<CodeFormatterMode>
+                            ariaLabel={settings.language === "zh-CN" ? "代码格式化" : "Code formatter"}
+                            value={fileFormatterMode}
+                            options={formatterOptions}
+                            onChange={setFileFormatterMode}
+                            triggerClassName="min-w-32 text-[12px]"
+                            contentClassName="text-[12px]"
+                          />
+                        ) : (
+                          <span className="inline-flex h-8 min-w-24 items-center justify-center rounded-[12px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 text-[12px] text-[#565869]">
+                            {formatterOptions[0].label}
+                          </span>
+                        )}
+                      </label>
+                    ) : null}
                   </div>
                   <FilePreviewRenderer
                     content={previewContent}
@@ -1980,12 +2035,6 @@ function createCommandRunId(threadId: string): string {
   return `${threadId}-command-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function isMarkdownPreviewPath(path: string): boolean {
-  const normalizedPath = path.toLowerCase();
-
-  return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".mdx");
-}
-
 function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPath: string): string {
   const existing = new Set(
     projects
@@ -2093,6 +2142,19 @@ function isMissingProjectError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
 
   return /Project path does not exist|ENOENT|cannot find|no such file/i.test(message);
+}
+
+function formatRemoteModelError(language: Language, error: unknown): string {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const message = rawMessage.replace(/^Error invoking remote method '[^']+':\s*/u, "");
+
+  if (/Unexpected token '<'|<!doctype|not valid JSON|returned HTML|invalid JSON/i.test(message)) {
+    return language === "zh-CN"
+      ? "API 返回了 HTML 而不是 JSON, 请检查 Base URL 是否指向兼容的 /v1 接口, 以及模型 ID 是否正确"
+      : "API returned HTML instead of JSON. Check the Base URL, compatible /v1 endpoint, and model ID.";
+  }
+
+  return message;
 }
 
 function formatPreviewStatus(

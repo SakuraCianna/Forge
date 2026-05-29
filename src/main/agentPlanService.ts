@@ -77,7 +77,7 @@ export async function generateAgentPlan({
     );
   }
 
-  const body = (await response.json()) as unknown;
+  const body = await readJsonBody(provider.label, response);
   const text = extractGeneratedText(provider.kind, body).trim();
   const usage = extractTokenUsage(provider.kind, body);
 
@@ -125,7 +125,7 @@ export async function generateAgentFileChange({
     );
   }
 
-  const body = (await response.json()) as unknown;
+  const body = await readJsonBody(provider.label, response);
   const nextContent = stripMarkdownCodeFence(extractGeneratedText(provider.kind, body));
   const usage = extractTokenUsage(provider.kind, body);
 
@@ -173,7 +173,7 @@ export async function generateAgentAsk({
     );
   }
 
-  const body = (await response.json()) as unknown;
+  const body = await readJsonBody(provider.label, response);
   const text = extractGeneratedText(provider.kind, body).trim();
   const usage = extractTokenUsage(provider.kind, body);
 
@@ -226,6 +226,29 @@ function appendPersonalization(instructions: string[], personalization?: string)
   }
 
   return [...instructions, "User personalization:", personalization.trim()].join("\n");
+}
+
+async function readJsonBody(providerLabel: string, response: Response): Promise<unknown> {
+  const text = await response.text();
+  const trimmedText = text.trim();
+
+  if (!trimmedText) {
+    throw new Error(`${providerLabel} returned an empty response`);
+  }
+
+  try {
+    return JSON.parse(trimmedText) as unknown;
+  } catch {
+    if (trimmedText.startsWith("<")) {
+      throw new Error(
+        `${providerLabel} returned HTML instead of JSON. Check Base URL and provider compatibility.`
+      );
+    }
+
+    throw new Error(
+      `${providerLabel} returned invalid JSON. Check Base URL and provider compatibility.`
+    );
+  }
 }
 
 function createAgentPlanInput(request: GenerateAgentPlanRequest): string {

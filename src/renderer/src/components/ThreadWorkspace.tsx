@@ -25,6 +25,7 @@ import {
 } from "@/agent/agentActionExecutor";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
+import { MarkdownPreview } from "./FilePreviewRenderer";
 
 type ThreadWorkspaceProps = {
   compact?: boolean;
@@ -399,7 +400,13 @@ export function ThreadWorkspace({
             <span className="shrink-0">{label}</span>
             <span className="truncate">{event.createdAt}</span>
           </div>
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#202123]">{event.message}</p>
+          <div className="mt-1">
+            {event.kind === "result" && !runningCommand && !result ? (
+              <MarkdownPreview compact content={event.message} />
+            ) : (
+              <p className="whitespace-pre-wrap text-sm leading-6 text-[#202123]">{event.message}</p>
+            )}
+          </div>
 
           {runningCommand ? (
             <pre className="mt-2 overflow-auto rounded-[12px] bg-[#111827] p-3 font-mono text-[11px] leading-4 text-[#f8fafc]">

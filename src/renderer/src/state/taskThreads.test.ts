@@ -14,6 +14,7 @@ import {
   archiveThread,
   completeNextPendingAgentAction,
   createThreadFromSettings,
+  cancelThread,
   restoreThread,
   toggleThreadPinned,
   updateThreadAgentActionStatus,
@@ -108,6 +109,31 @@ describe("taskThreads", () => {
       "任务已创建, 等待 Forge 生成执行计划",
       "初始计划"
     ]);
+  });
+
+  it("marks a running thread as cancelled with a visible event", () => {
+    const thread: TaskThread = {
+      id: "thread-1",
+      title: "Say hi",
+      prompt: "你好",
+      status: "running",
+      modelId: "openai:gpt-5.5",
+      intelligence: "high",
+      speed: "balanced",
+      createdAt: "2026-05-27T13:00:00.000Z",
+      events: []
+    };
+
+    const threads = cancelThread([thread], "thread-1", {
+      createdAt: "2026-05-27T13:01:00.000Z",
+      message: "已终止"
+    });
+
+    expect(threads[0].status).toBe("blocked");
+    expect(threads[0].events[0]).toMatchObject({
+      kind: "error",
+      message: "已终止"
+    });
   });
 
   it("appends live command output to the matching running command", () => {

@@ -263,4 +263,16 @@ describe("agentPlanService", () => {
       usage: { inputTokens: 5, outputTokens: 7, totalTokens: 12 }
     });
   });
+
+  it("throws a readable error when an ask endpoint returns HTML instead of JSON", async () => {
+    const fetcher = vi.fn(async () => new Response("<!doctype html><html></html>"));
+
+    await expect(
+      generateAgentAsk({
+        request: askRequest,
+        keyVault: { readProviderKey: async () => "sk-test" },
+        fetcher
+      })
+    ).rejects.toThrow("OpenAI returned HTML instead of JSON");
+  });
 });

@@ -146,4 +146,29 @@ describe("TaskComposer", () => {
     expect(screen.getByRole("button", { name: "Add project" })).not.toHaveClass("border");
     expect(screen.getByRole("button", { name: "Configure model" })).not.toHaveClass("border");
   });
+
+  it("uses a shorter dock input and exposes a stop button while generating", async () => {
+    const user = userEvent.setup();
+    const onCancelTask = vi.fn();
+    const onSubmitTask = vi.fn();
+    const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
+
+    render(
+      <TaskComposer
+        busy
+        settings={settings}
+        onCancelTask={onCancelTask}
+        onSelectIntelligence={vi.fn()}
+        onSelectModel={vi.fn()}
+        onSelectSpeed={vi.fn()}
+        onSubmitTask={onSubmitTask}
+      />
+    );
+
+    expect(screen.getByRole("textbox")).toHaveClass("min-h-[34px]");
+    await user.click(screen.getByRole("button", { name: "Stop response" }));
+
+    expect(onCancelTask).toHaveBeenCalledOnce();
+    expect(onSubmitTask).not.toHaveBeenCalled();
+  });
 });

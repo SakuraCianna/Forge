@@ -45,6 +45,33 @@ describe("ThreadWorkspace", () => {
     expect(screen.queryByText("Validation")).not.toBeInTheDocument();
   });
 
+  it("renders compact assistant output as markdown", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        threads={[
+          {
+            ...thread,
+            events: [
+              {
+                id: "answer",
+                kind: "result",
+                message: "**你好**\n\n- 欢迎回来",
+                createdAt: "2026-05-27T13:01:00.000Z"
+              }
+            ]
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    expect(screen.getByText("你好").tagName).toBe("STRONG");
+    expect(screen.getByText("欢迎回来")).toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no task threads", () => {
     render(
       <ThreadWorkspace

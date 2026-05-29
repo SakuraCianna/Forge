@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { formatCodePreview, getPrettierParserForPath } from "./codeFormatting";
+import {
+  formatCodePreview,
+  getAvailableCodeFormatterModes,
+  getDefaultCodeFormatterMode,
+  getPrettierParserForPath
+} from "./codeFormatting";
 
 describe("codeFormatting", () => {
   it("maps common code file extensions to Prettier parsers", () => {
     expect(getPrettierParserForPath("src/App.tsx")).toBe("typescript");
     expect(getPrettierParserForPath("package.json")).toBe("json");
     expect(getPrettierParserForPath("README.md")).toBe("markdown");
+  });
+
+  it("defaults supported project files to Prettier and removes raw from choices", () => {
+    expect(getDefaultCodeFormatterMode("src/App.tsx")).toBe("prettier");
+    expect(getAvailableCodeFormatterModes("src/App.tsx")).toEqual(["prettier"]);
+    expect(getAvailableCodeFormatterModes("README.md")).toEqual(["prettier", "rendered"]);
+    expect(getAvailableCodeFormatterModes("public/logo.png")).toEqual([]);
   });
 
   it("returns raw content when formatting is disabled", async () => {

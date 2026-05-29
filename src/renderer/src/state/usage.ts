@@ -9,7 +9,7 @@ export type UsageRate = {
   outputPerMillion: number;
 };
 
-// Rates may be keyed by provider id or exact model id. Model-specific rates win.
+// 费率可以按提供商 ID 或精确模型 ID 配置, 模型级费率优先
 export type UsageRateMap = Record<string, UsageRate>;
 
 export type UsageSummary = {

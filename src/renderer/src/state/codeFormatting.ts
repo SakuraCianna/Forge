@@ -42,6 +42,24 @@ export function getPrettierParserForPath(path: string): string | null {
   return extension ? parserByExtension[extension] : null;
 }
 
+export function getAvailableCodeFormatterModes(path: string): CodeFormatterMode[] {
+  const modes: CodeFormatterMode[] = [];
+
+  if (getPrettierParserForPath(path)) {
+    modes.push("prettier");
+  }
+
+  if (isMarkdownPath(path)) {
+    modes.push("rendered");
+  }
+
+  return modes;
+}
+
+export function getDefaultCodeFormatterMode(path: string): CodeFormatterMode {
+  return getAvailableCodeFormatterModes(path)[0] ?? "raw";
+}
+
 export async function formatCodePreview(
   path: string,
   content: string,
@@ -105,4 +123,10 @@ function unwrapDefault<T>(module: unknown): T {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isMarkdownPath(path: string): boolean {
+  const normalizedPath = path.toLowerCase();
+
+  return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".mdx");
 }

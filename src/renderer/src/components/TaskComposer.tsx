@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, BotMessageSquare, Check, ChevronDown, FolderOpen, Plus } from "lucide-react";
+import { ArrowUp, BotMessageSquare, Check, ChevronDown, FolderOpen, Plus, Square } from "lucide-react";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { ForgeProject } from "@/state/projects";
@@ -11,8 +11,10 @@ import { ModelSelector } from "./ModelSelector";
 export type ComposerContextMode = "ask" | "project";
 
 type TaskComposerProps = {
+  busy?: boolean;
   settings: ModelSettings;
   contextMode?: ComposerContextMode;
+  onCancelTask?: () => void;
   onSelectContextMode?: (mode: ComposerContextMode) => void;
   onSelectModel: (modelId: string) => void;
   onSelectIntelligence: (level: IntelligenceLevel) => void;
@@ -31,8 +33,10 @@ type TaskComposerProps = {
 };
 
 export function TaskComposer({
+  busy = false,
   settings,
   contextMode = "project",
+  onCancelTask,
   onSelectContextMode,
   onSelectModel,
   onSelectIntelligence,
@@ -74,6 +78,15 @@ export function TaskComposer({
     onSubmitTask(normalizedPrompt);
     setPrompt("");
   }, [onSubmitTask, prompt]);
+
+  const handlePrimaryAction = useCallback((): void => {
+    if (busy) {
+      onCancelTask?.();
+      return;
+    }
+
+    submitTask();
+  }, [busy, onCancelTask, submitTask]);
 
   useEffect(() => {
     if (focusSignal > 0) {
@@ -118,7 +131,7 @@ export function TaskComposer({
         onChange={(event) => setPrompt(event.currentTarget.value)}
         onKeyDown={handlePromptKeyDown}
         className={`w-full resize-none bg-transparent px-1.5 py-1.5 text-[10px] leading-4 outline-none placeholder:text-[#b4b4bf] ${
-          isHero ? "min-h-[40px]" : "min-h-[48px]"
+          isHero ? "min-h-[36px]" : "min-h-[34px]"
         }`}
         placeholder={placeholderText}
       />
@@ -149,11 +162,11 @@ export function TaskComposer({
         <button
           type="button"
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
-          aria-label={t("composer.send")}
-          title={t("composer.send")}
-          onClick={submitTask}
+          aria-label={busy ? copy.stopResponse : t("composer.send")}
+          title={busy ? copy.stopResponse : t("composer.send")}
+          onClick={handlePrimaryAction}
         >
-          <ArrowUp className="h-4 w-4" />
+          {busy ? <Square className="h-3.5 w-3.5 fill-current" /> : <ArrowUp className="h-4 w-4" />}
         </button>
       </div>
     </div>
@@ -273,18 +286,21 @@ function getComposerCopy(language: ModelSettings["language"]): {
   addProject: string;
   askHint: string;
   askOnly: string;
+  stopResponse: string;
 } {
   if (language === "zh-CN") {
     return {
       addProject: "新增项目",
       askHint: "纯聊天, 不读取项目文件",
-      askOnly: "ASK 独立对话"
+      askOnly: "ASK 独立对话",
+      stopResponse: "停止回答"
     };
   }
 
   return {
     addProject: "Add project",
     askHint: "Plain chat, no project files",
-    askOnly: "ASK only conversation"
+    askOnly: "ASK only conversation",
+    stopResponse: "Stop response"
   };
 }

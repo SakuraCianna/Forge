@@ -30,12 +30,24 @@ export function FilePreviewRenderer({
   return <CodePreview content={content} path={path} />;
 }
 
-function MarkdownPreview({ content }: { content: string }): ReactElement {
+export function MarkdownPreview({
+  compact = false,
+  content
+}: {
+  compact?: boolean;
+  content: string;
+}): ReactElement {
   const blocks = parseMarkdownBlocks(content);
 
   return (
-    <div className="min-h-0 overflow-auto rounded-[14px] border border-[#ececf1] bg-white p-5 text-[14px] leading-7 text-[#202123]">
-      <article className="mx-auto max-w-[860px] space-y-4">
+    <div
+      className={
+        compact
+          ? "min-h-0 text-sm leading-6 text-[#202123]"
+          : "min-h-0 overflow-auto rounded-[14px] border border-[#ececf1] bg-white p-5 text-[14px] leading-7 text-[#202123]"
+      }
+    >
+      <article className={compact ? "space-y-2" : "mx-auto max-w-[860px] space-y-4"}>
         {blocks.map((block, index) => renderMarkdownBlock(block, index))}
       </article>
     </div>

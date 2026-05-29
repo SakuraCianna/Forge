@@ -126,6 +126,30 @@ export function appendThreadEvents(
   );
 }
 
+export function cancelThread(
+  threads: TaskThread[],
+  threadId: string,
+  event: { createdAt: string; message: string }
+): TaskThread[] {
+  return threads.map((thread) =>
+    thread.id === threadId
+      ? {
+          ...thread,
+          status: "blocked",
+          events: [
+            ...thread.events,
+            {
+              id: `${threadId}-cancelled-${event.createdAt}`,
+              kind: "error",
+              message: event.message,
+              createdAt: event.createdAt
+            }
+          ]
+        }
+      : thread
+  );
+}
+
 export function appendCommandRunOutput(
   threads: TaskThread[],
   output: CommandOutputChunk
