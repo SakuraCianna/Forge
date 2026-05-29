@@ -238,8 +238,10 @@ export function ThreadWorkspace({
                   {t("threads.model")}: {selectedThread.modelId}
                 </span>
                 {threadActivitySummary ? (
-                  <span
-                    className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 ${
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("commands")}
+                    className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-left transition hover:shadow-sm active:scale-[0.99] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#202123] ${
                       threadActivitySummary.kind === "running"
                         ? "border-[#bfdbfe] bg-[#eff6ff] text-[#1d4ed8]"
                         : "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
@@ -253,7 +255,7 @@ export function ThreadWorkspace({
                     {threadActivitySummary.meta ? (
                       <span className="shrink-0 opacity-80">{threadActivitySummary.meta}</span>
                     ) : null}
-                  </span>
+                  </button>
                 ) : null}
               </div>
               <h1 className="truncate text-xl font-semibold leading-7 tracking-normal text-[#202123]">
