@@ -42,6 +42,36 @@ describe("TaskComposer", () => {
     expect(onSubmitTask).toHaveBeenCalledWith("实现任务线程");
     expect(screen.getByPlaceholderText("描述你想锻造的代码任务")).toHaveValue("");
   });
+  it("submits the prompt with Enter and keeps Shift Enter for multiline input", async () => {
+    const user = userEvent.setup();
+    const onSubmitTask = vi.fn();
+    const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
+
+    render(
+      <TaskComposer
+        settings={settings}
+        onSelectIntelligence={vi.fn()}
+        onSelectModel={vi.fn()}
+        onSelectSpeed={vi.fn()}
+        onSubmitTask={onSubmitTask}
+      />
+    );
+
+    const textbox = screen.getByRole("textbox");
+
+    await user.type(textbox, "Implement send shortcut");
+    await user.keyboard("{Enter}");
+
+    expect(onSubmitTask).toHaveBeenCalledWith("Implement send shortcut");
+    expect(textbox).toHaveValue("");
+
+    await user.type(textbox, "Line one");
+    await user.keyboard("{Shift>}{Enter}{/Shift}");
+
+    expect(onSubmitTask).toHaveBeenCalledTimes(1);
+    expect(textbox).toHaveValue("Line one\n");
+  });
+
   it("selects an existing project from the composer context menu", async () => {
     const user = userEvent.setup();
     const onSelectProject = vi.fn();

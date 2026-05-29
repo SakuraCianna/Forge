@@ -97,7 +97,7 @@ export function ModelSelector({
         <DropdownMenu.Content
           align="start"
           sideOffset={8}
-          className="forge-dropdown-content z-50 w-60 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+          className="forge-dropdown-content forge-dropdown-fast z-50 w-60 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
         >
           <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
             {t("selector.intelligence")}
@@ -137,7 +137,7 @@ export function ModelSelector({
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 sideOffset={10}
-                className="forge-dropdown-content forge-model-menu-content forge-scrollbar-none z-50 max-h-[min(300px,calc(100vh-120px))] w-60 overflow-y-auto rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+                className="forge-dropdown-content forge-dropdown-fast forge-model-menu-content forge-scrollbar-none z-50 max-h-[min(300px,calc(100vh-120px))] w-60 overflow-y-auto rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
               >
                 <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
                   {t("selector.model")}
@@ -176,7 +176,7 @@ export function ModelSelector({
               <DropdownMenu.Portal>
                 <DropdownMenu.SubContent
                   sideOffset={10}
-                  className="forge-dropdown-content z-50 w-48 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+                  className="forge-dropdown-content forge-dropdown-fast z-50 w-48 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
                 >
                   <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
                     {t("selector.speed")}

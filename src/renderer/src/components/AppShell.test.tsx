@@ -38,12 +38,14 @@ describe("AppShell", () => {
     );
 
     const wallpaper = screen.getByTestId("app-wallpaper");
+    const scrim = screen.getByTestId("app-wallpaper-scrim");
 
-    expect(wallpaper).toHaveStyle({ opacity: "0.22" });
     expect(wallpaper).toHaveStyle({
       backgroundImage: "url(data:image/png;base64,abc)"
     });
-    expect(screen.getByRole("main", { name: "Forge workbench" })).toHaveClass("bg-transparent");
+    expect(scrim).toHaveStyle({ opacity: "0.78" });
+    expect(screen.getByTestId("app-sidebar")).toHaveClass("bg-white/58");
+    expect(screen.getByRole("main", { name: "Forge workbench" })).toHaveClass("bg-white/58");
     expect(screen.getByRole("main", { name: "Forge workbench" })).not.toHaveClass("bg-white/80");
   });
 

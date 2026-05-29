@@ -135,6 +135,24 @@ describe("SettingsPanel", () => {
     expect(screen.queryByLabelText(/model ID/)).not.toBeInTheDocument();
   });
 
+  it("mounts only the expanded API profile details to avoid hidden form layout work", async () => {
+    const user = userEvent.setup();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+
+    renderSettingsPanel({ settings });
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+
+    expect(screen.getAllByTestId("provider-profile-details")).toHaveLength(1);
+    expect(screen.getByLabelText("OpenAI Base URL")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Configure Anthropic/ }));
+
+    expect(screen.getAllByTestId("provider-profile-details")).toHaveLength(1);
+    expect(screen.queryByLabelText("OpenAI Base URL")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Anthropic Base URL")).toBeInTheDocument();
+  });
+
   it("adds custom OpenAI-compatible API profiles without a fixed key limit", async () => {
     const user = userEvent.setup();
     const onAddProvider = vi.fn();

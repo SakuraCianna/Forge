@@ -79,33 +79,15 @@ select {
   will-change: transform, opacity;
 }
 
-.forge-provider-collapse {
-  display: grid;
-  grid-template-rows: 0fr;
+.forge-provider-panel {
   overflow: hidden;
-  opacity: 0;
-  border-top: 1px solid transparent;
+  border-top: 1px solid #ececf1;
   background: #fafafa;
-  transition:
-    grid-template-rows 180ms cubic-bezier(0.2, 0, 0, 1),
-    opacity 150ms ease,
-    border-color 150ms ease;
-}
-
-.forge-provider-collapse > * {
-  min-height: 0;
-  overflow: hidden;
-}
-
-.forge-provider-collapse[data-state="open"] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-  border-top-color: #ececf1;
-}
-
-.forge-provider-collapse[data-state="closed"] > * {
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
+  transform-origin: top center;
+  animation: forge-provider-panel-in 96ms cubic-bezier(0.2, 0, 0, 1);
+  backface-visibility: hidden;
+  contain: layout paint style;
+  will-change: transform, opacity;
 }
 
 .forge-scrollbar-none {
@@ -150,5 +132,17 @@ select {
   to {
     opacity: 0;
     transform: translate3d(0, -3px, 0);
+  }
+}
+
+@keyframes forge-provider-panel-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 }

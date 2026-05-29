@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ArrowUp, BotMessageSquare, Check, ChevronDown, FolderOpen, Plus } from "lucide-react";
@@ -87,6 +87,23 @@ export function TaskComposer({
     }
   }, [submitSignal, submitTask]);
 
+  function handlePromptKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+
+    // Enter 直接发送, Shift+Enter 保留换行
+    event.preventDefault();
+    submitTask();
+  }
+
   const inputPanel = (
     <div
       className={`bg-white p-2 text-[#202123] transition focus-within:border-[#202123] ${
@@ -99,6 +116,7 @@ export function TaskComposer({
         ref={textareaRef}
         value={prompt}
         onChange={(event) => setPrompt(event.currentTarget.value)}
+        onKeyDown={handlePromptKeyDown}
         className={`w-full resize-none bg-transparent px-1.5 py-1.5 text-[10px] leading-4 outline-none placeholder:text-[#b4b4bf] ${
           isHero ? "min-h-[40px]" : "min-h-[48px]"
         }`}
@@ -186,7 +204,7 @@ export function TaskComposer({
           <DropdownMenu.Content
             align="start"
             sideOffset={8}
-            className="forge-dropdown-content z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[11px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
+            className="forge-dropdown-content forge-dropdown-fast z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[11px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
             <ContextItem
               selected={contextMode === "ask"}

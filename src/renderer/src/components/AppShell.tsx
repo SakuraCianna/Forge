@@ -163,15 +163,22 @@ export function AppShell({
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{
-            backgroundImage: `url(${backgroundImageDataUrl})`,
-            opacity: wallpaperOpacity
+            backgroundImage: `url(${backgroundImageDataUrl})`
           }}
+        />
+      ) : null}
+      {backgroundImageDataUrl ? (
+        <div
+          data-testid="app-wallpaper-scrim"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-white"
+          style={{ opacity: 1 - wallpaperOpacity }}
         />
       ) : null}
       <div className="relative z-10 grid h-full min-h-0 grid-rows-[48px_minmax(0,1fr)] overflow-hidden">
       <header
         className={`grid h-12 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)_138px] border-b border-[#ececf1] ${
-          hasWallpaper ? "bg-white/72" : "bg-white/90 backdrop-blur"
+          hasWallpaper ? "bg-white/58" : "bg-white/90 backdrop-blur"
         }`}
       >
         <div className="drag-region flex h-12 items-center gap-2 px-4">
@@ -187,8 +194,9 @@ export function AppShell({
 
       <div className="grid min-h-0 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)] overflow-hidden">
         <aside
+          data-testid="app-sidebar"
           className={`relative flex min-h-0 flex-col border-r border-[#ececf1] p-3 ${
-            hasWallpaper ? "bg-[#f7f7f8]/74" : "bg-[#f7f7f8]/90 backdrop-blur"
+            hasWallpaper ? "bg-white/58" : "bg-[#f7f7f8]/90 backdrop-blur"
           }`}
         >
           <button
@@ -255,9 +263,9 @@ export function AppShell({
 
         <main
           aria-label="Forge workbench"
-          // 背景图需要穿透到工作台主层, 否则白色面板会抵消透明度
+          // 背景图按统一工作台表面渲染, 避免侧栏和主区割裂
           className={`min-h-0 min-w-0 overflow-hidden ${
-            hasWallpaper ? "bg-transparent" : "bg-white/80 backdrop-blur-[1px]"
+            hasWallpaper ? "bg-white/58" : "bg-white/80 backdrop-blur-[1px]"
           }`}
         >
           {children}
@@ -481,7 +489,7 @@ function MenuContent({
       <DropdownMenu.Content
         align={align}
         sideOffset={sideOffset}
-        className="forge-dropdown-content z-50 min-w-52 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-[10px] text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+        className="forge-dropdown-content forge-dropdown-fast z-50 min-w-52 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-[10px] text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
       >
         {children}
       </DropdownMenu.Content>

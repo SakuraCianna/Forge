@@ -706,13 +706,10 @@ export function SettingsPanel({
                   />
                 </button>
 
-                <div
-                  className="forge-provider-collapse"
-                  data-state={isExpanded ? "open" : "closed"}
-                  aria-hidden={!isExpanded}
-                  inert={!isExpanded}
-                >
-                  <div className="grid gap-3 px-4 py-4">
+                {/* 只挂载当前展开的 API 配置, 避免隐藏表单参与布局 */}
+                {isExpanded ? (
+                  <div data-testid="provider-profile-details" className="forge-provider-panel">
+                    <div className="grid gap-3 px-4 py-4">
                     {provider.custom ? (
                       <label className="grid gap-1.5 text-xs text-[#6e6e80]">
                         {t("settings.providerName")}
@@ -843,8 +840,9 @@ export function SettingsPanel({
                         />
                       </div>
                     </div>
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </article>
             );
           })}
@@ -915,12 +913,9 @@ export function SettingsPanel({
                     className={`h-4 w-4 text-[#6e6e80] transition ${isExpanded ? "rotate-180" : ""}`}
                   />
                 </button>
-                {providerModels.length > 0 ? (
+                {providerModels.length > 0 && isExpanded ? (
                   <div
-                    className="forge-provider-collapse rounded-[12px] border border-transparent bg-[#fafafa]"
-                    data-state={isExpanded ? "open" : "closed"}
-                    aria-hidden={!isExpanded}
-                    inert={!isExpanded}
+                    className="forge-provider-panel rounded-[12px] border border-transparent bg-[#fafafa]"
                   >
                     <div className="overflow-hidden rounded-[12px]">
                       {providerModels.map((modelRow, modelIndex) => {
@@ -1339,7 +1334,7 @@ function ProviderModelDropdown({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="forge-dropdown-content z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[560px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+          className="forge-dropdown-content forge-dropdown-fast z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[560px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
         >
           {models.map((model) => (
             <DropdownMenu.Item
