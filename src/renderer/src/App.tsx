@@ -27,6 +27,7 @@ import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
 import { removeFileChangePreview, upsertFileChangePreview } from "@/state/fileChanges";
 import {
+  addManualModel,
   addCustomProvider,
   createDefaultModelSettings,
   deleteCustomProvider,
@@ -415,6 +416,87 @@ export function App(): ReactElement {
     }
   }
 
+  async function addManualProviderModel(
+    providerId: string,
+    modelName: string,
+    apiKey?: string
+  ): Promise<void> {
+    const provider = settings.providers.find((candidate) => candidate.id === providerId);
+    const normalizedModelName = modelName.trim();
+
+    if (!provider || !normalizedModelName) {
+      setProviderFetchStates((current) => ({
+        ...current,
+        [providerId]: {
+          status: "error",
+          message: settings.language === "zh-CN" ? "请先填写模型 ID" : "Enter a model ID first"
+        }
+      }));
+      return;
+    }
+
+    const trimmedApiKey = apiKey?.trim();
+    const manualModel: ForgeModel = {
+      id: `${provider.id}:${normalizedModelName}`,
+      providerId: provider.id,
+      label: normalizedModelName,
+      modelName: normalizedModelName,
+      enabled: true,
+      capabilities: {
+        reasoning: { type: "none" },
+        toolCalling: "unknown",
+        streaming: "unknown",
+        vision: "unknown"
+      },
+      capabilitySource: "manual"
+    };
+
+    setProviderFetchStates((current) => ({
+      ...current,
+      [providerId]: {
+        status: "loading",
+        message: settings.language === "zh-CN" ? "正在验证模型..." : "Validating model..."
+      }
+    }));
+
+    try {
+      if (trimmedApiKey && provider.requiresApiKey !== false) {
+        await window.forge.secrets.saveProviderKey(providerId, trimmedApiKey);
+        await refreshProviderKeyStatus(providerId);
+      }
+
+      await window.forge.agent.generateAsk({
+        provider,
+        model: manualModel,
+        intelligence: settings.intelligence,
+        personalization: createPersonalizationPrompt(personalization),
+        speed: settings.speed,
+        prompt: "Reply with OK."
+      });
+      setSettings((current) => addManualModel(current, providerId, normalizedModelName));
+      setProviderFetchStates((current) => ({
+        ...current,
+        [providerId]: {
+          status: "success",
+          message: settings.language === "zh-CN" ? "模型已验证并保存" : "Model verified and saved"
+        }
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      setProviderFetchStates((current) => ({
+        ...current,
+        [providerId]: {
+          status: "error",
+          message:
+            settings.language === "zh-CN"
+              ? `模型不可用: ${message}`
+              : `Model is not usable: ${message}`
+        }
+      }));
+    }
+  }
+
   function setInterfaceLanguage(language: Language): void {
     setSettings((current) => setLanguage(current, language));
   }
@@ -444,6 +526,9 @@ export function App(): ReactElement {
     setMissingProjectPath(null);
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, { ...project, openedAt: new Date().toISOString() }));
+    setSelectedThreadId(
+      threads.find((thread) => !thread.archived && thread.projectPath === projectPath)?.id ?? null
+    );
     setComposerContextMode("project");
     setActiveView("workspace");
   }
@@ -1451,12 +1536,21 @@ export function App(): ReactElement {
   }
 
   function renderThreadWorkspace(): ReactElement {
+    const selectedThread = threads.find((thread) => thread.id === selectedThreadId) ?? null;
+    const workspaceProjectPath = selectedThread?.projectPath ?? currentProject?.path ?? null;
+    const visibleWorkspaceThreads = threads.filter(
+      (thread) =>
+        !thread.archived &&
+        (workspaceProjectPath ? thread.projectPath === workspaceProjectPath : !thread.projectPath)
+    );
+
     return (
       <ThreadWorkspace
+        compact
         language={settings.language}
-        hasProject={Boolean(currentProject)}
+        hasProject={Boolean(currentProject) || Boolean(selectedThread)}
         selectedThreadId={selectedThreadId}
-        threads={threads.filter((thread) => !thread.archived)}
+        threads={visibleWorkspaceThreads}
         projectScan={projectScanResult}
         previewFile={previewFile}
         changePreview={
@@ -1697,6 +1791,9 @@ export function App(): ReactElement {
           archivedThreads={threads.filter((thread) => thread.archived)}
           onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
           onFetchModels={(providerId, apiKey) => void fetchModels(providerId, apiKey)}
+          onAddManualModel={(providerId, modelName, apiKey) =>
+            void addManualProviderModel(providerId, modelName, apiKey)
+          }
           onAddProvider={(label, baseUrl) =>
             setSettings((current) => addCustomProvider(current, label, baseUrl))
           }
@@ -1793,6 +1890,22 @@ export function App(): ReactElement {
       onRenameProject={renameProject}
       onSelectProject={selectProject}
       onSelectThread={(threadId) => {
+        const thread = threads.find((candidate) => candidate.id === threadId);
+
+        if (thread?.projectPath) {
+          const project = recentProjects.find((candidate) => candidate.path === thread.projectPath);
+
+          if (project) {
+            setCurrentProject(project);
+            setRecentProjects((current) =>
+              addRecentProject(current, { ...project, openedAt: new Date().toISOString() })
+            );
+            setComposerContextMode("project");
+          }
+        } else if (thread) {
+          setComposerContextMode("ask");
+        }
+
         setSelectedThreadId(threadId);
         setActiveView("workspace");
       }}

@@ -133,4 +133,51 @@ describe("AppShell", () => {
     await user.click(screen.getByRole("menuitem", { name: "Archive conversation" }));
     expect(onArchiveThread).toHaveBeenCalledWith("thread-1");
   });
+
+  it("keeps project conversations nested under their project instead of the global chat list", () => {
+    render(
+      <AppShell
+        language="en-US"
+        activeView="workspace"
+        currentProjectPath="E:\\CodeHome\\Forge"
+        projects={[{ name: "Forge", path: "E:\\CodeHome\\Forge", openedAt: "2026-05-27T13:00:00.000Z" }]}
+        threads={[
+          {
+            id: "project-thread",
+            title: "Project task",
+            prompt: "Project task",
+            status: "running",
+            modelId: "openai:gpt-5.5",
+            intelligence: "high",
+            speed: "balanced",
+            createdAt: "2026-05-27T13:00:00.000Z",
+            projectPath: "E:\\CodeHome\\Forge",
+            events: []
+          },
+          {
+            id: "ask-thread",
+            title: "Ask only",
+            prompt: "Ask only",
+            status: "completed",
+            modelId: "openai:gpt-5.5",
+            intelligence: "high",
+            speed: "balanced",
+            createdAt: "2026-05-27T14:00:00.000Z",
+            projectPath: null,
+            events: []
+          }
+        ]}
+        onNavigate={() => undefined}
+      >
+        <section>Workbench</section>
+      </AppShell>
+    );
+
+    expect(screen.getByRole("group", { name: "Forge conversations" })).toHaveTextContent(
+      "Project task"
+    );
+    expect(screen.getByRole("group", { name: "Global conversations" })).toHaveTextContent(
+      "Ask only"
+    );
+  });
 });

@@ -368,6 +368,13 @@ export function saveModelSettings(storage: Storage, settings: ModelSettings): vo
         pricing: model.pricing,
         selectionCount: model.selectionCount,
         lastSelectedAt: model.lastSelectedAt
+      })),
+    manualModels: settings.models
+      .filter((model) => model.capabilitySource === "manual")
+      .map((model) => ({
+        providerId: model.providerId,
+        modelName: model.modelName,
+        label: model.label
       }))
   };
 
@@ -435,7 +442,12 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
         lastSelectedAt: typeof model.lastSelectedAt === "string" ? model.lastSelectedAt : undefined
       };
     });
-  const models = detectedModels
+  const manualModels = (persisted.manualModels ?? [])
+    .filter((model) => model.providerId && model.modelName)
+    .map((model) =>
+      createManualModel(model.providerId, model.modelName, model.label || model.modelName, true)
+    );
+  const models = dedupeModelsById([...detectedModels, ...manualModels])
     .filter((model) => {
       const provider = providers.find((candidate) => candidate.id === model.providerId);
 
@@ -462,6 +474,16 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
     providers,
     models
   };
+}
+
+function dedupeModelsById(models: ForgeModel[]): ForgeModel[] {
+  const modelsById = new Map<string, ForgeModel>();
+
+  for (const model of models) {
+    modelsById.set(model.id, { ...modelsById.get(model.id), ...model });
+  }
+
+  return Array.from(modelsById.values());
 }
 
 function createDetectedModel(

@@ -24,6 +24,27 @@ const thread: TaskThread = {
 };
 
 describe("ThreadWorkspace", () => {
+  it("uses a compact Codex-style transcript without nested task panels", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        threads={[thread]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+        onPickProject={() => undefined}
+      />
+    );
+
+    expect(screen.getByRole("region", { name: "Conversation transcript" })).toHaveTextContent(
+      "任务已创建, 等待 Forge 生成执行计划"
+    );
+    expect(screen.queryByText("Task threads")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Plan" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Steps")).not.toBeInTheDocument();
+    expect(screen.queryByText("Validation")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no task threads", () => {
     render(
       <ThreadWorkspace

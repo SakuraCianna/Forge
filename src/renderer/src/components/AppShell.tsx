@@ -322,14 +322,18 @@ export function AppShell({
           {projectsToRender.map((project) => {
             const displayName = getProjectDisplayName(project, projectsToRender);
             const selected = project.path === currentProjectPath;
+            const projectThreads = visibleThreads.filter((thread) => thread.projectPath === project.path);
 
             return (
               <div
                 key={project.path}
-                className={`group grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-[12px] pr-1 transition ${
-                  selected ? "bg-[#ececf1]" : "hover:bg-[#ececf1]"
-                }`}
+                className="space-y-1"
               >
+                <div
+                  className={`group grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-[12px] pr-1 transition ${
+                    selected ? "bg-[#ececf1]" : "hover:bg-[#ececf1]"
+                  }`}
+                >
                 <button
                   type="button"
                   onClick={() => onSelectProject?.(project.path)}
@@ -398,6 +402,29 @@ export function AppShell({
                     </MenuItem>
                   </MenuContent>
                 </DropdownMenu.Root>
+                </div>
+
+                {projectThreads.length > 0 ? (
+                  // 项目对话挂在项目下方, 避免全局列表混在一起
+                  <div
+                    role="group"
+                    aria-label={`${displayName} conversations`}
+                    className="ml-7 space-y-1 border-l border-[#ececf1] pl-2"
+                  >
+                    {projectThreads.map((thread) => (
+                      <button
+                        key={thread.id}
+                        type="button"
+                        onClick={() => onSelectThread?.(thread.id)}
+                        className="flex min-w-0 items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[10px] text-[#565869] transition hover:bg-[#ececf1]"
+                      >
+                        <MessageSquare className="h-4 w-4 shrink-0" />
+                        <span className="truncate text-[#202123]">{thread.title}</span>
+                        {thread.pinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-[#6e6e80]" /> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -423,15 +450,17 @@ export function AppShell({
   }
 
   function renderConversations(): ReactElement | null {
-    if (visibleThreads.length === 0) {
+    const globalThreads = visibleThreads.filter((thread) => !thread.projectPath);
+
+    if (globalThreads.length === 0) {
       return null;
     }
 
     return (
       <section className="mt-5 min-w-0">
         <div className="mb-1 px-3 text-[10px] text-[#8e8ea0]">{copy.conversations}</div>
-        <div className="space-y-1">
-          {visibleThreads.map((thread) => (
+        <div role="group" aria-label="Global conversations" className="space-y-1">
+          {globalThreads.map((thread) => (
             <div
               key={thread.id}
               className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-[12px] pr-1 transition hover:bg-[#ececf1]"

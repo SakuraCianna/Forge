@@ -27,13 +27,14 @@ import { useI18n } from "@/i18n/useI18n";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
 
 type ThreadWorkspaceProps = {
+  compact?: boolean;
   language: Language;
   hasProject?: boolean;
   selectedThreadId: string | null;
   threads: TaskThread[];
-  projectScan: ProjectScanResult | null;
-  previewFile: ProjectTextFile | null;
-  changePreview: ProjectFileChangePreview | null;
+  projectScan?: ProjectScanResult | null;
+  previewFile?: ProjectTextFile | null;
+  changePreview?: ProjectFileChangePreview | null;
   changePreviews?: ProjectFileChangePreview[];
   onSelectThread: (threadId: string) => void;
   onPickProject?: () => void;
@@ -44,9 +45,9 @@ type ThreadWorkspaceProps = {
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
   onOpenSourceControl?: () => void;
-  onRunCommand: (threadId: string, command: string) => void;
+  onRunCommand?: (threadId: string, command: string) => void;
   onCancelCommand?: (threadId: string, runId: string) => void;
-  onPreviewFile: (relativePath: string) => void;
+  onPreviewFile?: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
   onApplyChange?: (relativePath: string, nextContent: string) => void;
   onDiscardChange?: (relativePath: string) => void;
@@ -73,13 +74,14 @@ type ThreadActivitySummary = {
 };
 
 export function ThreadWorkspace({
+  compact = false,
   language,
   hasProject = true,
   selectedThreadId,
   threads,
-  projectScan,
-  previewFile,
-  changePreview,
+  projectScan = null,
+  previewFile = null,
+  changePreview = null,
   changePreviews,
   onSelectThread,
   onPickProject,
@@ -90,9 +92,9 @@ export function ThreadWorkspace({
   onGenerateCommandFix,
   onCompleteAgentAction,
   onOpenSourceControl,
-  onRunCommand,
+  onRunCommand = () => undefined,
   onCancelCommand,
-  onPreviewFile,
+  onPreviewFile = () => undefined,
   onPreviewChange,
   onApplyChange,
   onDiscardChange,
@@ -205,6 +207,35 @@ export function ThreadWorkspace({
           </div>
           <h1 className="text-lg font-semibold tracking-normal text-[#202123]">{t("threads.emptyTitle")}</h1>
           <p className="mt-2 text-[12px] leading-5 text-[#6e6e80]">{t("threads.emptyBody")}</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (compact) {
+    return (
+      <section className="h-full min-h-0 overflow-auto px-5 py-7">
+        <div className="mx-auto flex min-h-full max-w-[920px] flex-col gap-7">
+          <article className="ml-auto max-w-[72%] rounded-[18px] bg-[#f3f3f3] px-4 py-3 text-sm leading-6 text-[#202123]">
+            <div className="mb-1 text-[11px] text-[#8e8ea0]">
+              {language === "zh-CN" ? "用户请求" : "Request"}
+            </div>
+            <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
+          </article>
+
+          <section
+            role="region"
+            aria-label="Conversation transcript"
+            className="grid gap-5"
+          >
+            {selectedThread.events.length > 0 ? (
+              selectedThread.events.map((event) => renderCompactEvent(event))
+            ) : (
+              <div className="text-sm text-[#8e8ea0]">
+                {language === "zh-CN" ? "等待 Forge 开始执行" : "Waiting for Forge to start"}
+              </div>
+            )}
+          </section>
         </div>
       </section>
     );
@@ -334,6 +365,99 @@ export function ThreadWorkspace({
       </div>
     </section>
   );
+
+  function renderCompactEvent(event: TaskThreadEvent): ReactElement {
+    const result = event.commandResult;
+    const runningCommand = event.commandRun;
+    const failed = Boolean(result && !result.cancelled && (result.timedOut || result.exitCode !== 0));
+    const passed = Boolean(result && result.exitCode === 0 && !result.timedOut);
+    const label = getCompactEventLabel(event, language);
+
+    return (
+      <article key={event.id} className="grid grid-cols-[20px_minmax(0,1fr)] gap-3">
+        <span
+          className={`mt-1 flex h-5 w-5 items-center justify-center rounded-full ${
+            failed
+              ? "bg-[#fff7ed] text-[#b45309]"
+              : passed || event.kind === "result"
+                ? "bg-[#effaf6] text-[#087443]"
+                : "bg-[#f7f7f8] text-[#565869]"
+          }`}
+        >
+          {failed ? (
+            <Circle className="h-3.5 w-3.5" />
+          ) : passed || event.kind === "result" ? (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          ) : runningCommand ? (
+            <Activity className="h-3.5 w-3.5" />
+          ) : (
+            <Circle className="h-3.5 w-3.5" />
+          )}
+        </span>
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2 text-[11px] text-[#8e8ea0]">
+            <span className="shrink-0">{label}</span>
+            <span className="truncate">{event.createdAt}</span>
+          </div>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#202123]">{event.message}</p>
+
+          {runningCommand ? (
+            <pre className="mt-2 overflow-auto rounded-[12px] bg-[#111827] p-3 font-mono text-[11px] leading-4 text-[#f8fafc]">
+              {runningCommand.command}
+              {runningCommand.stdout ? `\n${formatCommandOutputSnippet(runningCommand.stdout)}` : ""}
+              {runningCommand.stderr ? `\n${formatCommandOutputSnippet(runningCommand.stderr)}` : ""}
+            </pre>
+          ) : null}
+
+          {result ? (
+            <div className="mt-2 grid gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-[#6e6e80]">
+                <code className="max-w-full truncate rounded-[8px] bg-[#f7f7f8] px-2 py-1 font-mono text-[#202123]">
+                  {result.command}
+                </code>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 ${
+                    failed ? "bg-[#fff7ed] text-[#b45309]" : "bg-[#effaf6] text-[#087443]"
+                  }`}
+                >
+                  {result.timedOut
+                    ? language === "zh-CN"
+                      ? "已超时"
+                      : "timed out"
+                    : `exit ${result.exitCode}`}
+                </span>
+                {failed ? (
+                  <>
+                    {onGenerateCommandFix ? (
+                      <button
+                        type="button"
+                        onClick={() => onGenerateCommandFix(selectedThread.id, result)}
+                        className="h-7 shrink-0 rounded-[9px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                      >
+                        {language === "zh-CN" ? "生成修复计划" : "Generate fix plan"}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => onRunCommand(selectedThread.id, result.command)}
+                      className="h-7 shrink-0 rounded-[9px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                    >
+                      {language === "zh-CN" ? "重试" : "Retry"}
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              {result.stdout.trim() || result.stderr.trim() ? (
+                <pre className="max-h-44 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-3 font-mono text-[11px] leading-4 text-[#f8fafc]">
+                  {formatCommandOutputSnippet([result.stdout, result.stderr].filter(Boolean).join("\n"))}
+                </pre>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </article>
+    );
+  }
 
   function renderActiveCommandPanel(entry: CommandHistoryEntry): ReactElement {
     const copy =
@@ -1836,6 +1960,37 @@ function getThreadActivitySummary(
     command: failedResult.command,
     meta: failedResult.timedOut ? copy.timedOut : copy.exit(failedResult.exitCode)
   };
+}
+
+function getCompactEventLabel(event: TaskThreadEvent, language: Language): string {
+  if (event.commandRun) {
+    return language === "zh-CN" ? "正在运行命令" : "Running command";
+  }
+
+  if (event.commandResult) {
+    const failed =
+      event.commandResult.timedOut ||
+      event.commandResult.cancelled ||
+      event.commandResult.exitCode !== 0;
+
+    return failed
+      ? language === "zh-CN"
+        ? "命令失败"
+        : "Command failed"
+      : language === "zh-CN"
+        ? "命令已通过"
+        : "Command passed";
+  }
+
+  if (event.kind === "error") {
+    return language === "zh-CN" ? "需要恢复" : "Needs recovery";
+  }
+
+  if (event.kind === "result") {
+    return language === "zh-CN" ? "输出" : "Output";
+  }
+
+  return language === "zh-CN" ? "执行记录" : "Run transcript";
 }
 
 function findLatestUnfinishedCommandRun(events: TaskThreadEvent[]): string | null {

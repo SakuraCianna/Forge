@@ -50,6 +50,7 @@ type SettingsPanelProps = {
   generalPreferences: GeneralPreferences;
   onDeleteProviderKey: (providerId: string) => void;
   onFetchModels: (providerId: string, apiKey?: string) => void;
+  onAddManualModel: (providerId: string, modelName: string, apiKey?: string) => void;
   onAddProvider: (label: string, baseUrl: string) => void;
   onClearUsage: () => void;
   onDeleteProvider: (providerId: string) => void;
@@ -85,6 +86,7 @@ export function SettingsPanel({
   generalPreferences,
   onDeleteProviderKey,
   onFetchModels,
+  onAddManualModel,
   onAddProvider,
   onClearUsage,
   onDeleteProvider,
@@ -104,10 +106,12 @@ export function SettingsPanel({
   usageRates
 }: SettingsPanelProps): ReactElement {
   const { t } = useI18n(settings.language);
-  const [activeSection, setActiveSection] = useState<SettingsSection>("models");
+  const [activeSection, setActiveSection] = useState<SettingsSection>("general");
   const [expandedProviderId, setExpandedProviderId] = useState(settings.providers[0]?.id ?? "");
   const [draftKeys, setDraftKeys] = useState<Record<string, string>>({});
   const [draftBaseUrls, setDraftBaseUrls] = useState<Record<string, string>>({});
+  const [manualModelProviderId, setManualModelProviderId] = useState<string | null>(null);
+  const [draftManualModels, setDraftManualModels] = useState<Record<string, string>>({});
   const [newProviderLabel, setNewProviderLabel] = useState("");
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState("");
   const [modelSearchQuery, setModelSearchQuery] = useState("");
@@ -648,6 +652,7 @@ export function SettingsPanel({
             const keyStatus = keyStatuses[provider.id] ?? { hasKey: false, last4: null };
             const draftKey = draftKeys[provider.id] ?? "";
             const draftBaseUrl = draftBaseUrls[provider.id] ?? provider.baseUrl ?? "";
+            const draftManualModel = draftManualModels[provider.id] ?? "";
             const isExpanded = expandedProviderId === provider.id;
             const providerLabel = provider.label.trim() || t("settings.customProvider");
             const fetchState = providerFetchStates[provider.id] ?? { status: "idle" as const };
@@ -757,20 +762,20 @@ export function SettingsPanel({
                       </label>
                     ) : null}
 
-                    <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap">
                       {requiresApiKey ? (
                         <>
                           <button
                             type="button"
                             aria-label={`${t("settings.saveKey")} ${providerLabel} API Key`}
-                            className="inline-flex h-9 items-center justify-center rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                            className="inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
                             onClick={() => onSaveProviderKey(provider.id, draftKey)}
                           >
                             {t("settings.saveKey")}
                           </button>
                           <button
                             type="button"
-                            className="inline-flex h-9 items-center justify-center rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                            className="inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
                             onClick={() => onDeleteProviderKey(provider.id)}
                           >
                             {t("settings.deleteKey")}
@@ -780,7 +785,9 @@ export function SettingsPanel({
                       <button
                         type="button"
                         disabled={fetchState.status === "loading"}
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
+                        className={`inline-flex h-9 shrink-0 items-center justify-center gap-2 border border-[#d9d9e3] bg-white px-3 text-xs font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99] disabled:cursor-wait disabled:opacity-70 ${
+                          provider.custom ? "rounded-l-[12px] rounded-r-none" : "rounded-[12px]"
+                        }`}
                         onClick={() => onFetchModels(provider.id, draftKey)}
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${fetchState.status === "loading" ? "animate-spin" : ""}`} />
@@ -790,9 +797,23 @@ export function SettingsPanel({
                             : "Fetching"
                           : t("settings.fetchModels")}
                       </button>
+                      {provider.custom ? (
+                        <button
+                          type="button"
+                          aria-label={`Add model ID for ${providerLabel}`}
+                          className="-ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-l-none rounded-r-[12px] border border-l-0 border-[#d9d9e3] bg-white text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                          onClick={() =>
+                            setManualModelProviderId((current) =>
+                              current === provider.id ? null : provider.id
+                            )
+                          }
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      ) : null}
                       {fetchState.message ? (
                         <span
-                          className={`min-w-0 max-w-[560px] truncate text-xs ${
+                          className={`min-w-0 flex-1 truncate whitespace-nowrap text-xs ${
                             fetchState.status === "error" ? "text-[#b45309]" : "text-[#087443]"
                           }`}
                           title={fetchState.message}
@@ -803,7 +824,7 @@ export function SettingsPanel({
                       {provider.custom ? (
                         <button
                           type="button"
-                          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[12px] border border-[#f1c2c2] bg-white px-3 text-xs font-semibold text-[#b42318] transition hover:bg-[#fff5f5] active:scale-[0.99]"
+                          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[12px] border border-[#f1c2c2] bg-white px-3 text-xs font-semibold text-[#b42318] transition hover:bg-[#fff5f5] active:scale-[0.99]"
                           onClick={() => onDeleteProvider(provider.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -811,6 +832,46 @@ export function SettingsPanel({
                         </button>
                       ) : null}
                     </div>
+
+                    {manualModelProviderId === provider.id ? (
+                      // 手动模型行保持单行, 避免状态信息挤压按钮
+                      <div
+                        data-testid={`manual-model-row-${provider.id}`}
+                        className="flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap"
+                      >
+                        <label className="min-w-0 flex-1">
+                          <span className="sr-only">{providerLabel} model ID</span>
+                          <input
+                            aria-label={`${providerLabel} model ID`}
+                            value={draftManualModel}
+                            onChange={(event) => {
+                              const nextValue = event.currentTarget.value;
+
+                              setDraftManualModels((current) => ({
+                                ...current,
+                                [provider.id]: nextValue
+                              }));
+                            }}
+                            placeholder="model-id"
+                            className="h-9 w-full rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          aria-label={`Save ${providerLabel} model ID`}
+                          className="h-9 shrink-0 rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                          onClick={() => {
+                            onAddManualModel(provider.id, draftManualModel, draftKey);
+                            setDraftManualModels((current) => ({
+                              ...current,
+                              [provider.id]: ""
+                            }));
+                          }}
+                        >
+                          {settings.language === "zh-CN" ? "保存" : "Save"}
+                        </button>
+                      </div>
+                    ) : null}
 
                     <p className="text-xs leading-5 text-[#6e6e80]">
                       {requiresApiKey

@@ -17,6 +17,7 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
       onClearUsage={vi.fn()}
       onDeleteProviderKey={vi.fn()}
       onFetchModels={vi.fn()}
+      onAddManualModel={vi.fn()}
       onAddProvider={vi.fn()}
       onDeleteProvider={vi.fn()}
       onSaveProviderKey={vi.fn()}
@@ -40,6 +41,15 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
 }
 
 describe("SettingsPanel", () => {
+  it("opens settings on General instead of Available models", () => {
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+
+    renderSettingsPanel({ settings });
+
+    expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    expect(screen.getByText("Work mode")).toBeInTheDocument();
+  });
+
   it("switches language through an explicit user control", async () => {
     const user = userEvent.setup();
     const onSetLanguage = vi.fn();
@@ -170,6 +180,65 @@ describe("SettingsPanel", () => {
     );
   });
 
+  it("adds a manual model ID for a custom API profile from a single inline row", async () => {
+    const user = userEvent.setup();
+    const onAddManualModel = vi.fn();
+    const settings = setLanguage(
+      {
+        ...createDefaultModelSettings(),
+        providers: [
+          ...createDefaultModelSettings().providers,
+          {
+            id: "custom-cherry",
+            label: "Cherry Gateway",
+            kind: "openai-compatible",
+            baseUrl: "https://gateway.example/v1",
+            requiresBaseUrl: true,
+            custom: true
+          }
+        ]
+      },
+      "en-US"
+    );
+
+    renderSettingsPanel({ settings, onAddManualModel });
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+    await user.click(screen.getByRole("button", { name: /Configure Cherry Gateway/ }));
+    await user.click(screen.getByRole("button", { name: "Add model ID for Cherry Gateway" }));
+    await user.type(screen.getByLabelText("Cherry Gateway model ID"), "deepseek-coder");
+    await user.click(screen.getByRole("button", { name: "Save Cherry Gateway model ID" }));
+
+    expect(onAddManualModel).toHaveBeenCalledWith("custom-cherry", "deepseek-coder", "");
+    expect(screen.getByTestId("manual-model-row-custom-cherry")).toHaveClass("flex-nowrap");
+  });
+
+  it("keeps provider fetch errors on one line without squeezing action buttons", async () => {
+    const user = userEvent.setup();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+
+    renderSettingsPanel({
+      settings,
+      providerFetchStates: {
+        openai: {
+          status: "error",
+          message:
+            "Error invoking remote method 'forge:provider-models:fetch': SyntaxError: Unexpected token '<', '<!doctype html>' is not valid JSON"
+        }
+      }
+    });
+
+    await user.click(screen.getByRole("button", { name: /API profiles/ }));
+
+    expect(screen.getByRole("button", { name: "Fetch models" })).toHaveClass("shrink-0");
+    expect(screen.getByText(/Unexpected token/)).toHaveClass(
+      "min-w-0",
+      "flex-1",
+      "truncate",
+      "whitespace-nowrap"
+    );
+  });
+
   it("edits usage rates from collapsed provider groups and personalization settings", async () => {
     const user = userEvent.setup();
     const onUpdateUsageRate = vi.fn();
@@ -255,6 +324,7 @@ describe("SettingsPanel", () => {
     ]);
 
     renderSettingsPanel({ settings, onToggleModelEnabled, onSelectModel });
+    await user.click(screen.getByRole("button", { name: /Available models/ }));
 
     expect(screen.getByText("Disabled")).toBeInTheDocument();
 
@@ -298,6 +368,7 @@ describe("SettingsPanel", () => {
     ]);
 
     renderSettingsPanel({ settings });
+    await user.click(screen.getByRole("button", { name: /Available models/ }));
 
     await user.type(screen.getByRole("searchbox", { name: "Search models" }), "deep");
 

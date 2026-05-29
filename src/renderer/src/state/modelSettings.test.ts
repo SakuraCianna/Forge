@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addCustomProvider,
+  addManualModel,
   createDefaultModelSettings,
   deleteCustomProvider,
   getEnabledModels,
@@ -259,6 +260,24 @@ describe("modelSettings", () => {
     expect(loaded.models.map((model) => model.id)).toContain("openai:gpt-5.5");
     expect(getEnabledModels(loaded)).toEqual([]);
     expect(loaded.currentModelId).toBeNull();
+  });
+
+  it("persists manually added custom provider models", () => {
+    const storage = createMemoryStorage();
+    let settings = createDefaultModelSettings();
+
+    settings = addCustomProvider(settings, "Cherry Gateway", "https://gateway.example/v1");
+    settings = addManualModel(settings, "custom-cherry-gateway", "deepseek-coder");
+    saveModelSettings(storage, settings);
+
+    const loaded = loadModelSettings(storage);
+
+    expect(loaded.models.find((model) => model.id === "custom-cherry-gateway:deepseek-coder")).toMatchObject({
+      providerId: "custom-cherry-gateway",
+      modelName: "deepseek-coder",
+      capabilitySource: "manual",
+      enabled: true
+    });
   });
 
   it("drops persisted provider models that are not usable for coding tasks", () => {
