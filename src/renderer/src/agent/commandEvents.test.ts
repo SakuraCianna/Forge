@@ -13,6 +13,10 @@ describe("commandEvents", () => {
       expect.objectContaining({
         id: "thread-1-command-started-2026-05-27T13:00:00.000Z",
         kind: "command",
+        commandRun: {
+          command: "npm test",
+          status: "running"
+        },
         createdAt: "2026-05-27T13:00:00.000Z"
       })
     );

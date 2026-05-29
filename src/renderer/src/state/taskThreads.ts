@@ -15,11 +15,17 @@ export type CommandRunResult = {
   timedOut: boolean;
 };
 
+export type CommandRunState = {
+  command: string;
+  status: "running";
+};
+
 export type TaskThreadEvent = {
   id: string;
   kind: TaskThreadEventKind;
   message: string;
   createdAt: string;
+  commandRun?: CommandRunState;
   commandResult?: CommandRunResult;
 };
 

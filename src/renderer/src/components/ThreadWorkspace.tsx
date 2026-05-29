@@ -53,6 +53,13 @@ type ThreadWorkspaceProps = {
 
 type WorkspaceTab = "plan" | "changes" | "commands" | "logs";
 
+type CommandHistoryEntry = {
+  id: string;
+  createdAt: string;
+  status: "finished" | "running";
+  result: CommandRunResult;
+};
+
 export function ThreadWorkspace({
   language,
   hasProject = true,
@@ -987,15 +994,50 @@ export function ThreadWorkspace({
             stderr: "stderr",
             generateFixPlan: "Generate fix plan"
           };
-    const commandHistory =
-      selectedThread?.events
-        .filter((event) => event.commandResult)
-        .map((event) => ({
-          id: event.id,
-          createdAt: event.createdAt,
-          result: event.commandResult as CommandRunResult
-        }))
-        .reverse() ?? [];
+    const commandRunningCopy = language === "zh-CN" ? "运行中" : "running";
+    const commandEvents = selectedThread?.events ?? [];
+    const commandHistory: CommandHistoryEntry[] = commandEvents
+      .flatMap<CommandHistoryEntry>((event, index) => {
+        if (event.commandResult) {
+          return [
+            {
+              id: event.id,
+              createdAt: event.createdAt,
+              status: "finished" as const,
+              result: event.commandResult
+            }
+          ];
+        }
+
+        if (!event.commandRun) {
+          return [];
+        }
+
+        const hasFinishedAfter = commandEvents
+          .slice(index + 1)
+          .some((candidate) => candidate.commandResult?.command === event.commandRun?.command);
+
+        if (hasFinishedAfter) {
+          return [];
+        }
+
+        return [
+          {
+            id: event.id,
+            createdAt: event.createdAt,
+            status: "running" as const,
+            result: {
+              command: event.commandRun.command,
+              cwd: "",
+              exitCode: null,
+              stdout: "",
+              stderr: "",
+              timedOut: false
+            }
+          }
+        ];
+      })
+      .reverse();
 
     return (
       <div className="space-y-4">
@@ -1030,7 +1072,7 @@ export function ThreadWorkspace({
           </h2>
           {commandHistory.length > 0 ? (
             <div className="space-y-3">
-              {commandHistory.map(({ id, createdAt, result }) => (
+              {commandHistory.map(({ id, createdAt, result, status }) => (
                 <article
                   key={id}
                   className="rounded-[16px] border border-[#ececf1] bg-[#fafafa] p-3"
@@ -1057,8 +1099,14 @@ export function ThreadWorkspace({
                           {commandHistoryCopy.timedOut}
                         </span>
                       ) : null}
+                      {status === "running" ? (
+                        <span className="rounded-full border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] text-[#565869]">
+                          {commandRunningCopy}
+                        </span>
+                      ) : null}
                       {selectedThread &&
                       onGenerateCommandFix &&
+                      status === "finished" &&
                       (result.timedOut || result.exitCode !== 0) ? (
                         <button
                           type="button"

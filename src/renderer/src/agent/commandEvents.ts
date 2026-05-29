@@ -27,6 +27,10 @@ export function createCommandStartedEvent({
     id: `${threadId}-command-started-${createdAt}`,
     kind: "command",
     message: `开始执行命令: ${command}`,
+    commandRun: {
+      command,
+      status: "running"
+    },
     createdAt
   };
 }

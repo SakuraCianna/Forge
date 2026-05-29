@@ -615,6 +615,47 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByText("failed tests")).toBeInTheDocument();
   });
 
+  it("shows a running command in the command history", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Watch running command",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-started",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandRun: {
+                  command: "npm run build",
+                  status: "running"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    expect(screen.getByText("npm run build")).toBeInTheDocument();
+    expect(screen.getByText("running")).toBeInTheDocument();
+  });
+
   it("generates a fix plan from a failed command history entry", async () => {
     const user = userEvent.setup();
     const onGenerateCommandFix = vi.fn();
