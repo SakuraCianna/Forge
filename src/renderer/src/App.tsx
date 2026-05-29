@@ -12,6 +12,7 @@ import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer, type ComposerContextMode } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
+import { resolveAgentActionExecution } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
 import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
@@ -682,17 +683,21 @@ export function App(): ReactElement {
 
   async function generateProjectFileChange(
     relativePath: string,
-    currentContent: string
-  ): Promise<void> {
+    currentContent: string,
+    threadId?: string
+  ): Promise<boolean | undefined> {
     if (!currentProject) {
-      return;
+      return false;
     }
 
+    const targetThreadId = threadId ?? selectedThreadId ?? undefined;
     const selectedThread =
-      threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
+      (targetThreadId ? threads.find((thread) => thread.id === targetThreadId) : null) ??
+      threads[0] ??
+      null;
 
     if (!selectedThread) {
-      return;
+      return false;
     }
 
     const model = settings.models.find((candidate) => candidate.id === selectedThread.modelId);
@@ -752,11 +757,13 @@ export function App(): ReactElement {
           }
         ])
       );
+      return true;
     } catch (error) {
       appendThreadError(
         selectedThread.id,
         `模型文件修改失败: ${error instanceof Error ? error.message : String(error)}`
       );
+      return false;
     }
   }
 
@@ -1051,17 +1058,51 @@ export function App(): ReactElement {
   function runAgentAction(threadId: string, action: AgentAction): void {
     updateAgentActionStatus(threadId, action.id, "running");
 
-    if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
-      void openAgentFileAction(threadId, action.id, action.target);
+    const execution = resolveAgentActionExecution(action);
+
+    if (execution.kind === "open-file") {
+      void openAgentFileAction(threadId, action.id, execution.relativePath);
+    } else if (execution.kind === "generate-file-change") {
+      void generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
+    } else if (execution.kind === "run-command") {
+      void runThreadCommand(threadId, execution.command, action.id);
+    } else {
+      updateAgentActionStatus(threadId, action.id, "completed");
+    }
+  }
+
+  async function generateAgentFileChangeAction(
+    threadId: string,
+    actionId: string,
+    relativePath: string
+  ): Promise<void> {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      updateAgentActionStatus(threadId, actionId, "failed");
       return;
     }
 
-    if (action.kind === "run-command" && action.command) {
-      void runThreadCommand(threadId, action.command, action.id);
-      return;
-    }
+    try {
+      const file = await window.forge.files.readText({
+        projectRoot: currentProject.path,
+        relativePath
+      });
+      setPreviewFile(file);
+      setFileFormatterMode(isMarkdownPreviewPath(file.relativePath) ? "rendered" : "raw");
 
-    updateAgentActionStatus(threadId, action.id, "completed");
+      const generated = await generateProjectFileChange(file.relativePath, file.content, threadId);
+      updateAgentActionStatus(threadId, actionId, generated ? "completed" : "failed");
+    } catch (error) {
+      updateAgentActionStatus(threadId, actionId, "failed");
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "file",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+    }
   }
 
   async function openAgentFileAction(
