@@ -1038,7 +1038,8 @@ export function ThreadWorkspace({
             timedOut: "已超时",
             stdout: "stdout",
             stderr: "stderr",
-            generateFixPlan: "生成修复计划"
+            generateFixPlan: "生成修复计划",
+            retryCommand: "重试命令"
           }
         : {
             title: "Command history",
@@ -1047,7 +1048,8 @@ export function ThreadWorkspace({
             timedOut: "Timed out",
             stdout: "stdout",
             stderr: "stderr",
-            generateFixPlan: "Generate fix plan"
+            generateFixPlan: "Generate fix plan",
+            retryCommand: "Retry command"
           };
     const commandRunningCopy = language === "zh-CN" ? "运行中" : "running";
     const commandEvents = selectedThread?.events ?? [];
@@ -1171,6 +1173,17 @@ export function ThreadWorkspace({
                           className="h-6 rounded-[9px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
                         >
                           {commandHistoryCopy.generateFixPlan}
+                        </button>
+                      ) : null}
+                      {selectedThread &&
+                      status === "finished" &&
+                      (result.timedOut || result.exitCode !== 0) ? (
+                        <button
+                          type="button"
+                          onClick={() => onRunCommand(selectedThread.id, result.command)}
+                          className="h-6 rounded-[9px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                        >
+                          {commandHistoryCopy.retryCommand}
                         </button>
                       ) : null}
                     </div>
