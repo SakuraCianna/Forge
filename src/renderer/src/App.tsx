@@ -64,6 +64,7 @@ import {
   archiveAllThreads,
   archiveProjectThreads,
   archiveThread,
+  completeNextPendingAgentAction,
   createThreadFromSettings,
   restoreThread,
   toggleThreadPinned,
@@ -583,6 +584,9 @@ export function App(): ReactElement {
       setGitStatus(result.status);
       setCommitMessage("");
       setGitNotice(t("projects.commitDone"));
+      if (selectedThreadId) {
+        setThreads((current) => completeNextPendingAgentAction(current, selectedThreadId, "commit"));
+      }
     } catch (error) {
       setGitNotice(error instanceof Error ? error.message : String(error));
     }

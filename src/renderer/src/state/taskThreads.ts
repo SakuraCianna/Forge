@@ -179,6 +179,24 @@ export function updateThreadAgentActionStatus(
   );
 }
 
+export function completeNextPendingAgentAction(
+  threads: TaskThread[],
+  threadId: string,
+  kind: AgentAction["kind"]
+): TaskThread[] {
+  return threads.map((thread) => {
+    if (thread.id !== threadId) {
+      return thread;
+    }
+
+    const action = thread.agentActions?.find(
+      (candidate) => candidate.kind === kind && candidate.status === "pending"
+    );
+
+    return action ? updateThreadActionStatus(thread, action.id, "completed") : thread;
+  });
+}
+
 function updateThreadActionStatus(
   thread: TaskThread,
   actionId: string,

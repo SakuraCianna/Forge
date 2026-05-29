@@ -12,6 +12,7 @@ import {
   archiveAllThreads,
   archiveProjectThreads,
   archiveThread,
+  completeNextPendingAgentAction,
   createThreadFromSettings,
   restoreThread,
   toggleThreadPinned,
@@ -425,6 +426,49 @@ describe("taskThreads", () => {
     );
 
     expect(threads[0].status).toBe("blocked");
+  });
+
+  it("completes the next pending commit action after a Git commit succeeds", () => {
+    const threads = completeNextPendingAgentAction(
+      [
+        {
+          id: "thread-1",
+          title: "Agent task",
+          prompt: "Agent task",
+          status: "blocked",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "run-command",
+              label: "Run npm test",
+              status: "completed",
+              command: "npm test"
+            },
+            {
+              id: "action-2",
+              stepId: "step-2",
+              kind: "commit",
+              label: "Commit changes",
+              status: "pending"
+            }
+          ]
+        }
+      ],
+      "thread-1",
+      "commit"
+    );
+
+    expect(threads[0].agentActions?.map((action) => action.status)).toEqual([
+      "completed",
+      "completed"
+    ]);
+    expect(threads[0].status).toBe("completed");
   });
 });
 
