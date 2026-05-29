@@ -323,6 +323,63 @@ describe("ThreadWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows queue progress and blocks continuation after a failed action", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Fix failed command",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect src/App.tsx",
+                status: "completed",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "failed",
+                command: "npm test"
+              },
+              {
+                id: "action-3",
+                stepId: "step-3",
+                kind: "run-command",
+                label: "Run npm run build",
+                status: "pending",
+                command: "npm run build"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentAction={vi.fn()}
+        onRunAgentActions={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("1 / 3 actions completed")).toBeInTheDocument();
+    expect(screen.getByText("1 failed")).toBeInTheDocument();
+    expect(screen.getByText("Queue stopped at Run npm test")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run next agent action" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Continue safe agent actions" })
+    ).not.toBeInTheDocument();
+  });
+
   it("submits a command for the selected thread", async () => {
     const user = userEvent.setup();
     const onRunCommand = vi.fn();

@@ -272,6 +272,9 @@ export function ThreadWorkspace({
             manualGateBody: (label: string) => `请先处理 ${label}, Forge 不会自动越过这个门禁`,
             reviewGate: "审查门禁",
             ready: "就绪",
+            progress: (completed: number, total: number) => `已完成 ${completed} / ${total} 个动作`,
+            failedCount: (count: number) => `${count} 个失败`,
+            queueStoppedAt: (label: string) => `队列停止在 ${label}`,
             generateEdit: "生成修改"
           }
         : {
@@ -289,10 +292,18 @@ export function ThreadWorkspace({
               `Handle ${label} before Forge continues. This gate will not be auto-run.`,
             reviewGate: "Review gate",
             ready: "Ready",
+            progress: (completed: number, total: number) =>
+              `${completed} / ${total} actions completed`,
+            failedCount: (count: number) => `${count} failed`,
+            queueStoppedAt: (label: string) => `Queue stopped at ${label}`,
             generateEdit: "Generate edit"
           };
-    const nextPendingAction = findNextPendingAgentAction(agentActions);
-    const runnablePendingActions = getRunnablePendingAgentActions(agentActions);
+    const queueStats = getQueueStats(agentActions);
+    const queueBlockerAction = getQueueBlockerAction(agentActions);
+    const queueBlocked =
+      queueBlockerAction?.status === "failed" || queueBlockerAction?.status === "running";
+    const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(agentActions);
+    const runnablePendingActions = queueBlocked ? [] : getRunnablePendingAgentActions(agentActions);
     const nextRunnableAction =
       nextPendingAction && isRunnableAgentAction(nextPendingAction) ? nextPendingAction : null;
     const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
@@ -445,6 +456,25 @@ export function ThreadWorkspace({
                 </button>
               ) : null}
             </div>
+            {queueStats.total > 0 ? (
+              <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[14px] border border-[#ececf1] bg-white px-3 py-2">
+                <p className="truncate text-sm font-medium leading-5 text-[#202123]">
+                  {actionQueueCopy.progress(queueStats.completed, queueStats.total)}
+                </p>
+                {queueStats.failed > 0 ? (
+                  <span className="rounded-full border border-[#f4c7ab] bg-[#fff7ed] px-2 py-0.5 text-[11px] text-[#b45309]">
+                    {actionQueueCopy.failedCount(queueStats.failed)}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {queueBlockerAction?.status === "failed" ? (
+              <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2">
+                <p className="text-sm font-medium leading-5 text-[#9a3412]">
+                  {actionQueueCopy.queueStoppedAt(queueBlockerAction.label)}
+                </p>
+              </div>
+            ) : null}
             {runnablePendingActions.length > 0 ? (
               <div className="mb-3 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-2">
                 <p className="text-sm font-medium leading-5 text-[#202123]">
@@ -784,4 +814,39 @@ function getNextGateAction(
       .slice(lastRunnableIndex + 1)
       .find((action) => action.status === "pending") ?? null
   );
+}
+
+function getQueueStats(actions: AgentAction[]): {
+  completed: number;
+  failed: number;
+  total: number;
+} {
+  return actions.reduce(
+    (stats, action) => ({
+      completed: stats.completed + (action.status === "completed" ? 1 : 0),
+      failed: stats.failed + (action.status === "failed" ? 1 : 0),
+      total: stats.total + 1
+    }),
+    { completed: 0, failed: 0, total: 0 }
+  );
+}
+
+function getQueueBlockerAction(actions: AgentAction[]): AgentAction | null {
+  for (const action of actions) {
+    if (action.status === "completed" || action.status === "skipped") {
+      continue;
+    }
+
+    if (action.status === "failed" || action.status === "running") {
+      return action;
+    }
+
+    if (action.status === "pending" && !isRunnableAgentAction(action)) {
+      return action;
+    }
+
+    return null;
+  }
+
+  return null;
 }
