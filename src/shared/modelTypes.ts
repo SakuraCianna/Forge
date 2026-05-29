@@ -34,6 +34,8 @@ export type ForgeModel = {
   label: string;
   modelName: string;
   enabled: boolean;
+  selectionCount?: number;
+  lastSelectedAt?: string;
   capabilities: {
     reasoning: ReasoningControl;
     toolCalling: boolean | "unknown";

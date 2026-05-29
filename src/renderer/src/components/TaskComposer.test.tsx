@@ -1,14 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultModelSettings, mergeFetchedModels } from "@/state/modelSettings";
+import { createDefaultModelSettings, mergeFetchedModels, updateModelEnabled } from "@/state/modelSettings";
 import { TaskComposer } from "./TaskComposer";
 
 describe("TaskComposer", () => {
   it("submits the typed task prompt", async () => {
     const user = userEvent.setup();
     const onSubmitTask = vi.fn();
-    const settings = mergeFetchedModels(createDefaultModelSettings(), [
+    let settings = mergeFetchedModels(createDefaultModelSettings(), [
       {
         id: "openai:gpt-5.5",
         providerId: "openai",
@@ -24,6 +24,7 @@ describe("TaskComposer", () => {
         capabilitySource: "provider-api"
       }
     ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
 
     render(
       <TaskComposer

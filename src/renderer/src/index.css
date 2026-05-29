@@ -62,32 +62,48 @@ select {
 
 .forge-dropdown-content {
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
 }
 
 .forge-dropdown-content[data-state="open"] {
-  animation: forge-menu-in 140ms ease-out;
+  animation: forge-menu-in 110ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .forge-dropdown-content[data-state="closed"] {
-  animation: forge-menu-out 100ms ease-in;
+  animation: forge-menu-out 80ms ease-in;
 }
 
 .forge-provider-collapse {
-  max-height: 0;
+  display: grid;
+  grid-template-rows: 0fr;
   overflow: hidden;
   opacity: 0;
   border-top: 1px solid transparent;
   background: #fafafa;
   transition:
-    max-height 180ms ease,
-    opacity 140ms ease,
-    border-color 140ms ease;
+    grid-template-rows 150ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 120ms ease,
+    border-color 120ms ease;
+}
+
+.forge-provider-collapse > * {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .forge-provider-collapse[data-state="open"] {
-  max-height: 840px;
+  grid-template-rows: 1fr;
   opacity: 1;
   border-top-color: #ececf1;
+}
+
+.forge-scrollbar-none {
+  scrollbar-width: none;
+}
+
+.forge-scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 @keyframes forge-title-swap {
@@ -106,23 +122,23 @@ select {
 @keyframes forge-menu-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translate3d(0, -4px, 0);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 @keyframes forge-menu-out {
   from {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0);
   }
 
   to {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: translate3d(0, -4px, 0);
   }
 }

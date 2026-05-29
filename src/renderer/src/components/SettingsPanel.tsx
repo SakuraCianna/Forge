@@ -25,6 +25,7 @@ import { useI18n } from "@/i18n/useI18n";
 import type { PersonalizationSettings } from "@/state/personalization";
 import type { TaskThread } from "@/state/taskThreads";
 import type { GeneralPreferences } from "@/state/generalPreferences";
+import { getModelsForDisplay } from "@/state/modelSettings";
 import {
   summarizeUsage,
   summarizeUsageByModel,
@@ -51,6 +52,7 @@ type SettingsPanelProps = {
   onDeleteProvider: (providerId: string) => void;
   onSaveProviderKey: (providerId: string, apiKey: string) => void;
   onSetLanguage: (language: Language) => void;
+  onToggleModelEnabled: (modelId: string, enabled: boolean) => void;
   onUpdateGeneralPreferences: (preferences: GeneralPreferences) => void;
   onUpdatePersonalization: (settings: PersonalizationSettings) => void;
   onUpdateProviderBaseUrl: (providerId: string, baseUrl: string) => void;
@@ -85,6 +87,7 @@ export function SettingsPanel({
   onDeleteProvider,
   onSaveProviderKey,
   onSetLanguage,
+  onToggleModelEnabled,
   onUpdateGeneralPreferences,
   onUpdatePersonalization,
   onUpdateProviderBaseUrl,
@@ -104,8 +107,10 @@ export function SettingsPanel({
   const [draftBaseUrls, setDraftBaseUrls] = useState<Record<string, string>>({});
   const [newProviderLabel, setNewProviderLabel] = useState("");
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState("");
-  const availableModels = settings.models;
-  const currentModel = settings.models.find((model) => model.id === settings.currentModelId) ?? null;
+  const availableModels = getModelsForDisplay(settings);
+  const enabledModelCount = availableModels.filter((model) => model.enabled).length;
+  const currentModel =
+    settings.models.find((model) => model.id === settings.currentModelId && model.enabled) ?? null;
   const currentProvider = currentModel
     ? (settings.providers.find((provider) => provider.id === currentModel.providerId) ?? null)
     : null;
@@ -370,7 +375,7 @@ export function SettingsPanel({
           <StatusTile
             icon={Database}
             label={t("settings.availableModels")}
-            value={`${availableModels.length}`}
+            value={`${enabledModelCount}/${availableModels.length}`}
           />
           <StatusTile
             icon={Globe2}
@@ -380,39 +385,66 @@ export function SettingsPanel({
         </div>
 
         <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
-          {settings.models.length > 0 ? (
-            settings.models.map((model, index) => {
+          {availableModels.length > 0 ? (
+            availableModels.map((model, index) => {
               const provider =
                 settings.providers.find((candidate) => candidate.id === model.providerId) ?? null;
               const providerLabel = provider?.label ?? model.providerId;
+              const selected = model.enabled && settings.currentModelId === model.id;
 
               return (
-                <button
-                  type="button"
+                <div
                   key={model.id}
-                  onClick={() => onSelectModel(model.id)}
-                  className={`flex w-full items-center justify-between gap-4 bg-white px-4 py-3 text-left text-sm transition hover:bg-[#f7f7f8] ${
+                  className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 bg-white px-4 py-3 text-sm ${
                     index === 0 ? "" : "border-t border-[#ececf1]"
                   }`}
                 >
-                  <span className="flex min-w-0 items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={!model.enabled}
+                    onClick={() => onSelectModel(model.id)}
+                    className="flex min-w-0 items-center gap-3 text-left outline-none transition hover:opacity-80 disabled:cursor-not-allowed disabled:hover:opacity-100"
+                  >
                     <ProviderMark provider={provider} fallbackLabel={providerLabel} size="md" />
                     <span className="min-w-0">
-                      <span className="block truncate font-medium text-[#202123]">{model.label}</span>
+                      <span
+                        className={`block truncate font-medium ${
+                          model.enabled ? "text-[#202123]" : "text-[#6e6e80]"
+                        }`}
+                      >
+                        {model.label}
+                      </span>
                       <span className="mt-1 block truncate text-xs text-[#6e6e80]">
                         {t("selector.modelSource")} {providerLabel}
                       </span>
                     </span>
-                  </span>
+                  </button>
                   <span className="flex shrink-0 items-center gap-2">
-                    {settings.currentModelId === model.id ? (
+                    {selected ? (
                       <Check className="h-4 w-4 text-[#202123]" />
                     ) : null}
-                    <span className="rounded-full border border-[#c3eadc] bg-[#effaf6] px-2 py-1 text-xs font-medium text-[#087443]">
-                      {t("settings.available")}
+                    <span
+                      className={`rounded-full border px-2 py-1 text-xs font-medium ${
+                        model.enabled
+                          ? "border-[#c3eadc] bg-[#effaf6] text-[#087443]"
+                          : "border-[#f4c7ab] bg-[#fff7ed] text-[#b45309]"
+                      }`}
+                    >
+                      {model.enabled ? t("settings.enabled") : t("settings.disabled")}
                     </span>
+                    <button
+                      type="button"
+                      aria-label={getModelToggleLabel(settings.language, model.label, model.enabled)}
+                      aria-pressed={model.enabled}
+                      onClick={() => onToggleModelEnabled(model.id, !model.enabled)}
+                      className={`flex h-6 w-11 items-center rounded-full p-0.5 transition ${
+                        model.enabled ? "justify-end bg-[#202123]" : "justify-start bg-[#d9d9e3]"
+                      }`}
+                    >
+                      <span className="h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.18)]" />
+                    </button>
                   </span>
-                </button>
+                </div>
               );
             })
           ) : (
@@ -947,6 +979,14 @@ export function SettingsPanel({
 
 function SectionFrame({ children }: { children: ReactElement | ReactElement[] }): ReactElement {
   return <section>{children}</section>;
+}
+
+function getModelToggleLabel(language: Language, modelLabel: string, enabled: boolean): string {
+  if (language === "zh-CN") {
+    return `${enabled ? "停用" : "启用"} ${modelLabel}`;
+  }
+
+  return `${enabled ? "Disable" : "Enable"} ${modelLabel}`;
 }
 
 function ModeCard({

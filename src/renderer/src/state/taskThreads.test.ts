@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createDefaultModelSettings,
   mergeFetchedModels,
-  setCurrentModel
+  setCurrentModel,
+  updateModelEnabled
 } from "./modelSettings";
 import {
   appendThreadEvents,
@@ -43,6 +44,7 @@ describe("taskThreads", () => {
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
     ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
 
     const result = createThreadFromSettings(settings, "实现设置持久化", deps);
@@ -75,6 +77,7 @@ describe("taskThreads", () => {
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
     ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     const result = createThreadFromSettings(settings, "实现设置持久化", deps);
 
     if (!result.ok) {
@@ -106,6 +109,7 @@ describe("taskThreads", () => {
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
     ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     const first = createThreadFromSettings(settings, "First conversation", deps);
     const second = createThreadFromSettings(settings, "Second conversation", {
       createId: () => "thread-2",
@@ -135,6 +139,7 @@ describe("taskThreads", () => {
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
     ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     const first = createThreadFromSettings(settings, "Project Forge", deps);
     const second = createThreadFromSettings(settings, "Project Aiko", {
       createId: () => "thread-2",

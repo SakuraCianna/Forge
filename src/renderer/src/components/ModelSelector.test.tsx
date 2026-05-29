@@ -1,13 +1,18 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultModelSettings, mergeFetchedModels, setLanguage } from "@/state/modelSettings";
+import {
+  createDefaultModelSettings,
+  mergeFetchedModels,
+  setLanguage,
+  updateModelEnabled
+} from "@/state/modelSettings";
 import { ModelSelector } from "./ModelSelector";
 
 describe("ModelSelector", () => {
   it("shows all available models in the model submenu", async () => {
     const user = userEvent.setup();
-    const settings = setLanguage(
+    let settings = setLanguage(
       mergeFetchedModels(createDefaultModelSettings(), [
         {
           id: "openai:gpt-5.5",
@@ -40,6 +45,8 @@ describe("ModelSelector", () => {
       ]),
       "en-US"
     );
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
+    settings = updateModelEnabled(settings, "anthropic:claude-sonnet", true);
 
     render(
       <ModelSelector
@@ -89,7 +96,7 @@ describe("ModelSelector", () => {
 
   it("shows only standard and fast speed choices when the model declares speed modes", async () => {
     const user = userEvent.setup();
-    const settings = setLanguage(
+    let settings = setLanguage(
       mergeFetchedModels(createDefaultModelSettings(), [
         {
           id: "openai:gpt-5.5",
@@ -109,6 +116,7 @@ describe("ModelSelector", () => {
       ]),
       "en-US"
     );
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     const { container, rerender } = render(
       <ModelSelector
         settings={settings}
@@ -141,7 +149,7 @@ describe("ModelSelector", () => {
 
   it("hides speed choices when the current model has no speed modes", async () => {
     const user = userEvent.setup();
-    const settings = setLanguage(
+    let settings = setLanguage(
       mergeFetchedModels(createDefaultModelSettings(), [
         {
           id: "deepseek:deepseek-v4-flash",
@@ -160,6 +168,7 @@ describe("ModelSelector", () => {
       ]),
       "en-US"
     );
+    settings = updateModelEnabled(settings, "deepseek:deepseek-v4-flash", true);
 
     render(
       <ModelSelector
@@ -175,5 +184,51 @@ describe("ModelSelector", () => {
     await user.click(screen.getByRole("button", { name: /deepseek-v4-flash/ }));
 
     expect(screen.queryByText("Speed")).not.toBeInTheDocument();
+  });
+
+  it("keeps the model submenu compact and scrollable without visible scrollbars", async () => {
+    const user = userEvent.setup();
+    let settings = setLanguage(
+      mergeFetchedModels(
+        createDefaultModelSettings(),
+        Array.from({ length: 16 }, (_, index) => ({
+          id: `openai:gpt-list-${index}`,
+          providerId: "openai",
+          label: `GPT List ${index}`,
+          modelName: `gpt-list-${index}`,
+          enabled: true,
+          capabilities: {
+            reasoning: { type: "none" as const },
+            toolCalling: "unknown" as const,
+            streaming: "unknown" as const,
+            vision: "unknown" as const
+          },
+          capabilitySource: "provider-api" as const
+        }))
+      ),
+      "en-US"
+    );
+
+    for (const model of settings.models) {
+      settings = updateModelEnabled(settings, model.id, true);
+    }
+
+    render(
+      <ModelSelector
+        settings={settings}
+        onSelectModel={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectSpeed={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /GPT List 0/ }));
+    await user.hover(screen.getByText("GPT List 0"));
+
+    const modelMenu = await screen.findByText("GPT List 15");
+    const menuContent = modelMenu.closest(".forge-model-menu-content");
+
+    expect(menuContent).toHaveClass("max-h-[min(340px,calc(100vh-120px))]");
+    expect(menuContent).toHaveClass("forge-scrollbar-none");
   });
 });

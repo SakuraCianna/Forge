@@ -122,17 +122,17 @@ export function ThreadWorkspace({
             <div className="mx-auto mb-5 flex h-11 w-11 items-center justify-center rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] text-[#565869]">
               <Layers className="h-6 w-6" />
             </div>
-            <h1 className="text-[30px] font-semibold leading-tight tracking-normal text-[#202123] md:text-[32px]">
+            <h1 className="text-[28px] font-semibold leading-tight tracking-normal text-[#202123] md:text-[30px]">
               {t("dashboard.title")}
             </h1>
-            <p className="mx-auto mt-3 max-w-[540px] text-base leading-7 text-[#6e6e80]">
+            <p className="mx-auto mt-3 max-w-[540px] text-sm leading-6 text-[#6e6e80]">
               {t("dashboard.description")}
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2.5">
               <button
                 type="button"
                 onClick={onPickProject}
-                className="inline-flex h-10 items-center gap-2 rounded-[12px] bg-[#202123] px-4 text-sm font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                className="inline-flex h-10 items-center gap-2 rounded-[12px] bg-[#202123] px-4 text-[12px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
               >
                 {t("dashboard.pickProject")}
                 <ArrowRight className="h-4 w-4" />
@@ -140,7 +140,7 @@ export function ThreadWorkspace({
               <button
                 type="button"
                 onClick={onOpenRecentProject}
-                className="inline-flex h-10 items-center rounded-[12px] border border-[#d9d9e3] bg-white px-4 text-sm font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                className="inline-flex h-10 items-center rounded-[12px] border border-[#d9d9e3] bg-white px-4 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
               >
                 {t("dashboard.openRecent")}
               </button>
@@ -158,8 +158,8 @@ export function ThreadWorkspace({
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] text-[#565869]">
             <Layers className="h-6 w-6" />
           </div>
-          <h1 className="text-xl font-semibold tracking-normal text-[#202123]">{t("threads.emptyTitle")}</h1>
-          <p className="mt-2 text-sm leading-6 text-[#6e6e80]">{t("threads.emptyBody")}</p>
+          <h1 className="text-lg font-semibold tracking-normal text-[#202123]">{t("threads.emptyTitle")}</h1>
+          <p className="mt-2 text-[12px] leading-5 text-[#6e6e80]">{t("threads.emptyBody")}</p>
         </div>
       </section>
     );
@@ -177,7 +177,7 @@ export function ThreadWorkspace({
               key={thread.id}
               type="button"
                 onClick={() => onSelectThread(thread.id)}
-                className={`w-full rounded-[14px] border px-3 py-2.5 text-left text-sm transition active:scale-[0.99] ${
+                className={`w-full rounded-[14px] border px-3 py-2.5 text-left text-[12px] transition active:scale-[0.99] ${
                   thread.id === selectedThread.id
                   ? "border-transparent bg-[#ececf1] text-[#202123]"
                   : "border-transparent text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
@@ -205,7 +205,7 @@ export function ThreadWorkspace({
                   {t("threads.model")}: {selectedThread.modelId}
                 </span>
               </div>
-              <h1 className="truncate text-2xl font-semibold leading-8 tracking-normal text-[#202123]">
+              <h1 className="truncate text-xl font-semibold leading-7 tracking-normal text-[#202123]">
                 {selectedThread.title}
               </h1>
             </div>
@@ -220,7 +220,7 @@ export function ThreadWorkspace({
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id as WorkspaceTab)}
-                  className={`h-8 rounded-[10px] px-3 text-sm transition active:scale-[0.99] ${
+                  className={`h-8 rounded-[10px] px-3 text-[12px] transition active:scale-[0.99] ${
                     activeTab === tab.id
                       ? "bg-white text-[#202123] shadow-sm"
                       : "text-[#6e6e80] hover:text-[#202123]"

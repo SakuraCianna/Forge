@@ -38,6 +38,9 @@ type PersistedDetectedModel = {
   providerId: string;
   modelName: string;
   label: string;
+  enabled?: boolean;
+  selectionCount?: number;
+  lastSelectedAt?: string;
 };
 
 export function createDefaultModelSettings(): ModelSettings {
@@ -52,7 +55,14 @@ export function createDefaultModelSettings(): ModelSettings {
 }
 
 export function getEnabledModels(settings: ModelSettings): ForgeModel[] {
-  return settings.models;
+  return sortModelsForSelection(
+    settings.models.filter((model) => model.enabled),
+    settings.currentModelId
+  );
+}
+
+export function getModelsForDisplay(settings: ModelSettings): ForgeModel[] {
+  return sortModelsForSelection(settings.models, settings.currentModelId);
 }
 
 export function updateModelEnabled(
@@ -60,31 +70,59 @@ export function updateModelEnabled(
   modelId: string,
   enabled: boolean
 ): ModelSettings {
+  const targetModelExists = settings.models.some((model) => model.id === modelId);
+
+  if (!targetModelExists) {
+    return settings;
+  }
+
   const models = settings.models.map((model) =>
     model.id === modelId ? { ...model, enabled } : model
   );
 
-  const enabledModels = models.filter((model) => model.enabled);
+  const enabledModels = sortModelsForSelection(
+    models.filter((model) => model.enabled),
+    settings.currentModelId
+  );
   const currentModelStillEnabled = enabledModels.some((model) => model.id === settings.currentModelId);
+  const currentModelId = currentModelStillEnabled
+    ? settings.currentModelId
+    : enabled
+      ? modelId
+      : (enabledModels[0]?.id ?? null);
+  const currentModel = models.find((model) => model.id === currentModelId) ?? null;
 
   return {
     ...settings,
     models,
-    currentModelId: currentModelStillEnabled ? settings.currentModelId : (enabledModels[0]?.id ?? null)
+    currentModelId,
+    speed: normalizeSpeedForModel(settings.speed, currentModel)
   };
 }
 
 export function setCurrentModel(settings: ModelSettings, modelId: string): ModelSettings {
   const model = settings.models.find((candidate) => candidate.id === modelId);
 
-  if (!model) {
+  if (!model?.enabled) {
     return settings;
   }
+  const selectedAt = new Date().toISOString();
+  const models = settings.models.map((candidate) =>
+    candidate.id === model.id
+      ? {
+          ...candidate,
+          selectionCount: (candidate.selectionCount ?? 0) + 1,
+          lastSelectedAt: selectedAt
+        }
+      : candidate
+  );
+  const selectedModel = models.find((candidate) => candidate.id === model.id) ?? model;
 
   return {
     ...settings,
+    models,
     currentModelId: model.id,
-    speed: normalizeSpeedForModel(settings.speed, model)
+    speed: normalizeSpeedForModel(settings.speed, selectedModel)
   };
 }
 
@@ -132,16 +170,25 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
     if (existingModel) {
       const nextModel = {
         ...modelWithKnownCapabilities,
-        enabled: true
+        enabled: existingModel.enabled,
+        selectionCount: existingModel.selectionCount,
+        lastSelectedAt: existingModel.lastSelectedAt
       };
       const index = nextModels.findIndex((model) => model.id === fetchedModel.id);
       nextModels[index] = nextModel;
     } else {
-      nextModels.push({ ...modelWithKnownCapabilities, enabled: true });
+      nextModels.push({ ...modelWithKnownCapabilities, enabled: false });
     }
   }
 
-  const currentModelId = settings.currentModelId ?? nextModels[0]?.id ?? null;
+  const enabledModels = sortModelsForSelection(
+    nextModels.filter((model) => model.enabled),
+    settings.currentModelId
+  );
+  const currentModelId =
+    settings.currentModelId && enabledModels.some((model) => model.id === settings.currentModelId)
+      ? settings.currentModelId
+      : (enabledModels[0]?.id ?? null);
   const currentModel = nextModels.find((model) => model.id === currentModelId) ?? null;
 
   return {
@@ -224,28 +271,40 @@ export function deleteCustomProvider(settings: ModelSettings, providerId: string
 
   const providers = settings.providers.filter((candidate) => candidate.id !== providerId);
   const models = settings.models.filter((model) => model.providerId !== providerId);
-  const currentModelId = models.some((model) => model.id === settings.currentModelId)
+  const enabledModels = sortModelsForSelection(
+    models.filter((model) => model.enabled),
+    settings.currentModelId
+  );
+  const currentModelId = enabledModels.some((model) => model.id === settings.currentModelId)
     ? settings.currentModelId
-    : (models[0]?.id ?? null);
+    : (enabledModels[0]?.id ?? null);
+  const currentModel = models.find((model) => model.id === currentModelId) ?? null;
 
   return {
     ...settings,
     providers,
     models,
-    currentModelId
+    currentModelId,
+    speed: normalizeSpeedForModel(settings.speed, currentModel)
   };
 }
 
 export function removeProviderModels(settings: ModelSettings, providerId: string): ModelSettings {
   const models = settings.models.filter((model) => model.providerId !== providerId);
-  const currentModelId = models.some((model) => model.id === settings.currentModelId)
+  const enabledModels = sortModelsForSelection(
+    models.filter((model) => model.enabled),
+    settings.currentModelId
+  );
+  const currentModelId = enabledModels.some((model) => model.id === settings.currentModelId)
     ? settings.currentModelId
-    : (models[0]?.id ?? null);
+    : (enabledModels[0]?.id ?? null);
+  const currentModel = models.find((model) => model.id === currentModelId) ?? null;
 
   return {
     ...settings,
     models,
-    currentModelId
+    currentModelId,
+    speed: normalizeSpeedForModel(settings.speed, currentModel)
   };
 }
 
@@ -294,7 +353,10 @@ export function saveModelSettings(storage: Storage, settings: ModelSettings): vo
       .map((model) => ({
         providerId: model.providerId,
         modelName: model.modelName,
-        label: model.label
+        label: model.label,
+        enabled: model.enabled,
+        selectionCount: model.selectionCount,
+        lastSelectedAt: model.lastSelectedAt
       }))
   };
 
@@ -338,28 +400,34 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
   ];
   const detectedModels = (persisted.detectedModels ?? [])
     .filter((model) => model.providerId && model.modelName)
-    .map((model) =>
-      createDetectedModel(
+    .map((model) => ({
+      ...createDetectedModel(
         providers,
         model.providerId,
         model.modelName,
         model.label || model.modelName
-      )
-    );
+      ),
+      enabled: model.enabled === true,
+      selectionCount:
+        typeof model.selectionCount === "number" && Number.isFinite(model.selectionCount)
+          ? Math.max(0, model.selectionCount)
+          : undefined,
+      lastSelectedAt: typeof model.lastSelectedAt === "string" ? model.lastSelectedAt : undefined
+    }));
   const models = detectedModels
-    .map((model) => ({
-      ...model,
-      enabled: true
-    }))
     .filter((model) => {
       const provider = providers.find((candidate) => candidate.id === model.providerId);
 
       return provider ? isUsableCodingModel(provider, model.modelName) : true;
     });
+  const enabledModels = sortModelsForSelection(
+    models.filter((model) => model.enabled),
+    persisted.currentModelId ?? null
+  );
   const currentModelId =
-    persisted.currentModelId && models.some((model) => model.id === persisted.currentModelId)
+    persisted.currentModelId && enabledModels.some((model) => model.id === persisted.currentModelId)
       ? persisted.currentModelId
-      : (models[0]?.id ?? null);
+      : (enabledModels[0]?.id ?? null);
 
   return {
     ...defaults,
@@ -421,6 +489,37 @@ function normalizeSpeed(value: unknown, fallback: SpeedMode): SpeedMode {
 
 function normalizeSpeedForModel(speed: SpeedMode, model: ForgeModel | null): SpeedMode {
   return model?.capabilities.speedModes?.includes(speed) ? speed : "balanced";
+}
+
+function sortModelsForSelection(models: ForgeModel[], currentModelId: string | null): ForgeModel[] {
+  return [...models].sort((first, second) => {
+    if (first.id === currentModelId && second.id !== currentModelId) {
+      return -1;
+    }
+
+    if (second.id === currentModelId && first.id !== currentModelId) {
+      return 1;
+    }
+
+    const selectionDelta = (second.selectionCount ?? 0) - (first.selectionCount ?? 0);
+
+    if (selectionDelta !== 0) {
+      return selectionDelta;
+    }
+
+    const recencyDelta =
+      Date.parse(second.lastSelectedAt ?? "") - Date.parse(first.lastSelectedAt ?? "");
+
+    if (Number.isFinite(recencyDelta) && recencyDelta !== 0) {
+      return recencyDelta;
+    }
+
+    if (first.enabled !== second.enabled) {
+      return first.enabled ? -1 : 1;
+    }
+
+    return first.label.localeCompare(second.label);
+  });
 }
 
 function createCustomProviderId(label: string, existingIds: Set<string>): string {

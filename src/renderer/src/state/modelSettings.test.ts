@@ -11,6 +11,7 @@ import {
   setCurrentModel,
   setLanguage,
   setSpeed,
+  updateModelEnabled,
   updateProviderLabel,
   updateProviderBaseUrl
 } from "./modelSettings";
@@ -77,16 +78,16 @@ describe("modelSettings", () => {
     ]);
   });
 
-  it("keeps fetched models available without a manual enable step", () => {
+  it("keeps fetched models disabled until the user enables them", () => {
     let settings = createDefaultModelSettings();
 
     settings = mergeFetchedModels(settings, [
       createFetchedModel("anthropic", "claude-sonnet", "Claude Sonnet")
     ]);
 
-    expect(getEnabledModels(settings).map((model) => model.id)).toContain(
-      "anthropic:claude-sonnet"
-    );
+    expect(settings.models.map((model) => model.id)).toContain("anthropic:claude-sonnet");
+    expect(getEnabledModels(settings)).toEqual([]);
+    expect(settings.currentModelId).toBeNull();
   });
 
   it("keeps the current model pointed at an enabled model", () => {
@@ -95,9 +96,59 @@ describe("modelSettings", () => {
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
     ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
 
     expect(settings.currentModelId).toBe("openai:gpt-5.5");
+  });
+
+  it("enables and disables fetched models explicitly", () => {
+    let settings = createDefaultModelSettings();
+
+    settings = mergeFetchedModels(settings, [
+      createFetchedModel("openai", "gpt-5.5", "GPT-5.5"),
+      createFetchedModel("deepseek", "deepseek-chat", "deepseek-chat")
+    ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
+
+    expect(settings.currentModelId).toBe("openai:gpt-5.5");
+    expect(getEnabledModels(settings).map((model) => model.id)).toEqual(["openai:gpt-5.5"]);
+
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", false);
+
+    expect(settings.currentModelId).toBeNull();
+    expect(getEnabledModels(settings)).toEqual([]);
+  });
+
+  it("sorts selected and frequently used enabled models first", () => {
+    const settings = {
+      ...createDefaultModelSettings(),
+      currentModelId: "deepseek:deepseek-chat",
+      models: [
+        {
+          ...createFetchedModel("openai", "rare", "Rare"),
+          enabled: true
+        },
+        {
+          ...createFetchedModel("openai", "frequent", "Frequent"),
+          enabled: true,
+          selectionCount: 8,
+          lastSelectedAt: "2026-05-27T13:00:00.000Z"
+        },
+        {
+          ...createFetchedModel("deepseek", "deepseek-chat", "DeepSeek Chat"),
+          enabled: true,
+          selectionCount: 1,
+          lastSelectedAt: "2026-05-26T13:00:00.000Z"
+        }
+      ]
+    };
+
+    expect(getEnabledModels(settings).map((model) => model.id)).toEqual([
+      "deepseek:deepseek-chat",
+      "openai:frequent",
+      "openai:rare"
+    ]);
   });
 
   it("persists user-facing settings and enabled model choices", () => {
@@ -108,6 +159,7 @@ describe("modelSettings", () => {
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
     ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
     settings = setSpeed(settings, "fast");
 
@@ -169,6 +221,9 @@ describe("modelSettings", () => {
         capabilitySource: "provider-api"
       }
     ]);
+    settings = updateModelEnabled(settings, "openai:gpt-5.5", true);
+    settings = updateModelEnabled(settings, "deepseek:deepseek-v4-flash", true);
+    settings = setCurrentModel(settings, "openai:gpt-5.5");
     settings = setSpeed(settings, "fast");
     settings = setCurrentModel(settings, "deepseek:deepseek-v4-flash");
 
@@ -201,8 +256,9 @@ describe("modelSettings", () => {
 
     const loaded = loadModelSettings(storage);
 
-    expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openai:gpt-5.5");
-    expect(loaded.currentModelId).toBe("openai:gpt-5.5");
+    expect(loaded.models.map((model) => model.id)).toContain("openai:gpt-5.5");
+    expect(getEnabledModels(loaded)).toEqual([]);
+    expect(loaded.currentModelId).toBeNull();
   });
 
   it("drops persisted provider models that are not usable for coding tasks", () => {
@@ -217,7 +273,8 @@ describe("modelSettings", () => {
 
     const loaded = loadModelSettings(storage);
 
-    expect(getEnabledModels(loaded).map((model) => model.modelName)).toEqual(["mimo-v2-pro"]);
+    expect(loaded.models.map((model) => model.modelName)).toEqual(["mimo-v2-pro"]);
+    expect(getEnabledModels(loaded)).toEqual([]);
   });
 
   it("adds unlimited custom API profiles and restores them from storage", () => {
@@ -247,7 +304,7 @@ describe("modelSettings", () => {
       custom: true,
       baseUrl: "https://gateway.example/v1"
     });
-    expect(getEnabledModels(loaded).map((model) => model.id)).toContain(
+    expect(loaded.models.map((model) => model.id)).toContain(
       "custom-cherry-gateway:deepseek-chat"
     );
   });
@@ -309,7 +366,7 @@ describe("modelSettings", () => {
     expect(getEnabledModels(loaded)).toEqual([]);
   });
 
-  it("merges fetched provider models as immediately available", () => {
+  it("merges fetched provider models as disabled until explicitly enabled", () => {
     let settings = createDefaultModelSettings();
 
     settings = mergeFetchedModels(settings, [
@@ -330,7 +387,7 @@ describe("modelSettings", () => {
     ]);
 
     expect(settings.models.some((model) => model.id === "openai:gpt-5.6")).toBe(true);
-    expect(getEnabledModels(settings).map((model) => model.id)).toContain("openai:gpt-5.6");
+    expect(getEnabledModels(settings)).toEqual([]);
   });
 });
 

@@ -22,6 +22,7 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
       onSaveProviderKey={vi.fn()}
       onSetLanguage={vi.fn()}
       onUpdateGeneralPreferences={vi.fn()}
+      onToggleModelEnabled={vi.fn()}
       onSelectModel={vi.fn()}
       onUpdatePersonalization={vi.fn()}
       onUpdateProviderBaseUrl={vi.fn()}
@@ -164,6 +165,37 @@ describe("SettingsPanel", () => {
     expect(screen.getByText("OpenAI API Key is not configured")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Fetch models" })[0]);
     expect(onFetchModels).toHaveBeenCalledWith("openai", "");
+  });
+
+  it("lets users enable fetched models explicitly from the model list", async () => {
+    const user = userEvent.setup();
+    const onToggleModelEnabled = vi.fn();
+    const onSelectModel = vi.fn();
+    const settings = mergeFetchedModels(setLanguage(createDefaultModelSettings(), "en-US"), [
+      {
+        id: "openai:gpt-4.1",
+        providerId: "openai",
+        label: "GPT-4.1",
+        modelName: "gpt-4.1",
+        enabled: false,
+        capabilities: {
+          reasoning: { type: "none" },
+          toolCalling: "unknown",
+          streaming: "unknown",
+          vision: "unknown"
+        },
+        capabilitySource: "provider-api"
+      }
+    ]);
+
+    renderSettingsPanel({ settings, onToggleModelEnabled, onSelectModel });
+
+    expect(screen.getByText("Disabled")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Enable GPT-4.1" }));
+
+    expect(onToggleModelEnabled).toHaveBeenCalledWith("openai:gpt-4.1", true);
+    expect(onSelectModel).not.toHaveBeenCalled();
   });
 
   it("passes the draft API key when fetching models", async () => {

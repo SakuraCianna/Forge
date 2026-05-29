@@ -154,7 +154,7 @@ export function AppShell({
           <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#ececf1] bg-white text-[#202123] shadow-sm">
             <Hammer className="h-4 w-4" />
           </div>
-          <span className="text-xs font-semibold tracking-normal text-[#202123]">Forge</span>
+          <span className="text-[10px] font-semibold tracking-normal text-[#202123]">Forge</span>
         </div>
 
         <div className="drag-region h-12" aria-hidden="true" />
@@ -173,7 +173,7 @@ export function AppShell({
                 onNavigate("workspace");
               }
             }}
-            className="mb-2 flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-xs text-[#202123] transition hover:bg-[#ececf1] active:scale-[0.99]"
+            className="mb-2 flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] text-[#202123] transition hover:bg-[#ececf1] active:scale-[0.99]"
           >
             <Plus className="h-4 w-4" />
             <span className="truncate">{t("nav.newChat")}</span>
@@ -185,7 +185,7 @@ export function AppShell({
                 key={item.key}
                 type="button"
                 onClick={() => onNavigate(item.key)}
-                className={`flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-xs transition active:scale-[0.99] ${
+                className={`flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] transition active:scale-[0.99] ${
                   activeView === item.key
                     ? "bg-[#ececf1] text-[#202123]"
                     : "text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
@@ -205,7 +205,7 @@ export function AppShell({
               type="button"
               onClick={() => onNavigate("settings")}
               title={t("nav.settings")}
-              className={`flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-xs transition active:scale-[0.99] ${
+              className={`flex h-10 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] transition active:scale-[0.99] ${
                 activeView === "settings"
                   ? "bg-[#ececf1] text-[#202123]"
                   : "text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
@@ -246,7 +246,7 @@ export function AppShell({
     return (
       <section className="mt-5 min-w-0">
         <div className="mb-1 flex h-8 items-center justify-between px-3">
-          <span className="text-xs text-[#8e8ea0]">{t("nav.projects")}</span>
+          <span className="text-[10px] text-[#8e8ea0]">{t("nav.projects")}</span>
           <span className="flex items-center gap-1">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
@@ -293,7 +293,7 @@ export function AppShell({
                 <button
                   type="button"
                   onClick={() => onSelectProject?.(project.path)}
-                  className="flex min-w-0 items-center gap-2 rounded-[12px] px-3 py-2 text-left text-xs text-[#565869]"
+                  className="flex min-w-0 items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[10px] text-[#565869]"
                 >
                   <FolderOpen className="h-4 w-4 shrink-0" />
                   <span className="min-w-0">
@@ -301,7 +301,7 @@ export function AppShell({
                       {project.pinned ? <Pin className="h-3.5 w-3.5 shrink-0 text-[#6e6e80]" /> : null}
                       <span className="truncate">{displayName}</span>
                     </span>
-                    <span className="block truncate text-xs text-[#8e8ea0]">{project.path}</span>
+                    <span className="block truncate text-[10px] text-[#8e8ea0]">{project.path}</span>
                   </span>
                 </button>
 
@@ -366,12 +366,12 @@ export function AppShell({
             <button
               type="button"
               onClick={onPickProject}
-              className="flex h-11 w-full items-center gap-2 rounded-[12px] px-3 text-left text-xs text-[#565869] transition hover:bg-[#ececf1] hover:text-[#202123] active:scale-[0.99]"
+              className="flex h-11 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] text-[#565869] transition hover:bg-[#ececf1] hover:text-[#202123] active:scale-[0.99]"
             >
               <FolderOpen className="h-4 w-4 shrink-0" />
               <span className="min-w-0">
                 <span className="block truncate text-[#202123]">{t("projects.empty")}</span>
-                <span className="block truncate text-xs text-[#8e8ea0]">
+                <span className="block truncate text-[10px] text-[#8e8ea0]">
                   {t("sidebar.pickProjectHint")}
                 </span>
               </span>
@@ -389,7 +389,7 @@ export function AppShell({
 
     return (
       <section className="mt-5 min-w-0">
-        <div className="mb-1 px-3 text-xs text-[#8e8ea0]">{copy.conversations}</div>
+        <div className="mb-1 px-3 text-[10px] text-[#8e8ea0]">{copy.conversations}</div>
         <div className="space-y-1">
           {visibleThreads.map((thread) => (
             <div
@@ -399,7 +399,7 @@ export function AppShell({
               <button
                 type="button"
                 onClick={() => onSelectThread?.(thread.id)}
-                className="flex min-w-0 items-center gap-2 rounded-[12px] px-3 py-2 text-left text-xs text-[#565869]"
+                className="flex min-w-0 items-center gap-2 rounded-[12px] px-3 py-2 text-left text-[10px] text-[#565869]"
               >
                 <MessageSquare className="h-4 w-4 shrink-0" />
                 <span className="truncate text-[#202123]">{thread.title}</span>
@@ -449,7 +449,7 @@ function MenuContent({
       <DropdownMenu.Content
         align={align}
         sideOffset={sideOffset}
-        className="forge-dropdown-content z-50 min-w-52 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-xs text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+        className="forge-dropdown-content z-50 min-w-52 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-[10px] text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
       >
         {children}
       </DropdownMenu.Content>

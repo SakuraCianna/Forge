@@ -64,7 +64,7 @@ export function ModelSelector({
       <button
         type="button"
         onClick={onOpenSettings}
-        className="inline-flex h-8 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[11px] border border-[#d9d9e3] bg-white px-2 text-[12px] font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+        className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[10px] font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
         aria-label={triggerLabel}
         title={triggerLabel}
       >
@@ -78,7 +78,7 @@ export function ModelSelector({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="inline-flex h-8 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[11px] border border-[#d9d9e3] bg-white px-2 text-[12px] font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+          className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[10px] font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
           aria-label={triggerLabel}
           title={triggerLabel}
         >
@@ -97,7 +97,7 @@ export function ModelSelector({
         <DropdownMenu.Content
           align="start"
           sideOffset={8}
-          className="forge-dropdown-content z-50 w-64 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+          className="forge-dropdown-content z-50 w-60 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
         >
           <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
             {t("selector.intelligence")}
@@ -107,20 +107,20 @@ export function ModelSelector({
               <DropdownMenu.Item
                 key={level}
                 onSelect={() => onSelectIntelligence(level)}
-                className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-xs outline-none data-[highlighted]:bg-[#f7f7f8]"
+                className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-[10px] outline-none data-[highlighted]:bg-[#f7f7f8]"
               >
                 {t(intelligenceLabels[level])}
                 {settings.intelligence === level ? <Check className="h-4 w-4 text-[#202123]" /> : null}
               </DropdownMenu.Item>
             ))
           ) : (
-            <DropdownMenu.Item className="flex h-8 cursor-default items-center rounded-[10px] px-2 text-xs text-[#6e6e80] outline-none">
+            <DropdownMenu.Item className="flex h-8 cursor-default items-center rounded-[10px] px-2 text-[10px] text-[#6e6e80] outline-none">
               {t("selector.noReasoning")}
             </DropdownMenu.Item>
           )}
           <DropdownMenu.Separator className="my-2 h-px bg-[#ececf1]" />
           <DropdownMenu.Sub>
-          <DropdownMenu.SubTrigger className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-xs outline-none data-[highlighted]:bg-[#f7f7f8]">
+            <DropdownMenu.SubTrigger className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-[10px] outline-none data-[highlighted]:bg-[#f7f7f8]">
               <span className="inline-flex items-center gap-2">
                 {isFast ? <Zap className="h-3 w-3 text-[#202123]" /> : null}
                 {currentProvider ? (
@@ -137,7 +137,7 @@ export function ModelSelector({
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 sideOffset={10}
-                className="forge-dropdown-content z-50 w-64 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+                className="forge-dropdown-content forge-model-menu-content forge-scrollbar-none z-50 max-h-[min(340px,calc(100vh-120px))] w-60 overflow-y-auto rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
               >
                 <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
                   {t("selector.model")}
@@ -146,7 +146,7 @@ export function ModelSelector({
                   <DropdownMenu.Item
                     key={model.id}
                     onSelect={() => onSelectModel(model.id)}
-                    className="flex min-h-11 cursor-default items-center justify-between gap-2 rounded-[10px] px-2 py-1.5 outline-none data-[highlighted]:bg-[#f7f7f8]"
+                    className="flex min-h-9 cursor-default items-center justify-between gap-2 rounded-[10px] px-2 py-1 outline-none data-[highlighted]:bg-[#f7f7f8]"
                   >
                     <span className="flex min-w-0 items-start gap-2">
                       <ProviderMark
@@ -155,8 +155,8 @@ export function ModelSelector({
                         size="sm"
                       />
                       <span className="min-w-0">
-                        <span className="block truncate text-xs text-[#202123]">{model.label}</span>
-                        <span className="mt-0.5 block truncate text-xs text-[#6e6e80]">
+                        <span className="block truncate text-[11px] text-[#202123]">{model.label}</span>
+                        <span className="mt-0.5 block truncate text-[10px] text-[#6e6e80]">
                           {t("selector.modelSource")} {providerLabelById.get(model.providerId) ?? model.providerId}
                         </span>
                       </span>
@@ -169,7 +169,7 @@ export function ModelSelector({
           </DropdownMenu.Sub>
           {supportsSpeed ? (
             <DropdownMenu.Sub>
-              <DropdownMenu.SubTrigger className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-xs outline-none data-[highlighted]:bg-[#f7f7f8]">
+              <DropdownMenu.SubTrigger className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-[10px] outline-none data-[highlighted]:bg-[#f7f7f8]">
                 <span>{t("selector.speed")}</span>
                 <ChevronRight className="h-4 w-4 text-[#6e6e80]" />
               </DropdownMenu.SubTrigger>
@@ -185,7 +185,7 @@ export function ModelSelector({
                     <DropdownMenu.Item
                       key={speed}
                       onSelect={() => onSelectSpeed(speed)}
-                      className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-xs outline-none data-[highlighted]:bg-[#f7f7f8]"
+                      className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-[10px] outline-none data-[highlighted]:bg-[#f7f7f8]"
                     >
                       {t(speedLabels[speed])}
                       {settings.speed === speed ? <Check className="h-4 w-4 text-[#202123]" /> : null}

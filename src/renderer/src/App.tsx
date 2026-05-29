@@ -25,6 +25,7 @@ import {
   setIntelligence,
   setLanguage,
   setSpeed,
+  updateModelEnabled,
   updateProviderBaseUrl,
   updateProviderLabel
 } from "@/state/modelSettings";
@@ -1079,7 +1080,7 @@ export function App(): ReactElement {
     return (
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
         <div className="w-full max-w-[760px] -translate-y-[5vh]">
-          <h1 className="mb-5 overflow-hidden whitespace-nowrap pb-1 text-center text-[24px] font-medium leading-[1.28] tracking-normal text-[#202123] md:text-[26px]">
+          <h1 className="mb-5 overflow-visible whitespace-nowrap pb-2 text-center text-[22px] font-medium leading-[1.28] tracking-normal text-[#202123] md:text-[24px]">
             <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_900ms_ease-in-out] truncate align-baseline">
               {activeHeroPrompts[heroPromptIndex]}
             </span>
@@ -1195,7 +1196,7 @@ export function App(): ReactElement {
                   key={file.relativePath}
                   type="button"
                   onClick={() => void previewProjectFile(file.relativePath)}
-                  className={`block w-full truncate rounded-[12px] px-3 py-2 text-left text-sm ${
+                  className={`block w-full truncate rounded-[12px] px-3 py-2 text-left text-[12px] ${
                     previewFile?.relativePath === file.relativePath
                       ? "bg-[#ececf1] text-[#202123]"
                       : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
@@ -1210,14 +1211,14 @@ export function App(): ReactElement {
                 <>
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-[#202123]">
+                      <span className="block truncate text-[12px] font-semibold text-[#202123]">
                         {previewFile.relativePath}
                       </span>
-                      <span className="mt-1 block truncate text-xs text-[#8e8ea0]">
+                      <span className="mt-1 block truncate text-[10px] text-[#8e8ea0]">
                         {formatterMessage}
                       </span>
                     </span>
-                    <label className="flex shrink-0 items-center gap-2 text-xs text-[#6e6e80]">
+                    <label className="flex shrink-0 items-center gap-2 text-[10px] text-[#6e6e80]">
                       {settings.language === "zh-CN" ? "格式化" : "Formatter"}
                       <select
                         aria-label={settings.language === "zh-CN" ? "代码格式化" : "Code formatter"}
@@ -1225,14 +1226,14 @@ export function App(): ReactElement {
                         onChange={(event) =>
                           setFileFormatterMode(event.currentTarget.value as CodeFormatterMode)
                         }
-                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-xs text-[#202123] outline-none focus:border-[#202123]"
+                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[10px] text-[#202123] outline-none focus:border-[#202123]"
                       >
                         <option value="raw">{settings.language === "zh-CN" ? "原始" : "Raw"}</option>
                         <option value="prettier">Prettier</option>
                       </select>
                     </label>
                   </div>
-                  <pre className="min-h-0 overflow-auto whitespace-pre-wrap rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-4 font-mono text-xs leading-5 text-[#202123]">
+                  <pre className="min-h-0 overflow-auto whitespace-pre-wrap rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-4 font-mono text-[10px] leading-5 text-[#202123]">
                     {previewContent}
                   </pre>
                 </>
@@ -1268,12 +1269,12 @@ export function App(): ReactElement {
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0">
                     <h2 className="text-sm font-semibold text-[#202123]">{t("source.changedFiles")}</h2>
-                    <span className="mt-1 block truncate text-xs text-[#8e8ea0]">{currentProject.path}</span>
+                    <span className="mt-1 block truncate text-[10px] text-[#8e8ea0]">{currentProject.path}</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => void refreshProjectGitStatus()}
-                    className="shrink-0 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 py-1.5 text-xs text-[#202123] hover:bg-[#f7f7f8]"
+                    className="shrink-0 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 py-1.5 text-[10px] text-[#202123] hover:bg-[#f7f7f8]"
                   >
                     {t("projects.refreshGit")}
                   </button>
@@ -1289,7 +1290,7 @@ export function App(): ReactElement {
                         key={change.path}
                         type="button"
                         onClick={() => setSelectedGitPath(change.path)}
-                        className={`grid w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-[9px] px-1.5 py-1.5 text-left text-[13px] transition ${
+                        className={`grid w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-1.5 rounded-[9px] px-1.5 py-1.5 text-left text-[11px] transition ${
                           selectedChange?.path === change.path
                             ? "bg-[#ececf1] text-[#202123]"
                             : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
@@ -1333,12 +1334,12 @@ export function App(): ReactElement {
             <div className="min-h-[520px] overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
               <div className="border-b border-[#ececf1] px-4 py-3">
                 <h2 className="text-sm font-semibold text-[#202123]">{t("source.diffPreview")}</h2>
-                <p className="mt-1 truncate text-xs text-[#6e6e80]">
+                <p className="mt-1 truncate text-[10px] text-[#6e6e80]">
                   {selectedChange?.path ?? t("source.selectChangedFile")}
                 </p>
               </div>
               {selectedChange && selectedChange.diff.trim() ? (
-                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-5 text-[#202123]">
+                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[10px] leading-5 text-[#202123]">
                   {renderDiffPreview(selectedChange.diff)}
                 </pre>
               ) : (
@@ -1373,6 +1374,9 @@ export function App(): ReactElement {
           onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
           onSetLanguage={setInterfaceLanguage}
           onUpdateGeneralPreferences={setGeneralPreferences}
+          onToggleModelEnabled={(modelId, enabled) =>
+            setSettings((current) => updateModelEnabled(current, modelId, enabled))
+          }
           onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
           onUpdateProviderBaseUrl={(providerId, baseUrl) =>
             setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
@@ -1601,7 +1605,7 @@ function formatPreviewStatus(
 
 function Notice({ message }: { message: string }): ReactElement {
   return (
-    <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2 text-sm text-[#b45309]">
+    <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2 text-[12px] text-[#b45309]">
       {message}
     </div>
   );
@@ -1616,8 +1620,8 @@ function ViewHeader({
 }): ReactElement {
   return (
     <header className="border-b border-[#ececf1] px-5 py-4">
-      <h1 className="text-xl font-semibold text-[#202123]">{title}</h1>
-      <p className="mt-1 text-sm text-[#6e6e80]">{description}</p>
+      <h1 className="text-lg font-semibold text-[#202123]">{title}</h1>
+      <p className="mt-1 text-[12px] text-[#6e6e80]">{description}</p>
     </header>
   );
 }
@@ -1634,11 +1638,11 @@ function EmptyAction({
   return (
     <div className="flex h-[calc(100%-86px)] items-center justify-center p-6">
       <div className="text-center">
-        <p className="mb-4 text-sm text-[#6e6e80]">{message}</p>
+        <p className="mb-4 text-[12px] text-[#6e6e80]">{message}</p>
         <button
           type="button"
           onClick={onClick}
-          className="rounded-[14px] bg-[#202123] px-4 py-2 text-sm font-semibold text-white transition hover:bg-black"
+          className="rounded-[14px] bg-[#202123] px-4 py-2 text-[12px] font-semibold text-white transition hover:bg-black"
         >
           {action}
         </button>
