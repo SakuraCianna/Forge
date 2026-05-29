@@ -105,11 +105,11 @@ describe("modelSettings", () => {
     let settings = createDefaultModelSettings();
 
     settings = setLanguage(settings, "en-US");
-    settings = setSpeed(settings, "fast");
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
     ]);
     settings = setCurrentModel(settings, "openai:gpt-5.5");
+    settings = setSpeed(settings, "fast");
 
     saveModelSettings(storage, settings);
 
@@ -133,6 +133,46 @@ describe("modelSettings", () => {
     const loaded = loadModelSettings(storage);
 
     expect(loaded.speed).toBe("balanced");
+  });
+
+  it("resets fast speed when the current model does not support speed modes", () => {
+    let settings = createDefaultModelSettings();
+
+    settings = mergeFetchedModels(settings, [
+      {
+        id: "openai:gpt-5.5",
+        providerId: "openai",
+        label: "GPT-5.5",
+        modelName: "gpt-5.5",
+        enabled: true,
+        capabilities: {
+          reasoning: { type: "none" },
+          toolCalling: "unknown",
+          streaming: "unknown",
+          vision: "unknown",
+          speedModes: ["balanced", "fast"]
+        },
+        capabilitySource: "provider-api"
+      },
+      {
+        id: "deepseek:deepseek-v4-flash",
+        providerId: "deepseek",
+        label: "deepseek-v4-flash",
+        modelName: "deepseek-v4-flash",
+        enabled: true,
+        capabilities: {
+          reasoning: { type: "none" },
+          toolCalling: "unknown",
+          streaming: "unknown",
+          vision: "unknown"
+        },
+        capabilitySource: "provider-api"
+      }
+    ]);
+    settings = setSpeed(settings, "fast");
+    settings = setCurrentModel(settings, "deepseek:deepseek-v4-flash");
+
+    expect(settings.speed).toBe("balanced");
   });
 
   it("persists provider Base URL overrides", () => {
@@ -163,6 +203,21 @@ describe("modelSettings", () => {
 
     expect(getEnabledModels(loaded).map((model) => model.id)).toContain("openai:gpt-5.5");
     expect(loaded.currentModelId).toBe("openai:gpt-5.5");
+  });
+
+  it("drops persisted provider models that are not usable for coding tasks", () => {
+    const storage = createMemoryStorage(
+      JSON.stringify({
+        detectedModels: [
+          { providerId: "xiaomi-mimo-token", modelName: "mimo-v2-pro", label: "mimo-v2-pro" },
+          { providerId: "xiaomi-mimo-token", modelName: "mimo-v2-tts", label: "mimo-v2-tts" }
+        ]
+      })
+    );
+
+    const loaded = loadModelSettings(storage);
+
+    expect(getEnabledModels(loaded).map((model) => model.modelName)).toEqual(["mimo-v2-pro"]);
   });
 
   it("adds unlimited custom API profiles and restores them from storage", () => {

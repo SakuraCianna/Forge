@@ -64,7 +64,8 @@ export async function generateAgentPlan({
     apiKey: apiKey ?? "",
     instructions: createAgentPlanInstructions(request.personalization),
     input: createAgentPlanInput(request),
-    intelligence: request.intelligence
+    intelligence: request.intelligence,
+    speed: request.speed
   });
   const response = await fetcher(generationRequest.url, generationRequest.init);
 
@@ -110,7 +111,8 @@ export async function generateAgentFileChange({
     apiKey: apiKey ?? "",
     instructions: createAgentFileChangeInstructions(request.personalization),
     input: createAgentFileChangeInput(request),
-    intelligence: request.intelligence
+    intelligence: request.intelligence,
+    speed: request.speed
   });
   const response = await fetcher(generationRequest.url, generationRequest.init);
 
@@ -157,7 +159,8 @@ export async function generateAgentAsk({
     apiKey: apiKey ?? "",
     instructions: createAskInstructions(request.personalization),
     input: createAskInput(request),
-    intelligence: request.intelligence
+    intelligence: request.intelligence,
+    speed: request.speed
   });
   const response = await fetcher(generationRequest.url, generationRequest.init);
 

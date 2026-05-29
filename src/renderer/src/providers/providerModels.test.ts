@@ -211,6 +211,53 @@ describe("provider model adapters", () => {
     expect(models).toEqual([{ id: "qwen2.5-coder:7b", label: "qwen2.5-coder:7b" }]);
   });
 
+  it("filters provider models that cannot be used for coding tasks", () => {
+    const xiaomiProvider = providerCatalog.find((provider) => provider.id === "xiaomi-mimo-token")!;
+    const models = parseProviderModelList(xiaomiProvider, {
+      data: [
+        { id: "mimo-v2-pro" },
+        { id: "mimo-v2-tts" },
+        { id: "mimo-v2.5-tts-voiceclone" },
+        { id: "text-embedding-v1" },
+        { id: "mimo-v2.5-omni" }
+      ]
+    });
+
+    expect(models.map((model) => model.id)).toEqual(["mimo-v2-pro", "mimo-v2.5-omni"]);
+  });
+
+  it("filters non-text output models before they enter coding model selection", () => {
+    const models = parseProviderModelList(openaiProvider, {
+      data: [
+        { id: "gpt-5.5", output_modalities: ["text"] },
+        { id: "gpt-audio-preview", output_modalities: ["audio"] }
+      ]
+    });
+
+    expect(models.map((model) => model.id)).toEqual(["gpt-5.5"]);
+  });
+
+  it("preserves OpenRouter service tier metadata for speed-capable models", () => {
+    const openRouterProvider = providerCatalog.find((provider) => provider.id === "openrouter")!;
+    const models = parseProviderModelList(openRouterProvider, {
+      data: [
+        {
+          id: "openai/gpt-5",
+          name: "GPT-5",
+          supported_parameters: ["tools", "service_tier"]
+        }
+      ]
+    });
+    const model = toForgeModel(openRouterProvider, models[0]);
+
+    expect(models[0]).toMatchObject({
+      id: "openai/gpt-5",
+      label: "GPT-5",
+      supportedParameters: ["tools", "service_tier"]
+    });
+    expect(model.capabilities.speedModes).toEqual(["balanced", "fast"]);
+  });
+
   it("parses direct array catalog responses", () => {
     const githubProvider = providerCatalog.find((provider) => provider.id === "github-models")!;
     const models = parseProviderModelList(githubProvider, [

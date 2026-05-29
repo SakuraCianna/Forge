@@ -69,6 +69,36 @@ describe("textGeneration", () => {
     });
   });
 
+  it("adds OpenAI service tier only for models that declare speed modes", () => {
+    const provider: ForgeProvider = {
+      id: "openai",
+      label: "OpenAI",
+      kind: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      requiresBaseUrl: false
+    };
+
+    const request = buildTextGenerationRequest({
+      provider,
+      model: {
+        ...reasoningModel,
+        capabilities: {
+          ...reasoningModel.capabilities,
+          speedModes: ["balanced", "fast"]
+        }
+      },
+      apiKey: "sk-test",
+      instructions: "You are Forge",
+      input: "Plan the change",
+      intelligence: "high",
+      speed: "fast"
+    });
+
+    expect(JSON.parse(request.init.body)).toMatchObject({
+      service_tier: "priority"
+    });
+  });
+
   it("builds an Anthropic Messages request with thinking budget", () => {
     const provider: ForgeProvider = {
       id: "anthropic",
@@ -107,6 +137,39 @@ describe("textGeneration", () => {
       messages: [{ role: "user", content: "Plan the change" }],
       max_tokens: 8192,
       thinking: { type: "enabled", budget_tokens: 4096 }
+    });
+  });
+
+  it("maps Anthropic speed mode to the official service tier field", () => {
+    const provider: ForgeProvider = {
+      id: "anthropic",
+      label: "Anthropic",
+      kind: "anthropic",
+      baseUrl: "https://api.anthropic.com",
+      requiresBaseUrl: false
+    };
+
+    const request = buildTextGenerationRequest({
+      provider,
+      model: {
+        ...reasoningModel,
+        providerId: "anthropic",
+        modelName: "claude-sonnet-4-5",
+        capabilities: {
+          ...reasoningModel.capabilities,
+          reasoning: { type: "none" },
+          speedModes: ["balanced", "fast"]
+        }
+      },
+      apiKey: "sk-ant",
+      instructions: "You are Forge",
+      input: "Plan the change",
+      intelligence: "high",
+      speed: "balanced"
+    });
+
+    expect(JSON.parse(request.init.body)).toMatchObject({
+      service_tier: "standard_only"
     });
   });
 
@@ -171,6 +234,36 @@ describe("textGeneration", () => {
         { role: "user", content: "Plan the change" }
       ],
       stream: false
+    });
+  });
+
+  it("adds OpenRouter priority service tier only when fast speed is supported", () => {
+    const provider: ForgeProvider = {
+      id: "openrouter",
+      label: "OpenRouter",
+      kind: "openai-compatible",
+      baseUrl: "https://openrouter.ai/api/v1",
+      requiresBaseUrl: false
+    };
+
+    const request = buildTextGenerationRequest({
+      provider,
+      model: {
+        ...plainModel,
+        capabilities: {
+          ...plainModel.capabilities,
+          speedModes: ["balanced", "fast"]
+        }
+      },
+      apiKey: "sk-router",
+      instructions: "You are Forge",
+      input: "Plan the change",
+      intelligence: "medium",
+      speed: "fast"
+    });
+
+    expect(JSON.parse(request.init.body)).toMatchObject({
+      service_tier: "priority"
     });
   });
 

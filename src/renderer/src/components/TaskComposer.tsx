@@ -183,7 +183,7 @@ export function TaskComposer({
           <DropdownMenu.Content
             align="start"
             sideOffset={8}
-            className="z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-xs text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
+            className="forge-dropdown-content z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-xs text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
             <ContextItem
               selected={contextMode === "ask"}

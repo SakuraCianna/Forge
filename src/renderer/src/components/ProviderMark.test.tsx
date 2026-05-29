@@ -12,6 +12,15 @@ describe("ProviderMark", () => {
     ).toEqual(["openrouter", "groq", "together", "mistral", "xai", "fireworks", "cerebras"]);
   });
 
+  it("uses downloaded Simple Icons assets where they are available", () => {
+    expect(providerCatalog.find((provider) => provider.id === "openrouter")?.iconAsset).toBe(
+      "openrouter"
+    );
+    expect(providerCatalog.find((provider) => provider.id === "mistral")?.iconAsset).toBe(
+      "mistral"
+    );
+  });
+
   it("renders configured provider assets as images", () => {
     const provider = providerCatalog.find((candidate) => candidate.id === "groq")!;
     const { container } = render(<ProviderMark provider={provider} fallbackLabel={provider.label} />);

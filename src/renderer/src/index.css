@@ -60,6 +60,36 @@ select {
   -webkit-app-region: no-drag;
 }
 
+.forge-dropdown-content {
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+}
+
+.forge-dropdown-content[data-state="open"] {
+  animation: forge-menu-in 140ms ease-out;
+}
+
+.forge-dropdown-content[data-state="closed"] {
+  animation: forge-menu-out 100ms ease-in;
+}
+
+.forge-provider-collapse {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  border-top: 1px solid transparent;
+  background: #fafafa;
+  transition:
+    max-height 180ms ease,
+    opacity 140ms ease,
+    border-color 140ms ease;
+}
+
+.forge-provider-collapse[data-state="open"] {
+  max-height: 840px;
+  opacity: 1;
+  border-top-color: #ececf1;
+}
+
 @keyframes forge-title-swap {
   0% {
     opacity: 0;
@@ -70,5 +100,29 @@ select {
   100% {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes forge-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes forge-menu-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
   }
 }

@@ -16,7 +16,6 @@ type ModelSelectorProps = {
 };
 
 const intelligenceLevels: IntelligenceLevel[] = ["low", "medium", "high", "xhigh"];
-const speedModes: SpeedMode[] = ["balanced", "fast"];
 
 const intelligenceLabels: Record<IntelligenceLevel, MessageKey> = {
   low: "selector.low",
@@ -50,7 +49,9 @@ export function ModelSelector({
     ? (providerLabelById.get(currentModel.providerId) ?? currentModel.providerId)
     : "";
   const supportsReasoning = currentModel?.capabilities.reasoning.type !== "none";
-  const isFast = settings.speed === "fast";
+  const currentSpeedModes = currentModel?.capabilities.speedModes ?? [];
+  const supportsSpeed = currentSpeedModes.length > 1;
+  const isFast = supportsSpeed && settings.speed === "fast";
   const intelligenceLabel = supportsReasoning
     ? t(intelligenceLabels[settings.intelligence])
     : t("selector.noReasoning");
@@ -96,7 +97,7 @@ export function ModelSelector({
         <DropdownMenu.Content
           align="start"
           sideOffset={8}
-          className="z-50 w-64 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+          className="forge-dropdown-content z-50 w-64 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
         >
           <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
             {t("selector.intelligence")}
@@ -136,7 +137,7 @@ export function ModelSelector({
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 sideOffset={10}
-                className="z-50 w-64 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+                className="forge-dropdown-content z-50 w-64 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
               >
                 <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
                   {t("selector.model")}
@@ -166,32 +167,34 @@ export function ModelSelector({
               </DropdownMenu.SubContent>
             </DropdownMenu.Portal>
           </DropdownMenu.Sub>
-          <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-xs outline-none data-[highlighted]:bg-[#f7f7f8]">
-              <span>{t("selector.speed")}</span>
-              <ChevronRight className="h-4 w-4 text-[#6e6e80]" />
-            </DropdownMenu.SubTrigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.SubContent
-                sideOffset={10}
-                className="z-50 w-48 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
-              >
-                <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
-                  {t("selector.speed")}
-                </DropdownMenu.Label>
-                {speedModes.map((speed) => (
-                  <DropdownMenu.Item
-                    key={speed}
-                    onSelect={() => onSelectSpeed(speed)}
-                    className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-xs outline-none data-[highlighted]:bg-[#f7f7f8]"
-                  >
-                    {t(speedLabels[speed])}
-                    {settings.speed === speed ? <Check className="h-4 w-4 text-[#202123]" /> : null}
-                  </DropdownMenu.Item>
-                ))}
-              </DropdownMenu.SubContent>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Sub>
+          {supportsSpeed ? (
+            <DropdownMenu.Sub>
+              <DropdownMenu.SubTrigger className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-xs outline-none data-[highlighted]:bg-[#f7f7f8]">
+                <span>{t("selector.speed")}</span>
+                <ChevronRight className="h-4 w-4 text-[#6e6e80]" />
+              </DropdownMenu.SubTrigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.SubContent
+                  sideOffset={10}
+                  className="forge-dropdown-content z-50 w-48 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+                >
+                  <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
+                    {t("selector.speed")}
+                  </DropdownMenu.Label>
+                  {currentSpeedModes.map((speed) => (
+                    <DropdownMenu.Item
+                      key={speed}
+                      onSelect={() => onSelectSpeed(speed)}
+                      className="flex h-8 cursor-default items-center justify-between rounded-[10px] px-2 text-xs outline-none data-[highlighted]:bg-[#f7f7f8]"
+                    >
+                      {t(speedLabels[speed])}
+                      {settings.speed === speed ? <Check className="h-4 w-4 text-[#202123]" /> : null}
+                    </DropdownMenu.Item>
+                  ))}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Sub>
+          ) : null}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>

@@ -1,4 +1,10 @@
-import type { ForgeModel, ForgeProvider, IntelligenceLevel, ProviderKind } from "./modelTypes.js";
+import type {
+  ForgeModel,
+  ForgeProvider,
+  IntelligenceLevel,
+  ProviderKind,
+  SpeedMode
+} from "./modelTypes.js";
 import { assertHeaderValue, normalizeApiKeyForHeader } from "./providerModels.js";
 import type { TokenUsage } from "./usageTypes.js";
 
@@ -9,6 +15,7 @@ export type TextGenerationRequestOptions = {
   instructions: string;
   input: string;
   intelligence: IntelligenceLevel;
+  speed?: SpeedMode;
 };
 
 export type BuiltTextGenerationRequest = {
@@ -22,6 +29,7 @@ export type BuiltTextGenerationRequest = {
 
 type ProviderTextGenerationRequestOptions = Omit<TextGenerationRequestOptions, "provider"> & {
   baseUrl: string;
+  providerId: string;
   requestHeaders?: Record<string, string>;
   requiresApiKey?: boolean;
   authHeader?: ForgeProvider["authHeader"];
@@ -41,7 +49,8 @@ export function buildTextGenerationRequest({
   apiKey,
   instructions,
   input,
-  intelligence
+  intelligence,
+  speed = "balanced"
 }: TextGenerationRequestOptions): BuiltTextGenerationRequest {
   const baseUrl = trimTrailingSlash(provider.baseUrl ?? "");
 
@@ -52,11 +61,13 @@ export function buildTextGenerationRequest({
   if (provider.kind === "openai") {
     return buildOpenAIRequest({
       baseUrl,
+      providerId: provider.id,
       model,
       apiKey,
       instructions,
       input,
       intelligence,
+      speed,
       requestHeaders: provider.requestHeaders,
       requiresApiKey: provider.requiresApiKey,
       authHeader: provider.authHeader,
@@ -67,26 +78,39 @@ export function buildTextGenerationRequest({
   if (provider.kind === "anthropic") {
     return buildAnthropicRequest({
       baseUrl,
+      providerId: provider.id,
       model,
       apiKey,
       instructions,
       input,
       intelligence,
+      speed,
       requestHeaders: provider.requestHeaders
     });
   }
 
   if (provider.kind === "gemini") {
-    return buildGeminiRequest({ baseUrl, model, apiKey, instructions, input, intelligence });
+    return buildGeminiRequest({
+      baseUrl,
+      providerId: provider.id,
+      model,
+      apiKey,
+      instructions,
+      input,
+      intelligence,
+      speed
+    });
   }
 
   return buildOpenAICompatibleRequest({
     baseUrl,
+    providerId: provider.id,
     model,
     apiKey,
     instructions,
     input,
     intelligence,
+    speed,
     requestHeaders: provider.requestHeaders,
     requiresApiKey: provider.requiresApiKey,
     authHeader: provider.authHeader,
@@ -141,6 +165,7 @@ function buildOpenAIRequest({
   instructions,
   input,
   intelligence,
+  speed,
   requestHeaders,
   requiresApiKey,
   authHeader
@@ -157,6 +182,12 @@ function buildOpenAIRequest({
     body.reasoning = { effort };
   }
 
+  const serviceTier = resolveOpenAIServiceTier(model, speed);
+
+  if (serviceTier) {
+    body.service_tier = serviceTier;
+  }
+
   return postJson(`${baseUrl}/responses`, apiKey, body, requestHeaders, requiresApiKey, authHeader);
 }
 
@@ -167,6 +198,7 @@ function buildAnthropicRequest({
   instructions,
   input,
   intelligence,
+  speed,
   requestHeaders
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
   const body: Record<string, unknown> = {
@@ -185,6 +217,12 @@ function buildAnthropicRequest({
 
     body.thinking = { type: "enabled", budget_tokens: budgetTokens };
     body.max_tokens = Math.min(budgetTokens + 4096, 16384);
+  }
+
+  const serviceTier = resolveAnthropicServiceTier(model, speed);
+
+  if (serviceTier) {
+    body.service_tier = serviceTier;
   }
 
   return {
@@ -242,9 +280,11 @@ function buildOpenAICompatibleRequest({
   instructions,
   input,
   intelligence,
+  speed,
   requestHeaders,
   requiresApiKey,
   authHeader,
+  providerId,
   reasoningStyle
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
   const body: Record<string, unknown> = {
@@ -261,6 +301,12 @@ function buildOpenAICompatibleRequest({
     body.thinking = { type: intelligence === "low" ? "disabled" : "enabled" };
   } else if (effort) {
     body.reasoning = { effort };
+  }
+
+  const serviceTier = resolveOpenAICompatibleServiceTier(providerId, model, speed);
+
+  if (serviceTier) {
+    body.service_tier = serviceTier;
   }
 
   return postJson(`${baseUrl}/chat/completions`, apiKey, body, requestHeaders, requiresApiKey, authHeader);
@@ -308,6 +354,38 @@ function resolveEffort(model: ForgeModel, intelligence: IntelligenceLevel): Inte
   }
 
   return model.capabilities.reasoning.values.at(-1) ?? null;
+}
+
+function resolveOpenAIServiceTier(model: ForgeModel, speed?: SpeedMode): string | null {
+  if (!speed || !model.capabilities.speedModes?.includes(speed)) {
+    return null;
+  }
+
+  return speed === "fast" ? "priority" : "default";
+}
+
+function resolveAnthropicServiceTier(model: ForgeModel, speed?: SpeedMode): string | null {
+  if (!speed || !model.capabilities.speedModes?.includes(speed)) {
+    return null;
+  }
+
+  return speed === "fast" ? "auto" : "standard_only";
+}
+
+function resolveOpenAICompatibleServiceTier(
+  providerId: string,
+  model: ForgeModel,
+  speed?: SpeedMode
+): string | null {
+  if (
+    providerId !== "openrouter" ||
+    speed !== "fast" ||
+    !model.capabilities.speedModes?.includes(speed)
+  ) {
+    return null;
+  }
+
+  return "priority";
 }
 
 function extractOpenAIText(response: Record<string, unknown>): string {

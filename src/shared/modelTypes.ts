@@ -40,6 +40,7 @@ export type ForgeModel = {
     streaming: boolean | "unknown";
     vision: boolean | "unknown";
     contextWindow?: number;
+    speedModes?: SpeedMode[];
   };
   capabilitySource: "built-in" | "provider-api" | "probe" | "manual";
 };

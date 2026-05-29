@@ -532,8 +532,13 @@ export function SettingsPanel({
                   />
                 </button>
 
-                {isExpanded ? (
-                  <div className="grid gap-3 border-t border-[#ececf1] bg-[#fafafa] px-4 py-4">
+                <div
+                  className="forge-provider-collapse"
+                  data-state={isExpanded ? "open" : "closed"}
+                  aria-hidden={!isExpanded}
+                  inert={!isExpanded}
+                >
+                  <div className="grid gap-3 px-4 py-4">
                     {provider.custom ? (
                       <label className="grid gap-1.5 text-xs text-[#6e6e80]">
                         {t("settings.providerName")}
@@ -665,7 +670,7 @@ export function SettingsPanel({
                       </div>
                     </div>
                   </div>
-                ) : null}
+                </div>
               </article>
             );
           })}
@@ -1059,7 +1064,7 @@ function InlineDropdown<T extends string>({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-50 min-w-40 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+          className="forge-dropdown-content z-50 min-w-40 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
         >
           {options.map((option) => (
             <DropdownMenu.Item
@@ -1118,7 +1123,7 @@ function ProviderModelDropdown({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[560px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+          className="forge-dropdown-content z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[560px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
         >
           {models.map((model) => (
             <DropdownMenu.Item

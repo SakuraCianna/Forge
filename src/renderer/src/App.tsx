@@ -1079,8 +1079,8 @@ export function App(): ReactElement {
     return (
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
         <div className="w-full max-w-[760px] -translate-y-[5vh]">
-          <h1 className="mb-5 overflow-hidden whitespace-nowrap text-center text-[24px] font-medium leading-tight tracking-normal text-[#202123] md:text-[26px]">
-            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_900ms_ease-in-out] truncate align-bottom">
+          <h1 className="mb-5 overflow-hidden whitespace-nowrap pb-1 text-center text-[24px] font-medium leading-[1.28] tracking-normal text-[#202123] md:text-[26px]">
+            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_900ms_ease-in-out] truncate align-baseline">
               {activeHeroPrompts[heroPromptIndex]}
             </span>
           </h1>

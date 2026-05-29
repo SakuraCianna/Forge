@@ -87,7 +87,7 @@ describe("ModelSelector", () => {
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 
-  it("shows only standard and fast speed choices, with the fast icon only when selected", async () => {
+  it("shows only standard and fast speed choices when the model declares speed modes", async () => {
     const user = userEvent.setup();
     const settings = setLanguage(
       mergeFetchedModels(createDefaultModelSettings(), [
@@ -101,7 +101,8 @@ describe("ModelSelector", () => {
             reasoning: { type: "none" },
             toolCalling: "unknown",
             streaming: "unknown",
-            vision: "unknown"
+            vision: "unknown",
+            speedModes: ["balanced", "fast"]
           },
           capabilitySource: "provider-api"
         }
@@ -136,5 +137,43 @@ describe("ModelSelector", () => {
     );
 
     expect(container.querySelector(".lucide-zap")).toBeInTheDocument();
+  });
+
+  it("hides speed choices when the current model has no speed modes", async () => {
+    const user = userEvent.setup();
+    const settings = setLanguage(
+      mergeFetchedModels(createDefaultModelSettings(), [
+        {
+          id: "deepseek:deepseek-v4-flash",
+          providerId: "deepseek",
+          label: "deepseek-v4-flash",
+          modelName: "deepseek-v4-flash",
+          enabled: true,
+          capabilities: {
+            reasoning: { type: "none" },
+            toolCalling: "unknown",
+            streaming: "unknown",
+            vision: "unknown"
+          },
+          capabilitySource: "provider-api"
+        }
+      ]),
+      "en-US"
+    );
+
+    render(
+      <ModelSelector
+        settings={{ ...settings, speed: "fast" }}
+        onSelectModel={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectSpeed={vi.fn()}
+      />
+    );
+
+    expect(document.querySelector(".lucide-zap")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /deepseek-v4-flash/ }));
+
+    expect(screen.queryByText("Speed")).not.toBeInTheDocument();
   });
 });

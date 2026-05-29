@@ -1,5 +1,5 @@
 import { catalogModels, providerCatalog } from "@shared/providerCatalog";
-import { toForgeModel } from "@shared/providerModels";
+import { isUsableCodingModel, toForgeModel } from "@shared/providerModels";
 import type {
   ForgeProvider,
   ForgeModel,
@@ -83,7 +83,8 @@ export function setCurrentModel(settings: ModelSettings, modelId: string): Model
 
   return {
     ...settings,
-    currentModelId: model.id
+    currentModelId: model.id,
+    speed: normalizeSpeedForModel(settings.speed, model)
   };
 }
 
@@ -95,7 +96,9 @@ export function setIntelligence(
 }
 
 export function setSpeed(settings: ModelSettings, speed: SpeedMode): ModelSettings {
-  return { ...settings, speed };
+  const currentModel = settings.models.find((model) => model.id === settings.currentModelId) ?? null;
+
+  return { ...settings, speed: normalizeSpeedForModel(speed, currentModel) };
 }
 
 export function setLanguage(settings: ModelSettings, language: Language): ModelSettings {
@@ -107,6 +110,12 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
   const nextModels = [...settings.models];
 
   for (const fetchedModel of fetchedModels) {
+    const provider = settings.providers.find((candidate) => candidate.id === fetchedModel.providerId);
+
+    if (provider && !isUsableCodingModel(provider, fetchedModel.modelName)) {
+      continue;
+    }
+
     const catalogModel = catalogModels.find(
       (model) =>
         model.providerId === fetchedModel.providerId &&
@@ -132,10 +141,14 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
     }
   }
 
+  const currentModelId = settings.currentModelId ?? nextModels[0]?.id ?? null;
+  const currentModel = nextModels.find((model) => model.id === currentModelId) ?? null;
+
   return {
     ...settings,
     models: nextModels,
-    currentModelId: settings.currentModelId ?? nextModels[0]?.id ?? null
+    currentModelId,
+    speed: normalizeSpeedForModel(settings.speed, currentModel)
   };
 }
 
@@ -333,10 +346,16 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
         model.label || model.modelName
       )
     );
-  const models = detectedModels.map((model) => ({
-    ...model,
-    enabled: true
-  }));
+  const models = detectedModels
+    .map((model) => ({
+      ...model,
+      enabled: true
+    }))
+    .filter((model) => {
+      const provider = providers.find((candidate) => candidate.id === model.providerId);
+
+      return provider ? isUsableCodingModel(provider, model.modelName) : true;
+    });
   const currentModelId =
     persisted.currentModelId && models.some((model) => model.id === persisted.currentModelId)
       ? persisted.currentModelId
@@ -346,7 +365,10 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
     ...defaults,
     language: persisted.language ?? defaults.language,
     intelligence: persisted.intelligence ?? defaults.intelligence,
-    speed: normalizeSpeed(persisted.speed, defaults.speed),
+    speed: normalizeSpeedForModel(
+      normalizeSpeed(persisted.speed, defaults.speed),
+      models.find((model) => model.id === currentModelId) ?? null
+    ),
     currentModelId,
     providers,
     models
@@ -395,6 +417,10 @@ function createDetectedModel(
 
 function normalizeSpeed(value: unknown, fallback: SpeedMode): SpeedMode {
   return value === "fast" || value === "balanced" ? value : fallback;
+}
+
+function normalizeSpeedForModel(speed: SpeedMode, model: ForgeModel | null): SpeedMode {
+  return model?.capabilities.speedModes?.includes(speed) ? speed : "balanced";
 }
 
 function createCustomProviderId(label: string, existingIds: Set<string>): string {

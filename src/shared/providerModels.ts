@@ -1,4 +1,4 @@
-import type { ForgeModel, ForgeProvider, ReasoningControl } from "./modelTypes.js";
+import type { ForgeModel, ForgeProvider, ReasoningControl, SpeedMode } from "./modelTypes.js";
 
 export type ModelListRequest = {
   url: string;
@@ -8,6 +8,8 @@ export type ModelListRequest = {
 export type FetchedModel = {
   id: string;
   label: string;
+  outputModalities?: string[];
+  supportedParameters?: string[];
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -48,8 +50,11 @@ export function buildModelListRequest(provider: ForgeProvider, apiKey: string): 
 }
 
 export function parseProviderModelList(provider: ForgeProvider, response: unknown): FetchedModel[] {
+  const filterCodingModels = (models: FetchedModel[]): FetchedModel[] =>
+    models.filter((model) => isUsableCodingModel(provider, model.id, model));
+
   if (Array.isArray(response)) {
-    return parseModelItems(response, provider.kind === "anthropic");
+    return filterCodingModels(parseModelItems(response, provider.kind === "anthropic"));
   }
 
   if (!isRecord(response)) {
@@ -57,14 +62,14 @@ export function parseProviderModelList(provider: ForgeProvider, response: unknow
   }
 
   if (provider.kind === "gemini") {
-    return parseGeminiModels(response);
+    return filterCodingModels(parseGeminiModels(response));
   }
 
-  return parseOpenAICompatibleModels(response, provider.kind === "anthropic");
+  return filterCodingModels(parseOpenAICompatibleModels(response, provider.kind === "anthropic"));
 }
 
 export function toForgeModel(provider: ForgeProvider, fetchedModel: FetchedModel): ForgeModel {
-  const capabilities = inferFetchedModelCapabilities(provider, fetchedModel.id);
+  const capabilities = inferFetchedModelCapabilities(provider, fetchedModel.id, fetchedModel);
 
   return {
     id: `${provider.id}:${fetchedModel.id}`,
@@ -76,7 +81,8 @@ export function toForgeModel(provider: ForgeProvider, fetchedModel: FetchedModel
       reasoning: capabilities.reasoning,
       toolCalling: "unknown",
       streaming: "unknown",
-      vision: "unknown"
+      vision: "unknown",
+      speedModes: capabilities.speedModes
     },
     capabilitySource: "provider-api"
   };
@@ -106,23 +112,52 @@ export function assertHeaderValue(headerName: string, value: string): string {
 
 export function inferFetchedModelCapabilities(
   provider: ForgeProvider,
-  modelName: string
-): { reasoning: ReasoningControl } {
+  modelName: string,
+  metadata?: Pick<FetchedModel, "supportedParameters">
+): { reasoning: ReasoningControl; speedModes?: SpeedMode[] } {
   const normalizedModelName = modelName.toLowerCase();
+  const speedModes = inferSpeedModes(provider, normalizedModelName, metadata);
 
   if (provider.reasoningStyle === "mimo-thinking" && isMimoThinkingModel(normalizedModelName)) {
-    return { reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] } };
+    return {
+      reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] },
+      speedModes
+    };
   }
 
   if (provider.kind === "gemini" && /(^|[-.])2\.5([-_.]|$)/.test(normalizedModelName)) {
-    return { reasoning: { type: "budget", min: 0, max: 32768 } };
+    return { reasoning: { type: "budget", min: 0, max: 32768 }, speedModes };
   }
 
   if (provider.id === "deepseek" && /(^|[-_])(reasoner|r1)([-_]|$)/.test(normalizedModelName)) {
-    return { reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] } };
+    return {
+      reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] },
+      speedModes
+    };
   }
 
-  return { reasoning: { type: "none" } };
+  return { reasoning: { type: "none" }, speedModes };
+}
+
+export function isUsableCodingModel(
+  provider: ForgeProvider,
+  modelName: string,
+  metadata?: Pick<FetchedModel, "outputModalities">
+): boolean {
+  const normalizedModelName = modelName.toLowerCase();
+
+  if (
+    metadata?.outputModalities?.length &&
+    !metadata.outputModalities.some((modality) => modality.toLowerCase() === "text")
+  ) {
+    return false;
+  }
+
+  if (provider.reasoningStyle === "mimo-thinking" && normalizedModelName.includes("tts")) {
+    return false;
+  }
+
+  return !isNonCodingModelName(normalizedModelName);
 }
 
 function applyAuthHeader(
@@ -149,6 +184,35 @@ function isMimoThinkingModel(normalizedModelName: string): boolean {
   }
 
   return /^mimo-v(2|2\.5)(-(pro|omni|flash))?$/.test(normalizedModelName);
+}
+
+function isNonCodingModelName(normalizedModelName: string): boolean {
+  return /(^|[-_.:/])(tts|voiceclone|voicedesign|speech|audio|whisper|embedding|embed|rerank|image|video|moderation|guard)([-_.:/]|$)/.test(
+    normalizedModelName
+  );
+}
+
+function inferSpeedModes(
+  provider: ForgeProvider,
+  normalizedModelName: string,
+  metadata?: Pick<FetchedModel, "supportedParameters">
+): SpeedMode[] | undefined {
+  if (provider.kind === "openai") {
+    return ["balanced", "fast"];
+  }
+
+  if (provider.kind === "anthropic" && !normalizedModelName.includes("mythos")) {
+    return ["balanced", "fast"];
+  }
+
+  if (
+    provider.id === "openrouter" &&
+    metadata?.supportedParameters?.some((parameter) => parameter.toLowerCase() === "service_tier")
+  ) {
+    return ["balanced", "fast"];
+  }
+
+  return undefined;
 }
 
 function validateHeaders(headers: Record<string, string>): Record<string, string> {
@@ -186,9 +250,28 @@ function parseModelItems(items: unknown[], preferDisplayName: boolean): FetchedM
       (typeof item.displayName === "string" ? item.displayName : undefined) ??
       (typeof item.name === "string" && item.name !== id ? item.name : undefined) ??
       id;
+    const architecture = isRecord(item.architecture) ? item.architecture : undefined;
+    const outputModalities =
+      readStringArray(item.output_modalities) ?? readStringArray(architecture?.output_modalities);
+    const supportedParameters = readStringArray(item.supported_parameters);
 
-    return [{ id, label }];
+    return [
+      {
+        id,
+        label,
+        ...(outputModalities ? { outputModalities } : {}),
+        ...(supportedParameters ? { supportedParameters } : {})
+      }
+    ];
   });
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    return undefined;
+  }
+
+  return value;
 }
 
 function readModelId(item: UnknownRecord): string | null {

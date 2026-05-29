@@ -347,7 +347,8 @@ export const catalogModels: ForgeModel[] = [
       reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] },
       toolCalling: true,
       streaming: true,
-      vision: true
+      vision: true,
+      speedModes: ["balanced", "fast"]
     },
     capabilitySource: "built-in"
   },
@@ -361,7 +362,8 @@ export const catalogModels: ForgeModel[] = [
       reasoning: { type: "budget", min: 1024, max: 32000 },
       toolCalling: true,
       streaming: true,
-      vision: true
+      vision: true,
+      speedModes: ["balanced", "fast"]
     },
     capabilitySource: "built-in"
   },
