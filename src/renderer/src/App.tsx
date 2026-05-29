@@ -8,6 +8,7 @@ import type { AgentPlanStep } from "@shared/agentTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
 import { FilePreviewRenderer } from "@/components/FilePreviewRenderer";
+import { InlineSelectMenu } from "@/components/InlineSelectMenu";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer, type ComposerContextMode } from "@/components/TaskComposer";
@@ -1506,6 +1507,13 @@ export function App(): ReactElement {
           : "Rendered Markdown preview"
         : formatPreviewStatus(formattedPreview, settings.language);
     const isMarkdownPreview = previewFile ? isMarkdownPreviewPath(previewFile.relativePath) : false;
+    const formatterOptions: Array<{ value: CodeFormatterMode; label: string }> = [
+      { value: "raw", label: settings.language === "zh-CN" ? "原始" : "Raw" },
+      { value: "prettier", label: "Prettier" },
+      ...(isMarkdownPreview
+        ? [{ value: "rendered" as const, label: settings.language === "zh-CN" ? "渲染" : "Rendered" }]
+        : [])
+    ];
 
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-hidden rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -1546,22 +1554,14 @@ export function App(): ReactElement {
                     </span>
                     <label className="flex shrink-0 items-center gap-2 text-[12px] text-[#6e6e80]">
                       {settings.language === "zh-CN" ? "格式化" : "Formatter"}
-                      <select
-                        aria-label={settings.language === "zh-CN" ? "代码格式化" : "Code formatter"}
+                      <InlineSelectMenu<CodeFormatterMode>
+                        ariaLabel={settings.language === "zh-CN" ? "代码格式化" : "Code formatter"}
                         value={fileFormatterMode}
-                        onChange={(event) =>
-                          setFileFormatterMode(event.currentTarget.value as CodeFormatterMode)
-                        }
-                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[12px] text-[#202123] outline-none focus:border-[#202123]"
-                      >
-                        <option value="raw">{settings.language === "zh-CN" ? "原始" : "Raw"}</option>
-                        <option value="prettier">Prettier</option>
-                        {isMarkdownPreview ? (
-                          <option value="rendered">
-                            {settings.language === "zh-CN" ? "渲染" : "Rendered"}
-                          </option>
-                        ) : null}
-                      </select>
+                        options={formatterOptions}
+                        onChange={setFileFormatterMode}
+                        triggerClassName="min-w-32 text-[12px]"
+                        contentClassName="text-[12px]"
+                      />
                     </label>
                   </div>
                   <FilePreviewRenderer

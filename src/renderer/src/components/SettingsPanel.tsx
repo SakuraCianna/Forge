@@ -36,6 +36,7 @@ import {
   type UsageRateMap
 } from "@/state/usage";
 import { ProviderMark } from "./ProviderMark";
+import { InlineSelectMenu } from "./InlineSelectMenu";
 
 export type ProviderFetchState = {
   status: "idle" | "loading" | "success" | "error";
@@ -273,7 +274,7 @@ export function SettingsPanel({
 
           <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
             <SettingRow label={t("settings.language")} description={copy.languageDescription}>
-              <InlineDropdown
+              <InlineSelectMenu
                 ariaLabel={t("settings.language")}
                 value={settings.language}
                 options={[
@@ -284,7 +285,7 @@ export function SettingsPanel({
               />
             </SettingRow>
             <SettingRow label={copy.defaultOpenTarget} description={copy.defaultOpenTargetDescription}>
-              <InlineDropdown
+              <InlineSelectMenu
                 ariaLabel={copy.defaultOpenTarget}
                 value={generalPreferences.defaultOpenTarget}
                 options={[
@@ -300,7 +301,7 @@ export function SettingsPanel({
               />
             </SettingRow>
             <SettingRow label={copy.agentRuntime} description={copy.agentRuntimeDescription}>
-              <InlineDropdown
+              <InlineSelectMenu
                 ariaLabel={copy.agentRuntime}
                 value={generalPreferences.agentRuntime}
                 options={[
@@ -316,7 +317,7 @@ export function SettingsPanel({
               />
             </SettingRow>
             <SettingRow label={copy.terminalShell} description={copy.terminalShellDescription}>
-              <InlineDropdown
+              <InlineSelectMenu
                 ariaLabel={copy.terminalShell}
                 value={generalPreferences.terminalShell}
                 options={[
@@ -1020,7 +1021,7 @@ export function SettingsPanel({
               <span className="block font-medium text-[#202123]">{t("settings.replyTone")}</span>
               <span className="mt-1 block text-xs text-[#6e6e80]">{t("settings.replyToneDescription")}</span>
             </span>
-            <InlineDropdown
+            <InlineSelectMenu
               ariaLabel={t("settings.replyTone")}
               value={personalization.replyTone}
               options={[
@@ -1294,53 +1295,6 @@ function PreferenceToggle({
         <span className="h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.18)]" />
       </button>
     </div>
-  );
-}
-
-function InlineDropdown<T extends string>({
-  ariaLabel,
-  onChange,
-  options,
-  value
-}: {
-  ariaLabel: string;
-  onChange: (value: T) => void;
-  options: Array<{ value: T; label: string }>;
-  value: T;
-}): ReactElement {
-  const selected = options.find((option) => option.value === value) ?? options[0];
-
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          aria-label={ariaLabel}
-          className="inline-flex h-9 min-w-32 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123]"
-        >
-          <span>{selected.label}</span>
-          <ChevronDown className="h-4 w-4 text-[#6e6e80]" />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          sideOffset={6}
-          className="forge-dropdown-content z-50 min-w-40 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
-        >
-          {options.map((option) => (
-            <DropdownMenu.Item
-              key={option.value}
-              onSelect={() => onChange(option.value)}
-              className="flex h-9 cursor-default select-none items-center justify-between gap-3 rounded-[10px] px-2.5 outline-none transition data-[highlighted]:bg-[#f7f7f8]"
-            >
-              <span>{option.label}</span>
-              {option.value === value ? <Check className="h-4 w-4" /> : null}
-            </DropdownMenu.Item>
-          ))}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
   );
 }
 

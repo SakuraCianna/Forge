@@ -119,6 +119,7 @@ export function AppShell({
     "--forge-sidebar-width": `${sidebarWidth}px`
   } as CSSProperties;
   const wallpaperOpacity = clampWallpaperOpacity(backgroundOpacity);
+  const hasWallpaper = Boolean(backgroundImageDataUrl);
 
   useEffect(() => {
     function syncSidebarWidth(): void {
@@ -152,7 +153,9 @@ export function AppShell({
   return (
     <div
       style={layoutStyle}
-      className="relative h-screen min-h-screen overflow-hidden bg-white text-[#202123]"
+      className={`relative h-screen min-h-screen overflow-hidden text-[#202123] ${
+        hasWallpaper ? "bg-[#f7f7f8]" : "bg-white"
+      }`}
     >
       {backgroundImageDataUrl ? (
         <div
@@ -166,7 +169,11 @@ export function AppShell({
         />
       ) : null}
       <div className="relative z-10 grid h-full min-h-0 grid-rows-[48px_minmax(0,1fr)] overflow-hidden">
-      <header className="grid h-12 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)_138px] border-b border-[#ececf1] bg-white/90 backdrop-blur">
+      <header
+        className={`grid h-12 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)_138px] border-b border-[#ececf1] ${
+          hasWallpaper ? "bg-white/72" : "bg-white/90 backdrop-blur"
+        }`}
+      >
         <div className="drag-region flex h-12 items-center gap-2 px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#ececf1] bg-white text-[#202123] shadow-sm">
             <Hammer className="h-4 w-4" />
@@ -179,7 +186,11 @@ export function AppShell({
       </header>
 
       <div className="grid min-h-0 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)] overflow-hidden">
-        <aside className="relative flex min-h-0 flex-col border-r border-[#ececf1] bg-[#f7f7f8]/90 p-3 backdrop-blur">
+        <aside
+          className={`relative flex min-h-0 flex-col border-r border-[#ececf1] p-3 ${
+            hasWallpaper ? "bg-[#f7f7f8]/74" : "bg-[#f7f7f8]/90 backdrop-blur"
+          }`}
+        >
           <button
             type="button"
             title={t("nav.newChat")}
@@ -244,7 +255,10 @@ export function AppShell({
 
         <main
           aria-label="Forge workbench"
-          className="min-h-0 min-w-0 overflow-hidden bg-white/80 backdrop-blur-[1px]"
+          // 背景图需要穿透到工作台主层, 否则白色面板会抵消透明度
+          className={`min-h-0 min-w-0 overflow-hidden ${
+            hasWallpaper ? "bg-transparent" : "bg-white/80 backdrop-blur-[1px]"
+          }`}
         >
           {children}
         </main>

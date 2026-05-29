@@ -43,6 +43,8 @@ describe("AppShell", () => {
     expect(wallpaper).toHaveStyle({
       backgroundImage: "url(data:image/png;base64,abc)"
     });
+    expect(screen.getByRole("main", { name: "Forge workbench" })).toHaveClass("bg-transparent");
+    expect(screen.getByRole("main", { name: "Forge workbench" })).not.toHaveClass("bg-white/80");
   });
 
   it("routes sidebar buttons to real workbench views", async () => {
