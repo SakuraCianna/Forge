@@ -7,10 +7,12 @@ import {
   Circle,
   Code2,
   FileText,
-  GitPullRequest,
   Layers,
+  ListChecks,
   Play,
+  RotateCcw,
   Terminal,
+  Wrench,
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
@@ -438,7 +440,15 @@ export function ThreadWorkspace({
     const planCopy =
       language === "zh-CN"
         ? {
-            agentTimeline: "Agent 时间线",
+            runTranscript: "运行记录",
+            userRequest: "用户请求",
+            commandRunning: "正在运行命令",
+            commandSucceeded: "命令已通过",
+            commandFailed: "命令失败",
+            commandCancelled: "命令已取消",
+            viewOutput: "查看输出",
+            retryCommand: "重试命令",
+            generateFixPlan: "生成修复计划",
             verification: "验证",
             noVerification: "还没有完成的验证命令",
             exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
@@ -447,7 +457,15 @@ export function ThreadWorkspace({
             timedOut: "已超时"
           }
         : {
-            agentTimeline: "Agent timeline",
+            runTranscript: "Run transcript",
+            userRequest: "Request",
+            commandRunning: "Running command",
+            commandSucceeded: "Command passed",
+            commandFailed: "Command failed",
+            commandCancelled: "Command cancelled",
+            viewOutput: "View output",
+            retryCommand: "Retry command",
+            generateFixPlan: "Generate fix plan",
             verification: "Verification",
             noVerification: "No verification commands have finished yet",
             exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
@@ -458,7 +476,7 @@ export function ThreadWorkspace({
     const actionQueueCopy =
       language === "zh-CN"
         ? {
-            title: "Agent 动作队列",
+            title: "步骤",
             empty: "等待模型生成可执行动作",
             pending: "待执行",
             open: "打开",
@@ -479,7 +497,7 @@ export function ThreadWorkspace({
             generateEdit: "生成修改"
           }
         : {
-            title: "Agent action queue",
+            title: "Steps",
             empty: "Waiting for executable agent actions",
             pending: "Pending",
             open: "Open",
@@ -846,6 +864,184 @@ export function ThreadWorkspace({
       );
     }
 
+    function renderTranscriptOutput(label: string, value: string, tone: "dark" | "warning"): ReactElement | null {
+      const output = value.trim();
+
+      if (!output) {
+        return null;
+      }
+
+      return (
+        <div className="mt-2">
+          <div
+            className={`mb-1 text-[11px] font-medium ${
+              tone === "warning" ? "text-[#9a3412]" : "text-[#8e8ea0]"
+            }`}
+          >
+            {label}
+          </div>
+          <pre
+            className={`max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] p-2 font-mono text-[11px] leading-4 ${
+              tone === "warning"
+                ? "bg-[#fff7ed] text-[#9a3412]"
+                : "bg-[#111827] text-[#f8fafc]"
+            }`}
+          >
+            {formatCommandOutputSnippet(output)}
+          </pre>
+        </div>
+      );
+    }
+
+    function renderCommandRecovery(result: CommandRunResult): ReactElement | null {
+      const failed = !result.cancelled && (result.timedOut || result.exitCode !== 0);
+      const canRetry = result.cancelled || result.timedOut || result.exitCode !== 0;
+
+      if (!selectedThread || !canRetry) {
+        return null;
+      }
+
+      const viewOutputLabel =
+        language === "zh-CN"
+          ? `${planCopy.viewOutput} ${result.command}`
+          : `${planCopy.viewOutput} for ${result.command}`;
+      const generateFixLabel =
+        language === "zh-CN"
+          ? `${planCopy.generateFixPlan} ${result.command}`
+          : `${planCopy.generateFixPlan} for ${result.command}`;
+
+      return (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            aria-label={viewOutputLabel}
+            onClick={() => setActiveTab("commands")}
+            className="h-7 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+          >
+            {planCopy.viewOutput}
+          </button>
+          {failed && onGenerateCommandFix ? (
+            <button
+              type="button"
+              aria-label={generateFixLabel}
+              onClick={() => onGenerateCommandFix(selectedThread.id, result)}
+              className="h-7 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Wrench className="h-3.5 w-3.5" />
+                {planCopy.generateFixPlan}
+              </span>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            aria-label={`${planCopy.retryCommand} ${result.command}`}
+            onClick={() => onRunCommand(selectedThread.id, result.command)}
+            className="h-7 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <RotateCcw className="h-3.5 w-3.5" />
+              {planCopy.retryCommand}
+            </span>
+          </button>
+        </div>
+      );
+    }
+
+    function renderTranscriptEvent(event: TaskThreadEvent, index: number): ReactElement {
+      const isLast = index === timelineEvents.length - 1;
+      const isActive = isLast && selectedThread?.status === "running";
+
+      if (event.commandRun) {
+        return (
+          <article key={event.id} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+            <div className="flex flex-col items-center">
+              <Activity className="h-5 w-5 text-[#202123]" />
+              {!isLast ? <span className="mt-2 h-full w-px bg-[#ececf1]" /> : null}
+            </div>
+            <div className="min-w-0 pb-4">
+              <div className="text-sm font-semibold leading-5 text-[#202123]">
+                {planCopy.commandRunning}
+              </div>
+              <p className="mt-1 break-words font-mono text-[12px] leading-5 text-[#202123]">
+                {event.commandRun.command}
+              </p>
+              {renderTranscriptOutput(planCopy.stdout, event.commandRun.stdout ?? "", "dark")}
+              {renderTranscriptOutput(planCopy.stderr, event.commandRun.stderr ?? "", "warning")}
+            </div>
+          </article>
+        );
+      }
+
+      if (event.commandResult) {
+        const result = event.commandResult;
+        const failed = !result.cancelled && (result.timedOut || result.exitCode !== 0);
+        const title = result.cancelled
+          ? planCopy.commandCancelled
+          : failed
+            ? planCopy.commandFailed
+            : planCopy.commandSucceeded;
+
+        return (
+          <article key={event.id} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+            <div className="flex flex-col items-center">
+              {failed ? (
+                <Terminal className="h-5 w-5 text-[#9a3412]" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5 text-[#087443]" />
+              )}
+              {!isLast ? <span className="mt-2 h-full w-px bg-[#ececf1]" /> : null}
+            </div>
+            <div className="min-w-0 pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`text-sm font-semibold leading-5 ${
+                    failed ? "text-[#9a3412]" : "text-[#087443]"
+                  }`}
+                >
+                  {title}
+                </span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] ${
+                    failed ? "bg-[#fff7ed] text-[#9a3412]" : "bg-[#effaf6] text-[#087443]"
+                  }`}
+                >
+                  {planCopy.exit(result.exitCode)}
+                </span>
+                {result.timedOut ? (
+                  <span className="rounded-full bg-[#fff7ed] px-2 py-0.5 text-[11px] text-[#9a3412]">
+                    {planCopy.timedOut}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 break-words font-mono text-[12px] leading-5 text-[#202123]">
+                {result.command}
+              </p>
+              {renderTranscriptOutput(planCopy.stdout, result.stdout, "dark")}
+              {renderTranscriptOutput(planCopy.stderr, result.stderr, "warning")}
+              {renderCommandRecovery(result)}
+            </div>
+          </article>
+        );
+      }
+
+      return (
+        <article key={event.id} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+          <div className="flex flex-col items-center">
+            {isActive ? (
+              <Activity className="h-5 w-5 text-[#202123]" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 text-[#10a37f]" />
+            )}
+            {!isLast ? <span className="mt-2 h-full w-px bg-[#ececf1]" /> : null}
+          </div>
+          <div className="min-w-0 pb-4">
+            <p className="text-sm leading-6 text-[#202123]">{event.message}</p>
+          </div>
+        </article>
+      );
+    }
+
     return (
       <div className="space-y-4">
         {queueStats.total > 0 ? (
@@ -906,90 +1102,39 @@ export function ThreadWorkspace({
           </section>
         ) : null}
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
-          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[#202123]">
-            <GitPullRequest className="h-4 w-4 text-[#565869]" />
-            {planCopy.agentTimeline}
-          </h2>
-          <div className="space-y-4">
-            {timelineEvents.map((event, index) => {
-              const isLast = index === timelineEvents.length - 1;
-              const isActive = index === timelineEvents.length - 1 && selectedThread?.status === "running";
-              const Icon = isActive ? Activity : CheckCircle2;
-
-              return (
-                <div key={event.id} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
-                  <div className="flex flex-col items-center">
-                    <Icon className={`h-5 w-5 ${isActive ? "text-[#202123]" : "text-[#10a37f]"}`} />
-                    {!isLast ? <span className="mt-2 h-full w-px bg-[#ececf1]" /> : null}
+          <section aria-label={planCopy.runTranscript} className="min-w-0 bg-white px-1 py-1">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[#202123]">
+              <Activity className="h-4 w-4 text-[#565869]" />
+              {planCopy.runTranscript}
+            </h2>
+            <div className="space-y-1">
+              <article className="flex justify-end">
+                <div className="max-w-[78%] rounded-[18px] bg-[#f2f2f2] px-4 py-3 text-sm leading-6 text-[#202123]">
+                  <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
+                    {planCopy.userRequest}
                   </div>
-                  <div className="min-w-0 pb-2">
-                    <div className="text-xs uppercase tracking-[0.08em] text-[#8e8ea0]">{event.kind}</div>
-                    <p className="mt-1 text-sm leading-6 text-[#202123]">{event.message}</p>
-                    {event.commandResult ? (
-                      <div className="mt-2 rounded-[14px] border border-[#ececf1] bg-[#fafafa] p-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="break-words font-mono text-[12px] font-semibold text-[#202123]">
-                            {event.commandResult.command}
-                          </span>
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                              event.commandResult.exitCode === 0 && !event.commandResult.timedOut
-                                ? "border-[#c3eadc] bg-[#effaf6] text-[#087443]"
-                                : "border-[#f4c7ab] bg-[#fff7ed] text-[#9a3412]"
-                            }`}
-                          >
-                            {planCopy.exit(event.commandResult.exitCode)}
-                          </span>
-                          {event.commandResult.timedOut ? (
-                            <span className="rounded-full border border-[#f4c7ab] bg-[#fff7ed] px-2 py-0.5 text-[11px] text-[#9a3412]">
-                              {planCopy.timedOut}
-                            </span>
-                          ) : null}
-                        </div>
-                        {event.commandResult.stdout.trim() ? (
-                          <div className="mt-2">
-                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-                              {planCopy.stdout}
-                            </div>
-                            <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-2 font-mono text-[11px] leading-4 text-[#f8fafc]">
-                              {formatCommandOutputSnippet(event.commandResult.stdout)}
-                            </pre>
-                          </div>
-                        ) : null}
-                        {event.commandResult.stderr.trim() ? (
-                          <div className="mt-2">
-                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#9a3412]">
-                              {planCopy.stderr}
-                            </div>
-                            <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-2 font-mono text-[11px] leading-4 text-[#9a3412]">
-                              {formatCommandOutputSnippet(event.commandResult.stderr)}
-                            </pre>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
+                  {selectedThread.prompt}
+                </div>
+              </article>
+              <div className="pt-4">
+                {timelineEvents.map((event, index) => renderTranscriptEvent(event, index))}
+                <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+                  <div className="flex justify-center">
+                    <Circle className="h-5 w-5 text-[#8e8ea0]" />
+                  </div>
+                  <div>
+                    <p className="text-sm leading-6 text-[#6e6e80]">{t("threads.command")}</p>
                   </div>
                 </div>
-              );
-            })}
-            <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
-              <div className="flex justify-center">
-                <Circle className="h-5 w-5 text-[#8e8ea0]" />
-              </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.08em] text-[#8e8ea0]">waiting</div>
-                <p className="mt-1 text-sm leading-6 text-[#6e6e80]">{t("threads.command")}</p>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
         <aside className="space-y-4">
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-[#202123]">
-                <Play className="h-4 w-4 text-[#565869]" />
+                <ListChecks className="h-4 w-4 text-[#565869]" />
                 {actionQueueCopy.title}
               </h2>
               {runnablePendingActions.length > 0 && selectedThread && onRunAgentActions ? (

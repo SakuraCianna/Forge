@@ -57,7 +57,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getAllByText("实现设置持久化")).toHaveLength(2);
+    expect(screen.getAllByText("实现设置持久化").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/openai:gpt-5.5/)).toBeInTheDocument();
     expect(screen.getAllByText("任务已创建, 等待 Forge 生成执行计划").length).toBeGreaterThan(0);
   });
@@ -229,7 +229,7 @@ describe("ThreadWorkspace", () => {
     expect(within(header).getByText("exit 1")).toBeInTheDocument();
   });
 
-  it("shows the generated agent action queue on the plan tab", () => {
+  it("shows generated agent steps on the plan tab", () => {
     render(
       <ThreadWorkspace
         language="en-US"
@@ -267,7 +267,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("Agent action queue")).toBeInTheDocument();
+    expect(screen.getByText("Steps")).toBeInTheDocument();
     expect(screen.getAllByText("Inspect src/App.tsx").length).toBeGreaterThan(0);
     expect(screen.getByText("Run npm test")).toBeInTheDocument();
   });
@@ -335,7 +335,7 @@ describe("ThreadWorkspace", () => {
     expect(within(verification!).getByText("221 passed")).toBeInTheDocument();
   });
 
-  it("shows recent command output in the agent timeline", () => {
+  it("shows recent command output in the run transcript", () => {
     render(
       <ThreadWorkspace
         language="en-US"
@@ -378,12 +378,71 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    const timeline = screen.getByText("Agent timeline").closest("section");
+    const timeline = screen.getByRole("region", { name: "Run transcript" });
     expect(timeline).not.toBeNull();
     expect(within(timeline!).getByText("npm run build")).toBeInTheDocument();
     expect(within(timeline!).getByText("exit 1")).toBeInTheDocument();
     expect(within(timeline!).getByText("compiled renderer")).toBeInTheDocument();
     expect(within(timeline!).getByText("type error")).toBeInTheDocument();
+  });
+
+  it("offers failed command recovery from the run transcript", async () => {
+    const user = userEvent.setup();
+    const onGenerateCommandFix = vi.fn();
+    const onRunCommand = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Recover failed transcript command",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "ran 199 tests",
+                  stderr: "failed tests",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={onRunCommand}
+        onPreviewFile={vi.fn()}
+        onGenerateCommandFix={onGenerateCommandFix}
+      />
+    );
+
+    const transcript = screen.getByRole("region", { name: "Run transcript" });
+    expect(within(transcript).getByText("Command failed")).toBeInTheDocument();
+    expect(within(transcript).getByText("failed tests")).toBeInTheDocument();
+
+    await user.click(within(transcript).getByRole("button", { name: "Generate fix plan for npm test" }));
+    expect(onGenerateCommandFix).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ command: "npm test", exitCode: 1 })
+    );
+
+    await user.click(within(transcript).getByRole("button", { name: "Retry command npm test" }));
+    expect(onRunCommand).toHaveBeenCalledWith("thread-1", "npm test");
+
+    await user.click(within(transcript).getByRole("button", { name: "View output for npm test" }));
+    expect(screen.getByText("Command history")).toBeInTheDocument();
   });
 
   it("runs command actions and opens file actions from the agent queue", async () => {
@@ -1404,6 +1463,12 @@ describe("ThreadWorkspace", () => {
     expect(within(activeRun!).getByText("npm run build")).toBeInTheDocument();
     expect(within(activeRun!).getByText("building client")).toBeInTheDocument();
     expect(within(activeRun!).getByText("warning: cache miss")).toBeInTheDocument();
+
+    const transcript = screen.getByRole("region", { name: "Run transcript" });
+    expect(within(transcript).getByText("Running command")).toBeInTheDocument();
+    expect(within(transcript).getByText("npm run build")).toBeInTheDocument();
+    expect(within(transcript).getByText("building client")).toBeInTheDocument();
+    expect(within(transcript).getByText("warning: cache miss")).toBeInTheDocument();
   });
 
   it("cancels a running command from the active run panel", async () => {

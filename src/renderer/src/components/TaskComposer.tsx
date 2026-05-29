@@ -115,7 +115,7 @@ export function TaskComposer({
               aria-label={copy.addProject}
               title={copy.addProject}
               onClick={onPickProject}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
             >
               <Plus className="h-4 w-4" />
             </button>

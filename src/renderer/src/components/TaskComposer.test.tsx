@@ -98,7 +98,7 @@ describe("TaskComposer", () => {
     expect(onSelectContextMode).toHaveBeenCalledWith("ask");
   });
 
-  it("keeps the add button fully visible inside the hero composer controls", () => {
+  it("keeps the hero composer controls borderless inside the input box", () => {
     const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
 
     render(
@@ -113,6 +113,7 @@ describe("TaskComposer", () => {
     );
 
     expect(screen.getByTestId("composer-control-row")).toHaveClass("overflow-visible");
-    expect(screen.getByRole("button", { name: "Add project" })).toHaveClass("border");
+    expect(screen.getByRole("button", { name: "Add project" })).not.toHaveClass("border");
+    expect(screen.getByRole("button", { name: "Configure model" })).not.toHaveClass("border");
   });
 });
