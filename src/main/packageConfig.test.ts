@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -19,19 +19,18 @@ function readPackageJson(): PackageJson {
 }
 
 describe("package config", () => {
-  it("defines desktop packaging scripts and Windows targets", () => {
+  it("does not expose release packaging while Forge is not release-ready", () => {
     const pkg = readPackageJson();
 
-    expect(pkg.devDependencies?.["electron-builder"]).toBeDefined();
-    expect(pkg.scripts?.["package:dir"]).toBe("npm run build && electron-builder --dir");
-    expect(pkg.scripts?.["dist:win"]).toBe("npm run build && electron-builder --win");
-    expect(pkg.build).toMatchObject({
-      appId: "dev.forge.app",
-      productName: "Forge",
-      directories: { output: "release" },
-      win: { icon: "build/icon.ico", target: ["msi"], signAndEditExecutable: false }
-    });
-    expect(pkg.build?.files).toContain("out/**/*");
+    expect(pkg.devDependencies?.["electron-builder"]).toBeUndefined();
+    expect(pkg.scripts?.["package:dir"]).toBeUndefined();
+    expect(pkg.scripts?.["dist:win"]).toBeUndefined();
+    expect(pkg.build).toBeUndefined();
+  });
+
+  it("does not keep release documentation or automation in the repository", () => {
+    expect(existsSync(join(process.cwd(), "docs", "RELEASE.md"))).toBe(false);
+    expect(existsSync(join(process.cwd(), ".github", "workflows", "release.yml"))).toBe(false);
   });
 
   it("loads the ESM preload bundle emitted by electron-vite", () => {

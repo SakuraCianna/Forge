@@ -16,7 +16,10 @@ import type { Language } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
-import { findNextPendingAgentAction } from "@/agent/agentActionExecutor";
+import {
+  findNextPendingAgentAction,
+  getRunnablePendingAgentActions
+} from "@/agent/agentActionExecutor";
 import { useI18n } from "@/i18n/useI18n";
 import type { TaskThread } from "@/state/taskThreads";
 
@@ -33,6 +36,7 @@ type ThreadWorkspaceProps = {
   onPickProject?: () => void;
   onOpenRecentProject?: () => void;
   onRunAgentAction?: (threadId: string, action: AgentAction) => void;
+  onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onRunCommand: (threadId: string, command: string) => void;
   onPreviewFile: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
@@ -59,6 +63,7 @@ export function ThreadWorkspace({
   onPickProject,
   onOpenRecentProject,
   onRunAgentAction,
+  onRunAgentActions,
   onRunCommand,
   onPreviewFile,
   onPreviewChange,
@@ -259,6 +264,9 @@ export function ThreadWorkspace({
             open: "打开",
             run: "运行",
             runNext: "运行下一步",
+            continueSafe: "继续安全动作",
+            safeReady: (count: number) => `可连续执行 ${count} 个安全动作`,
+            stopsBefore: (label: string) => `将在 ${label} 前停止`,
             generateEdit: "生成修改"
           }
         : {
@@ -268,9 +276,14 @@ export function ThreadWorkspace({
             open: "Open",
             run: "Run",
             runNext: "Run next action",
+            continueSafe: "Continue safe agent actions",
+            safeReady: (count: number) => `${count} safe actions ready`,
+            stopsBefore: (label: string) => `Stops before ${label}`,
             generateEdit: "Generate edit"
           };
     const nextPendingAction = findNextPendingAgentAction(agentActions);
+    const runnablePendingActions = getRunnablePendingAgentActions(agentActions);
+    const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
 
     function renderAgentActionControl(action: AgentAction): ReactElement | null {
       if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
@@ -382,7 +395,16 @@ export function ThreadWorkspace({
                 <Play className="h-4 w-4 text-[#565869]" />
                 {actionQueueCopy.title}
               </h2>
-              {nextPendingAction && selectedThread && onRunAgentAction ? (
+              {runnablePendingActions.length > 0 && selectedThread && onRunAgentActions ? (
+                <button
+                  type="button"
+                  aria-label="Continue safe agent actions"
+                  onClick={() => onRunAgentActions(selectedThread.id, runnablePendingActions)}
+                  className="h-7 shrink-0 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                >
+                  {actionQueueCopy.continueSafe}
+                </button>
+              ) : nextPendingAction && selectedThread && onRunAgentAction ? (
                 <button
                   type="button"
                   aria-label="Run next agent action"
@@ -393,6 +415,18 @@ export function ThreadWorkspace({
                 </button>
               ) : null}
             </div>
+            {runnablePendingActions.length > 0 ? (
+              <div className="mb-3 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-2">
+                <p className="text-sm font-medium leading-5 text-[#202123]">
+                  {actionQueueCopy.safeReady(runnablePendingActions.length)}
+                </p>
+                {nextGateAction ? (
+                  <p className="mt-0.5 text-[11px] leading-4 text-[#6e6e80]">
+                    {actionQueueCopy.stopsBefore(nextGateAction.label)}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {agentActions.length > 0 ? (
               <div className="space-y-2">
                 {agentActions.map((action) => (
@@ -677,4 +711,27 @@ export function ThreadWorkspace({
       </div>
     );
   }
+}
+
+function getNextGateAction(
+  actions: AgentAction[],
+  runnablePendingActions: AgentAction[]
+): AgentAction | null {
+  const lastRunnableAction = runnablePendingActions.at(-1);
+
+  if (!lastRunnableAction) {
+    return null;
+  }
+
+  const lastRunnableIndex = actions.findIndex((action) => action.id === lastRunnableAction.id);
+
+  if (lastRunnableIndex < 0) {
+    return null;
+  }
+
+  return (
+    actions
+      .slice(lastRunnableIndex + 1)
+      .find((action) => action.status === "pending") ?? null
+  );
 }

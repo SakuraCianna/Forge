@@ -2,7 +2,6 @@ node_modules/
 out/
 dist/
 dist-electron/
-release/
 coverage/
 .vite/
 .env

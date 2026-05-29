@@ -212,6 +212,70 @@ describe("ThreadWorkspace", () => {
     );
   });
 
+  it("runs the safe pending agent action batch without crossing a manual gate", async () => {
+    const user = userEvent.setup();
+    const onRunAgentActions = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Continue agent queue",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect src/App.tsx",
+                status: "pending",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              },
+              {
+                id: "action-3",
+                stepId: "step-3",
+                kind: "manual",
+                label: "Review diff",
+                status: "pending"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentActions={onRunAgentActions}
+      />
+    );
+
+    expect(screen.getByText("2 safe actions ready")).toBeInTheDocument();
+    expect(screen.getByText("Stops before Review diff")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Continue safe agent actions" }));
+
+    expect(onRunAgentActions).toHaveBeenCalledWith(
+      "thread-1",
+      expect.arrayContaining([
+        expect.objectContaining({ id: "action-1" }),
+        expect.objectContaining({ id: "action-2" })
+      ])
+    );
+    expect(onRunAgentActions.mock.calls[0][1]).toHaveLength(2);
+  });
+
   it("submits a command for the selected thread", async () => {
     const user = userEvent.setup();
     const onRunCommand = vi.fn();

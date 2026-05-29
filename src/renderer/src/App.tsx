@@ -1055,19 +1055,25 @@ export function App(): ReactElement {
     setThreads((current) => updateThreadAgentActionStatus(current, threadId, actionId, status));
   }
 
-  function runAgentAction(threadId: string, action: AgentAction): void {
+  async function runAgentAction(threadId: string, action: AgentAction): Promise<void> {
     updateAgentActionStatus(threadId, action.id, "running");
 
     const execution = resolveAgentActionExecution(action);
 
     if (execution.kind === "open-file") {
-      void openAgentFileAction(threadId, action.id, execution.relativePath);
+      await openAgentFileAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "generate-file-change") {
-      void generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
+      await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "run-command") {
-      void runThreadCommand(threadId, execution.command, action.id);
+      await runThreadCommand(threadId, execution.command, action.id);
     } else {
       updateAgentActionStatus(threadId, action.id, "completed");
+    }
+  }
+
+  async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
+    for (const action of actions) {
+      await runAgentAction(threadId, action);
     }
   }
 
@@ -1285,7 +1291,8 @@ export function App(): ReactElement {
         onSelectThread={setSelectedThreadId}
         onPickProject={() => void pickProject()}
         onOpenRecentProject={openMostRecentProject}
-        onRunAgentAction={(threadId, action) => runAgentAction(threadId, action)}
+        onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
+        onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
         onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
         onPreviewChange={(relativePath, nextContent) =>
