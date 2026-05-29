@@ -113,6 +113,10 @@ export function ThreadWorkspace({
     () => (selectedThread ? getThreadActivitySummary(selectedThread.events, language) : null),
     [language, selectedThread]
   );
+  const activeCommandEntry = useMemo(
+    () => (selectedThread ? findLatestRunningCommandHistoryEntry(selectedThread.events) : null),
+    [selectedThread]
+  );
   const duration = useMemo(() => {
     if (!selectedThread) {
       return "0m";
@@ -313,14 +317,110 @@ export function ThreadWorkspace({
         </header>
 
         <div className="min-h-0 overflow-auto p-5">
-          {activeTab === "plan" ? renderPlanTab() : null}
-          {activeTab === "changes" ? renderChangesTab() : null}
-          {activeTab === "commands" ? renderCommandsTab() : null}
-          {activeTab === "logs" ? renderLogsTab() : null}
+          {activeCommandEntry ? renderActiveCommandPanel(activeCommandEntry) : null}
+          <div className={activeCommandEntry ? "mt-4" : ""}>
+            {activeTab === "plan" ? renderPlanTab() : null}
+            {activeTab === "changes" ? renderChangesTab() : null}
+            {activeTab === "commands" ? renderCommandsTab() : null}
+            {activeTab === "logs" ? renderLogsTab() : null}
+          </div>
         </div>
       </div>
     </section>
   );
+
+  function renderActiveCommandPanel(entry: CommandHistoryEntry): ReactElement {
+    const copy =
+      language === "zh-CN"
+        ? {
+            title: "活动命令",
+            running: "运行中",
+            stopCommand: "停止命令",
+            openCommands: "打开命令页",
+            waiting: "等待命令输出",
+            stdout: "stdout",
+            stderr: "stderr"
+          }
+        : {
+            title: "Active run",
+            running: "running",
+            stopCommand: "Stop command",
+            openCommands: "Open commands",
+            waiting: "Waiting for command output",
+            stdout: "stdout",
+            stderr: "stderr"
+          };
+    const stdout = entry.result.stdout.trim();
+    const stderr = entry.result.stderr.trim();
+
+    return (
+      <section className="rounded-[18px] border border-[#bfdbfe] bg-[#f8fbff] p-4 shadow-[0_12px_32px_rgba(29,78,216,0.08)]">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#bfdbfe] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#1d4ed8]">
+                <Activity className="h-3.5 w-3.5" />
+                {copy.title}
+              </span>
+              <span className="rounded-full border border-[#d9d9e3] bg-white px-2.5 py-1 text-[11px] text-[#565869]">
+                {copy.running}
+              </span>
+            </div>
+            <p className="break-words font-mono text-sm font-semibold leading-5 text-[#202123]">
+              {entry.result.command}
+            </p>
+            <p className="mt-1 text-[11px] text-[#6e6e80]">{entry.createdAt}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("commands")}
+              className="h-8 rounded-[11px] border border-[#d9d9e3] bg-white px-2.5 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+            >
+              {copy.openCommands}
+            </button>
+            {selectedThread && entry.result.runId && onCancelCommand ? (
+              <button
+                type="button"
+                onClick={() => onCancelCommand(selectedThread.id, entry.result.runId!)}
+                className="h-8 rounded-[11px] border border-[#f4c7ab] bg-[#fff7ed] px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#ffedd5] active:scale-[0.99]"
+              >
+                {copy.stopCommand}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {stdout || stderr ? (
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            {stdout ? (
+              <div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6e6e80]">
+                  {copy.stdout}
+                </div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-3 font-mono text-[11px] leading-4 text-[#f8fafc]">
+                  {formatCommandOutputSnippet(stdout)}
+                </pre>
+              </div>
+            ) : null}
+            {stderr ? (
+              <div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#9a3412]">
+                  {copy.stderr}
+                </div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-3 font-mono text-[11px] leading-4 text-[#9a3412]">
+                  {formatCommandOutputSnippet(stderr)}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-[12px] border border-dashed border-[#bfdbfe] bg-white px-3 py-3 text-[12px] text-[#6e6e80]">
+            {copy.waiting}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   function renderPlanTab(): ReactElement {
     const timelineEvents = selectedThread?.events.slice(0, 5) ?? [];
@@ -1059,55 +1159,7 @@ export function ThreadWorkspace({
           };
     const commandRunningCopy = language === "zh-CN" ? "运行中" : "running";
     const commandEvents = selectedThread?.events ?? [];
-    const commandHistory: CommandHistoryEntry[] = commandEvents
-      .flatMap<CommandHistoryEntry>((event, index) => {
-        if (event.commandResult) {
-          return [
-            {
-              id: event.id,
-              createdAt: event.createdAt,
-              status: "finished" as const,
-              result: event.commandResult
-            }
-          ];
-        }
-
-        if (!event.commandRun) {
-          return [];
-        }
-
-        const commandRun = event.commandRun;
-        const runKey = getCommandRunKey(commandRun.command, commandRun.runId);
-        const hasFinishedAfter = commandEvents
-          .slice(index + 1)
-          .some((candidate) => {
-            const result = candidate.commandResult;
-
-            return result ? getCommandRunKey(result.command, result.runId) === runKey : false;
-          });
-
-        if (hasFinishedAfter) {
-          return [];
-        }
-
-        return [
-          {
-            id: event.id,
-            createdAt: event.createdAt,
-            status: "running" as const,
-            result: {
-              runId: event.commandRun.runId,
-              command: event.commandRun.command,
-              cwd: "",
-              exitCode: null,
-              stdout: event.commandRun.stdout ?? "",
-              stderr: event.commandRun.stderr ?? "",
-              timedOut: false
-            }
-          }
-        ];
-      })
-      .reverse();
+    const commandHistory = getCommandHistoryEntries(commandEvents);
 
     return (
       <div className="space-y-4">
@@ -1421,6 +1473,62 @@ function findLatestCommandResult(
   }
 
   return null;
+}
+
+function findLatestRunningCommandHistoryEntry(
+  events: TaskThreadEvent[]
+): CommandHistoryEntry | null {
+  return getCommandHistoryEntries(events).find((entry) => entry.status === "running") ?? null;
+}
+
+function getCommandHistoryEntries(events: TaskThreadEvent[]): CommandHistoryEntry[] {
+  return events
+    .flatMap<CommandHistoryEntry>((event, index) => {
+      if (event.commandResult) {
+        return [
+          {
+            id: event.id,
+            createdAt: event.createdAt,
+            status: "finished" as const,
+            result: event.commandResult
+          }
+        ];
+      }
+
+      if (!event.commandRun) {
+        return [];
+      }
+
+      const commandRun = event.commandRun;
+      const runKey = getCommandRunKey(commandRun.command, commandRun.runId);
+      const hasFinishedAfter = events.slice(index + 1).some((candidate) => {
+        const result = candidate.commandResult;
+
+        return result ? getCommandRunKey(result.command, result.runId) === runKey : false;
+      });
+
+      if (hasFinishedAfter) {
+        return [];
+      }
+
+      return [
+        {
+          id: event.id,
+          createdAt: event.createdAt,
+          status: "running" as const,
+          result: {
+            runId: commandRun.runId,
+            command: commandRun.command,
+            cwd: "",
+            exitCode: null,
+            stdout: commandRun.stdout ?? "",
+            stderr: commandRun.stderr ?? "",
+            timedOut: false
+          }
+        }
+      ];
+    })
+    .reverse();
 }
 
 function getCommandRunKey(command: string, runId?: string): string {

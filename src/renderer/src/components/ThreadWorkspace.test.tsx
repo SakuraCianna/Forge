@@ -1031,6 +1031,95 @@ describe("ThreadWorkspace", () => {
     expect(within(commandHistory!).getByText("warning: cache miss")).toBeInTheDocument();
   });
 
+  it("keeps a live running command visible on the plan tab", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Watch active run",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-started",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandRun: {
+                  command: "npm run build",
+                  runId: "run-1",
+                  status: "running",
+                  stdout: "building client\n",
+                  stderr: "warning: cache miss\n"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const activeRun = screen.getByText("Active run").closest("section");
+    expect(activeRun).not.toBeNull();
+    expect(within(activeRun!).getByText("npm run build")).toBeInTheDocument();
+    expect(within(activeRun!).getByText("building client")).toBeInTheDocument();
+    expect(within(activeRun!).getByText("warning: cache miss")).toBeInTheDocument();
+  });
+
+  it("cancels a running command from the active run panel", async () => {
+    const user = userEvent.setup();
+    const onCancelCommand = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Cancel active run",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-started",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandRun: {
+                  command: "npm run build",
+                  runId: "run-1",
+                  status: "running",
+                  stdout: "building client\n"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onCancelCommand={onCancelCommand}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const activeRun = screen.getByText("Active run").closest("section");
+    expect(activeRun).not.toBeNull();
+    await user.click(within(activeRun!).getByRole("button", { name: "Stop command" }));
+
+    expect(onCancelCommand).toHaveBeenCalledWith("thread-1", "run-1");
+  });
+
   it("generates a fix plan from a failed command history entry", async () => {
     const user = userEvent.setup();
     const onGenerateCommandFix = vi.fn();
