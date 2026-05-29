@@ -1116,15 +1116,17 @@ export function ThreadWorkspace({
                       <p className="mt-1 text-[11px] text-[#8e8ea0]">{createdAt}</p>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-1.5">
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                          result.exitCode === 0 && !result.timedOut
-                            ? "border-[#c3eadc] bg-[#effaf6] text-[#087443]"
-                            : "border-[#f4c7ab] bg-[#fff7ed] text-[#9a3412]"
-                        }`}
-                      >
-                        {commandHistoryCopy.exit(result.exitCode)}
-                      </span>
+                      {status === "finished" ? (
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                            result.exitCode === 0 && !result.timedOut
+                              ? "border-[#c3eadc] bg-[#effaf6] text-[#087443]"
+                              : "border-[#f4c7ab] bg-[#fff7ed] text-[#9a3412]"
+                          }`}
+                        >
+                          {commandHistoryCopy.exit(result.exitCode)}
+                        </span>
+                      ) : null}
                       {result.timedOut ? (
                         <span className="rounded-full border border-[#f4c7ab] bg-[#fff7ed] px-2 py-0.5 text-[11px] text-[#9a3412]">
                           {commandHistoryCopy.timedOut}
