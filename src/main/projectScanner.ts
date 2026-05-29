@@ -23,6 +23,21 @@ export async function scanProjectFiles(
   const limit = options.limit ?? 500;
   const files: ProjectFile[] = [];
   let truncated = false;
+  let rootStat: Awaited<ReturnType<typeof stat>>;
+
+  try {
+    rootStat = await stat(rootPath);
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      throw new Error(`Project path does not exist: ${rootPath}`, { cause: error });
+    }
+
+    throw error;
+  }
+
+  if (!rootStat.isDirectory()) {
+    throw new Error(`Project path is not a directory: ${rootPath}`);
+  }
 
   async function walk(directoryPath: string): Promise<void> {
     if (files.length >= limit) {
@@ -69,6 +84,14 @@ export async function scanProjectFiles(
   };
 }
 
+function isMissingPathError(error: unknown): boolean {
+  return isRecord(error) && error.code === "ENOENT";
+}
+
 function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

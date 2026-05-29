@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Mistral AI">
+  <rect width="64" height="64" rx="32" fill="#ff7000"/>
+  <path d="M14 18h9v8h6v-8h6v8h6v-8h9v28h-9v-8h-6v8h-6v-8h-6v8h-9V18z" fill="#fff"/>
+  <path d="M23 26h6v12h-6V26zm12 0h6v12h-6V26z" fill="#ff7000"/>
+</svg>

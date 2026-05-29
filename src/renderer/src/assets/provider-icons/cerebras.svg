@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Cerebras">
+  <rect width="64" height="64" rx="32" fill="#0f172a"/>
+  <rect x="18" y="18" width="28" height="28" rx="6" fill="#fff"/>
+  <path d="M24 24h16v16H24z" fill="#0f172a"/>
+  <path d="M13 25h8M13 39h8M43 25h8M43 39h8M25 13v8M39 13v8M25 43v8M39 43v8" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+</svg>

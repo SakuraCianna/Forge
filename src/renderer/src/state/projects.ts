@@ -24,6 +24,10 @@ export function addRecentProject(projects: ForgeProject[], project: ForgeProject
   return sortProjects([project, ...withoutDuplicate]).slice(0, maxRecentProjects);
 }
 
+export function removeRecentProject(projects: ForgeProject[], projectPath: string): ForgeProject[] {
+  return projects.filter((project) => project.path !== projectPath);
+}
+
 export function toggleProjectPinned(projects: ForgeProject[], projectPath: string): ForgeProject[] {
   return sortProjects(
     projects.map((project) =>

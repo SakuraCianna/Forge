@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Groq">
+  <rect width="64" height="64" rx="32" fill="#f55036"/>
+  <path d="M34 12a20 20 0 1 0 17.1 30.4H35.4v-8.1H55v3.4A25 25 0 1 1 47.8 20L42 25.8A17.1 17.1 0 0 0 34 12z" fill="#fff"/>
+  <circle cx="34" cy="34" r="6" fill="#fff"/>
+</svg>

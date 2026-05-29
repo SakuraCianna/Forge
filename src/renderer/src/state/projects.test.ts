@@ -4,6 +4,7 @@ import {
   createProjectFromPath,
   getProjectDisplayName,
   loadRecentProjects,
+  removeRecentProject,
   saveRecentProjects,
   toggleProjectPinned
 } from "./projects";
@@ -76,5 +77,12 @@ describe("projects", () => {
 
     expect(projects.map((project) => project.name)).toEqual(["Aiko", "Forge"]);
     expect(projects.find((project) => project.name === "Forge")?.pinned).toBe(false);
+  });
+
+  it("removes stale project records by path", () => {
+    const forge = createProjectFromPath("E:\\CodeHome\\Forge", "2026-05-27T13:00:00.000Z");
+    const missing = createProjectFromPath("E:\\CodeHome\\Missing", "2026-05-27T14:00:00.000Z");
+
+    expect(removeRecentProject([forge, missing], missing.path)).toEqual([forge]);
   });
 });

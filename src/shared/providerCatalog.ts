@@ -38,6 +38,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://openrouter.ai/api/v1",
     requiresBaseUrl: false,
     icon: "OR",
+    iconAsset: "openrouter",
     accentColor: "#7c3aed"
   },
   {
@@ -187,6 +188,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.groq.com/openai/v1",
     requiresBaseUrl: false,
     icon: "GQ",
+    iconAsset: "groq",
     accentColor: "#f55036"
   },
   {
@@ -196,6 +198,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.together.xyz/v1",
     requiresBaseUrl: false,
     icon: "TG",
+    iconAsset: "together",
     accentColor: "#111827"
   },
   {
@@ -205,6 +208,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.mistral.ai/v1",
     requiresBaseUrl: false,
     icon: "MS",
+    iconAsset: "mistral",
     accentColor: "#ff7000"
   },
   {
@@ -214,6 +218,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.x.ai/v1",
     requiresBaseUrl: false,
     icon: "X",
+    iconAsset: "xai",
     accentColor: "#202123"
   },
   {
@@ -223,6 +228,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.fireworks.ai/inference/v1",
     requiresBaseUrl: false,
     icon: "FW",
+    iconAsset: "fireworks",
     accentColor: "#ef4444"
   },
   {
@@ -232,6 +238,7 @@ export const providerCatalog: ForgeProvider[] = [
     baseUrl: "https://api.cerebras.ai/v1",
     requiresBaseUrl: false,
     icon: "CB",
+    iconAsset: "cerebras",
     accentColor: "#111827"
   },
   {

@@ -5,6 +5,7 @@ import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
+import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer, type ComposerContextMode } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
@@ -38,6 +39,7 @@ import {
   addRecentProject,
   createProjectFromPath,
   loadRecentProjects,
+  removeRecentProject as removeRecentProjectRecord,
   saveRecentProjects,
   toggleProjectPinned,
   type ForgeProject
@@ -171,6 +173,7 @@ export function App(): ReactElement {
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
   const [fileFormatterMode, setFileFormatterMode] = useState<CodeFormatterMode>("raw");
   const [formattedPreview, setFormattedPreview] = useState<CodeFormatResult | null>(null);
+  const [missingProjectPath, setMissingProjectPath] = useState<string | null>(null);
   const [changePreviews, setChangePreviews] = useState<ProjectFileChangePreview[]>([]);
   const [gitStatus, setGitStatus] = useState<ProjectGitStatus | null>(null);
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
@@ -214,16 +217,9 @@ export function App(): ReactElement {
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
   const [heroPromptIndex, setHeroPromptIndex] = useState(0);
   const { t } = useI18n(settings.language);
-  const heroPrompts =
-    settings.language === "zh-CN"
-      ? ["我们该做什么？", "要修复哪个问题？", "想实现什么功能？", "需要解释哪段代码？"]
-      : ["What should we build?", "What should we fix?", "What feature is next?", "What code should we explain?"];
-  const activeHeroPrompts =
-    settings.language === "zh-CN" && heroPrompts.length === 4
-      ? zhHeroPrompts
-      : settings.language === "en-US" && heroPrompts.length === 4
-        ? enHeroPrompts
-        : heroPrompts;
+  const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
+  const currentProjectMissing =
+    Boolean(currentProject) && missingProjectPath === currentProject?.path;
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -262,6 +258,7 @@ export function App(): ReactElement {
       setProjectScanResult(null);
       setPreviewFile(null);
       setFormattedPreview(null);
+      setMissingProjectPath(null);
       setChangePreviews([]);
       setGitStatus(null);
       setSelectedGitPath(null);
@@ -269,8 +266,11 @@ export function App(): ReactElement {
       return;
     }
 
-    void scanProject(currentProject.path);
-    void refreshProjectGitStatus(currentProject.path);
+    void scanProject(currentProject.path).then((projectExists) => {
+      if (projectExists) {
+        void refreshProjectGitStatus(currentProject.path);
+      }
+    });
   }, [currentProject]);
 
   useEffect(() => {
@@ -400,6 +400,7 @@ export function App(): ReactElement {
     }
 
     const project = createProjectFromPath(projectPath);
+    setMissingProjectPath(null);
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, project));
     setActiveView("workspace");
@@ -413,16 +414,18 @@ export function App(): ReactElement {
       return;
     }
 
+    setMissingProjectPath(null);
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, { ...project, openedAt: new Date().toISOString() }));
     setComposerContextMode("project");
     setActiveView("workspace");
   }
 
-  function removeRecentProject(projectPath: string): void {
-    setRecentProjects((current) => current.filter((project) => project.path !== projectPath));
+  function removeProjectRecord(projectPath: string): void {
+    setRecentProjects((current) => removeRecentProjectRecord(current, projectPath));
 
     if (currentProject?.path === projectPath) {
+      setMissingProjectPath(null);
       setCurrentProject(null);
     }
   }
@@ -491,16 +494,36 @@ export function App(): ReactElement {
     }
 
     setCurrentProject(recentProject);
+    setMissingProjectPath(null);
     setComposerContextMode("project");
     setActiveView("workspace");
   }
 
-  async function scanProject(projectPath: string): Promise<void> {
-    const result = await window.forge.projects.scan(projectPath);
-    setProjectScanResult(result);
-    setPreviewFile(null);
-    setFormattedPreview(null);
-    setChangePreviews([]);
+  async function scanProject(projectPath: string): Promise<boolean> {
+    try {
+      const result = await window.forge.projects.scan(projectPath);
+      setProjectScanResult(result);
+      setPreviewFile(null);
+      setFormattedPreview(null);
+      setMissingProjectPath(null);
+      setChangePreviews([]);
+      return true;
+    } catch (error) {
+      setProjectScanResult(null);
+      setPreviewFile(null);
+      setFormattedPreview(null);
+      setChangePreviews([]);
+      setGitStatus(null);
+
+      if (isMissingProjectError(error)) {
+        setMissingProjectPath(projectPath);
+        setTaskNotice(null);
+        return false;
+      }
+
+      setTaskNotice(error instanceof Error ? error.message : String(error));
+      return false;
+    }
   }
 
   async function refreshProjectGitStatus(projectPath = currentProject?.path): Promise<void> {
@@ -1044,6 +1067,7 @@ export function App(): ReactElement {
     return (
       <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
         <div className="min-h-0 p-5">
+          {currentProjectMissing ? <div className="mb-4">{renderProjectMissingNotice()}</div> : null}
           {renderThreadWorkspace()}
         </div>
         {renderTaskComposer("dock")}
@@ -1060,7 +1084,11 @@ export function App(): ReactElement {
               {activeHeroPrompts[heroPromptIndex]}
             </span>
           </h1>
-          {taskNotice ? (
+          {currentProjectMissing ? (
+            <div className="mx-auto mb-4 max-w-[680px]">
+              {renderProjectMissingNotice()}
+            </div>
+          ) : taskNotice ? (
             <div className="mx-auto mb-4 max-w-[760px]">
               <Notice message={taskNotice} />
             </div>
@@ -1091,6 +1119,20 @@ export function App(): ReactElement {
         onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
         onSelectSpeed={(speed) => setSettings((current) => setSpeed(current, speed))}
         onSubmitTask={submitTask}
+      />
+    );
+  }
+
+  function renderProjectMissingNotice(): ReactElement | null {
+    if (!currentProject) {
+      return null;
+    }
+
+    return (
+      <ProjectMissingNotice
+        language={settings.language}
+        projectPath={currentProject.path}
+        onRemove={() => removeProjectRecord(currentProject.path)}
       />
     );
   }
@@ -1143,6 +1185,8 @@ export function App(): ReactElement {
         <ViewHeader title={t("files.title")} description={t("files.description")} />
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
+        ) : currentProjectMissing ? (
+          <div className="p-5">{renderProjectMissingNotice()}</div>
         ) : (
           <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
             <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
@@ -1215,6 +1259,8 @@ export function App(): ReactElement {
         <ViewHeader title={t("source.title")} description={t("source.description")} />
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
+        ) : currentProjectMissing ? (
+          <div className="p-5">{renderProjectMissingNotice()}</div>
         ) : (
           <div className="grid h-[calc(100%-86px)] min-h-0 gap-3 p-4 xl:grid-cols-[minmax(260px,330px)_minmax(0,1fr)]">
             <div className="flex min-h-0 flex-col overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
@@ -1406,7 +1452,7 @@ export function App(): ReactElement {
         setComposerSubmitSignal((current) => current + 1);
       }}
       onPickProject={() => void pickProject()}
-      onRemoveProject={removeRecentProject}
+      onRemoveProject={removeProjectRecord}
       onRenameProject={renameProject}
       onSelectProject={selectProject}
       onSelectThread={(threadId) => {
@@ -1522,6 +1568,12 @@ function formatGitStatusLetter(status: string): string {
   }
 
   return "M";
+}
+
+function isMissingProjectError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return /Project path does not exist|ENOENT|cannot find|no such file/i.test(message);
 }
 
 function formatPreviewStatus(

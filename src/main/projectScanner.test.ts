@@ -40,4 +40,10 @@ describe("projectScanner", () => {
     expect(result.files).toHaveLength(1);
     expect(result.truncated).toBe(true);
   });
+
+  it("throws a readable error when the project path no longer exists", async () => {
+    await expect(scanProjectFiles(join(testRoot, "missing"))).rejects.toThrow(
+      "Project path does not exist"
+    );
+  });
 });
