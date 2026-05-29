@@ -40,6 +40,7 @@ type ThreadWorkspaceProps = {
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
+  onOpenSourceControl?: () => void;
   onRunCommand: (threadId: string, command: string) => void;
   onCancelCommand?: (threadId: string, runId: string) => void;
   onPreviewFile: (relativePath: string) => void;
@@ -84,6 +85,7 @@ export function ThreadWorkspace({
   onRunAgentActions,
   onGenerateFailureFix,
   onGenerateCommandFix,
+  onOpenSourceControl,
   onRunCommand,
   onCancelCommand,
   onPreviewFile,
@@ -466,6 +468,7 @@ export function ThreadWorkspace({
             manualGate: "需要人工审查",
             manualGateBody: (label: string) => `请先处理 ${label}, Forge 不会自动越过这个门禁`,
             reviewGate: "审查门禁",
+            openSourceControl: "打开源代码管理",
             ready: "就绪",
             progress: (completed: number, total: number) => `已完成 ${completed} / ${total} 个动作`,
             failedCount: (count: number) => `${count} 个失败`,
@@ -486,6 +489,7 @@ export function ThreadWorkspace({
             manualGateBody: (label: string) =>
               `Handle ${label} before Forge continues. This gate will not be auto-run.`,
             reviewGate: "Review gate",
+            openSourceControl: "Open source control",
             ready: "Ready",
             progress: (completed: number, total: number) =>
               `${completed} / ${total} actions completed`,
@@ -1087,6 +1091,15 @@ export function ThreadWorkspace({
                 <p className="mt-0.5 text-[11px] leading-4 text-[#b45309]">
                   {actionQueueCopy.manualGateBody(activeGateAction.label)}
                 </p>
+                {activeGateAction.kind === "commit" && onOpenSourceControl ? (
+                  <button
+                    type="button"
+                    onClick={onOpenSourceControl}
+                    className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+                  >
+                    {actionQueueCopy.openSourceControl}
+                  </button>
+                ) : null}
               </div>
             ) : null}
             {agentActions.length > 0 ? (

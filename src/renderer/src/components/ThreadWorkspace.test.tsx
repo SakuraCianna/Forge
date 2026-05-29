@@ -835,6 +835,52 @@ describe("ThreadWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("opens source control from a pending commit gate", async () => {
+    const user = userEvent.setup();
+    const onOpenSourceControl = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Commit after verification",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "completed",
+                command: "npm test"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "commit",
+                label: "Commit changes",
+                status: "pending"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onOpenSourceControl={onOpenSourceControl}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open source control" }));
+
+    expect(onOpenSourceControl).toHaveBeenCalledOnce();
+  });
+
   it("shows queue progress and blocks continuation after a failed action", () => {
     render(
       <ThreadWorkspace
