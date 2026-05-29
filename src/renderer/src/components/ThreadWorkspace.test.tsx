@@ -726,6 +726,68 @@ describe("ThreadWorkspace", () => {
     expect(within(status).getByText("Stops before Review diff")).toBeInTheDocument();
   });
 
+  it("blocks queued verification while generated file changes are still pending", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Apply generated changes",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "edit-file",
+                label: "Edit src/App.tsx",
+                status: "completed",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        changePreviews={[
+          {
+            relativePath: "src/App.tsx",
+            currentContent: "old",
+            nextContent: "new",
+            diff: [{ kind: "add", newLineNumber: 1, text: "new" }]
+          }
+        ]}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentActions={vi.fn()}
+      />
+    );
+
+    const status = screen.getByRole("region", { name: "Agent run" });
+    expect(within(status).getByText("Review generated changes")).toBeInTheDocument();
+    expect(within(status).getByText("1 pending change")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Continue safe agent actions" })
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Review changes" }));
+
+    expect(screen.getByText("Pending changes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pending change src/App.tsx" })).toBeInTheDocument();
+  });
+
   it("shows manual gates as review requirements instead of runnable steps", () => {
     render(
       <ThreadWorkspace

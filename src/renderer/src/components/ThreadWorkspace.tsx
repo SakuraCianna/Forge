@@ -507,6 +507,10 @@ export function ThreadWorkspace({
             safeBatch: "安全批次",
             nextGate: "下一门禁",
             current: "当前动作",
+            reviewGeneratedChanges: "审查生成的修改",
+            reviewChanges: "审查修改",
+            pendingChanges: (count: number) => `${count} 个待应用修改`,
+            pendingChangesGate: "请先应用或丢弃生成的修改, 再继续执行队列",
             noSafeBatch: "没有可连续执行的安全动作",
             noGate: "没有待处理门禁",
             noCurrent: "没有待处理动作"
@@ -523,6 +527,11 @@ export function ThreadWorkspace({
             safeBatch: "Safe batch",
             nextGate: "Next gate",
             current: "Current action",
+            reviewGeneratedChanges: "Review generated changes",
+            reviewChanges: "Review changes",
+            pendingChanges: (count: number) =>
+              `${count} pending ${count === 1 ? "change" : "changes"}`,
+            pendingChangesGate: "Apply or discard generated changes before continuing",
             noSafeBatch: "No safe batch ready",
             noGate: "No pending gate",
             noCurrent: "No pending action"
@@ -586,9 +595,13 @@ export function ThreadWorkspace({
             skipped: "Skipped"
           };
     const queueStats = getQueueStats(agentActions);
+    const pendingChangeCount = allChangePreviews.length;
+    const hasPendingFileChanges = pendingChangeCount > 0;
     const queueBlockerAction = getQueueBlockerAction(agentActions);
     const queueBlocked =
-      queueBlockerAction?.status === "failed" || queueBlockerAction?.status === "running";
+      hasPendingFileChanges ||
+      queueBlockerAction?.status === "failed" ||
+      queueBlockerAction?.status === "running";
     const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(agentActions);
     const runnablePendingActions = queueBlocked ? [] : getRunnablePendingAgentActions(agentActions);
     const nextRunnableAction =
@@ -602,15 +615,18 @@ export function ThreadWorkspace({
         ? agentRunCopy.running
         : queueBlockerAction?.status === "failed"
           ? agentRunCopy.stopped
-          : runnablePendingActions.length > 0
-            ? agentRunCopy.ready
-            : activeGateAction
-              ? agentRunCopy.gate
-              : queueComplete
-                ? agentRunCopy.complete
-                : agentRunCopy.waiting;
+          : hasPendingFileChanges
+            ? agentRunCopy.reviewGeneratedChanges
+            : runnablePendingActions.length > 0
+              ? agentRunCopy.ready
+              : activeGateAction
+                ? agentRunCopy.gate
+                : queueComplete
+                  ? agentRunCopy.complete
+                  : agentRunCopy.waiting;
     const agentRunFocus =
       queueBlockerAction?.label ??
+      (hasPendingFileChanges ? agentRunCopy.pendingChanges(pendingChangeCount) : null) ??
       nextPendingAction?.label ??
       activeGateAction?.label ??
       agentRunCopy.noCurrent;
@@ -856,7 +872,9 @@ export function ThreadWorkspace({
                     {agentRunCopy.safeBatch}
                   </div>
                   <div className="mt-1 text-sm font-semibold text-[#202123]">
-                    {runnablePendingActions.length > 0
+                    {hasPendingFileChanges
+                      ? agentRunCopy.pendingChanges(pendingChangeCount)
+                      : runnablePendingActions.length > 0
                       ? actionQueueCopy.safeReady(runnablePendingActions.length)
                       : agentRunCopy.noSafeBatch}
                   </div>
@@ -866,7 +884,9 @@ export function ThreadWorkspace({
                     {agentRunCopy.nextGate}
                   </div>
                   <div className="mt-1 text-sm font-semibold text-[#202123]">
-                    {nextGateAction
+                    {hasPendingFileChanges
+                      ? agentRunCopy.pendingChangesGate
+                      : nextGateAction
                       ? actionQueueCopy.stopsBefore(nextGateAction.label)
                       : activeGateAction
                         ? actionQueueCopy.manualGateBody(activeGateAction.label)
@@ -1028,6 +1048,23 @@ export function ThreadWorkspace({
                     </button>
                   ) : null}
                 </div>
+              </div>
+            ) : null}
+            {hasPendingFileChanges ? (
+              <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2">
+                <p className="text-sm font-medium leading-5 text-[#9a3412]">
+                  {agentRunCopy.reviewGeneratedChanges}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-4 text-[#b45309]">
+                  {agentRunCopy.pendingChangesGate}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("changes")}
+                  className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+                >
+                  {agentRunCopy.reviewChanges}
+                </button>
               </div>
             ) : null}
             {runnablePendingActions.length > 0 ? (
