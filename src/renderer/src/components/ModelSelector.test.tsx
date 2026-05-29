@@ -228,7 +228,7 @@ describe("ModelSelector", () => {
     const modelMenu = await screen.findByText("GPT List 15");
     const menuContent = modelMenu.closest(".forge-model-menu-content");
 
-    expect(menuContent).toHaveClass("max-h-[min(340px,calc(100vh-120px))]");
+    expect(menuContent).toHaveClass("max-h-[min(300px,calc(100vh-120px))]");
     expect(menuContent).toHaveClass("forge-scrollbar-none");
   });
 });

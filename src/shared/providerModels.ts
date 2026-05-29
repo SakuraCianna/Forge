@@ -1,4 +1,10 @@
-import type { ForgeModel, ForgeProvider, ReasoningControl, SpeedMode } from "./modelTypes.js";
+import type {
+  ForgeModel,
+  ForgeProvider,
+  ModelPricing,
+  ReasoningControl,
+  SpeedMode
+} from "./modelTypes.js";
 
 export type ModelListRequest = {
   url: string;
@@ -8,7 +14,9 @@ export type ModelListRequest = {
 export type FetchedModel = {
   id: string;
   label: string;
+  contextWindow?: number;
   outputModalities?: string[];
+  pricing?: ModelPricing;
   supportedParameters?: string[];
 };
 
@@ -82,8 +90,10 @@ export function toForgeModel(provider: ForgeProvider, fetchedModel: FetchedModel
       toolCalling: "unknown",
       streaming: "unknown",
       vision: "unknown",
+      contextWindow: fetchedModel.contextWindow,
       speedModes: capabilities.speedModes
     },
+    pricing: fetchedModel.pricing,
     capabilitySource: "provider-api"
   };
 }
@@ -253,13 +263,17 @@ function parseModelItems(items: unknown[], preferDisplayName: boolean): FetchedM
     const architecture = isRecord(item.architecture) ? item.architecture : undefined;
     const outputModalities =
       readStringArray(item.output_modalities) ?? readStringArray(architecture?.output_modalities);
+    const pricing = readPricing(item);
     const supportedParameters = readStringArray(item.supported_parameters);
+    const contextWindow = readContextWindow(item);
 
     return [
       {
         id,
         label,
+        ...(contextWindow ? { contextWindow } : {}),
         ...(outputModalities ? { outputModalities } : {}),
+        ...(pricing ? { pricing } : {}),
         ...(supportedParameters ? { supportedParameters } : {})
       }
     ];
@@ -302,8 +316,76 @@ function parseGeminiModels(response: UnknownRecord): FetchedModel[] {
 
     const id = item.name.replace(/^models\//, "");
     const label = typeof item.displayName === "string" ? item.displayName : id;
-    return [{ id, label }];
+    const contextWindow = readContextWindow(item);
+    return [{ id, label, ...(contextWindow ? { contextWindow } : {}) }];
   });
+}
+
+function readPricing(item: UnknownRecord): ModelPricing | undefined {
+  const pricing = isRecord(item.pricing) ? item.pricing : item;
+  const inputPerMillion =
+    readNumber(pricing.inputPerMillion) ??
+    readNumber(pricing.input_price_per_million) ??
+    readNumber(pricing.prompt_per_million) ??
+    readPerTokenPricePerMillion(pricing.prompt) ??
+    readPerTokenPricePerMillion(pricing.input);
+  const outputPerMillion =
+    readNumber(pricing.outputPerMillion) ??
+    readNumber(pricing.output_price_per_million) ??
+    readNumber(pricing.completion_per_million) ??
+    readPerTokenPricePerMillion(pricing.completion) ??
+    readPerTokenPricePerMillion(pricing.output);
+
+  if (inputPerMillion === undefined || outputPerMillion === undefined) {
+    return undefined;
+  }
+
+  return {
+    inputPerMillion,
+    outputPerMillion
+  };
+}
+
+function readContextWindow(item: UnknownRecord): number | undefined {
+  const topProvider = isRecord(item.top_provider) ? item.top_provider : undefined;
+  const limits = isRecord(item.limits) ? item.limits : undefined;
+  const inputTokenLimit = isRecord(item.inputTokenLimit) ? item.inputTokenLimit : undefined;
+  const outputTokenLimit = isRecord(item.outputTokenLimit) ? item.outputTokenLimit : undefined;
+  const tokenLimit =
+    readNumber(item.context_length) ??
+    readNumber(item.contextWindow) ??
+    readNumber(item.context_window) ??
+    readNumber(item.max_context_tokens) ??
+    readNumber(item.maxInputTokens) ??
+    readNumber(item.inputTokenLimit) ??
+    readNumber(inputTokenLimit?.max) ??
+    readNumber(outputTokenLimit?.max) ??
+    readNumber(topProvider?.context_length) ??
+    readNumber(limits?.max_context_tokens) ??
+    readNumber(limits?.max_input_tokens);
+
+  if (tokenLimit === undefined) {
+    return undefined;
+  }
+
+  return Math.round(tokenLimit);
+}
+
+function readPerTokenPricePerMillion(value: unknown): number | undefined {
+  const perTokenPrice = readNumber(value);
+
+  return perTokenPrice === undefined ? undefined : perTokenPrice * 1_000_000;
+}
+
+function readNumber(value: unknown): number | undefined {
+  const parsedValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN;
+
+  return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : undefined;
 }
 
 function isRecord(value: unknown): value is UnknownRecord {

@@ -11,6 +11,11 @@ export type ReasoningControl =
   | { type: "effort"; values: IntelligenceLevel[] }
   | { type: "budget"; min: number; max: number };
 
+export type ModelPricing = {
+  inputPerMillion: number;
+  outputPerMillion: number;
+};
+
 export type ForgeProvider = {
   id: string;
   label: string;
@@ -36,6 +41,7 @@ export type ForgeModel = {
   enabled: boolean;
   selectionCount?: number;
   lastSelectedAt?: string;
+  pricing?: ModelPricing;
   capabilities: {
     reasoning: ReasoningControl;
     toolCalling: boolean | "unknown";

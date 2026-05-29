@@ -137,7 +137,7 @@ export function ModelSelector({
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 sideOffset={10}
-                className="forge-dropdown-content forge-model-menu-content forge-scrollbar-none z-50 max-h-[min(340px,calc(100vh-120px))] w-60 overflow-y-auto rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
+                className="forge-dropdown-content forge-model-menu-content forge-scrollbar-none z-50 max-h-[min(300px,calc(100vh-120px))] w-60 overflow-y-auto rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[#202123] shadow-[0_18px_52px_rgba(0,0,0,0.14)]"
               >
                 <DropdownMenu.Label className="px-2 py-1 text-[11px] text-[#6e6e80]">
                   {t("selector.model")}
@@ -155,8 +155,8 @@ export function ModelSelector({
                         size="sm"
                       />
                       <span className="min-w-0">
-                        <span className="block truncate text-[11px] text-[#202123]">{model.label}</span>
-                        <span className="mt-0.5 block truncate text-[10px] text-[#6e6e80]">
+                        <span className="block truncate text-[11px] font-medium text-[#202123]">{model.label}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-[#565869]">
                           {t("selector.modelSource")} {providerLabelById.get(model.providerId) ?? model.providerId}
                         </span>
                       </span>

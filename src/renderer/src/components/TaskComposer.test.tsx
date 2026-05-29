@@ -97,4 +97,22 @@ describe("TaskComposer", () => {
 
     expect(onSelectContextMode).toHaveBeenCalledWith("ask");
   });
+
+  it("keeps the add button fully visible inside the hero composer controls", () => {
+    const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
+
+    render(
+      <TaskComposer
+        settings={settings}
+        onSelectIntelligence={vi.fn()}
+        onSelectModel={vi.fn()}
+        onSelectSpeed={vi.fn()}
+        onSubmitTask={vi.fn()}
+        variant="hero"
+      />
+    );
+
+    expect(screen.getByTestId("composer-control-row")).toHaveClass("overflow-visible");
+    expect(screen.getByRole("button", { name: "Add project" })).toHaveClass("border");
+  });
 });

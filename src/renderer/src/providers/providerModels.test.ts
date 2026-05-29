@@ -258,6 +258,30 @@ describe("provider model adapters", () => {
     expect(model.capabilities.speedModes).toEqual(["balanced", "fast"]);
   });
 
+  it("parses OpenRouter context length and token pricing metadata when available", () => {
+    const openRouterProvider = providerCatalog.find((provider) => provider.id === "openrouter")!;
+    const models = parseProviderModelList(openRouterProvider, {
+      data: [
+        {
+          id: "openai/gpt-5-mini",
+          name: "GPT-5 Mini",
+          context_length: 272000,
+          pricing: {
+            prompt: "0.00000025",
+            completion: "0.000002"
+          }
+        }
+      ]
+    });
+    const model = toForgeModel(openRouterProvider, models[0]);
+
+    expect(model.capabilities.contextWindow).toBe(272000);
+    expect(model.pricing).toEqual({
+      inputPerMillion: 0.25,
+      outputPerMillion: 2
+    });
+  });
+
   it("parses direct array catalog responses", () => {
     const githubProvider = providerCatalog.find((provider) => provider.id === "github-models")!;
     const models = parseProviderModelList(githubProvider, [

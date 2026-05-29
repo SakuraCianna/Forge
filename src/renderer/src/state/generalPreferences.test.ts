@@ -35,7 +35,9 @@ describe("generalPreferences", () => {
       autoReview: true,
       fullAccess: false,
       defaultPermission: true,
-      telemetry: false
+      telemetry: false,
+      backgroundImageDataUrl: null,
+      backgroundOpacity: 0.18
     });
   });
 
@@ -44,7 +46,9 @@ describe("generalPreferences", () => {
     const preferences = updateGeneralPreferences(createDefaultGeneralPreferences(), {
       workMode: "daily",
       autoReview: false,
-      terminalShell: "cmd"
+      terminalShell: "cmd",
+      backgroundImageDataUrl: "data:image/png;base64,abc",
+      backgroundOpacity: 0.24
     });
 
     saveGeneralPreferences(storage, preferences);
@@ -52,7 +56,9 @@ describe("generalPreferences", () => {
     expect(loadGeneralPreferences(storage)).toMatchObject({
       workMode: "daily",
       autoReview: false,
-      terminalShell: "cmd"
+      terminalShell: "cmd",
+      backgroundImageDataUrl: "data:image/png;base64,abc",
+      backgroundOpacity: 0.24
     });
   });
 

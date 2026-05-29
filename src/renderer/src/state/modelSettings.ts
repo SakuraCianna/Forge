@@ -5,6 +5,7 @@ import type {
   ForgeModel,
   IntelligenceLevel,
   Language,
+  ModelPricing,
   ModelSettings,
   SpeedMode
 } from "@shared/modelTypes";
@@ -39,6 +40,8 @@ type PersistedDetectedModel = {
   modelName: string;
   label: string;
   enabled?: boolean;
+  contextWindow?: number;
+  pricing?: ModelPricing;
   selectionCount?: number;
   lastSelectedAt?: string;
 };
@@ -162,7 +165,13 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
     const modelWithKnownCapabilities = catalogModel
       ? {
           ...fetchedModel,
-          capabilities: catalogModel.capabilities
+          capabilities: {
+            ...fetchedModel.capabilities,
+            ...catalogModel.capabilities,
+            contextWindow:
+              fetchedModel.capabilities.contextWindow ?? catalogModel.capabilities.contextWindow
+          },
+          pricing: fetchedModel.pricing ?? catalogModel.pricing
         }
       : fetchedModel;
     const existingModel = existingModelsById.get(fetchedModel.id);
@@ -355,6 +364,8 @@ export function saveModelSettings(storage: Storage, settings: ModelSettings): vo
         modelName: model.modelName,
         label: model.label,
         enabled: model.enabled,
+        contextWindow: model.capabilities.contextWindow,
+        pricing: model.pricing,
         selectionCount: model.selectionCount,
         lastSelectedAt: model.lastSelectedAt
       }))
@@ -400,20 +411,30 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
   ];
   const detectedModels = (persisted.detectedModels ?? [])
     .filter((model) => model.providerId && model.modelName)
-    .map((model) => ({
-      ...createDetectedModel(
+    .map((model) => {
+      const detectedModel = createDetectedModel(
         providers,
         model.providerId,
         model.modelName,
         model.label || model.modelName
-      ),
-      enabled: model.enabled === true,
-      selectionCount:
-        typeof model.selectionCount === "number" && Number.isFinite(model.selectionCount)
-          ? Math.max(0, model.selectionCount)
-          : undefined,
-      lastSelectedAt: typeof model.lastSelectedAt === "string" ? model.lastSelectedAt : undefined
-    }));
+      );
+      const persistedContextWindow = readPersistedContextWindow(model.contextWindow);
+
+      return {
+        ...detectedModel,
+        enabled: model.enabled === true,
+        capabilities: {
+          ...detectedModel.capabilities,
+          contextWindow: persistedContextWindow ?? detectedModel.capabilities.contextWindow
+        },
+        pricing: isModelPricing(model.pricing) ? model.pricing : detectedModel.pricing,
+        selectionCount:
+          typeof model.selectionCount === "number" && Number.isFinite(model.selectionCount)
+            ? Math.max(0, model.selectionCount)
+            : undefined,
+        lastSelectedAt: typeof model.lastSelectedAt === "string" ? model.lastSelectedAt : undefined
+      };
+    });
   const models = detectedModels
     .filter((model) => {
       const provider = providers.find((candidate) => candidate.id === model.providerId);
@@ -485,6 +506,27 @@ function createDetectedModel(
 
 function normalizeSpeed(value: unknown, fallback: SpeedMode): SpeedMode {
   return value === "fast" || value === "balanced" ? value : fallback;
+}
+
+function readPersistedContextWindow(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : undefined;
+}
+
+function isModelPricing(value: unknown): value is ModelPricing {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "inputPerMillion" in value &&
+    "outputPerMillion" in value &&
+    typeof value.inputPerMillion === "number" &&
+    typeof value.outputPerMillion === "number" &&
+    Number.isFinite(value.inputPerMillion) &&
+    Number.isFinite(value.outputPerMillion) &&
+    value.inputPerMillion >= 0 &&
+    value.outputPerMillion >= 0
+  );
 }
 
 function normalizeSpeedForModel(speed: SpeedMode, model: ForgeModel | null): SpeedMode {

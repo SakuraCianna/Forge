@@ -104,15 +104,18 @@ export function TaskComposer({
         }`}
         placeholder={placeholderText}
       />
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+      <div
+        data-testid="composer-control-row"
+        className="mt-1.5 flex items-center justify-between gap-2 overflow-visible"
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
           {isHero ? (
             <button
               type="button"
               aria-label={copy.addProject}
               title={copy.addProject}
               onClick={onPickProject}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -183,7 +186,7 @@ export function TaskComposer({
           <DropdownMenu.Content
             align="start"
             sideOffset={8}
-            className="forge-dropdown-content z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[10px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
+            className="forge-dropdown-content z-50 w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-64px)] rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[11px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
             <ContextItem
               selected={contextMode === "ask"}
@@ -192,7 +195,7 @@ export function TaskComposer({
               <BotMessageSquare className="h-4 w-4" />
               <span className="min-w-0">
                 <span className="block truncate">{copy.askOnly}</span>
-                <span className="block truncate text-[10px] text-[#8e8ea0]">{copy.askHint}</span>
+                <span className="block truncate text-[11px] text-[#6e6e80]">{copy.askHint}</span>
               </span>
             </ContextItem>
             <DropdownMenu.Separator className="my-1 h-px bg-[#ececf1]" />
@@ -211,7 +214,7 @@ export function TaskComposer({
                   <FolderOpen className="h-4 w-4" />
                   <span className="min-w-0">
                     <span className="block truncate">{displayName}</span>
-                    <span className="block truncate text-[10px] text-[#8e8ea0]">{project.path}</span>
+                    <span className="block truncate text-[11px] text-[#6e6e80]">{project.path}</span>
                   </span>
                 </ContextItem>
               );

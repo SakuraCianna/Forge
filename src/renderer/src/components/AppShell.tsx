@@ -45,6 +45,8 @@ type AppShellProps = {
   onSelectThread?: (threadId: string) => void;
   onTogglePinProject?: (projectPath: string) => void;
   onTogglePinThread?: (threadId: string) => void;
+  backgroundImageDataUrl?: string | null;
+  backgroundOpacity?: number;
   children: ReactNode;
 };
 
@@ -95,6 +97,8 @@ export function AppShell({
   onSelectThread,
   onTogglePinProject,
   onTogglePinThread,
+  backgroundImageDataUrl,
+  backgroundOpacity = 0.18,
   children
 }: AppShellProps): ReactElement {
   const { t } = useI18n(language);
@@ -114,6 +118,7 @@ export function AppShell({
   const layoutStyle = {
     "--forge-sidebar-width": `${sidebarWidth}px`
   } as CSSProperties;
+  const wallpaperOpacity = clampWallpaperOpacity(backgroundOpacity);
 
   useEffect(() => {
     function syncSidebarWidth(): void {
@@ -147,9 +152,21 @@ export function AppShell({
   return (
     <div
       style={layoutStyle}
-      className="grid h-screen min-h-screen grid-rows-[48px_minmax(0,1fr)] overflow-hidden bg-white text-[#202123]"
+      className="relative h-screen min-h-screen overflow-hidden bg-white text-[#202123]"
     >
-      <header className="grid h-12 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)_138px] border-b border-[#ececf1] bg-white">
+      {backgroundImageDataUrl ? (
+        <div
+          data-testid="app-wallpaper"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: `url(${backgroundImageDataUrl})`,
+            opacity: wallpaperOpacity
+          }}
+        />
+      ) : null}
+      <div className="relative z-10 grid h-full min-h-0 grid-rows-[48px_minmax(0,1fr)] overflow-hidden">
+      <header className="grid h-12 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)_138px] border-b border-[#ececf1] bg-white/90 backdrop-blur">
         <div className="drag-region flex h-12 items-center gap-2 px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#ececf1] bg-white text-[#202123] shadow-sm">
             <Hammer className="h-4 w-4" />
@@ -162,7 +179,7 @@ export function AppShell({
       </header>
 
       <div className="grid min-h-0 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)] overflow-hidden">
-        <aside className="relative flex min-h-0 flex-col border-r border-[#ececf1] bg-[#f7f7f8] p-3">
+        <aside className="relative flex min-h-0 flex-col border-r border-[#ececf1] bg-[#f7f7f8]/90 p-3 backdrop-blur">
           <button
             type="button"
             title={t("nav.newChat")}
@@ -227,10 +244,11 @@ export function AppShell({
 
         <main
           aria-label="Forge workbench"
-          className="min-h-0 min-w-0 overflow-hidden bg-white"
+          className="min-h-0 min-w-0 overflow-hidden bg-white/80 backdrop-blur-[1px]"
         >
           {children}
         </main>
+      </div>
       </div>
     </div>
   );
@@ -498,6 +516,10 @@ function clampSidebarWidth(width: number, maxWidth: number): number {
   const minWidth = Math.min(176, maxWidth);
 
   return Math.min(Math.max(width, minWidth), maxWidth);
+}
+
+function clampWallpaperOpacity(value: number): number {
+  return Math.min(Math.max(value, 0), 0.6);
 }
 
 function getShellCopy(language: Language): ShellCopy {

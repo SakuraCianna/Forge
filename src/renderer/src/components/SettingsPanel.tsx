@@ -1,5 +1,5 @@
 import type { ComponentType, ReactElement } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Archive,
@@ -10,11 +10,13 @@ import {
   Cpu,
   Database,
   Globe2,
+  Image,
   KeyRound,
   Palette,
   Plus,
   ReceiptText,
   RefreshCw,
+  Search,
   SlidersHorizontal,
   Terminal,
   Trash2
@@ -107,7 +109,13 @@ export function SettingsPanel({
   const [draftBaseUrls, setDraftBaseUrls] = useState<Record<string, string>>({});
   const [newProviderLabel, setNewProviderLabel] = useState("");
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState("");
+  const [modelSearchQuery, setModelSearchQuery] = useState("");
+  const [expandedUsageProviders, setExpandedUsageProviders] = useState<Record<string, boolean>>({});
+  const backgroundFileInputRef = useRef<HTMLInputElement | null>(null);
   const availableModels = getModelsForDisplay(settings);
+  const filteredAvailableModels = availableModels.filter((model) =>
+    modelMatchesSearch(model, settings.providers, modelSearchQuery)
+  );
   const enabledModelCount = availableModels.filter((model) => model.enabled).length;
   const currentModel =
     settings.models.find((model) => model.id === settings.currentModelId && model.enabled) ?? null;
@@ -210,6 +218,26 @@ export function SettingsPanel({
     </section>
   );
 
+  function handleBackgroundFile(file: File | null): void {
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result !== "string") {
+        return;
+      }
+
+      onUpdateGeneralPreferences({
+        ...generalPreferences,
+        backgroundImageDataUrl: reader.result,
+        backgroundOpacity: generalPreferences.backgroundOpacity || 0.18
+      });
+    });
+    reader.readAsDataURL(file);
+  }
+
   function renderGeneralSection(): ReactElement {
     const copy = getGeneralSettingsCopy(settings.language);
 
@@ -308,6 +336,77 @@ export function SettingsPanel({
 
           <div>
             <div className="mb-3">
+              <h2 className="text-sm font-semibold text-[#202123]">{copy.appBackground}</h2>
+              <p className="mt-1 text-xs leading-5 text-[#6e6e80]">
+                {copy.appBackgroundDescription}
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+              <SettingRow
+                label={copy.wallpaperImage}
+                description={copy.wallpaperImageDescription}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <input
+                    ref={backgroundFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    aria-label={copy.uploadBackground}
+                    className="hidden"
+                    onChange={(event) => {
+                      handleBackgroundFile(event.currentTarget.files?.[0] ?? null);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] transition hover:bg-[#f7f7f8]"
+                    onClick={() => backgroundFileInputRef.current?.click()}
+                  >
+                    <Image className="h-4 w-4" />
+                    {copy.uploadBackground}
+                  </button>
+                  <button
+                    type="button"
+                    className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] transition hover:bg-[#f7f7f8]"
+                    onClick={() =>
+                      onUpdateGeneralPreferences({
+                        ...generalPreferences,
+                        backgroundImageDataUrl: null
+                      })
+                    }
+                  >
+                    {copy.clearBackground}
+                  </button>
+                </span>
+              </SettingRow>
+              <SettingRow label={copy.backgroundOpacity} description={copy.backgroundOpacityDescription}>
+                <span className="flex min-w-56 items-center gap-3">
+                  <input
+                    type="range"
+                    min="8"
+                    max="36"
+                    step="1"
+                    aria-label={copy.backgroundOpacity}
+                    value={Math.round(generalPreferences.backgroundOpacity * 100)}
+                    onChange={(event) =>
+                      onUpdateGeneralPreferences({
+                        ...generalPreferences,
+                        backgroundOpacity: Number(event.currentTarget.value) / 100
+                      })
+                    }
+                    className="w-40 accent-[#202123]"
+                  />
+                  <span className="w-10 text-right text-sm text-[#565869]">
+                    {Math.round(generalPreferences.backgroundOpacity * 100)}%
+                  </span>
+                </span>
+              </SettingRow>
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-3">
               <h2 className="text-sm font-semibold text-[#202123]">{copy.permissionsTitle}</h2>
               <p className="mt-1 text-xs leading-5 text-[#6e6e80]">{copy.permissionsDescription}</p>
             </div>
@@ -384,13 +483,27 @@ export function SettingsPanel({
           />
         </div>
 
+        <label className="mb-3 flex h-10 items-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] transition focus-within:border-[#202123]">
+          <Search className="h-4 w-4 shrink-0 text-[#6e6e80]" />
+          <input
+            type="search"
+            role="searchbox"
+            aria-label={t("settings.searchModels")}
+            placeholder={t("settings.searchModelsPlaceholder")}
+            value={modelSearchQuery}
+            onChange={(event) => setModelSearchQuery(event.currentTarget.value)}
+            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#8e8ea0]"
+          />
+        </label>
+
         <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
-          {availableModels.length > 0 ? (
-            availableModels.map((model, index) => {
+          {filteredAvailableModels.length > 0 ? (
+            filteredAvailableModels.map((model, index) => {
               const provider =
                 settings.providers.find((candidate) => candidate.id === model.providerId) ?? null;
               const providerLabel = provider?.label ?? model.providerId;
               const selected = model.enabled && settings.currentModelId === model.id;
+              const modelDetails = formatModelDetails(settings.language, model, providerLabel);
 
               return (
                 <div
@@ -415,7 +528,7 @@ export function SettingsPanel({
                         {model.label}
                       </span>
                       <span className="mt-1 block truncate text-xs text-[#6e6e80]">
-                        {t("selector.modelSource")} {providerLabel}
+                        {modelDetails}
                       </span>
                     </span>
                   </button>
@@ -447,6 +560,10 @@ export function SettingsPanel({
                 </div>
               );
             })
+          ) : availableModels.length > 0 ? (
+            <div className="px-4 py-10 text-center text-sm leading-6 text-[#6e6e80]">
+              {t("settings.noModelSearchResults")}
+            </div>
           ) : (
             <div className="px-4 py-10 text-center text-sm leading-6 text-[#6e6e80]">
               {t("settings.noDetectedModels")}
@@ -724,17 +841,31 @@ export function SettingsPanel({
         <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
           {settings.providers.map((provider, index) => {
             const usage = providerUsage[provider.id] ?? summarizeUsage([], usageRates);
-            const rate = usageRates[provider.id] ?? { inputPerMillion: 0, outputPerMillion: 0 };
+            const legacyProviderRate = usageRates[provider.id] ?? {
+              inputPerMillion: 0,
+              outputPerMillion: 0
+            };
             const providerModels = getProviderModelRows(provider.id);
+            const isExpanded = expandedUsageProviders[provider.id] === true;
 
             return (
               <div
                 key={provider.id}
-                className={`grid gap-3 px-4 py-4 ${
+                className={`grid gap-3 px-4 py-3 ${
                   index === 0 ? "" : "border-t border-[#ececf1]"
                 }`}
               >
-                <div className="grid gap-4 lg:grid-cols-[minmax(180px,1fr)_minmax(150px,200px)_minmax(150px,200px)_92px] lg:items-end">
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={() =>
+                    setExpandedUsageProviders((current) => ({
+                      ...current,
+                      [provider.id]: !isExpanded
+                    }))
+                  }
+                  className="grid w-full gap-4 rounded-[12px] px-1 py-1.5 text-left transition hover:bg-[#f7f7f8] lg:grid-cols-[minmax(180px,1fr)_minmax(120px,180px)_92px_18px] lg:items-center"
+                >
                   <div className="flex min-w-0 items-center gap-3">
                     <ProviderMark provider={provider} fallbackLabel={provider.label} size="md" />
                     <span className="min-w-0">
@@ -746,71 +877,75 @@ export function SettingsPanel({
                       </span>
                     </span>
                   </div>
-                  <PriceInput
-                    label={t("settings.inputPrice")}
-                    value={rate.inputPerMillion}
-                    onChange={(value) =>
-                      onUpdateUsageRate(provider.id, { ...rate, inputPerMillion: value })
-                    }
-                  />
-                  <PriceInput
-                    label={t("settings.outputPrice")}
-                    value={rate.outputPerMillion}
-                    onChange={(value) =>
-                      onUpdateUsageRate(provider.id, { ...rate, outputPerMillion: value })
-                    }
-                  />
+                  <div className="text-xs text-[#6e6e80] lg:text-right">
+                    <span className="block font-medium text-[#202123]">
+                      {formatInteger(usage.totalTokens)}
+                    </span>
+                    <span>{t("settings.totalTokens")}</span>
+                  </div>
                   <div className="text-sm font-semibold text-[#202123] lg:text-right">
                     ${usage.estimatedCost.toFixed(4)}
                   </div>
-                </div>
+                  <ChevronDown
+                    className={`h-4 w-4 text-[#6e6e80] transition ${isExpanded ? "rotate-180" : ""}`}
+                  />
+                </button>
                 {providerModels.length > 0 ? (
-                  <div className="ml-10 overflow-hidden rounded-[12px] border border-[#ececf1] bg-[#fafafa]">
-                    {providerModels.map((modelRow, modelIndex) => {
-                      const modelRate = usageRates[modelRow.id] ?? rate;
-                      const usageForModel = modelUsage[modelRow.id] ?? summarizeUsage([], usageRates);
+                  <div
+                    className="forge-provider-collapse rounded-[12px] border border-transparent bg-[#fafafa]"
+                    data-state={isExpanded ? "open" : "closed"}
+                    aria-hidden={!isExpanded}
+                    inert={!isExpanded}
+                  >
+                    <div className="overflow-hidden rounded-[12px]">
+                      {providerModels.map((modelRow, modelIndex) => {
+                        const modelRate = usageRates[modelRow.id] ?? legacyProviderRate;
+                        const usageForModel =
+                          modelUsage[modelRow.id] ?? summarizeUsage([], usageRates);
 
-                      return (
-                        <div
-                          key={modelRow.id}
-                          className={`grid gap-3 px-3 py-3 lg:grid-cols-[minmax(180px,1fr)_minmax(150px,200px)_minmax(150px,200px)_92px] lg:items-end ${
-                            modelIndex === 0 ? "" : "border-t border-[#ececf1]"
-                          }`}
-                        >
-                          <div className="min-w-0">
-                            <span className="block truncate text-xs font-semibold text-[#202123]">
-                              {modelRow.label}
-                            </span>
-                            <span className="mt-1 block truncate text-[11px] text-[#8e8ea0]">
-                              {formatInteger(usageForModel.totalTokens)} tokens / {usageForModel.requests} requests
-                            </span>
+                        return (
+                          <div
+                            key={modelRow.id}
+                            className={`grid gap-3 px-3 py-3 lg:grid-cols-[minmax(180px,1fr)_minmax(150px,200px)_minmax(150px,200px)_92px] lg:items-end ${
+                              modelIndex === 0 ? "" : "border-t border-[#ececf1]"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <span className="block truncate text-xs font-semibold text-[#202123]">
+                                {modelRow.label}
+                              </span>
+                              <span className="mt-1 block truncate text-[11px] text-[#8e8ea0]">
+                                {formatInteger(usageForModel.totalTokens)} tokens /{" "}
+                                {usageForModel.requests} requests
+                              </span>
+                            </div>
+                            <PriceInput
+                              label={getUsageModelInputLabel(settings.language)}
+                              value={modelRate.inputPerMillion}
+                              onChange={(value) =>
+                                onUpdateUsageRate(modelRow.id, {
+                                  ...modelRate,
+                                  inputPerMillion: value
+                                })
+                              }
+                            />
+                            <PriceInput
+                              label={getUsageModelOutputLabel(settings.language)}
+                              value={modelRate.outputPerMillion}
+                              onChange={(value) =>
+                                onUpdateUsageRate(modelRow.id, {
+                                  ...modelRate,
+                                  outputPerMillion: value
+                                })
+                              }
+                            />
+                            <div className="text-xs font-semibold text-[#202123] lg:text-right">
+                              ${usageForModel.estimatedCost.toFixed(4)}
+                            </div>
                           </div>
-                          <PriceInput
-                            label={getUsageModelInputLabel(settings.language)}
-                            value={modelRate.inputPerMillion}
-                            onChange={(value) =>
-                              onUpdateUsageRate(modelRow.id, {
-                                ...modelRate,
-                                inputPerMillion: value
-                              })
-                            }
-                          />
-                          <PriceInput
-                            label={getUsageModelOutputLabel(settings.language)}
-                            value={modelRate.outputPerMillion}
-                            onChange={(value) =>
-                              onUpdateUsageRate(modelRow.id, {
-                                ...modelRate,
-                                outputPerMillion: value
-                              })
-                            }
-                          />
-                          <div className="text-xs font-semibold text-[#202123] lg:text-right">
-                            ${usageForModel.estimatedCost.toFixed(4)}
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -987,6 +1122,69 @@ function getModelToggleLabel(language: Language, modelLabel: string, enabled: bo
   }
 
   return `${enabled ? "Disable" : "Enable"} ${modelLabel}`;
+}
+
+function modelMatchesSearch(
+  model: ForgeModel,
+  providers: ModelSettings["providers"],
+  query: string
+): boolean {
+  const normalizedQuery = normalizeModelSearchText(query);
+
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const provider = providers.find((candidate) => candidate.id === model.providerId);
+  const normalizedHaystack = normalizeModelSearchText(
+    [model.id, model.modelName, model.label, model.providerId, provider?.label ?? ""].join(" ")
+  );
+
+  return normalizedHaystack.includes(normalizedQuery);
+}
+
+function normalizeModelSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
+}
+
+function formatModelDetails(
+  language: Language,
+  model: ForgeModel,
+  providerLabel: string
+): string {
+  const sourcePrefix = language === "zh-CN" ? "来源" : "From";
+  const details = [`${sourcePrefix} ${providerLabel}`];
+
+  if (model.modelName !== model.label) {
+    details.push(model.modelName);
+  }
+
+  if (model.capabilities.contextWindow) {
+    details.push(formatContextWindow(language, model.capabilities.contextWindow));
+  }
+
+  if (model.pricing) {
+    details.push(
+      `$${formatPrice(model.pricing.inputPerMillion)} / $${formatPrice(
+        model.pricing.outputPerMillion
+      )} / 1M`
+    );
+  }
+
+  return details.join(" · ");
+}
+
+function formatContextWindow(language: Language, contextWindow: number): string {
+  const compactValue =
+    contextWindow >= 1000 ? `${Math.round(contextWindow / 1000)}K` : formatInteger(contextWindow);
+
+  return language === "zh-CN" ? `${compactValue} 上下文` : `${compactValue} context`;
+}
+
+function formatPrice(value: number): string {
+  return Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function ModeCard({
@@ -1246,11 +1444,16 @@ function getUsageModelOutputLabel(language: Language): string {
 function getGeneralSettingsCopy(language: Language): {
   agentRuntime: string;
   agentRuntimeDescription: string;
+  appBackground: string;
+  appBackgroundDescription: string;
   autoReview: string;
   autoReviewDescription: string;
+  backgroundOpacity: string;
+  backgroundOpacityDescription: string;
   blankWorkspace: string;
   codeMode: string;
   codeModeDescription: string;
+  clearBackground: string;
   dailyMode: string;
   dailyModeDescription: string;
   defaultOpenTarget: string;
@@ -1267,6 +1470,9 @@ function getGeneralSettingsCopy(language: Language): {
   telemetryDescription: string;
   terminalShell: string;
   terminalShellDescription: string;
+  uploadBackground: string;
+  wallpaperImage: string;
+  wallpaperImageDescription: string;
   windowsNative: string;
   workModeDescription: string;
   workModeTitle: string;
@@ -1275,11 +1481,16 @@ function getGeneralSettingsCopy(language: Language): {
     return {
       agentRuntime: "智能体环境",
       agentRuntimeDescription: "选择智能体在 Windows 上的运行位置",
+      appBackground: "软件背景",
+      appBackgroundDescription: "上传一张壁纸作为 Forge 的背景, 默认保持轻微透明避免影响阅读",
       autoReview: "自动审核",
       autoReviewDescription: "运行前自动审查潜在高风险操作",
+      backgroundOpacity: "背景透明度",
+      backgroundOpacityDescription: "控制壁纸的显示强度",
       blankWorkspace: "空白工作区",
       codeMode: "适用于编程",
       codeModeDescription: "更技术性的回答和控制",
+      clearBackground: "清除背景图",
       dailyMode: "适用于日常工作",
       dailyModeDescription: "同样强大, 技术细节更少",
       defaultOpenTarget: "默认打开目标",
@@ -1296,6 +1507,9 @@ function getGeneralSettingsCopy(language: Language): {
       telemetryDescription: "本地保留基础诊断开关, 默认关闭",
       terminalShell: "集成终端 Shell",
       terminalShellDescription: "选择要在集成终端中打开的 Shell",
+      uploadBackground: "上传背景图",
+      wallpaperImage: "背景图片",
+      wallpaperImageDescription: "选择本机图片作为软件背景",
       windowsNative: "Windows 原生",
       workModeDescription: "选择 Forge 默认显示多少技术细节",
       workModeTitle: "工作模式"
@@ -1305,11 +1519,17 @@ function getGeneralSettingsCopy(language: Language): {
   return {
     agentRuntime: "Agent runtime",
     agentRuntimeDescription: "Choose where the agent runs on Windows",
+    appBackground: "App background",
+    appBackgroundDescription:
+      "Upload a wallpaper for Forge. The default opacity stays subtle so code remains readable.",
     autoReview: "Auto review",
     autoReviewDescription: "Review potentially risky operations before running",
+    backgroundOpacity: "App background opacity",
+    backgroundOpacityDescription: "Control how strongly the wallpaper appears",
     blankWorkspace: "Blank workspace",
     codeMode: "Code work",
     codeModeDescription: "More technical answers and controls",
+    clearBackground: "Clear background image",
     dailyMode: "Daily work",
     dailyModeDescription: "Same power, fewer implementation details",
     defaultOpenTarget: "Default open target",
@@ -1326,6 +1546,9 @@ function getGeneralSettingsCopy(language: Language): {
     telemetryDescription: "Keep local diagnostics off by default",
     terminalShell: "Integrated terminal shell",
     terminalShellDescription: "Choose the shell opened in the integrated terminal",
+    uploadBackground: "Upload background image",
+    wallpaperImage: "Background image",
+    wallpaperImageDescription: "Choose a local image to use behind the app",
     windowsNative: "Windows native",
     workModeDescription: "Choose how much technical detail Forge shows by default",
     workModeTitle: "Work mode"

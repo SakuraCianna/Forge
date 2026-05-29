@@ -1,4 +1,5 @@
 import type { TokenUsage, UsageEvent, UsageEventKind } from "@shared/usageTypes";
+import type { ForgeModel } from "@shared/modelTypes";
 
 const usageEventsStorageKey = "forge.usageEvents";
 const usageRatesStorageKey = "forge.usageRates";
@@ -115,6 +116,27 @@ export function summarizeUsageByProvider(
       summarizeUsage(providerEvents, rates)
     ])
   );
+}
+
+export function mergeModelPricingRates(
+  rates: UsageRateMap,
+  models: Array<Partial<ForgeModel> & Pick<ForgeModel, "id">>
+): UsageRateMap {
+  let nextRates = rates;
+
+  for (const model of models) {
+    if (!model.pricing || rates[model.id]) {
+      continue;
+    }
+
+    if (nextRates === rates) {
+      nextRates = { ...rates };
+    }
+
+    nextRates[model.id] = model.pricing;
+  }
+
+  return nextRates;
 }
 
 export function loadUsageEvents(storage: Storage): UsageEvent[] {

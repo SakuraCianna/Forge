@@ -60,6 +60,7 @@ import {
   createUsageEvent,
   loadUsageEvents,
   loadUsageRates,
+  mergeModelPricingRates,
   saveUsageEvents,
   saveUsageRates,
   type UsageRateMap
@@ -367,6 +368,7 @@ export function App(): ReactElement {
       }
 
       const fetchedModels = await window.forge.models.fetchProviderModels(provider);
+      setUsageRates((current) => mergeModelPricingRates(current, fetchedModels));
       setSettings((current) => mergeFetchedModels(current, fetchedModels));
       setProviderFetchStates((current) => ({
         ...current,
@@ -1465,6 +1467,8 @@ export function App(): ReactElement {
       }}
       onTogglePinProject={togglePinnedProject}
       onTogglePinThread={(threadId) => setThreads((current) => toggleThreadPinned(current, threadId))}
+      backgroundImageDataUrl={generalPreferences.backgroundImageDataUrl}
+      backgroundOpacity={generalPreferences.backgroundOpacity}
     >
       {renderActiveView()}
     </AppShell>

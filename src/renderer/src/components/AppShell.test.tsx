@@ -24,6 +24,27 @@ describe("AppShell", () => {
     expect(screen.queryByRole("button", { name: "Threads" })).not.toBeInTheDocument();
   });
 
+  it("renders an optional wallpaper background with the configured opacity", () => {
+    render(
+      <AppShell
+        language="en-US"
+        activeView="workspace"
+        backgroundImageDataUrl="data:image/png;base64,abc"
+        backgroundOpacity={0.22}
+        onNavigate={() => undefined}
+      >
+        <section>Workbench</section>
+      </AppShell>
+    );
+
+    const wallpaper = screen.getByTestId("app-wallpaper");
+
+    expect(wallpaper).toHaveStyle({ opacity: "0.22" });
+    expect(wallpaper).toHaveStyle({
+      backgroundImage: "url(data:image/png;base64,abc)"
+    });
+  });
+
   it("routes sidebar buttons to real workbench views", async () => {
     const user = userEvent.setup();
     const onNavigate = vi.fn();

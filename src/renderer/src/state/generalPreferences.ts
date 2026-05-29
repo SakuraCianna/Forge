@@ -12,6 +12,8 @@ export type GeneralPreferences = {
   terminalShell: TerminalShell;
   autoReview: boolean;
   defaultPermission: boolean;
+  backgroundImageDataUrl: string | null;
+  backgroundOpacity: number;
   fullAccess: boolean;
   telemetry: boolean;
 };
@@ -24,6 +26,8 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     terminalShell: "powershell",
     autoReview: true,
     defaultPermission: true,
+    backgroundImageDataUrl: null,
+    backgroundOpacity: 0.18,
     fullAccess: false,
     telemetry: false
   };
@@ -79,6 +83,15 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
       value.terminalShell === "git-bash") &&
     (!("autoReview" in value) || typeof value.autoReview === "boolean") &&
     (!("defaultPermission" in value) || typeof value.defaultPermission === "boolean") &&
+    (!("backgroundImageDataUrl" in value) ||
+      value.backgroundImageDataUrl === null ||
+      (typeof value.backgroundImageDataUrl === "string" &&
+        value.backgroundImageDataUrl.startsWith("data:image/"))) &&
+    (!("backgroundOpacity" in value) ||
+      (typeof value.backgroundOpacity === "number" &&
+        Number.isFinite(value.backgroundOpacity) &&
+        value.backgroundOpacity >= 0 &&
+        value.backgroundOpacity <= 0.6)) &&
     (!("fullAccess" in value) || typeof value.fullAccess === "boolean") &&
     (!("telemetry" in value) || typeof value.telemetry === "boolean")
   );

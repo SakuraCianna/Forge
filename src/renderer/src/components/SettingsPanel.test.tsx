@@ -75,6 +75,30 @@ describe("SettingsPanel", () => {
     );
   });
 
+  it("shows wallpaper controls in general preferences", async () => {
+    const user = userEvent.setup();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+    const preferences = {
+      ...createDefaultGeneralPreferences(),
+      backgroundImageDataUrl: "data:image/png;base64,abc",
+      backgroundOpacity: 0.2
+    };
+    const onUpdateGeneralPreferences = vi.fn();
+
+    renderSettingsPanel({ settings, generalPreferences: preferences, onUpdateGeneralPreferences });
+
+    await user.click(screen.getByRole("button", { name: /General/ }));
+
+    expect(screen.getByText("App background")).toBeInTheDocument();
+    expect(screen.getByLabelText("App background opacity")).toHaveValue("20");
+
+    await user.click(screen.getByRole("button", { name: "Clear background image" }));
+
+    expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
+      expect.objectContaining({ backgroundImageDataUrl: null })
+    );
+  });
+
   it("saves provider API keys without exposing them in settings state", async () => {
     const user = userEvent.setup();
     const onSaveProviderKey = vi.fn();
@@ -124,19 +148,39 @@ describe("SettingsPanel", () => {
     );
   });
 
-  it("edits usage rates and personalization settings", async () => {
+  it("edits usage rates from collapsed provider groups and personalization settings", async () => {
     const user = userEvent.setup();
     const onUpdateUsageRate = vi.fn();
     const onUpdatePersonalization = vi.fn();
+    const settings = mergeFetchedModels(setLanguage(createDefaultModelSettings(), "en-US"), [
+      {
+        id: "openai:gpt-4.1",
+        providerId: "openai",
+        label: "GPT-4.1",
+        modelName: "gpt-4.1",
+        enabled: false,
+        capabilities: {
+          reasoning: { type: "none" },
+          toolCalling: "unknown",
+          streaming: "unknown",
+          vision: "unknown"
+        },
+        capabilitySource: "provider-api"
+      }
+    ]);
 
-    renderSettingsPanel({ onUpdateUsageRate, onUpdatePersonalization });
+    renderSettingsPanel({ settings, onUpdateUsageRate, onUpdatePersonalization });
 
     await user.click(screen.getByRole("button", { name: /Usage and billing/ }));
-    await user.clear(screen.getAllByLabelText("Input price / 1M")[0]);
-    await user.type(screen.getAllByLabelText("Input price / 1M")[0], "5");
+
+    expect(screen.queryByLabelText("Input price / 1M")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /OpenAI/ }));
+    await user.clear(screen.getByLabelText("Model input price / 1M"));
+    await user.type(screen.getByLabelText("Model input price / 1M"), "5");
 
     expect(onUpdateUsageRate).toHaveBeenLastCalledWith(
-      "openai",
+      "openai:gpt-4.1",
       expect.objectContaining({ inputPerMillion: 5 })
     );
 
@@ -196,6 +240,53 @@ describe("SettingsPanel", () => {
 
     expect(onToggleModelEnabled).toHaveBeenCalledWith("openai:gpt-4.1", true);
     expect(onSelectModel).not.toHaveBeenCalled();
+  });
+
+  it("filters available models by fuzzy query, provider label, and model id", async () => {
+    const user = userEvent.setup();
+    const settings = mergeFetchedModels(setLanguage(createDefaultModelSettings(), "en-US"), [
+      {
+        id: "openai:gpt-4.1",
+        providerId: "openai",
+        label: "GPT-4.1",
+        modelName: "gpt-4.1",
+        enabled: false,
+        capabilities: {
+          reasoning: { type: "none" },
+          toolCalling: "unknown",
+          streaming: "unknown",
+          vision: "unknown"
+        },
+        capabilitySource: "provider-api"
+      },
+      {
+        id: "deepseek:deepseek-v4-flash",
+        providerId: "deepseek",
+        label: "DeepSeek V4 Flash",
+        modelName: "deepseek-v4-flash",
+        enabled: false,
+        capabilities: {
+          reasoning: { type: "none" },
+          toolCalling: "unknown",
+          streaming: "unknown",
+          vision: "unknown"
+        },
+        capabilitySource: "provider-api"
+      }
+    ]);
+
+    renderSettingsPanel({ settings });
+
+    await user.type(screen.getByRole("searchbox", { name: "Search models" }), "deep");
+
+    expect(screen.getByText("DeepSeek V4 Flash")).toBeInTheDocument();
+    expect(screen.queryByText("GPT-4.1")).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search models" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search models" }), "gpt41");
+
+    expect(screen.getByText("GPT-4.1")).toBeInTheDocument();
+    expect(screen.queryByText("DeepSeek V4 Flash")).not.toBeInTheDocument();
   });
 
   it("passes the draft API key when fetching models", async () => {
