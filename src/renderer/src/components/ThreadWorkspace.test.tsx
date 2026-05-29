@@ -615,6 +615,60 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByText("failed tests")).toBeInTheDocument();
   });
 
+  it("generates a fix plan from a failed command history entry", async () => {
+    const user = userEvent.setup();
+    const onGenerateCommandFix = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Fix from command history",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "ran 199 tests",
+                  stderr: "failed tests",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onGenerateCommandFix={onGenerateCommandFix}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    await user.click(screen.getByRole("button", { name: "Generate fix plan" }));
+
+    expect(onGenerateCommandFix).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        command: "npm test",
+        exitCode: 1,
+        stderr: "failed tests"
+      })
+    );
+  });
+
   it("shows scanned project files and previews selected content", async () => {
     const user = userEvent.setup();
     const onPreviewFile = vi.fn();

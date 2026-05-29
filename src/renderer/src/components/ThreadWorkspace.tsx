@@ -39,6 +39,7 @@ type ThreadWorkspaceProps = {
   onRunAgentAction?: (threadId: string, action: AgentAction) => void;
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
+  onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onRunCommand: (threadId: string, command: string) => void;
   onPreviewFile: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
@@ -67,6 +68,7 @@ export function ThreadWorkspace({
   onRunAgentAction,
   onRunAgentActions,
   onGenerateFailureFix,
+  onGenerateCommandFix,
   onRunCommand,
   onPreviewFile,
   onPreviewChange,
@@ -973,7 +975,8 @@ export function ThreadWorkspace({
             exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
             timedOut: "已超时",
             stdout: "stdout",
-            stderr: "stderr"
+            stderr: "stderr",
+            generateFixPlan: "生成修复计划"
           }
         : {
             title: "Command history",
@@ -981,7 +984,8 @@ export function ThreadWorkspace({
             exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
             timedOut: "Timed out",
             stdout: "stdout",
-            stderr: "stderr"
+            stderr: "stderr",
+            generateFixPlan: "Generate fix plan"
           };
     const commandHistory =
       selectedThread?.events
@@ -1052,6 +1056,17 @@ export function ThreadWorkspace({
                         <span className="rounded-full border border-[#f4c7ab] bg-[#fff7ed] px-2 py-0.5 text-[11px] text-[#9a3412]">
                           {commandHistoryCopy.timedOut}
                         </span>
+                      ) : null}
+                      {selectedThread &&
+                      onGenerateCommandFix &&
+                      (result.timedOut || result.exitCode !== 0) ? (
+                        <button
+                          type="button"
+                          onClick={() => onGenerateCommandFix(selectedThread.id, result)}
+                          className="h-6 rounded-[9px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                        >
+                          {commandHistoryCopy.generateFixPlan}
+                        </button>
                       ) : null}
                     </div>
                   </div>

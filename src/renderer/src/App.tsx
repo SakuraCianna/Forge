@@ -63,6 +63,7 @@ import {
   restoreThread,
   toggleThreadPinned,
   updateThreadAgentActionStatus,
+  type CommandRunResult,
   type TaskThread
 } from "@/state/taskThreads";
 import {
@@ -949,7 +950,11 @@ export function App(): ReactElement {
     }
   }
 
-  async function generateFailureFixPlan(threadId: string, action: AgentAction): Promise<void> {
+  async function generateFailureFixPlan(
+    threadId: string,
+    action: AgentAction,
+    commandResultOverride: CommandRunResult | null = null
+  ): Promise<void> {
     const thread = threads.find((candidate) => candidate.id === threadId);
 
     if (!thread) {
@@ -1008,12 +1013,28 @@ export function App(): ReactElement {
       taskPrompt: createFailureFixTaskPrompt(
         thread,
         action,
-        findLatestCommandResultForAction(thread.events, action)
+        commandResultOverride ?? findLatestCommandResultForAction(thread.events, action)
       ),
       model,
       provider,
       projectScan: projectScanResult
     });
+  }
+
+  async function generateCommandFixPlan(
+    threadId: string,
+    result: CommandRunResult
+  ): Promise<void> {
+    const action: AgentAction = {
+      id: `command-history-${Date.now()}`,
+      stepId: "command-history",
+      kind: "run-command",
+      label: `Run ${result.command}`,
+      status: result.exitCode === 0 && !result.timedOut ? "completed" : "failed",
+      command: result.command
+    };
+
+    await generateFailureFixPlan(threadId, action, result);
   }
 
   async function generateAskResponse({
@@ -1388,6 +1409,7 @@ export function App(): ReactElement {
         onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
         onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
         onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
+        onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
         onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
         onPreviewChange={(relativePath, nextContent) =>
