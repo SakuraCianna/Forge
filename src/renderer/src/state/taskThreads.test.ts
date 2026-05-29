@@ -298,6 +298,46 @@ describe("taskThreads", () => {
       "running"
     ]);
   });
+
+  it("keeps the thread status in sync with running and failed agent actions", () => {
+    const baseThread = {
+      id: "thread-1",
+      title: "Agent task",
+      prompt: "Agent task",
+      status: "planned" as const,
+      modelId: "openai:gpt-5.5",
+      intelligence: "high" as const,
+      speed: "balanced" as const,
+      createdAt: "2026-05-27T13:00:00.000Z",
+      events: [],
+      agentActions: [
+        {
+          id: "action-1",
+          stepId: "step-1",
+          kind: "run-command" as const,
+          label: "Run npm test",
+          status: "pending" as const,
+          command: "npm test"
+        }
+      ]
+    };
+
+    const runningThreads = updateThreadAgentActionStatus(
+      [baseThread],
+      "thread-1",
+      "action-1",
+      "running"
+    );
+    const failedThreads = updateThreadAgentActionStatus(
+      runningThreads,
+      "thread-1",
+      "action-1",
+      "failed"
+    );
+
+    expect(runningThreads[0].status).toBe("running");
+    expect(failedThreads[0].status).toBe("blocked");
+  });
 });
 
 function createFetchedModel(providerId: string, modelName: string, label: string) {

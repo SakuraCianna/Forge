@@ -174,16 +174,33 @@ export function updateThreadAgentActionStatus(
   actionId: string,
   status: AgentAction["status"]
 ): TaskThread[] {
+  const threadStatus = getThreadStatusForAgentActionStatus(status);
+
   return threads.map((thread) =>
     thread.id === threadId
       ? {
           ...thread,
+          status: threadStatus ?? thread.status,
           agentActions: thread.agentActions?.map((action) =>
             action.id === actionId ? { ...action, status } : action
           )
         }
       : thread
   );
+}
+
+function getThreadStatusForAgentActionStatus(
+  status: AgentAction["status"]
+): TaskThreadStatus | null {
+  if (status === "running") {
+    return "running";
+  }
+
+  if (status === "failed") {
+    return "blocked";
+  }
+
+  return null;
 }
 
 export function toggleThreadPinned(threads: TaskThread[], threadId: string): TaskThread[] {
