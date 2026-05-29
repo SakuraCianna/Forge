@@ -5,7 +5,7 @@ import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import type { AgentPlanStep } from "@shared/agentTypes";
-import { createAgentActionsFromPlanSteps } from "@shared/agentExecutionPlan";
+import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
 import { FilePreviewRenderer } from "@/components/FilePreviewRenderer";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
@@ -57,6 +57,7 @@ import {
   createThreadFromSettings,
   restoreThread,
   toggleThreadPinned,
+  updateThreadAgentActionStatus,
   type TaskThread
 } from "@/state/taskThreads";
 import {
@@ -1039,9 +1040,67 @@ export function App(): ReactElement {
     );
   }
 
-  async function runThreadCommand(threadId: string, command: string): Promise<void> {
+  function updateAgentActionStatus(
+    threadId: string,
+    actionId: string,
+    status: AgentAction["status"]
+  ): void {
+    setThreads((current) => updateThreadAgentActionStatus(current, threadId, actionId, status));
+  }
+
+  function runAgentAction(threadId: string, action: AgentAction): void {
+    updateAgentActionStatus(threadId, action.id, "running");
+
+    if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
+      void openAgentFileAction(threadId, action.id, action.target);
+      return;
+    }
+
+    if (action.kind === "run-command" && action.command) {
+      void runThreadCommand(threadId, action.command, action.id);
+      return;
+    }
+
+    updateAgentActionStatus(threadId, action.id, "completed");
+  }
+
+  async function openAgentFileAction(
+    threadId: string,
+    actionId: string,
+    relativePath: string
+  ): Promise<void> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
+      updateAgentActionStatus(threadId, actionId, "failed");
+      return;
+    }
+
+    try {
+      await previewProjectFile(relativePath);
+      updateAgentActionStatus(threadId, actionId, "completed");
+    } catch (error) {
+      updateAgentActionStatus(threadId, actionId, "failed");
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "file",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+    }
+  }
+
+  async function runThreadCommand(
+    threadId: string,
+    command: string,
+    actionId?: string
+  ): Promise<void> {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      if (actionId) {
+        updateAgentActionStatus(threadId, actionId, "failed");
+      }
       return;
     }
 
@@ -1050,21 +1109,43 @@ export function App(): ReactElement {
       appendThreadEvents(current, threadId, [createCommandStartedEvent({ threadId, command })], "running")
     );
 
-    const result = await window.forge.commands.run({
-      projectRoot: currentProject.path,
-      cwd: currentProject.path,
-      command,
-      timeoutMs: 120000
-    });
+    try {
+      const result = await window.forge.commands.run({
+        projectRoot: currentProject.path,
+        cwd: currentProject.path,
+        command,
+        timeoutMs: 120000
+      });
 
-    setThreads((current) =>
-      appendThreadEvents(
-        current,
+      if (actionId) {
+        updateAgentActionStatus(
+          threadId,
+          actionId,
+          result.exitCode === 0 && !result.timedOut ? "completed" : "failed"
+        );
+      }
+
+      setThreads((current) =>
+        appendThreadEvents(
+          current,
+          threadId,
+          [createCommandFinishedEvent({ threadId, result })],
+          result.exitCode === 0 && !result.timedOut ? "running" : "blocked"
+        )
+      );
+    } catch (error) {
+      if (actionId) {
+        updateAgentActionStatus(threadId, actionId, "failed");
+      }
+      appendThreadError(
         threadId,
-        [createCommandFinishedEvent({ threadId, result })],
-        result.exitCode === 0 && !result.timedOut ? "running" : "blocked"
-      )
-    );
+        formatAgentRuntimeError(
+          settings.language,
+          "command",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+    }
   }
 
   function renderWorkspaceView(): ReactElement {
@@ -1163,6 +1244,7 @@ export function App(): ReactElement {
         onSelectThread={setSelectedThreadId}
         onPickProject={() => void pickProject()}
         onOpenRecentProject={openMostRecentProject}
+        onRunAgentAction={(threadId, action) => runAgentAction(threadId, action)}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
         onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
         onPreviewChange={(relativePath, nextContent) =>
@@ -1536,6 +1618,18 @@ function getAgentStepKindLabel(kind: AgentPlanStep["kind"]): string {
   }
 
   return "计划";
+}
+
+function formatAgentRuntimeError(
+  language: Language,
+  kind: "file" | "command",
+  message: string
+): string {
+  if (language === "zh-CN") {
+    return `${kind === "file" ? "文件动作" : "命令执行"}失败: ${message}`;
+  }
+
+  return `${kind === "file" ? "File action" : "Command execution"} failed: ${message}`;
 }
 
 function isMarkdownPreviewPath(path: string): boolean {

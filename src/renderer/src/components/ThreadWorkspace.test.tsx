@@ -107,8 +107,7 @@ describe("ThreadWorkspace", () => {
 
   it("runs command actions and opens file actions from the agent queue", async () => {
     const user = userEvent.setup();
-    const onRunCommand = vi.fn();
-    const onPreviewFile = vi.fn();
+    const onRunAgentAction = vi.fn();
 
     render(
       <ThreadWorkspace
@@ -142,16 +141,25 @@ describe("ThreadWorkspace", () => {
         previewFile={null}
         changePreview={null}
         onSelectThread={vi.fn()}
-        onRunCommand={onRunCommand}
-        onPreviewFile={onPreviewFile}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentAction={onRunAgentAction}
       />
     );
 
     await user.click(screen.getByRole("button", { name: "Open action src/App.tsx" }));
     await user.click(screen.getByRole("button", { name: "Run action npm test" }));
 
-    expect(onPreviewFile).toHaveBeenCalledWith("src/App.tsx");
-    expect(onRunCommand).toHaveBeenCalledWith("thread-1", "npm test");
+    expect(onRunAgentAction).toHaveBeenNthCalledWith(
+      1,
+      "thread-1",
+      expect.objectContaining({ id: "action-1", target: "src/App.tsx" })
+    );
+    expect(onRunAgentAction).toHaveBeenNthCalledWith(
+      2,
+      "thread-1",
+      expect.objectContaining({ id: "action-2", command: "npm test" })
+    );
   });
 
   it("submits a command for the selected thread", async () => {

@@ -31,6 +31,7 @@ type ThreadWorkspaceProps = {
   onSelectThread: (threadId: string) => void;
   onPickProject?: () => void;
   onOpenRecentProject?: () => void;
+  onRunAgentAction?: (threadId: string, action: AgentAction) => void;
   onRunCommand: (threadId: string, command: string) => void;
   onPreviewFile: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
@@ -56,6 +57,7 @@ export function ThreadWorkspace({
   onSelectThread,
   onPickProject,
   onOpenRecentProject,
+  onRunAgentAction,
   onRunCommand,
   onPreviewFile,
   onPreviewChange,
@@ -291,7 +293,14 @@ export function ThreadWorkspace({
           <button
             type="button"
             aria-label={`Open action ${target}`}
-            onClick={() => onPreviewFile(target)}
+            onClick={() => {
+              if (onRunAgentAction && selectedThread) {
+                onRunAgentAction(selectedThread.id, action);
+                return;
+              }
+
+              onPreviewFile(target);
+            }}
             className="mt-2 h-7 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#202123] transition hover:bg-[#f7f7f8]"
           >
             {actionQueueCopy.open}
@@ -306,7 +315,14 @@ export function ThreadWorkspace({
           <button
             type="button"
             aria-label={`Run action ${commandToRun}`}
-            onClick={() => onRunCommand(selectedThread.id, commandToRun)}
+            onClick={() => {
+              if (onRunAgentAction) {
+                onRunAgentAction(selectedThread.id, action);
+                return;
+              }
+
+              onRunCommand(selectedThread.id, commandToRun);
+            }}
             className="mt-2 h-7 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
           >
             {actionQueueCopy.run}

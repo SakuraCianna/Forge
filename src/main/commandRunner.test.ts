@@ -51,4 +51,18 @@ describe("commandRunner", () => {
     expect(result.exitCode).toBe(7);
     expect(result.stderr).toContain("forge-fail");
   });
+
+  it("rejects when the command shell cannot be spawned", async () => {
+    await mkdir(testRoot, { recursive: true });
+
+    await expect(
+      runProjectCommand({
+        projectRoot: testRoot,
+        cwd: testRoot,
+        command: "Write-Output never-runs",
+        timeoutMs: 5000,
+        shellExecutable: "forge-missing-shell.exe"
+      })
+    ).rejects.toThrow("Failed to start command shell");
+  });
 });

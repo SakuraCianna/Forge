@@ -13,7 +13,8 @@ import {
   archiveThread,
   createThreadFromSettings,
   restoreThread,
-  toggleThreadPinned
+  toggleThreadPinned,
+  updateThreadAgentActionStatus
 } from "./taskThreads";
 
 const deps = {
@@ -204,6 +205,50 @@ describe("taskThreads", () => {
 
     expect(threads[0].agentActions).toHaveLength(1);
     expect(threads[1].agentActions).toBeUndefined();
+  });
+
+  it("updates a single agent action status without replacing the queue", () => {
+    const threads = updateThreadAgentActionStatus(
+      [
+        {
+          id: "thread-1",
+          title: "Agent task",
+          prompt: "Agent task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "inspect-file",
+              label: "Inspect src/App.tsx",
+              status: "pending",
+              target: "src/App.tsx"
+            },
+            {
+              id: "action-2",
+              stepId: "step-2",
+              kind: "run-command",
+              label: "Run npm test",
+              status: "pending",
+              command: "npm test"
+            }
+          ]
+        }
+      ],
+      "thread-1",
+      "action-2",
+      "running"
+    );
+
+    expect(threads[0].agentActions?.map((action) => action.status)).toEqual([
+      "pending",
+      "running"
+    ]);
   });
 });
 

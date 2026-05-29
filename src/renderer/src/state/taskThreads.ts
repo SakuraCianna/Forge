@@ -119,6 +119,24 @@ export function attachThreadAgentActions(
   );
 }
 
+export function updateThreadAgentActionStatus(
+  threads: TaskThread[],
+  threadId: string,
+  actionId: string,
+  status: AgentAction["status"]
+): TaskThread[] {
+  return threads.map((thread) =>
+    thread.id === threadId
+      ? {
+          ...thread,
+          agentActions: thread.agentActions?.map((action) =>
+            action.id === actionId ? { ...action, status } : action
+          )
+        }
+      : thread
+  );
+}
+
 export function toggleThreadPinned(threads: TaskThread[], threadId: string): TaskThread[] {
   return threads.map((thread) =>
     thread.id === threadId ? { ...thread, pinned: !thread.pinned } : thread

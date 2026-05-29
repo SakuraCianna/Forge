@@ -7,6 +7,7 @@ export type RunProjectCommandOptions = {
   cwd: string;
   command: string;
   timeoutMs?: number;
+  shellExecutable?: string;
 };
 
 export type CommandResult = {
@@ -22,7 +23,8 @@ export async function runProjectCommand({
   projectRoot,
   cwd,
   command,
-  timeoutMs = 120000
+  timeoutMs = 120000,
+  shellExecutable = "powershell.exe"
 }: RunProjectCommandOptions): Promise<CommandResult> {
   const resolvedProjectRoot = await realpath(projectRoot);
   const resolvedCwd = await realpath(cwd);
@@ -31,9 +33,9 @@ export async function runProjectCommand({
     throw new Error("Command cwd must stay inside the selected project");
   }
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const child = spawn(
-      "powershell.exe",
+      shellExecutable,
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
       {
         cwd: resolvedCwd,
@@ -72,14 +74,7 @@ export async function runProjectCommand({
 
     child.on("error", (error) => {
       clearTimeout(timer);
-      resolve({
-        command,
-        cwd: resolvedCwd,
-        exitCode: null,
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: error.message,
-        timedOut
-      });
+      reject(new Error(`Failed to start command shell: ${error.message}`));
     });
   });
 }
