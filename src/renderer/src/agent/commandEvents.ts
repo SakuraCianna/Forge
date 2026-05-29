@@ -5,6 +5,7 @@ export type CommandResult = CommandRunResult;
 type CreateCommandStartedEventOptions = {
   threadId: string;
   command: string;
+  runId?: string;
   now?: () => string;
 };
 
@@ -19,6 +20,7 @@ const maxLogLength = 1600;
 export function createCommandStartedEvent({
   threadId,
   command,
+  runId,
   now = () => new Date().toISOString()
 }: CreateCommandStartedEventOptions): TaskThreadEvent {
   const createdAt = now();
@@ -29,6 +31,7 @@ export function createCommandStartedEvent({
     message: `开始执行命令: ${command}`,
     commandRun: {
       command,
+      runId,
       status: "running"
     },
     createdAt
@@ -42,6 +45,7 @@ export function createCommandFinishedEvent({
 }: CreateCommandFinishedEventOptions): TaskThreadEvent {
   const createdAt = now();
   const sections = [
+    result.cancelled ? "命令已取消" : "",
     `命令执行完成, exitCode=${result.exitCode}`,
     result.timedOut ? "命令超时并已终止" : "",
     result.stdout.trim() ? `stdout:\n${truncateLog(result.stdout.trim())}` : "",
@@ -50,7 +54,7 @@ export function createCommandFinishedEvent({
 
   return {
     id: `${threadId}-command-finished-${createdAt}`,
-    kind: result.exitCode === 0 && !result.timedOut ? "result" : "error",
+    kind: result.exitCode === 0 && !result.timedOut && !result.cancelled ? "result" : "error",
     message: sections.join("\n"),
     commandResult: result,
     createdAt

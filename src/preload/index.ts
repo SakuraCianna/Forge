@@ -71,11 +71,14 @@ contextBridge.exposeInMainWorld("forge", {
   },
   commands: {
     run: (request: {
+      runId?: string;
       projectRoot: string;
       cwd: string;
       command: string;
       timeoutMs?: number;
-    }) => ipcRenderer.invoke(commandChannels.run, request)
+    }) => ipcRenderer.invoke(commandChannels.run, request),
+    cancel: (request: { runId: string }): Promise<{ ok: boolean; runId: string }> =>
+      ipcRenderer.invoke(commandChannels.cancel, request)
   },
   git: {
     status: (request: ProjectGitStatusRequest): Promise<ProjectGitStatus> =>

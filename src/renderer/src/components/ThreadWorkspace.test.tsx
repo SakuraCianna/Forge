@@ -827,6 +827,122 @@ describe("ThreadWorkspace", () => {
     expect(within(commandHistory!).getByText("running")).toBeInTheDocument();
   });
 
+  it("keeps a matching command running when another run id has finished", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Track repeated command runs",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-started-1",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandRun: {
+                  command: "npm test",
+                  runId: "run-1",
+                  status: "running"
+                }
+              },
+              {
+                id: "event-command-started-2",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:06:00.000Z",
+                commandRun: {
+                  command: "npm test",
+                  runId: "run-2",
+                  status: "running"
+                }
+              },
+              {
+                id: "event-command-result-1",
+                kind: "result",
+                message: "Command finished",
+                createdAt: "2026-05-27T13:07:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  runId: "run-1",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 0,
+                  stdout: "passed",
+                  stderr: "",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const header = screen.getByRole("banner");
+    expect(within(header).getByText("Running command")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    const commandHistory = screen.getByText("Command history").closest("section");
+    expect(commandHistory).not.toBeNull();
+    expect(within(commandHistory!).getByText("running")).toBeInTheDocument();
+  });
+
+  it("cancels a running command from the command history", async () => {
+    const user = userEvent.setup();
+    const onCancelCommand = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Cancel running command",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-started",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandRun: {
+                  command: "npm run build",
+                  runId: "run-1",
+                  status: "running"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onCancelCommand={onCancelCommand}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    await user.click(screen.getByRole("button", { name: "Cancel command" }));
+
+    expect(onCancelCommand).toHaveBeenCalledWith("thread-1", "run-1");
+  });
+
   it("does not show a placeholder exit code for a running command", async () => {
     const user = userEvent.setup();
 

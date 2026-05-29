@@ -23,6 +23,21 @@ describe("commandEvents", () => {
     expect(event.message).toContain("npm test");
   });
 
+  it("keeps a command run id on started events", () => {
+    const event = createCommandStartedEvent({
+      threadId: "thread-1",
+      command: "npm test",
+      runId: "run-1",
+      now: () => "2026-05-27T13:00:00.000Z"
+    });
+
+    expect(event.commandRun).toEqual({
+      command: "npm test",
+      runId: "run-1",
+      status: "running"
+    });
+  });
+
   it("creates a successful command result event", () => {
     const result = {
       command: "npm test",
@@ -86,5 +101,28 @@ describe("commandEvents", () => {
         now: () => "2026-05-27T13:00:00.000Z"
       })
     ).toEqual(expect.objectContaining({ commandResult: result }));
+  });
+
+  it("creates a cancelled command result event", () => {
+    const result = {
+      runId: "run-1",
+      command: "npm test",
+      cwd: "E:\\CodeHome\\Forge",
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+      timedOut: false,
+      cancelled: true
+    };
+
+    const event = createCommandFinishedEvent({
+      threadId: "thread-1",
+      result,
+      now: () => "2026-05-27T13:00:00.000Z"
+    });
+
+    expect(event.kind).toBe("error");
+    expect(event.commandResult).toEqual(result);
+    expect(event.message).toContain("取消");
   });
 });

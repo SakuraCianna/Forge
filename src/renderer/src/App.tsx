@@ -1267,12 +1267,19 @@ export function App(): ReactElement {
     }
 
     setTaskNotice(null);
+    const runId = createCommandRunId(threadId);
     setThreads((current) =>
-      appendThreadEvents(current, threadId, [createCommandStartedEvent({ threadId, command })], "running")
+      appendThreadEvents(
+        current,
+        threadId,
+        [createCommandStartedEvent({ threadId, command, runId })],
+        "running"
+      )
     );
 
     try {
       const result = await window.forge.commands.run({
+        runId,
         projectRoot: currentProject.path,
         cwd: currentProject.path,
         command,
@@ -1283,7 +1290,7 @@ export function App(): ReactElement {
         updateAgentActionStatus(
           threadId,
           actionId,
-          result.exitCode === 0 && !result.timedOut ? "completed" : "failed"
+          result.exitCode === 0 && !result.timedOut && !result.cancelled ? "completed" : "failed"
         );
       }
 
@@ -1292,13 +1299,39 @@ export function App(): ReactElement {
           current,
           threadId,
           [createCommandFinishedEvent({ threadId, result })],
-          result.exitCode === 0 && !result.timedOut ? "running" : "blocked"
+          result.exitCode === 0 && !result.timedOut && !result.cancelled ? "running" : "blocked"
         )
       );
     } catch (error) {
       if (actionId) {
         updateAgentActionStatus(threadId, actionId, "failed");
       }
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "command",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+    }
+  }
+
+  async function cancelThreadCommand(threadId: string, runId: string): Promise<void> {
+    setTaskNotice(null);
+
+    try {
+      const result = await window.forge.commands.cancel({ runId });
+
+      if (!result.ok) {
+        appendThreadError(
+          threadId,
+          settings.language === "zh-CN"
+            ? "命令取消失败: 该命令可能已经结束"
+            : "Command cancellation failed: the command may have already finished"
+        );
+      }
+    } catch (error) {
       appendThreadError(
         threadId,
         formatAgentRuntimeError(
@@ -1411,6 +1444,7 @@ export function App(): ReactElement {
         onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
         onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
+        onCancelCommand={(threadId, runId) => void cancelThreadCommand(threadId, runId)}
         onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
         onPreviewChange={(relativePath, nextContent) =>
           void previewProjectFileChange(relativePath, nextContent)
@@ -1795,6 +1829,10 @@ function formatAgentRuntimeError(
   }
 
   return `${kind === "file" ? "File action" : "Command execution"} failed: ${message}`;
+}
+
+function createCommandRunId(threadId: string): string {
+  return `${threadId}-command-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function isMarkdownPreviewPath(path: string): boolean {

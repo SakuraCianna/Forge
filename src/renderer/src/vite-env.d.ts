@@ -50,18 +50,22 @@ declare global {
       };
       commands: {
         run: (request: {
+          runId?: string;
           projectRoot: string;
           cwd: string;
           command: string;
           timeoutMs?: number;
         }) => Promise<{
+          runId?: string;
           command: string;
           cwd: string;
           exitCode: number | null;
           stdout: string;
           stderr: string;
           timedOut: boolean;
+          cancelled?: boolean;
         }>;
+        cancel: (request: { runId: string }) => Promise<{ ok: boolean; runId: string }>;
       };
       git: {
         status: (request: ProjectGitStatusRequest) => Promise<ProjectGitStatus>;

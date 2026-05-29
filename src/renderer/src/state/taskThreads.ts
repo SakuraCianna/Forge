@@ -7,15 +7,18 @@ export type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
 export type TaskThreadEventKind = "plan" | "command" | "file" | "error" | "result";
 
 export type CommandRunResult = {
+  runId?: string;
   command: string;
   cwd: string;
   exitCode: number | null;
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  cancelled?: boolean;
 };
 
 export type CommandRunState = {
+  runId?: string;
   command: string;
   status: "running";
 };

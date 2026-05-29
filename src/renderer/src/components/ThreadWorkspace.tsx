@@ -41,6 +41,7 @@ type ThreadWorkspaceProps = {
   onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onRunCommand: (threadId: string, command: string) => void;
+  onCancelCommand?: (threadId: string, runId: string) => void;
   onPreviewFile: (relativePath: string) => void;
   onPreviewChange?: (relativePath: string, nextContent: string) => void;
   onApplyChange?: (relativePath: string, nextContent: string) => void;
@@ -84,6 +85,7 @@ export function ThreadWorkspace({
   onGenerateFailureFix,
   onGenerateCommandFix,
   onRunCommand,
+  onCancelCommand,
   onPreviewFile,
   onPreviewChange,
   onApplyChange,
@@ -1039,7 +1041,9 @@ export function ThreadWorkspace({
             stdout: "stdout",
             stderr: "stderr",
             generateFixPlan: "生成修复计划",
-            retryCommand: "重试命令"
+            retryCommand: "重试命令",
+            cancelCommand: "取消命令",
+            cancelled: "已取消"
           }
         : {
             title: "Command history",
@@ -1049,7 +1053,9 @@ export function ThreadWorkspace({
             stdout: "stdout",
             stderr: "stderr",
             generateFixPlan: "Generate fix plan",
-            retryCommand: "Retry command"
+            retryCommand: "Retry command",
+            cancelCommand: "Cancel command",
+            cancelled: "Cancelled"
           };
     const commandRunningCopy = language === "zh-CN" ? "运行中" : "running";
     const commandEvents = selectedThread?.events ?? [];
@@ -1070,9 +1076,15 @@ export function ThreadWorkspace({
           return [];
         }
 
+        const commandRun = event.commandRun;
+        const runKey = getCommandRunKey(commandRun.command, commandRun.runId);
         const hasFinishedAfter = commandEvents
           .slice(index + 1)
-          .some((candidate) => candidate.commandResult?.command === event.commandRun?.command);
+          .some((candidate) => {
+            const result = candidate.commandResult;
+
+            return result ? getCommandRunKey(result.command, result.runId) === runKey : false;
+          });
 
         if (hasFinishedAfter) {
           return [];
@@ -1084,6 +1096,7 @@ export function ThreadWorkspace({
             createdAt: event.createdAt,
             status: "running" as const,
             result: {
+              runId: event.commandRun.runId,
               command: event.commandRun.command,
               cwd: "",
               exitCode: null,
@@ -1142,7 +1155,12 @@ export function ThreadWorkspace({
                       <p className="mt-1 text-[11px] text-[#8e8ea0]">{createdAt}</p>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-1.5">
-                      {status === "finished" ? (
+                      {status === "finished" && result.cancelled ? (
+                        <span className="rounded-full border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] text-[#565869]">
+                          {commandHistoryCopy.cancelled}
+                        </span>
+                      ) : null}
+                      {status === "finished" && !result.cancelled ? (
                         <span
                           className={`rounded-full border px-2 py-0.5 text-[11px] ${
                             result.exitCode === 0 && !result.timedOut
@@ -1163,9 +1181,19 @@ export function ThreadWorkspace({
                           {commandRunningCopy}
                         </span>
                       ) : null}
+                      {selectedThread && status === "running" && result.runId && onCancelCommand ? (
+                        <button
+                          type="button"
+                          onClick={() => onCancelCommand(selectedThread.id, result.runId!)}
+                          className="h-6 rounded-[9px] border border-[#f4c7ab] bg-[#fff7ed] px-2 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#ffedd5] active:scale-[0.99]"
+                        >
+                          {commandHistoryCopy.cancelCommand}
+                        </button>
+                      ) : null}
                       {selectedThread &&
                       onGenerateCommandFix &&
                       status === "finished" &&
+                      !result.cancelled &&
                       (result.timedOut || result.exitCode !== 0) ? (
                         <button
                           type="button"
@@ -1177,7 +1205,7 @@ export function ThreadWorkspace({
                       ) : null}
                       {selectedThread &&
                       status === "finished" &&
-                      (result.timedOut || result.exitCode !== 0) ? (
+                      (result.cancelled || result.timedOut || result.exitCode !== 0) ? (
                         <button
                           type="button"
                           onClick={() => onRunCommand(selectedThread.id, result.command)}
@@ -1347,17 +1375,20 @@ function getThreadActivitySummary(
 }
 
 function findLatestUnfinishedCommandRun(events: TaskThreadEvent[]): string | null {
-  const finishedCommands = new Set<string>();
+  const finishedRuns = new Set<string>();
 
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
 
     if (event?.commandResult) {
-      finishedCommands.add(event.commandResult.command);
+      finishedRuns.add(getCommandRunKey(event.commandResult.command, event.commandResult.runId));
       continue;
     }
 
-    if (event?.commandRun && !finishedCommands.has(event.commandRun.command)) {
+    if (
+      event?.commandRun &&
+      !finishedRuns.has(getCommandRunKey(event.commandRun.command, event.commandRun.runId))
+    ) {
       return event.commandRun.command;
     }
   }
@@ -1369,7 +1400,7 @@ function findLatestFailedCommandResult(events: TaskThreadEvent[]): CommandRunRes
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const result = events[index]?.commandResult;
 
-    if (result && (result.timedOut || result.exitCode !== 0)) {
+    if (result && !result.cancelled && (result.timedOut || result.exitCode !== 0)) {
       return result;
     }
   }
@@ -1390,6 +1421,10 @@ function findLatestCommandResult(
   }
 
   return null;
+}
+
+function getCommandRunKey(command: string, runId?: string): string {
+  return runId ? `run:${runId}` : `command:${command}`;
 }
 
 function formatCommandOutputSnippet(value: string): string {

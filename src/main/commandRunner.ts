@@ -6,31 +6,84 @@ export type RunProjectCommandOptions = {
   projectRoot: string;
   cwd: string;
   command: string;
+  runId?: string;
   timeoutMs?: number;
   shellExecutable?: string;
 };
 
+export type CancelProjectCommandOptions = {
+  runId: string;
+};
+
+export type CancelProjectCommandResult = {
+  ok: boolean;
+  runId: string;
+};
+
 export type CommandResult = {
+  runId?: string;
   command: string;
   cwd: string;
   exitCode: number | null;
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  cancelled?: boolean;
 };
 
-export async function runProjectCommand({
-  projectRoot,
-  cwd,
-  command,
-  timeoutMs = 120000,
-  shellExecutable = "powershell.exe"
-}: RunProjectCommandOptions): Promise<CommandResult> {
+export type ProjectCommandRunner = {
+  runProjectCommand: (options: RunProjectCommandOptions) => Promise<CommandResult>;
+  cancelProjectCommand: (options: CancelProjectCommandOptions) => CancelProjectCommandResult;
+};
+
+type RunningCommand = {
+  cancel: () => boolean;
+};
+
+export function createProjectCommandRunner(): ProjectCommandRunner {
+  const runningCommands = new Map<string, RunningCommand>();
+
+  return {
+    runProjectCommand: (options) => runProjectCommandWithRegistry(options, runningCommands),
+    cancelProjectCommand: ({ runId }) => ({
+      ok: runningCommands.get(runId)?.cancel() ?? false,
+      runId
+    })
+  };
+}
+
+const defaultRunner = createProjectCommandRunner();
+
+export function runProjectCommand(options: RunProjectCommandOptions): Promise<CommandResult> {
+  return defaultRunner.runProjectCommand(options);
+}
+
+export function cancelProjectCommand(
+  options: CancelProjectCommandOptions
+): CancelProjectCommandResult {
+  return defaultRunner.cancelProjectCommand(options);
+}
+
+async function runProjectCommandWithRegistry(
+  {
+    projectRoot,
+    cwd,
+    command,
+    runId,
+    timeoutMs = 120000,
+    shellExecutable = "powershell.exe"
+  }: RunProjectCommandOptions,
+  runningCommands: Map<string, RunningCommand>
+): Promise<CommandResult> {
   const resolvedProjectRoot = await realpath(projectRoot);
   const resolvedCwd = await realpath(cwd);
 
   if (!isPathInside(resolvedCwd, resolvedProjectRoot)) {
     throw new Error("Command cwd must stay inside the selected project");
+  }
+
+  if (runId && runningCommands.has(runId)) {
+    throw new Error("Command run id is already active");
   }
 
   return new Promise((resolve, reject) => {
@@ -51,29 +104,55 @@ export async function runProjectCommand({
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let timedOut = false;
+    let cancelled = false;
+    let settled = false;
 
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill();
     }, timeoutMs);
 
+    if (runId) {
+      runningCommands.set(runId, {
+        cancel: () => {
+          if (settled) {
+            return false;
+          }
+
+          cancelled = true;
+          return child.kill();
+        }
+      });
+    }
+
+    function cleanup(): void {
+      settled = true;
+      clearTimeout(timer);
+
+      if (runId) {
+        runningCommands.delete(runId);
+      }
+    }
+
     child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
 
     child.on("close", (exitCode) => {
-      clearTimeout(timer);
+      cleanup();
       resolve({
+        runId,
         command,
         cwd: resolvedCwd,
         exitCode,
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8"),
-        timedOut
+        timedOut,
+        cancelled
       });
     });
 
     child.on("error", (error) => {
-      clearTimeout(timer);
+      cleanup();
       reject(new Error(`Failed to start command shell: ${error.message}`));
     });
   });

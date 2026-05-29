@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { registerAgentHandlers } from "./agentIpc.js";
 import { generateAgentAsk, generateAgentFileChange, generateAgentPlan } from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
-import { runProjectCommand } from "./commandRunner.js";
+import { cancelProjectCommand, runProjectCommand } from "./commandRunner.js";
 import { registerGitHandlers } from "./gitIpc.js";
 import { commitProjectChanges, getProjectGitStatus } from "./gitService.js";
 import { createKeyVault } from "./keyVault.js";
@@ -139,7 +139,8 @@ void app.whenReady().then(() => {
     (request) => runProjectCommand(request),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
-    }
+    },
+    (request) => cancelProjectCommand(request)
   );
 
   registerGitHandlers(

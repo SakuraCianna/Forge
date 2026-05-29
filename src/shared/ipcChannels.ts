@@ -20,7 +20,8 @@ export const projectChannels = {
 } as const;
 
 export const commandChannels = {
-  run: "forge:command:run"
+  run: "forge:command:run",
+  cancel: "forge:command:cancel"
 } as const;
 
 export const gitChannels = {

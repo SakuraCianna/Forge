@@ -67,4 +67,34 @@ describe("commandIpc", () => {
       timeoutMs: undefined
     });
   });
+
+  it("registers a command cancellation handler", async () => {
+    const handlers = new Map<string, (_event: unknown, ...args: unknown[]) => Promise<unknown>>();
+    let forwardedRequest: unknown = null;
+
+    registerCommandHandlers(
+      async (request) => ({
+        command: request.command,
+        cwd: request.cwd,
+        exitCode: 0,
+        stdout: "ok",
+        stderr: "",
+        timedOut: false
+      }),
+      (channel, handler) => handlers.set(channel, handler),
+      async (request) => {
+        forwardedRequest = request;
+
+        return { ok: true, runId: request.runId };
+      }
+    );
+
+    const result = await handlers.get(commandChannels.cancel)?.(null, {
+      runId: "run-1",
+      pid: 1234
+    });
+
+    expect(forwardedRequest).toEqual({ runId: "run-1" });
+    expect(result).toEqual({ ok: true, runId: "run-1" });
+  });
 });
