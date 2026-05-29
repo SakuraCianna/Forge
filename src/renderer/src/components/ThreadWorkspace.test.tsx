@@ -650,8 +650,8 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("2 safe actions ready")).toBeInTheDocument();
-    expect(screen.getByText("Stops before Review diff")).toBeInTheDocument();
+    expect(screen.getAllByText("2 safe actions ready").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Stops before Review diff").length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Continue safe agent actions" }));
 
@@ -663,6 +663,67 @@ describe("ThreadWorkspace", () => {
       ])
     );
     expect(onRunAgentActions.mock.calls[0][1]).toHaveLength(2);
+  });
+
+  it("summarizes the agent run state above the timeline", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Track agent run",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect src/App.tsx",
+                status: "completed",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              },
+              {
+                id: "action-3",
+                stepId: "step-3",
+                kind: "edit-file",
+                label: "Edit src/App.tsx",
+                status: "pending",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-4",
+                stepId: "step-4",
+                kind: "manual",
+                label: "Review diff",
+                status: "pending"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentActions={vi.fn()}
+      />
+    );
+
+    const status = screen.getByRole("region", { name: "Agent run" });
+    expect(within(status).getByText("Ready for safe batch")).toBeInTheDocument();
+    expect(within(status).getByText("1 / 4 actions completed")).toBeInTheDocument();
+    expect(within(status).getByText("2 safe actions ready")).toBeInTheDocument();
+    expect(within(status).getByText("Stops before Review diff")).toBeInTheDocument();
   });
 
   it("shows manual gates as review requirements instead of runnable steps", () => {
@@ -760,7 +821,7 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("1 / 3 actions completed")).toBeInTheDocument();
+    expect(screen.getAllByText("1 / 3 actions completed").length).toBeGreaterThan(0);
     expect(screen.getByText("1 failed")).toBeInTheDocument();
     expect(screen.getByText("Queue stopped at Run npm test")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Run next agent action" })).not.toBeInTheDocument();

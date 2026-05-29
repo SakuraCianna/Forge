@@ -493,6 +493,40 @@ export function ThreadWorkspace({
             queueStoppedAt: (label: string) => `Queue stopped at ${label}`,
             generateEdit: "Generate edit"
           };
+    const agentRunCopy =
+      language === "zh-CN"
+        ? {
+            title: "Agent 运行状态",
+            running: "正在运行",
+            stopped: "已停止, 需要处理",
+            gate: "等待人工门禁",
+            ready: "可执行安全批次",
+            complete: "动作队列已完成",
+            waiting: "等待下一步",
+            progress: "进度",
+            safeBatch: "安全批次",
+            nextGate: "下一门禁",
+            current: "当前动作",
+            noSafeBatch: "没有可连续执行的安全动作",
+            noGate: "没有待处理门禁",
+            noCurrent: "没有待处理动作"
+          }
+        : {
+            title: "Agent run",
+            running: "Running",
+            stopped: "Stopped for review",
+            gate: "Waiting at manual gate",
+            ready: "Ready for safe batch",
+            complete: "Action queue complete",
+            waiting: "Waiting for next step",
+            progress: "Progress",
+            safeBatch: "Safe batch",
+            nextGate: "Next gate",
+            current: "Current action",
+            noSafeBatch: "No safe batch ready",
+            noGate: "No pending gate",
+            noCurrent: "No pending action"
+          };
     const recoveryActionCopy =
       language === "zh-CN"
         ? {
@@ -562,6 +596,24 @@ export function ThreadWorkspace({
     const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
     const activeGateAction =
       nextPendingAction && !isRunnableAgentAction(nextPendingAction) ? nextPendingAction : nextGateAction;
+    const queueComplete = queueStats.total > 0 && queueStats.completed === queueStats.total;
+    const agentRunStatus =
+      queueBlockerAction?.status === "running"
+        ? agentRunCopy.running
+        : queueBlockerAction?.status === "failed"
+          ? agentRunCopy.stopped
+          : runnablePendingActions.length > 0
+            ? agentRunCopy.ready
+            : activeGateAction
+              ? agentRunCopy.gate
+              : queueComplete
+                ? agentRunCopy.complete
+                : agentRunCopy.waiting;
+    const agentRunFocus =
+      queueBlockerAction?.label ??
+      nextPendingAction?.label ??
+      activeGateAction?.label ??
+      agentRunCopy.noCurrent;
     const selectedAgentAction =
       agentActions.find((action) => action.id === selectedAgentActionId) ??
       queueBlockerAction ??
@@ -771,7 +823,61 @@ export function ThreadWorkspace({
     }
 
     return (
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="space-y-4">
+        {queueStats.total > 0 ? (
+          <section
+            aria-label={agentRunCopy.title}
+            className="rounded-[18px] border border-[#d9d9e3] bg-[#f7f7f8] p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 rounded-full border border-[#d9d9e3] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#565869]">
+                  <Activity className="h-3.5 w-3.5 text-[#202123]" />
+                  {agentRunCopy.title}
+                </div>
+                <p className="mt-2 text-base font-semibold leading-6 text-[#202123]">
+                  {agentRunStatus}
+                </p>
+                <p className="mt-1 break-words text-sm leading-5 text-[#565869]">
+                  {agentRunCopy.current}: {agentRunFocus}
+                </p>
+              </div>
+              <div className="grid min-w-[260px] flex-1 gap-3 sm:grid-cols-3">
+                <div className="border-l border-[#d9d9e3] pl-3">
+                  <div className="text-[11px] font-medium text-[#8e8ea0]">
+                    {agentRunCopy.progress}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[#202123]">
+                    {actionQueueCopy.progress(queueStats.completed, queueStats.total)}
+                  </div>
+                </div>
+                <div className="border-l border-[#d9d9e3] pl-3">
+                  <div className="text-[11px] font-medium text-[#8e8ea0]">
+                    {agentRunCopy.safeBatch}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[#202123]">
+                    {runnablePendingActions.length > 0
+                      ? actionQueueCopy.safeReady(runnablePendingActions.length)
+                      : agentRunCopy.noSafeBatch}
+                  </div>
+                </div>
+                <div className="border-l border-[#d9d9e3] pl-3">
+                  <div className="text-[11px] font-medium text-[#8e8ea0]">
+                    {agentRunCopy.nextGate}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[#202123]">
+                    {nextGateAction
+                      ? actionQueueCopy.stopsBefore(nextGateAction.label)
+                      : activeGateAction
+                        ? actionQueueCopy.manualGateBody(activeGateAction.label)
+                        : agentRunCopy.noGate}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[#202123]">
             <GitPullRequest className="h-4 w-4 text-[#565869]" />
@@ -1034,6 +1140,7 @@ export function ThreadWorkspace({
             )}
           </section>
         </aside>
+      </div>
       </div>
     );
   }
