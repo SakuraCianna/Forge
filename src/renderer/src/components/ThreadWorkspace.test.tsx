@@ -276,6 +276,53 @@ describe("ThreadWorkspace", () => {
     expect(onRunAgentActions.mock.calls[0][1]).toHaveLength(2);
   });
 
+  it("shows manual gates as review requirements instead of runnable steps", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Review before commit",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "manual",
+                label: "Review diff",
+                status: "pending"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "commit",
+                label: "Commit changes",
+                status: "pending"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentAction={vi.fn()}
+        onRunAgentActions={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Manual review required")).toBeInTheDocument();
+    expect(screen.getByText("Review diff")).toBeInTheDocument();
+    expect(screen.getAllByText("Review gate")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Run next agent action" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Continue safe agent actions" })
+    ).not.toBeInTheDocument();
+  });
+
   it("submits a command for the selected thread", async () => {
     const user = userEvent.setup();
     const onRunCommand = vi.fn();

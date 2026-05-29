@@ -4,9 +4,14 @@ export type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }
   | { kind: "generate-file-change"; relativePath: string }
   | { kind: "run-command"; command: string }
+  | { kind: "manual-gate"; reason: "review" | "commit" }
   | { kind: "complete" };
 
 export function resolveAgentActionExecution(action: AgentAction): AgentActionExecution {
+  if (action.kind === "manual" || action.kind === "commit") {
+    return { kind: "manual-gate", reason: action.kind === "commit" ? "commit" : "review" };
+  }
+
   if (action.kind === "inspect-file" && action.target) {
     return { kind: "open-file", relativePath: action.target };
   }
@@ -44,7 +49,7 @@ export function getRunnablePendingAgentActions(actions: AgentAction[]): AgentAct
   return runnableActions;
 }
 
-function isRunnableAgentAction(action: AgentAction): boolean {
+export function isRunnableAgentAction(action: AgentAction): boolean {
   if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
     return true;
   }

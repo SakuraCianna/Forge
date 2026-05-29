@@ -18,7 +18,8 @@ import type { ProjectScanResult } from "@shared/projectTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import {
   findNextPendingAgentAction,
-  getRunnablePendingAgentActions
+  getRunnablePendingAgentActions,
+  isRunnableAgentAction
 } from "@/agent/agentActionExecutor";
 import { useI18n } from "@/i18n/useI18n";
 import type { TaskThread } from "@/state/taskThreads";
@@ -267,6 +268,10 @@ export function ThreadWorkspace({
             continueSafe: "继续安全动作",
             safeReady: (count: number) => `可连续执行 ${count} 个安全动作`,
             stopsBefore: (label: string) => `将在 ${label} 前停止`,
+            manualGate: "需要人工审查",
+            manualGateBody: (label: string) => `请先处理 ${label}, Forge 不会自动越过这个门禁`,
+            reviewGate: "审查门禁",
+            ready: "就绪",
             generateEdit: "生成修改"
           }
         : {
@@ -279,11 +284,36 @@ export function ThreadWorkspace({
             continueSafe: "Continue safe agent actions",
             safeReady: (count: number) => `${count} safe actions ready`,
             stopsBefore: (label: string) => `Stops before ${label}`,
+            manualGate: "Manual review required",
+            manualGateBody: (label: string) =>
+              `Handle ${label} before Forge continues. This gate will not be auto-run.`,
+            reviewGate: "Review gate",
+            ready: "Ready",
             generateEdit: "Generate edit"
           };
     const nextPendingAction = findNextPendingAgentAction(agentActions);
     const runnablePendingActions = getRunnablePendingAgentActions(agentActions);
+    const nextRunnableAction =
+      nextPendingAction && isRunnableAgentAction(nextPendingAction) ? nextPendingAction : null;
     const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
+    const activeGateAction =
+      nextPendingAction && !isRunnableAgentAction(nextPendingAction) ? nextPendingAction : nextGateAction;
+
+    function getActionStatusLabel(action: AgentAction): string {
+      if (action.status === "pending" && (action.kind === "manual" || action.kind === "commit")) {
+        return actionQueueCopy.reviewGate;
+      }
+
+      if (action.status === "pending" && isRunnableAgentAction(action)) {
+        return actionQueueCopy.ready;
+      }
+
+      if (action.status === "pending") {
+        return actionQueueCopy.pending;
+      }
+
+      return action.status;
+    }
 
     function renderAgentActionControl(action: AgentAction): ReactElement | null {
       if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
@@ -404,11 +434,11 @@ export function ThreadWorkspace({
                 >
                   {actionQueueCopy.continueSafe}
                 </button>
-              ) : nextPendingAction && selectedThread && onRunAgentAction ? (
+              ) : nextRunnableAction && selectedThread && onRunAgentAction ? (
                 <button
                   type="button"
                   aria-label="Run next agent action"
-                  onClick={() => onRunAgentAction(selectedThread.id, nextPendingAction)}
+                  onClick={() => onRunAgentAction(selectedThread.id, nextRunnableAction)}
                   className="h-7 shrink-0 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
                 >
                   {actionQueueCopy.runNext}
@@ -427,19 +457,39 @@ export function ThreadWorkspace({
                 ) : null}
               </div>
             ) : null}
+            {runnablePendingActions.length === 0 && activeGateAction ? (
+              <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2">
+                <p className="text-sm font-medium leading-5 text-[#9a3412]">
+                  {actionQueueCopy.manualGate}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-4 text-[#b45309]">
+                  {actionQueueCopy.manualGateBody(activeGateAction.label)}
+                </p>
+              </div>
+            ) : null}
             {agentActions.length > 0 ? (
               <div className="space-y-2">
                 {agentActions.map((action) => (
                   <div
                     key={action.id}
-                    className="rounded-[14px] border border-[#ececf1] bg-[#fafafa] px-3 py-2"
+                    className={`rounded-[14px] border px-3 py-2 ${
+                      action.kind === "manual" || action.kind === "commit"
+                        ? "border-[#f4c7ab] bg-[#fffaf5]"
+                        : "border-[#ececf1] bg-[#fafafa]"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="min-w-0 text-sm font-medium leading-5 text-[#202123]">
                         {action.label}
                       </p>
-                      <span className="shrink-0 rounded-full border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] text-[#6e6e80]">
-                        {action.status === "pending" ? actionQueueCopy.pending : action.status}
+                      <span
+                        className={`shrink-0 rounded-full border bg-white px-2 py-0.5 text-[11px] ${
+                          action.kind === "manual" || action.kind === "commit"
+                            ? "border-[#f4c7ab] text-[#b45309]"
+                            : "border-[#d9d9e3] text-[#6e6e80]"
+                        }`}
+                      >
+                        {getActionStatusLabel(action)}
                       </span>
                     </div>
                     <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-[#8e8ea0]">

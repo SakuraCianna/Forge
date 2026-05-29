@@ -1056,9 +1056,32 @@ export function App(): ReactElement {
   }
 
   async function runAgentAction(threadId: string, action: AgentAction): Promise<void> {
-    updateAgentActionStatus(threadId, action.id, "running");
-
     const execution = resolveAgentActionExecution(action);
+
+    if (execution.kind === "manual-gate") {
+      const createdAt = new Date().toISOString();
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? "需要先完成审查门禁, Forge 不会自动越过人工确认"
+          : "Manual review is required before Forge can continue."
+      );
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-manual-gate-${action.id}-${createdAt}`,
+            kind: "plan",
+            message:
+              settings.language === "zh-CN"
+                ? `等待人工审查: ${action.label}`
+                : `Waiting for manual review: ${action.label}`,
+            createdAt
+          }
+        ])
+      );
+      return;
+    }
+
+    updateAgentActionStatus(threadId, action.id, "running");
 
     if (execution.kind === "open-file") {
       await openAgentFileAction(threadId, action.id, execution.relativePath);

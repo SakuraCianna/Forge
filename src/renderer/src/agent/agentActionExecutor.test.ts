@@ -34,10 +34,18 @@ describe("agentActionExecutor", () => {
     });
   });
 
-  it("completes manual or incomplete actions without inventing work", () => {
+  it("keeps manual and commit actions behind an explicit review gate", () => {
     expect(resolveAgentActionExecution(createAction({ kind: "manual" }))).toEqual({
-      kind: "complete"
+      kind: "manual-gate",
+      reason: "review"
     });
+    expect(resolveAgentActionExecution(createAction({ kind: "commit" }))).toEqual({
+      kind: "manual-gate",
+      reason: "commit"
+    });
+  });
+
+  it("completes incomplete runnable actions without inventing work", () => {
     expect(resolveAgentActionExecution(createAction({ kind: "edit-file" }))).toEqual({
       kind: "complete"
     });
