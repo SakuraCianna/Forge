@@ -111,6 +111,58 @@ describe("commandRunner", () => {
     expect(result.cancelled).toBe(true);
     expect(result.stdout).not.toContain("after-cancel");
   });
+
+  it("tries to stop the whole process tree when cancelling a running command", async () => {
+    await mkdir(testRoot, { recursive: true });
+    const killedPids: number[] = [];
+    const runner = createProjectCommandRunner({
+      killProcessTree: (pid) => {
+        killedPids.push(pid);
+        return false;
+      }
+    });
+
+    const commandPromise = runner.runProjectCommand({
+      projectRoot: testRoot,
+      cwd: testRoot,
+      command: "Start-Sleep -Seconds 20; Write-Output after-cancel",
+      runId: "run-tree-cancel",
+      timeoutMs: 30000
+    });
+
+    await delay(300);
+
+    const cancelResult = runner.cancelProjectCommand({ runId: "run-tree-cancel" });
+    const result = await commandPromise;
+
+    expect(cancelResult.ok).toBe(true);
+    expect(killedPids).toHaveLength(1);
+    expect(killedPids[0]).toEqual(expect.any(Number));
+    expect(result.cancelled).toBe(true);
+  });
+
+  it("tries to stop the whole process tree when a command times out", async () => {
+    await mkdir(testRoot, { recursive: true });
+    const killedPids: number[] = [];
+    const runner = createProjectCommandRunner({
+      killProcessTree: (pid) => {
+        killedPids.push(pid);
+        return false;
+      }
+    });
+
+    const result = await runner.runProjectCommand({
+      projectRoot: testRoot,
+      cwd: testRoot,
+      command: "Start-Sleep -Seconds 20; Write-Output after-timeout",
+      timeoutMs: 100
+    });
+
+    expect(result.timedOut).toBe(true);
+    expect(killedPids).toHaveLength(1);
+    expect(killedPids[0]).toEqual(expect.any(Number));
+    expect(result.stdout).not.toContain("after-timeout");
+  });
 });
 
 function delay(ms: number): Promise<void> {

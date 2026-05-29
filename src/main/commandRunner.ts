@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { sep } from "node:path";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
@@ -38,15 +38,22 @@ export type ProjectCommandRunner = {
   cancelProjectCommand: (options: CancelProjectCommandOptions) => CancelProjectCommandResult;
 };
 
+type ProjectCommandRunnerDeps = {
+  killProcessTree?: (pid: number) => boolean;
+};
+
 type RunningCommand = {
   cancel: () => boolean;
 };
 
-export function createProjectCommandRunner(): ProjectCommandRunner {
+export function createProjectCommandRunner({
+  killProcessTree = killDefaultProcessTree
+}: ProjectCommandRunnerDeps = {}): ProjectCommandRunner {
   const runningCommands = new Map<string, RunningCommand>();
 
   return {
-    runProjectCommand: (options) => runProjectCommandWithRegistry(options, runningCommands),
+    runProjectCommand: (options) =>
+      runProjectCommandWithRegistry(options, runningCommands, killProcessTree),
     cancelProjectCommand: ({ runId }) => ({
       ok: runningCommands.get(runId)?.cancel() ?? false,
       runId
@@ -76,7 +83,8 @@ async function runProjectCommandWithRegistry(
     shellExecutable = "powershell.exe",
     onOutput
   }: RunProjectCommandOptions,
-  runningCommands: Map<string, RunningCommand>
+  runningCommands: Map<string, RunningCommand>,
+  killProcessTree: (pid: number) => boolean
 ): Promise<CommandResult> {
   const resolvedProjectRoot = await realpath(projectRoot);
   const resolvedCwd = await realpath(cwd);
@@ -112,7 +120,7 @@ async function runProjectCommandWithRegistry(
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill();
+      terminateCommandProcess(child, killProcessTree);
     }, timeoutMs);
 
     if (runId) {
@@ -123,7 +131,7 @@ async function runProjectCommandWithRegistry(
           }
 
           cancelled = true;
-          return child.kill();
+          return terminateCommandProcess(child, killProcessTree);
         }
       });
     }
@@ -175,6 +183,36 @@ async function runProjectCommandWithRegistry(
       reject(new Error(`Failed to start command shell: ${error.message}`));
     });
   });
+}
+
+function terminateCommandProcess(
+  child: ChildProcessWithoutNullStreams,
+  killProcessTree: (pid: number) => boolean
+): boolean {
+  const treeKilled = typeof child.pid === "number" ? killProcessTree(child.pid) : false;
+
+  if (treeKilled) {
+    return true;
+  }
+
+  try {
+    return child.kill();
+  } catch {
+    return false;
+  }
+}
+
+function killDefaultProcessTree(pid: number): boolean {
+  if (process.platform !== "win32") {
+    return false;
+  }
+
+  const result = spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+    stdio: "ignore",
+    windowsHide: true
+  });
+
+  return result.status === 0;
 }
 
 function isPathInside(candidatePath: string, rootPath: string): boolean {
