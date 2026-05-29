@@ -1,6 +1,6 @@
 import type { Options, Plugin } from "prettier";
 
-export type CodeFormatterMode = "raw" | "prettier";
+export type CodeFormatterMode = "raw" | "prettier" | "rendered";
 
 export type CodeFormatResult = {
   content: string;
@@ -47,7 +47,7 @@ export async function formatCodePreview(
   content: string,
   mode: CodeFormatterMode
 ): Promise<CodeFormatResult> {
-  if (mode === "raw") {
+  if (mode === "raw" || mode === "rendered") {
     return { status: "raw", content };
   }
 

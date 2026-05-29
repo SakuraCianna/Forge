@@ -98,6 +98,11 @@ select {
   border-top-color: #ececf1;
 }
 
+.forge-provider-collapse[data-state="closed"] > * {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
 .forge-scrollbar-none {
   scrollbar-width: none;
 }

@@ -6,6 +6,7 @@ import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import type { AgentPlanStep } from "@shared/agentTypes";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
+import { FilePreviewRenderer } from "@/components/FilePreviewRenderer";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer, type ComposerContextMode } from "@/components/TaskComposer";
@@ -577,6 +578,7 @@ export function App(): ReactElement {
       relativePath
     });
     setPreviewFile(file);
+    setFileFormatterMode(isMarkdownPreviewPath(file.relativePath) ? "rendered" : "raw");
   }
 
   async function previewProjectFileChange(relativePath: string, nextContent: string): Promise<void> {
@@ -1177,7 +1179,13 @@ export function App(): ReactElement {
 
   function renderFilesView(): ReactElement {
     const previewContent = formattedPreview?.content ?? previewFile?.content ?? "";
-    const formatterMessage = formatPreviewStatus(formattedPreview, settings.language);
+    const formatterMessage =
+      fileFormatterMode === "rendered"
+        ? settings.language === "zh-CN"
+          ? "Markdown 渲染预览"
+          : "Rendered Markdown preview"
+        : formatPreviewStatus(formattedPreview, settings.language);
+    const isMarkdownPreview = previewFile ? isMarkdownPreviewPath(previewFile.relativePath) : false;
 
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-hidden rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -1209,14 +1217,14 @@ export function App(): ReactElement {
                 <>
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <span className="min-w-0">
-                      <span className="block truncate text-[12px] font-semibold text-[#202123]">
+                      <span className="block truncate text-[14px] font-semibold text-[#202123]">
                         {previewFile.relativePath}
                       </span>
-                      <span className="mt-1 block truncate text-[10px] text-[#8e8ea0]">
+                      <span className="mt-1 block truncate text-[12px] text-[#8e8ea0]">
                         {formatterMessage}
                       </span>
                     </span>
-                    <label className="flex shrink-0 items-center gap-2 text-[10px] text-[#6e6e80]">
+                    <label className="flex shrink-0 items-center gap-2 text-[12px] text-[#6e6e80]">
                       {settings.language === "zh-CN" ? "格式化" : "Formatter"}
                       <select
                         aria-label={settings.language === "zh-CN" ? "代码格式化" : "Code formatter"}
@@ -1224,16 +1232,23 @@ export function App(): ReactElement {
                         onChange={(event) =>
                           setFileFormatterMode(event.currentTarget.value as CodeFormatterMode)
                         }
-                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[10px] text-[#202123] outline-none focus:border-[#202123]"
+                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[12px] text-[#202123] outline-none focus:border-[#202123]"
                       >
                         <option value="raw">{settings.language === "zh-CN" ? "原始" : "Raw"}</option>
                         <option value="prettier">Prettier</option>
+                        {isMarkdownPreview ? (
+                          <option value="rendered">
+                            {settings.language === "zh-CN" ? "渲染" : "Rendered"}
+                          </option>
+                        ) : null}
                       </select>
                     </label>
                   </div>
-                  <pre className="min-h-0 overflow-auto whitespace-pre-wrap rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-4 font-mono text-[10px] leading-5 text-[#202123]">
-                    {previewContent}
-                  </pre>
+                  <FilePreviewRenderer
+                    content={previewContent}
+                    mode={fileFormatterMode}
+                    path={previewFile.relativePath}
+                  />
                 </>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-[#6e6e80]">
@@ -1514,6 +1529,12 @@ function getAgentStepKindLabel(kind: AgentPlanStep["kind"]): string {
   }
 
   return "计划";
+}
+
+function isMarkdownPreviewPath(path: string): boolean {
+  const normalizedPath = path.toLowerCase();
+
+  return normalizedPath.endsWith(".md") || normalizedPath.endsWith(".mdx");
 }
 
 function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPath: string): string {

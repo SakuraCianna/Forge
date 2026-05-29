@@ -17,6 +17,15 @@ describe("codeFormatting", () => {
     });
   });
 
+  it("keeps markdown content untouched for rendered previews", async () => {
+    const result = await formatCodePreview("README.md", "# Forge", "rendered");
+
+    expect(result).toEqual({
+      status: "raw",
+      content: "# Forge"
+    });
+  });
+
   it("formats supported previews with Prettier", async () => {
     const result = await formatCodePreview("package.json", "{\"name\":\"forge\"}", "prettier");
 
