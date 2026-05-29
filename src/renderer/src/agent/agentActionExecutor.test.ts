@@ -126,11 +126,36 @@ describe("agentActionExecutor", () => {
     expect(result).toEqual({
       completed: 1,
       stoppedAt: second,
-      finalStatus: "failed"
+      finalStatus: "failed",
+      stopReason: "status"
     });
     expect(runAction).toHaveBeenCalledTimes(2);
     expect(runAction).toHaveBeenNthCalledWith(1, first);
     expect(runAction).toHaveBeenNthCalledWith(2, second);
+  });
+
+  it("stops after a completed action when it requests a batch pause", async () => {
+    const edit = createAction({ id: "action-1", kind: "edit-file", target: "src/App.tsx" });
+    const verify = createAction({ id: "action-2", kind: "run-command", command: "npm test" });
+    const runAction = vi
+      .fn<
+        (action: AgentAction) => Promise<{
+          status: AgentAction["status"];
+          continueBatch: boolean;
+        }>
+      >()
+      .mockResolvedValueOnce({ status: "completed", continueBatch: false })
+      .mockResolvedValueOnce({ status: "completed", continueBatch: true });
+
+    const result = await runAgentActionBatch([edit, verify], runAction);
+
+    expect(result).toEqual({
+      completed: 1,
+      stoppedAt: edit,
+      finalStatus: "completed",
+      stopReason: "pause"
+    });
+    expect(runAction).toHaveBeenCalledTimes(1);
   });
 
   it("runs every action in a safe batch when each action completes", async () => {
@@ -144,7 +169,8 @@ describe("agentActionExecutor", () => {
     expect(result).toEqual({
       completed: 2,
       stoppedAt: null,
-      finalStatus: "completed"
+      finalStatus: "completed",
+      stopReason: null
     });
     expect(runAction).toHaveBeenCalledTimes(2);
   });

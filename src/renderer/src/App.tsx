@@ -12,7 +12,11 @@ import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer, type ComposerContextMode } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
-import { resolveAgentActionExecution, runAgentActionBatch } from "@/agent/agentActionExecutor";
+import {
+  resolveAgentActionExecution,
+  runAgentActionBatch,
+  type AgentActionRunOutcome
+} from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
 import {
   createFailureFixTaskPrompt,
@@ -1157,7 +1161,7 @@ export function App(): ReactElement {
   async function runAgentAction(
     threadId: string,
     action: AgentAction
-  ): Promise<AgentAction["status"]> {
+  ): Promise<AgentActionRunOutcome> {
     const execution = resolveAgentActionExecution(action);
 
     if (execution.kind === "manual-gate") {
@@ -1188,7 +1192,12 @@ export function App(): ReactElement {
     if (execution.kind === "open-file") {
       return await openAgentFileAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "generate-file-change") {
-      return await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
+      const status = await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
+
+      return {
+        status,
+        continueBatch: status !== "completed"
+      };
     } else if (execution.kind === "run-command") {
       return await runThreadCommand(threadId, execution.command, action.id);
     }

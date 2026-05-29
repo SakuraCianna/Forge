@@ -53,34 +53,71 @@ export type AgentActionBatchResult = {
   completed: number;
   stoppedAt: AgentAction | null;
   finalStatus: AgentAction["status"];
+  stopReason: "status" | "pause" | null;
 };
+
+export type AgentActionRunOutcome =
+  | AgentAction["status"]
+  | {
+      status: AgentAction["status"];
+      continueBatch?: boolean;
+    };
 
 export async function runAgentActionBatch(
   actions: AgentAction[],
-  runAction: (action: AgentAction) => AgentAction["status"] | Promise<AgentAction["status"]>
+  runAction: (action: AgentAction) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>
 ): Promise<AgentActionBatchResult> {
   let completed = 0;
   let finalStatus: AgentAction["status"] = "completed";
 
   for (const action of actions) {
-    const status = await runAction(action);
+    const outcome = normalizeAgentActionRunOutcome(await runAction(action));
+    const { status } = outcome;
     finalStatus = status;
 
     if (status !== "completed") {
       return {
         completed,
         stoppedAt: action,
-        finalStatus
+        finalStatus,
+        stopReason: "status"
       };
     }
 
     completed += 1;
+
+    if (!outcome.continueBatch) {
+      return {
+        completed,
+        stoppedAt: action,
+        finalStatus,
+        stopReason: "pause"
+      };
+    }
   }
 
   return {
     completed,
     stoppedAt: null,
-    finalStatus
+    finalStatus,
+    stopReason: null
+  };
+}
+
+function normalizeAgentActionRunOutcome(outcome: AgentActionRunOutcome): {
+  status: AgentAction["status"];
+  continueBatch: boolean;
+} {
+  if (typeof outcome === "string") {
+    return {
+      status: outcome,
+      continueBatch: true
+    };
+  }
+
+  return {
+    status: outcome.status,
+    continueBatch: outcome.continueBatch ?? true
   };
 }
 
