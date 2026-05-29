@@ -1,6 +1,8 @@
 import type {
   AgentFileChangeResult,
   AgentAskResult,
+  AgentPlanStep,
+  AgentPlanStepKind,
   AgentPlanResult,
   GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
@@ -87,6 +89,7 @@ export async function generateAgentPlan({
     providerId: provider.id,
     modelId: request.model.id,
     text,
+    steps: parseAgentPlanSteps(text),
     createdAt: now(),
     usage
   };
@@ -191,6 +194,7 @@ function createAgentPlanInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
+    "Prefer a numbered list of concrete steps. Mention target files or commands in backticks when known.",
     "Do not reveal hidden chain-of-thought. Show only actionable engineering steps.",
     "Prefer Chinese when the user writes Chinese. Keep file paths exact when mentioned.",
     "Do not claim you changed files or ran commands. This response is planning only."
@@ -262,4 +266,73 @@ function stripMarkdownCodeFence(value: string): string {
   const match = /^```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)\r?\n```$/.exec(trimmed);
 
   return match ? match[1] : value;
+}
+
+function parseAgentPlanSteps(text: string): AgentPlanStep[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .flatMap((line) => {
+      const match = /^(?:\d+[.)]|[-*])\s+(.+)$/.exec(line);
+
+      return match ? [match[1].trim()] : [];
+    })
+    .filter(Boolean)
+    .slice(0, 12)
+    .map((description, index) => {
+      const target = readStepTarget(description);
+
+      return {
+        id: `step-${index + 1}`,
+        title: createStepTitle(description),
+        description,
+        kind: inferStepKind(description),
+        status: "pending" as const,
+        ...(target ? { target } : {})
+      };
+    });
+}
+
+function createStepTitle(description: string): string {
+  const withoutTrailingPeriod = description.replace(/[.。]\s*$/, "");
+  const sentenceBreak = withoutTrailingPeriod.search(/[。.!?]\s/);
+  const title = sentenceBreak > 0 ? withoutTrailingPeriod.slice(0, sentenceBreak + 1) : withoutTrailingPeriod;
+
+  return title.slice(0, 96);
+}
+
+function inferStepKind(description: string): AgentPlanStepKind {
+  const normalized = description.toLowerCase();
+
+  if (/(inspect|read|review|search|locate|analy[sz]e|查看|阅读|定位|分析|搜索)/.test(normalized)) {
+    return "inspect";
+  }
+
+  if (/(test|verify|build|lint|typecheck|run|validate|测试|验证|构建|运行|检查)/.test(normalized)) {
+    return "verify";
+  }
+
+  if (/(modify|edit|change|implement|add|remove|refactor|update|修改|实现|新增|删除|重构|更新)/.test(normalized)) {
+    return "edit";
+  }
+
+  if (/(commit|git|提交)/.test(normalized)) {
+    return "commit";
+  }
+
+  return "other";
+}
+
+function readStepTarget(description: string): string | undefined {
+  const backtickTarget = /`([^`]+)`/.exec(description)?.[1]?.trim();
+
+  if (backtickTarget) {
+    return backtickTarget;
+  }
+
+  const pathTarget = /(?:^|\s)([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)(?:\s|$|[.,;:])/u.exec(
+    description
+  )?.[1];
+
+  return pathTarget;
 }

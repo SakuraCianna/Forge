@@ -4,6 +4,7 @@ import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileType
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
+import type { AgentPlanStep } from "@shared/agentTypes";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
@@ -916,12 +917,7 @@ export function App(): ReactElement {
       });
       setThreads((current) =>
         appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-agent-plan-${plan.createdAt}`,
-            kind: "plan",
-            message: plan.text,
-            createdAt: plan.createdAt
-          }
+          ...createAgentPlanResultEvents(threadId, plan.text, plan.steps, plan.createdAt)
         ])
       );
     } catch (error) {
@@ -1473,6 +1469,51 @@ export function App(): ReactElement {
       {renderActiveView()}
     </AppShell>
   );
+}
+
+function createAgentPlanResultEvents(
+  threadId: string,
+  text: string,
+  steps: AgentPlanStep[] | undefined,
+  createdAt: string
+): Array<{ id: string; kind: "plan"; message: string; createdAt: string }> {
+  if (!steps?.length) {
+    return [
+      {
+        id: `${threadId}-agent-plan-${createdAt}`,
+        kind: "plan",
+        message: text,
+        createdAt
+      }
+    ];
+  }
+
+  return steps.map((step, index) => ({
+    id: `${threadId}-agent-plan-${createdAt}-${step.id}`,
+    kind: "plan",
+    message: `${index + 1}. ${getAgentStepKindLabel(step.kind)}: ${step.description}`,
+    createdAt
+  }));
+}
+
+function getAgentStepKindLabel(kind: AgentPlanStep["kind"]): string {
+  if (kind === "inspect") {
+    return "检查";
+  }
+
+  if (kind === "edit") {
+    return "修改";
+  }
+
+  if (kind === "verify") {
+    return "验证";
+  }
+
+  if (kind === "commit") {
+    return "提交";
+  }
+
+  return "计划";
 }
 
 function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPath: string): string {

@@ -32,10 +32,22 @@ export type GenerateAgentAskRequest = {
   prompt: string;
 };
 
+export type AgentPlanStepKind = "inspect" | "edit" | "verify" | "commit" | "other";
+
+export type AgentPlanStep = {
+  id: string;
+  title: string;
+  description: string;
+  kind: AgentPlanStepKind;
+  status: "pending";
+  target?: string;
+};
+
 export type AgentPlanResult = {
   providerId: string;
   modelId: string;
   text: string;
+  steps: AgentPlanStep[];
   createdAt: string;
   usage?: TokenUsage;
 };

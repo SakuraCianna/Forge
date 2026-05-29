@@ -89,8 +89,65 @@ describe("agentPlanService", () => {
       providerId: "openai",
       modelId: "openai:gpt-5.5",
       text: "1. Read App.tsx",
+      steps: [
+        {
+          id: "step-1",
+          title: "Read App.tsx",
+          description: "Read App.tsx",
+          kind: "inspect",
+          status: "pending"
+        }
+      ],
       usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }
     });
+  });
+
+  it("extracts structured execution steps from generated plan text", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: [
+              "1. Inspect `src/renderer/src/App.tsx` to find the workspace flow.",
+              "2. Modify `src/renderer/src/App.tsx` to wire the new behavior.",
+              "3. Run `npm test` to verify the change."
+            ].join("\n")
+          })
+        )
+    );
+
+    const result = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(result.steps).toEqual([
+      {
+        id: "step-1",
+        title: "Inspect `src/renderer/src/App.tsx` to find the workspace flow",
+        description: "Inspect `src/renderer/src/App.tsx` to find the workspace flow.",
+        kind: "inspect",
+        status: "pending",
+        target: "src/renderer/src/App.tsx"
+      },
+      {
+        id: "step-2",
+        title: "Modify `src/renderer/src/App.tsx` to wire the new behavior",
+        description: "Modify `src/renderer/src/App.tsx` to wire the new behavior.",
+        kind: "edit",
+        status: "pending",
+        target: "src/renderer/src/App.tsx"
+      },
+      {
+        id: "step-3",
+        title: "Run `npm test` to verify the change",
+        description: "Run `npm test` to verify the change.",
+        kind: "verify",
+        status: "pending",
+        target: "npm test"
+      }
+    ]);
   });
 
   it("throws a readable error when the provider key is missing", async () => {

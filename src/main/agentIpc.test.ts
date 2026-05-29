@@ -71,6 +71,7 @@ describe("agentIpc", () => {
       providerId: "openai",
       modelId: "openai:gpt-5.5",
       text: "Plan",
+      steps: [],
       createdAt: "2026-05-27T13:00:00.000Z"
     };
     const fileChangeResult: AgentFileChangeResult = {
