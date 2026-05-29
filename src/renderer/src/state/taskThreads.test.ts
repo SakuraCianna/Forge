@@ -7,6 +7,7 @@ import {
 } from "./modelSettings";
 import {
   attachThreadAgentActions,
+  appendCommandRunOutput,
   appendThreadEvents,
   archiveAllThreads,
   archiveProjectThreads,
@@ -14,7 +15,8 @@ import {
   createThreadFromSettings,
   restoreThread,
   toggleThreadPinned,
-  updateThreadAgentActionStatus
+  updateThreadAgentActionStatus,
+  type TaskThread
 } from "./taskThreads";
 
 const deps = {
@@ -106,6 +108,52 @@ describe("taskThreads", () => {
       "初始计划"
     ]);
   });
+
+  it("appends live command output to the matching running command", () => {
+    const threads: TaskThread[] = [
+      {
+        id: "thread-1",
+        title: "Run tests",
+        prompt: "Run tests",
+        status: "running" as const,
+        modelId: "openai:gpt-5.5",
+        intelligence: "high" as const,
+        speed: "balanced" as const,
+        createdAt: "2026-05-27T13:00:00.000Z",
+        events: [
+          {
+            id: "event-command-started",
+            kind: "command" as const,
+            message: "Started command",
+            createdAt: "2026-05-27T13:05:00.000Z",
+            commandRun: {
+              command: "npm test",
+              runId: "run-1",
+              status: "running" as const
+            }
+          }
+        ]
+      }
+    ];
+
+    const withStdout = appendCommandRunOutput(threads, {
+      runId: "run-1",
+      command: "npm test",
+      stream: "stdout",
+      chunk: "first line\n"
+    });
+    const withStderr = appendCommandRunOutput(withStdout, {
+      runId: "run-1",
+      command: "npm test",
+      stream: "stderr",
+      chunk: "warning line\n"
+    });
+
+    expect(threads[0].events[0].commandRun?.stdout).toBeUndefined();
+    expect(withStderr[0].events[0].commandRun?.stdout).toBe("first line\n");
+    expect(withStderr[0].events[0].commandRun?.stderr).toBe("warning line\n");
+  });
+
   it("pins, archives, restores, and archives all conversations without losing events", () => {
     let settings = createDefaultModelSettings();
     settings = mergeFetchedModels(settings, [

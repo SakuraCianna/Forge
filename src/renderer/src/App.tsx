@@ -56,6 +56,7 @@ import {
 import {
   attachThreadAgentActions,
   appendThreadEvents,
+  appendCommandRunOutput,
   archiveAllThreads,
   archiveProjectThreads,
   archiveThread,
@@ -257,6 +258,12 @@ export function App(): ReactElement {
   useEffect(() => {
     saveGeneralPreferences(window.localStorage, generalPreferences);
   }, [generalPreferences]);
+
+  useEffect(() => {
+    return window.forge.commands.onOutput((chunk) => {
+      setThreads((current) => appendCommandRunOutput(current, chunk));
+    });
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {

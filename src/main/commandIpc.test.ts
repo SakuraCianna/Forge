@@ -60,12 +60,67 @@ describe("commandIpc", () => {
       shellExecutable: "untrusted-shell.exe"
     });
 
-    expect(forwardedRequest).toEqual({
+    expect(forwardedRequest).toMatchObject({
       projectRoot: "E:\\CodeHome\\Forge",
       cwd: "E:\\CodeHome\\Forge",
       command: "Write-Output ok",
       timeoutMs: undefined
     });
+    expect(forwardedRequest).not.toHaveProperty("shellExecutable");
+    expect(forwardedRequest).toHaveProperty("onOutput", expect.any(Function));
+  });
+
+  it("streams command output chunks to the invoking web contents", async () => {
+    const handlers = new Map<string, (_event: unknown, ...args: unknown[]) => Promise<unknown>>();
+    const sentMessages: Array<{ channel: string; payload: unknown }> = [];
+
+    registerCommandHandlers(
+      async (request) => {
+        request.onOutput?.({
+          runId: request.runId,
+          command: request.command,
+          stream: "stdout",
+          chunk: "live output"
+        });
+
+        return {
+          runId: request.runId,
+          command: request.command,
+          cwd: request.cwd,
+          exitCode: 0,
+          stdout: "live output",
+          stderr: "",
+          timedOut: false
+        };
+      },
+      (channel, handler) => handlers.set(channel, handler)
+    );
+
+    await handlers.get(commandChannels.run)?.(
+      {
+        sender: {
+          send: (channel: string, payload: unknown) => sentMessages.push({ channel, payload })
+        }
+      },
+      {
+        projectRoot: "E:\\CodeHome\\Forge",
+        cwd: "E:\\CodeHome\\Forge",
+        command: "Write-Output ok",
+        runId: "run-1"
+      }
+    );
+
+    expect(sentMessages).toEqual([
+      {
+        channel: commandChannels.output,
+        payload: {
+          runId: "run-1",
+          command: "Write-Output ok",
+          stream: "stdout",
+          chunk: "live output"
+        }
+      }
+    ]);
   });
 
   it("registers a command cancellation handler", async () => {

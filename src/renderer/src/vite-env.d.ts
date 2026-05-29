@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+import type { CommandOutputChunk } from "@shared/commandTypes";
 import type {
   AgentFileChangeResult,
   AgentAskResult,
@@ -66,6 +67,7 @@ declare global {
           cancelled?: boolean;
         }>;
         cancel: (request: { runId: string }) => Promise<{ ok: boolean; runId: string }>;
+        onOutput: (listener: (chunk: CommandOutputChunk) => void) => () => void;
       };
       git: {
         status: (request: ProjectGitStatusRequest) => Promise<ProjectGitStatus>;

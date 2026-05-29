@@ -11,7 +11,13 @@ type CancelCommand = (
   request: CancelProjectCommandOptions
 ) => Promise<CancelProjectCommandResult> | CancelProjectCommandResult;
 
-type IpcHandler = (_event: unknown, ...args: unknown[]) => Promise<unknown>;
+type IpcEvent = {
+  sender?: {
+    send: (channel: string, payload: unknown) => void;
+  };
+};
+
+type IpcHandler = (_event: IpcEvent, ...args: unknown[]) => Promise<unknown>;
 
 type RegisterHandler = (channel: string, handler: IpcHandler) => void;
 
@@ -22,7 +28,14 @@ export function registerCommandHandlers(
   registerHandler: RegisterHandler,
   cancelCommand: CancelCommand = (request) => ({ ok: false, runId: request.runId })
 ): void {
-  registerHandler(commandChannels.run, async (_event, request) => runCommand(assertRunCommandRequest(request)));
+  registerHandler(commandChannels.run, async (event, request) => {
+    const commandRequest = assertRunCommandRequest(request);
+
+    return runCommand({
+      ...commandRequest,
+      onOutput: (chunk) => event.sender?.send(commandChannels.output, chunk)
+    });
+  });
   registerHandler(commandChannels.cancel, async (_event, request) =>
     cancelCommand(assertCancelCommandRequest(request))
   );

@@ -52,6 +52,27 @@ describe("commandRunner", () => {
     expect(result.stderr).toContain("forge-fail");
   });
 
+  it("streams stdout and stderr chunks while a command is running", async () => {
+    await mkdir(testRoot, { recursive: true });
+    const chunks: Array<{ stream: "stdout" | "stderr"; chunk: string }> = [];
+
+    const result = await runProjectCommand({
+      projectRoot: testRoot,
+      cwd: testRoot,
+      command: "Write-Output live-stdout; Write-Error live-stderr; exit 7",
+      timeoutMs: 5000,
+      onOutput: (chunk) => chunks.push({ stream: chunk.stream, chunk: chunk.chunk })
+    });
+
+    expect(result.exitCode).toBe(7);
+    expect(chunks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stream: "stdout", chunk: expect.stringContaining("live-stdout") }),
+        expect.objectContaining({ stream: "stderr", chunk: expect.stringContaining("live-stderr") })
+      ])
+    );
+  });
+
   it("rejects when the command shell cannot be spawned", async () => {
     await mkdir(testRoot, { recursive: true });
 

@@ -985,6 +985,52 @@ describe("ThreadWorkspace", () => {
     expect(within(commandHistory!).queryByText("exit null")).not.toBeInTheDocument();
   });
 
+  it("shows live output for a running command", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Watch live output",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-started",
+                kind: "command",
+                message: "Started command",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandRun: {
+                  command: "npm run build",
+                  runId: "run-1",
+                  status: "running",
+                  stdout: "building client\n",
+                  stderr: "warning: cache miss\n"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    const commandHistory = screen.getByText("Command history").closest("section");
+    expect(commandHistory).not.toBeNull();
+    expect(within(commandHistory!).getByText("building client")).toBeInTheDocument();
+    expect(within(commandHistory!).getByText("warning: cache miss")).toBeInTheDocument();
+  });
+
   it("generates a fix plan from a failed command history entry", async () => {
     const user = userEvent.setup();
     const onGenerateCommandFix = vi.fn();

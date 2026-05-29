@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
   agentChannels,
   commandChannels,
@@ -18,6 +18,7 @@ import type {
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
+import type { CommandOutputChunk } from "../shared/commandTypes.js";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 import type {
   ProjectGitCommitRequest,
@@ -78,7 +79,13 @@ contextBridge.exposeInMainWorld("forge", {
       timeoutMs?: number;
     }) => ipcRenderer.invoke(commandChannels.run, request),
     cancel: (request: { runId: string }): Promise<{ ok: boolean; runId: string }> =>
-      ipcRenderer.invoke(commandChannels.cancel, request)
+      ipcRenderer.invoke(commandChannels.cancel, request),
+    onOutput: (listener: (chunk: CommandOutputChunk) => void) => {
+      const handler = (_event: IpcRendererEvent, chunk: CommandOutputChunk) => listener(chunk);
+      ipcRenderer.on(commandChannels.output, handler);
+
+      return () => ipcRenderer.removeListener(commandChannels.output, handler);
+    }
   },
   git: {
     status: (request: ProjectGitStatusRequest): Promise<ProjectGitStatus> =>

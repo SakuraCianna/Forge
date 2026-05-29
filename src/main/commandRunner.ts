@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { sep } from "node:path";
+import type { CommandOutputChunk } from "../shared/commandTypes.js";
 
 export type RunProjectCommandOptions = {
   projectRoot: string;
@@ -9,6 +10,7 @@ export type RunProjectCommandOptions = {
   runId?: string;
   timeoutMs?: number;
   shellExecutable?: string;
+  onOutput?: (chunk: CommandOutputChunk) => void;
 };
 
 export type CancelProjectCommandOptions = {
@@ -71,7 +73,8 @@ async function runProjectCommandWithRegistry(
     command,
     runId,
     timeoutMs = 120000,
-    shellExecutable = "powershell.exe"
+    shellExecutable = "powershell.exe",
+    onOutput
   }: RunProjectCommandOptions,
   runningCommands: Map<string, RunningCommand>
 ): Promise<CommandResult> {
@@ -134,8 +137,24 @@ async function runProjectCommandWithRegistry(
       }
     }
 
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout.push(chunk);
+      onOutput?.({
+        runId,
+        command,
+        stream: "stdout",
+        chunk: chunk.toString("utf8")
+      });
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr.push(chunk);
+      onOutput?.({
+        runId,
+        command,
+        stream: "stderr",
+        chunk: chunk.toString("utf8")
+      });
+    });
 
     child.on("close", (exitCode) => {
       cleanup();

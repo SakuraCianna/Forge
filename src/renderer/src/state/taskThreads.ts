@@ -1,5 +1,6 @@
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
+import type { CommandOutputChunk } from "@shared/commandTypes";
 import { getEnabledModels } from "./modelSettings";
 
 export type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
@@ -21,6 +22,8 @@ export type CommandRunState = {
   runId?: string;
   command: string;
   status: "running";
+  stdout?: string;
+  stderr?: string;
 };
 
 export type TaskThreadEvent = {
@@ -123,6 +126,33 @@ export function appendThreadEvents(
   );
 }
 
+export function appendCommandRunOutput(
+  threads: TaskThread[],
+  output: CommandOutputChunk
+): TaskThread[] {
+  return threads.map((thread) => {
+    let changed = false;
+    const events = thread.events.map((event) => {
+      if (!event.commandRun || !commandRunMatchesOutput(event.commandRun, output)) {
+        return event;
+      }
+
+      changed = true;
+      const currentOutput = event.commandRun[output.stream] ?? "";
+
+      return {
+        ...event,
+        commandRun: {
+          ...event.commandRun,
+          [output.stream]: limitLiveCommandOutput(`${currentOutput}${output.chunk}`)
+        }
+      };
+    });
+
+    return changed ? { ...thread, events } : thread;
+  });
+}
+
 export function attachThreadAgentActions(
   threads: TaskThread[],
   threadId: string,
@@ -182,4 +212,25 @@ export function archiveProjectThreads(threads: TaskThread[], projectPath: string
   return threads.map((thread) =>
     thread.projectPath === projectPath ? { ...thread, archived: true, pinned: false } : thread
   );
+}
+
+const maxLiveCommandOutputLength = 12000;
+
+function commandRunMatchesOutput(
+  commandRun: CommandRunState,
+  output: CommandOutputChunk
+): boolean {
+  if (commandRun.runId && output.runId) {
+    return commandRun.runId === output.runId;
+  }
+
+  return !commandRun.runId && !output.runId && commandRun.command === output.command;
+}
+
+function limitLiveCommandOutput(value: string): string {
+  if (value.length <= maxLiveCommandOutputLength) {
+    return value;
+  }
+
+  return value.slice(value.length - maxLiveCommandOutputLength);
 }

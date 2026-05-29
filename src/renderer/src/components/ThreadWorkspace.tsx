@@ -1100,8 +1100,8 @@ export function ThreadWorkspace({
               command: event.commandRun.command,
               cwd: "",
               exitCode: null,
-              stdout: "",
-              stderr: "",
+              stdout: event.commandRun.stdout ?? "",
+              stderr: event.commandRun.stderr ?? "",
               timedOut: false
             }
           }
