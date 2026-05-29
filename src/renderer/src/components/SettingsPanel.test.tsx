@@ -90,6 +90,10 @@ describe("SettingsPanel", () => {
     await user.click(screen.getByRole("button", { name: /General/ }));
 
     expect(screen.getByText("App background")).toBeInTheDocument();
+    expect(screen.getByTestId("wallpaper-settings-panel")).toHaveClass("min-h-[156px]");
+    expect(screen.getByTestId("wallpaper-preview")).toHaveStyle({
+      backgroundImage: "url(data:image/png;base64,abc)"
+    });
     expect(screen.getByLabelText("App background opacity")).toHaveValue("20");
 
     await user.click(screen.getByRole("button", { name: "Clear background image" }));

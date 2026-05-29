@@ -5,6 +5,7 @@ import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import type { AgentPlanStep } from "@shared/agentTypes";
+import { createAgentActionsFromPlanSteps } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
 import { FilePreviewRenderer } from "@/components/FilePreviewRenderer";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
@@ -48,6 +49,7 @@ import {
   type ForgeProject
 } from "@/state/projects";
 import {
+  attachThreadAgentActions,
   appendThreadEvents,
   archiveAllThreads,
   archiveProjectThreads,
@@ -917,10 +919,15 @@ export function App(): ReactElement {
         usage: plan.usage,
         createdAt: plan.createdAt
       });
+      const agentActions = createAgentActionsFromPlanSteps(plan.steps ?? []);
       setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          ...createAgentPlanResultEvents(threadId, plan.text, plan.steps, plan.createdAt)
-        ])
+        attachThreadAgentActions(
+          appendThreadEvents(current, threadId, [
+            ...createAgentPlanResultEvents(threadId, plan.text, plan.steps, plan.createdAt)
+          ]),
+          threadId,
+          agentActions
+        )
       );
     } catch (error) {
       appendThreadError(

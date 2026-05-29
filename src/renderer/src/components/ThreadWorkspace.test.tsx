@@ -62,6 +62,98 @@ describe("ThreadWorkspace", () => {
     expect(screen.getAllByText("任务已创建, 等待 Forge 生成执行计划").length).toBeGreaterThan(0);
   });
 
+  it("shows the generated agent action queue on the plan tab", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Implement agent queue",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect src/App.tsx",
+                status: "pending",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Agent action queue")).toBeInTheDocument();
+    expect(screen.getByText("Inspect src/App.tsx")).toBeInTheDocument();
+    expect(screen.getByText("Run npm test")).toBeInTheDocument();
+  });
+
+  it("runs command actions and opens file actions from the agent queue", async () => {
+    const user = userEvent.setup();
+    const onRunCommand = vi.fn();
+    const onPreviewFile = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Execute agent queue",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect src/App.tsx",
+                status: "pending",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={onRunCommand}
+        onPreviewFile={onPreviewFile}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open action src/App.tsx" }));
+    await user.click(screen.getByRole("button", { name: "Run action npm test" }));
+
+    expect(onPreviewFile).toHaveBeenCalledWith("src/App.tsx");
+    expect(onRunCommand).toHaveBeenCalledWith("thread-1", "npm test");
+  });
+
   it("submits a command for the selected thread", async () => {
     const user = userEvent.setup();
     const onRunCommand = vi.fn();

@@ -341,12 +341,18 @@ export function SettingsPanel({
                 {copy.appBackgroundDescription}
               </p>
             </div>
-            <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
-              <SettingRow
-                label={copy.wallpaperImage}
-                description={copy.wallpaperImageDescription}
-              >
-                <span className="inline-flex items-center gap-2">
+            <div
+              data-testid="wallpaper-settings-panel"
+              className="grid min-h-[156px] gap-4 rounded-[16px] border border-[#ececf1] bg-white p-4 lg:grid-cols-[minmax(0,1fr)_240px]"
+            >
+              <div className="flex min-w-0 flex-col justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-[#202123]">{copy.wallpaperImage}</h3>
+                  <p className="mt-1 text-xs leading-5 text-[#6e6e80]">
+                    {copy.wallpaperImageDescription}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
                   <input
                     ref={backgroundFileInputRef}
                     type="file"
@@ -378,10 +384,14 @@ export function SettingsPanel({
                   >
                     {copy.clearBackground}
                   </button>
-                </span>
-              </SettingRow>
-              <SettingRow label={copy.backgroundOpacity} description={copy.backgroundOpacityDescription}>
-                <span className="flex min-w-56 items-center gap-3">
+                </div>
+                <label className="grid gap-2">
+                  <span className="flex items-center justify-between gap-3 text-xs text-[#6e6e80]">
+                    <span>{copy.backgroundOpacity}</span>
+                    <span className="font-medium text-[#202123]">
+                      {Math.round(generalPreferences.backgroundOpacity * 100)}%
+                    </span>
+                  </span>
                   <input
                     type="range"
                     min="8"
@@ -395,13 +405,27 @@ export function SettingsPanel({
                         backgroundOpacity: Number(event.currentTarget.value) / 100
                       })
                     }
-                    className="w-40 accent-[#202123]"
+                    className="w-full accent-[#202123]"
                   />
-                  <span className="w-10 text-right text-sm text-[#565869]">
-                    {Math.round(generalPreferences.backgroundOpacity * 100)}%
-                  </span>
-                </span>
-              </SettingRow>
+                </label>
+              </div>
+              <div
+                data-testid="wallpaper-preview"
+                className="relative min-h-28 overflow-hidden rounded-[14px] border border-[#ececf1] bg-[#f7f7f8]"
+                style={{
+                  backgroundImage: generalPreferences.backgroundImageDataUrl
+                    ? `url(${generalPreferences.backgroundImageDataUrl})`
+                    : undefined,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center"
+                }}
+              >
+                <div
+                  className="absolute inset-0 bg-white"
+                  style={{ opacity: 1 - generalPreferences.backgroundOpacity }}
+                />
+                <div className="absolute inset-x-4 bottom-4 h-7 rounded-[10px] border border-white/70 bg-white/80 shadow-sm" />
+              </div>
             </div>
           </div>
 

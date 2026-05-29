@@ -13,6 +13,7 @@ import {
   Terminal,
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
+import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import { useI18n } from "@/i18n/useI18n";
@@ -245,6 +246,76 @@ export function ThreadWorkspace({
 
   function renderPlanTab(): ReactElement {
     const timelineEvents = selectedThread?.events.slice(0, 5) ?? [];
+    const agentActions = selectedThread?.agentActions ?? [];
+    const actionQueueCopy =
+      language === "zh-CN"
+        ? {
+            title: "Agent 动作队列",
+            empty: "等待模型生成可执行动作",
+            pending: "待执行",
+            open: "打开",
+            run: "运行",
+            generateEdit: "生成修改"
+          }
+        : {
+            title: "Agent action queue",
+            empty: "Waiting for executable agent actions",
+            pending: "Pending",
+            open: "Open",
+            run: "Run",
+            generateEdit: "Generate edit"
+          };
+
+    function renderAgentActionControl(action: AgentAction): ReactElement | null {
+      if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
+        const target = action.target;
+        const canGenerateEdit =
+          action.kind === "edit-file" &&
+          onGenerateFileChange &&
+          previewFile?.relativePath === target;
+
+        if (canGenerateEdit) {
+          return (
+            <button
+              type="button"
+              aria-label={`Generate edit action ${target}`}
+              onClick={() => onGenerateFileChange(target, previewFile.content)}
+              className="mt-2 h-7 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#202123] transition hover:bg-[#f7f7f8]"
+            >
+              {actionQueueCopy.generateEdit}
+            </button>
+          );
+        }
+
+        return (
+          <button
+            type="button"
+            aria-label={`Open action ${target}`}
+            onClick={() => onPreviewFile(target)}
+            className="mt-2 h-7 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#202123] transition hover:bg-[#f7f7f8]"
+          >
+            {actionQueueCopy.open}
+          </button>
+        );
+      }
+
+      if (action.kind === "run-command" && action.command && selectedThread) {
+        const commandToRun = action.command;
+
+        return (
+          <button
+            type="button"
+            aria-label={`Run action ${commandToRun}`}
+            onClick={() => onRunCommand(selectedThread.id, commandToRun)}
+            className="mt-2 h-7 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+          >
+            {actionQueueCopy.run}
+          </button>
+        );
+      }
+
+      return null;
+    }
 
     return (
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
@@ -285,6 +356,37 @@ export function ThreadWorkspace({
         </section>
 
         <aside className="space-y-4">
+          <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#202123]">
+              <Play className="h-4 w-4 text-[#565869]" />
+              {actionQueueCopy.title}
+            </h2>
+            {agentActions.length > 0 ? (
+              <div className="space-y-2">
+                {agentActions.map((action) => (
+                  <div
+                    key={action.id}
+                    className="rounded-[14px] border border-[#ececf1] bg-[#fafafa] px-3 py-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 text-sm font-medium leading-5 text-[#202123]">
+                        {action.label}
+                      </p>
+                      <span className="shrink-0 rounded-full border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] text-[#6e6e80]">
+                        {action.status === "pending" ? actionQueueCopy.pending : action.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-[#8e8ea0]">
+                      {action.kind}
+                    </p>
+                    {renderAgentActionControl(action)}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm leading-6 text-[#6e6e80]">{actionQueueCopy.empty}</p>
+            )}
+          </section>
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold text-[#202123]">{t("thread.agentOutput")}</h2>
             <p className="text-sm leading-6 text-[#6e6e80]">

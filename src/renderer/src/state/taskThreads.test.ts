@@ -6,6 +6,7 @@ import {
   updateModelEnabled
 } from "./modelSettings";
 import {
+  attachThreadAgentActions,
   appendThreadEvents,
   archiveAllThreads,
   archiveProjectThreads,
@@ -160,6 +161,49 @@ describe("taskThreads", () => {
 
     expect(threads.find((thread) => thread.id === "thread-1")?.archived).toBe(true);
     expect(threads.find((thread) => thread.id === "thread-2")?.archived).toBeUndefined();
+  });
+
+  it("attaches generated agent actions to the matching thread", () => {
+    const threads = attachThreadAgentActions(
+      [
+        {
+          id: "thread-1",
+          title: "Agent task",
+          prompt: "Agent task",
+          status: "planned",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: []
+        },
+        {
+          id: "thread-2",
+          title: "Other task",
+          prompt: "Other task",
+          status: "planned",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: []
+        }
+      ],
+      "thread-1",
+      [
+        {
+          id: "action-1",
+          stepId: "step-1",
+          kind: "inspect-file",
+          label: "Inspect src/App.tsx",
+          status: "pending",
+          target: "src/App.tsx"
+        }
+      ]
+    );
+
+    expect(threads[0].agentActions).toHaveLength(1);
+    expect(threads[1].agentActions).toBeUndefined();
   });
 });
 

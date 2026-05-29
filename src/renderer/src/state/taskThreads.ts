@@ -1,4 +1,5 @@
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
+import type { AgentAction } from "@shared/agentExecutionPlan";
 import { getEnabledModels } from "./modelSettings";
 
 export type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
@@ -25,6 +26,7 @@ export type TaskThread = {
   archived?: boolean;
   mode?: "ask" | "project";
   projectPath?: string | null;
+  agentActions?: AgentAction[];
   events: TaskThreadEvent[];
 };
 
@@ -97,6 +99,21 @@ export function appendThreadEvents(
           ...thread,
           status: status ?? thread.status,
           events: [...thread.events, ...events]
+        }
+      : thread
+  );
+}
+
+export function attachThreadAgentActions(
+  threads: TaskThread[],
+  threadId: string,
+  actions: AgentAction[]
+): TaskThread[] {
+  return threads.map((thread) =>
+    thread.id === threadId
+      ? {
+          ...thread,
+          agentActions: actions
         }
       : thread
   );
