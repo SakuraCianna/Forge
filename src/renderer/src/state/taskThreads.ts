@@ -174,33 +174,48 @@ export function updateThreadAgentActionStatus(
   actionId: string,
   status: AgentAction["status"]
 ): TaskThread[] {
-  const threadStatus = getThreadStatusForAgentActionStatus(status);
-
   return threads.map((thread) =>
-    thread.id === threadId
-      ? {
-          ...thread,
-          status: threadStatus ?? thread.status,
-          agentActions: thread.agentActions?.map((action) =>
-            action.id === actionId ? { ...action, status } : action
-          )
-        }
-      : thread
+    thread.id === threadId ? updateThreadActionStatus(thread, actionId, status) : thread
   );
 }
 
-function getThreadStatusForAgentActionStatus(
+function updateThreadActionStatus(
+  thread: TaskThread,
+  actionId: string,
   status: AgentAction["status"]
-): TaskThreadStatus | null {
-  if (status === "running") {
-    return "running";
+): TaskThread {
+  const agentActions = thread.agentActions?.map((action) =>
+    action.id === actionId ? { ...action, status } : action
+  );
+
+  return {
+    ...thread,
+    status: getThreadStatusForAgentActions(agentActions, thread.status),
+    agentActions
+  };
+}
+
+function getThreadStatusForAgentActions(
+  actions: AgentAction[] | undefined,
+  currentStatus: TaskThreadStatus
+): TaskThreadStatus {
+  if (!actions || actions.length === 0) {
+    return currentStatus;
   }
 
-  if (status === "failed") {
+  if (actions.some((action) => action.status === "failed")) {
     return "blocked";
   }
 
-  return null;
+  if (actions.some((action) => action.status === "running")) {
+    return "running";
+  }
+
+  if (actions.every((action) => action.status === "completed" || action.status === "skipped")) {
+    return "completed";
+  }
+
+  return currentStatus;
 }
 
 export function toggleThreadPinned(threads: TaskThread[], threadId: string): TaskThread[] {
