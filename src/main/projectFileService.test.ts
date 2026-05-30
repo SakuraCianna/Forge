@@ -39,7 +39,7 @@ describe("projectFileService", () => {
         projectRoot: testRoot,
         relativePath: "../package.json"
       })
-    ).rejects.toThrow("File path must stay inside the selected project");
+    ).rejects.toThrow("文件路径必须位于当前项目内");
   });
 
   it("rejects files over the configured size limit", async () => {
@@ -52,7 +52,7 @@ describe("projectFileService", () => {
         relativePath: "large.txt",
         maxBytes: 4
       })
-    ).rejects.toThrow("File is too large to preview");
+    ).rejects.toThrow("文件过大，无法预览");
   });
 
   it("previews a text file update with a line diff", async () => {

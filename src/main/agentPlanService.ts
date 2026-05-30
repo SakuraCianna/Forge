@@ -16,6 +16,15 @@ import {
   extractGeneratedText,
   extractTokenUsage
 } from "../shared/textGeneration.js";
+import {
+  formatEmptyProviderResponse,
+  formatEmptyProviderResult,
+  formatHtmlInsteadOfJson,
+  formatInvalidJson,
+  formatMissingApiKey,
+  formatProviderHttpError,
+  formatStreamingBodyUnavailable
+} from "../shared/userFacingErrors.js";
 
 type KeyReader = {
   readProviderKey: (providerId: string) => Promise<string | null>;
@@ -72,7 +81,7 @@ export async function generateAgentPlan({
   const apiKey = await keyVault.readProviderKey(provider.id);
 
   if (provider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${provider.label} API Key is not configured`);
+    throw new Error(formatMissingApiKey(provider.label));
   }
 
   const generationRequest = buildTextGenerationRequest({
@@ -88,7 +97,7 @@ export async function generateAgentPlan({
 
   if (!response.ok) {
     throw new Error(
-      `${provider.label} agent request failed: ${response.status} ${response.statusText}`
+      formatProviderHttpError(provider.label, "Agent 计划", response.status, response.statusText)
     );
   }
 
@@ -97,7 +106,7 @@ export async function generateAgentPlan({
   const usage = extractTokenUsage(provider.kind, body);
 
   if (!text) {
-    throw new Error(`${provider.label} returned an empty agent response`);
+    throw new Error(formatEmptyProviderResult(provider.label, "Agent 计划"));
   }
 
   return {
@@ -121,7 +130,7 @@ export async function generateAgentFileChange({
   const apiKey = await keyVault.readProviderKey(provider.id);
 
   if (provider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${provider.label} API Key is not configured`);
+    throw new Error(formatMissingApiKey(provider.label));
   }
 
   const generationRequest = buildTextGenerationRequest({
@@ -137,7 +146,7 @@ export async function generateAgentFileChange({
 
   if (!response.ok) {
     throw new Error(
-      `${provider.label} file change request failed: ${response.status} ${response.statusText}`
+      formatProviderHttpError(provider.label, "文件修改", response.status, response.statusText)
     );
   }
 
@@ -146,7 +155,7 @@ export async function generateAgentFileChange({
   const usage = extractTokenUsage(provider.kind, body);
 
   if (!nextContent.trim()) {
-    throw new Error(`${provider.label} returned an empty file change`);
+    throw new Error(formatEmptyProviderResult(provider.label, "文件修改内容"));
   }
 
   return {
@@ -170,7 +179,7 @@ export async function generateAgentAsk({
   const apiKey = await keyVault.readProviderKey(provider.id);
 
   if (provider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${provider.label} API Key is not configured`);
+    throw new Error(formatMissingApiKey(provider.label));
   }
 
   const generationRequest = buildTextGenerationRequest({
@@ -186,7 +195,7 @@ export async function generateAgentAsk({
 
   if (!response.ok) {
     throw new Error(
-      `${provider.label} ask request failed: ${response.status} ${response.statusText}`
+      formatProviderHttpError(provider.label, "问答", response.status, response.statusText)
     );
   }
 
@@ -195,7 +204,7 @@ export async function generateAgentAsk({
   const usage = extractTokenUsage(provider.kind, body);
 
   if (!text) {
-    throw new Error(`${provider.label} returned an empty ask response`);
+    throw new Error(formatEmptyProviderResult(provider.label, "问答内容"));
   }
 
   return {
@@ -220,7 +229,7 @@ export async function generateAgentAskStream({
   const apiKey = await keyVault.readProviderKey(provider.id);
 
   if (provider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${provider.label} API Key is not configured`);
+    throw new Error(formatMissingApiKey(provider.label));
   }
 
   const generationRequest = maybeEnableTextGenerationStreaming(
@@ -242,7 +251,7 @@ export async function generateAgentAskStream({
 
   if (!response.ok) {
     throw new Error(
-      `${provider.label} ask request failed: ${response.status} ${response.statusText}`
+      formatProviderHttpError(provider.label, "问答", response.status, response.statusText)
     );
   }
 
@@ -252,7 +261,7 @@ export async function generateAgentAskStream({
     const usage = extractTokenUsage(provider.kind, body);
 
     if (!text) {
-      throw new Error(`${provider.label} returned an empty ask response`);
+      throw new Error(formatEmptyProviderResult(provider.label, "问答内容"));
     }
 
     onDelta(text);
@@ -293,7 +302,12 @@ export async function generateAgentAskStream({
 
     if (!continuationResponse.ok) {
       throw new Error(
-        `${provider.label} ask continuation failed: ${continuationResponse.status} ${continuationResponse.statusText}`
+        formatProviderHttpError(
+          provider.label,
+          "问答续写",
+          continuationResponse.status,
+          continuationResponse.statusText
+        )
       );
     }
 
@@ -314,7 +328,7 @@ export async function generateAgentAskStream({
   }
 
   if (!text.trim()) {
-    throw new Error(`${provider.label} returned an empty ask response`);
+    throw new Error(formatEmptyProviderResult(provider.label, "问答内容"));
   }
 
   return {
@@ -375,21 +389,17 @@ async function readJsonBody(providerLabel: string, response: Response): Promise<
   const trimmedText = text.trim();
 
   if (!trimmedText) {
-    throw new Error(`${providerLabel} returned an empty response`);
+    throw new Error(formatEmptyProviderResponse(providerLabel));
   }
 
   try {
     return JSON.parse(trimmedText) as unknown;
   } catch {
     if (trimmedText.startsWith("<")) {
-      throw new Error(
-        `${providerLabel} returned HTML instead of JSON. Check Base URL and provider compatibility.`
-      );
+      throw new Error(formatHtmlInsteadOfJson(providerLabel, "提供商接口兼容性"));
     }
 
-    throw new Error(
-      `${providerLabel} returned invalid JSON. Check Base URL and provider compatibility.`
-    );
+    throw new Error(formatInvalidJson(providerLabel, "提供商接口兼容性"));
   }
 }
 
@@ -445,7 +455,7 @@ async function readEventStreamText(
   const reader = response.body?.getReader();
 
   if (!reader) {
-    throw new Error("Streaming response body is not available");
+    throw new Error(formatStreamingBodyUnavailable());
   }
 
   const decoder = new TextDecoder();

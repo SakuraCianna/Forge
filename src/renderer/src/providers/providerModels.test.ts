@@ -52,7 +52,7 @@ describe("provider model adapters", () => {
 
   it("rejects non-ASCII values before they enter fetch headers", () => {
     expect(() => assertHeaderValue("Authorization", "Bearer API Key：sk-test")).toThrow(
-      "non-ASCII characters"
+      "包含非 ASCII 字符"
     );
   });
 
@@ -158,7 +158,7 @@ describe("provider model adapters", () => {
         },
         "sk-test"
       )
-    ).toThrow("Custom Base URL is not configured");
+    ).toThrow("Custom Base URL 未配置");
   });
 
   it("builds an Anthropic model list request with Anthropic headers", () => {

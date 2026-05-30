@@ -36,7 +36,7 @@ describe("commandRunner", () => {
         command: "Write-Output nope",
         timeoutMs: 5000
       })
-    ).rejects.toThrow("Command cwd must stay inside the selected project");
+    ).rejects.toThrow("命令工作目录必须位于当前项目内");
   });
 
   it("returns stderr and non-zero exit code without throwing", async () => {
@@ -85,7 +85,7 @@ describe("commandRunner", () => {
         timeoutMs: 5000,
         shellExecutable: "forge-missing-shell.exe"
       })
-    ).rejects.toThrow("Failed to start command shell");
+    ).rejects.toThrow("启动命令 Shell 失败");
   });
 
   it("cancels a running command by run id", async () => {

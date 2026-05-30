@@ -455,13 +455,13 @@ describe("SettingsPanel", () => {
     renderSettingsPanel({
       onFetchModels,
       providerFetchStates: {
-        openai: { status: "error", message: "OpenAI API Key is not configured" }
+        openai: { status: "error", message: "OpenAI API Key 未配置，请先在 API 配置中保存密钥。" }
       }
     });
 
     await user.click(screen.getByRole("button", { name: /API profiles/ }));
 
-    expect(screen.getByText("OpenAI API Key is not configured")).toBeInTheDocument();
+    expect(screen.getByText("OpenAI API Key 未配置，请先在 API 配置中保存密钥。")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Fetch models" })[0]);
     expect(onFetchModels).toHaveBeenCalledWith("openai", "");
   });

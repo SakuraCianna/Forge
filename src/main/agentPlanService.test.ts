@@ -163,7 +163,7 @@ describe("agentPlanService", () => {
         keyVault: { readProviderKey: async () => null },
         fetcher: vi.fn()
       })
-    ).rejects.toThrow("OpenAI API Key is not configured");
+    ).rejects.toThrow("OpenAI API Key 未配置");
   });
 
   it("hydrates no-key local providers before agent requests", async () => {
@@ -465,7 +465,7 @@ describe("agentPlanService", () => {
         keyVault: { readProviderKey: async () => "sk-test" },
         fetcher
       })
-    ).rejects.toThrow("OpenAI returned HTML instead of JSON");
+    ).rejects.toThrow("OpenAI 返回了 HTML 而不是 JSON");
   });
 
   it("streams OpenAI-compatible ask deltas as they arrive", async () => {

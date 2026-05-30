@@ -53,7 +53,7 @@ function assertReadRequest(value: unknown): ReadProjectTextFileRequest {
     typeof value.projectRoot !== "string" ||
     typeof value.relativePath !== "string"
   ) {
-    throw new Error("Invalid file read request");
+    throw new Error("无效的文件读取请求。");
   }
 
   return {
@@ -68,7 +68,7 @@ function assertUpdateRequest(value: unknown): UpdateProjectTextFileRequest {
   const readRequest = assertReadRequest(value);
 
   if (!isRecord(value) || typeof value.nextContent !== "string") {
-    throw new Error("Invalid file update request");
+    throw new Error("无效的文件更新请求。");
   }
 
   return {

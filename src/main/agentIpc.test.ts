@@ -141,7 +141,7 @@ describe("agentIpc", () => {
     );
     const cancelled = await handlers.get(agentChannels.cancelAskStream)?.(null, "stream-1");
 
-    await expect(running).rejects.toThrow("Agent ask stream cancelled");
+    await expect(running).rejects.toThrow("已取消 Agent 问答流");
     expect(cancelled).toEqual({ ok: true, requestId: "stream-1" });
     expect(streamSignal?.aborted).toBe(true);
   });

@@ -20,19 +20,19 @@ export async function readProjectTextFile({
   const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
 
   if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
-    throw new Error("File path must stay inside the selected project");
+    throw new Error("文件路径必须位于当前项目内。");
   }
 
   const resolvedFilePath = await realpath(absoluteFilePath);
 
   if (!isPathInside(resolvedFilePath, resolvedProjectRoot)) {
-    throw new Error("File path must stay inside the selected project");
+    throw new Error("文件路径必须位于当前项目内。");
   }
 
   const fileStat = await stat(resolvedFilePath);
 
   if (fileStat.size > maxBytes) {
-    throw new Error("File is too large to preview");
+    throw new Error("文件过大，无法预览。");
   }
 
   return {
@@ -71,13 +71,13 @@ export async function writeProjectTextFile({
   const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
 
   if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
-    throw new Error("File path must stay inside the selected project");
+    throw new Error("文件路径必须位于当前项目内。");
   }
 
   const resolvedFilePath = await realpath(absoluteFilePath);
 
   if (!isPathInside(resolvedFilePath, resolvedProjectRoot)) {
-    throw new Error("File path must stay inside the selected project");
+    throw new Error("文件路径必须位于当前项目内。");
   }
 
   await writeFile(resolvedFilePath, nextContent, "utf8");

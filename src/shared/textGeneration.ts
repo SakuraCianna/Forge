@@ -8,6 +8,7 @@ import type {
 } from "./modelTypes.js";
 import { assertHeaderValue, normalizeApiKeyForHeader } from "./providerModels.js";
 import type { TokenUsage } from "./usageTypes.js";
+import { formatMissingBaseUrl } from "./userFacingErrors.js";
 
 type TextGenerationRequestOptions = {
   provider: ForgeProvider;
@@ -59,7 +60,7 @@ export function buildTextGenerationRequest({
   const baseUrl = trimTrailingSlash(provider.baseUrl ?? "");
 
   if (!baseUrl) {
-    throw new Error(`${provider.label} Base URL is not configured`);
+    throw new Error(formatMissingBaseUrl(provider.label));
   }
 
   if (provider.kind === "openai") {

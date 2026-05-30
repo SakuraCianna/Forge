@@ -6,6 +6,14 @@ import {
   parseProviderModelList,
   toForgeModel
 } from "../shared/providerModels.js";
+import {
+  formatEmptyProviderResponse,
+  formatHtmlInsteadOfJson,
+  formatInvalidJson,
+  formatMissingApiKey,
+  formatModelFetchHttpError,
+  formatModelFetchNetworkError
+} from "../shared/userFacingErrors.js";
 
 type KeyReader = {
   readProviderKey: (providerId: string) => Promise<string | null>;
@@ -29,7 +37,7 @@ export async function fetchModelsForProvider({
   const apiKey = await keyVault.readProviderKey(hydratedProvider.id);
 
   if (hydratedProvider.requiresApiKey !== false && !apiKey) {
-    throw new Error(`${hydratedProvider.label} API Key is not configured`);
+    throw new Error(formatMissingApiKey(hydratedProvider.label));
   }
 
   const request = buildModelListRequest(hydratedProvider, apiKey ?? "");
@@ -41,7 +49,7 @@ export async function fetchModelsForProvider({
       headers: request.headers
     });
   } catch (error) {
-    throw new Error(createNetworkErrorMessage(hydratedProvider, request.url, error), {
+    throw new Error(formatModelFetchNetworkError(hydratedProvider.label, request.url, error), {
       cause: error
     });
   }
@@ -49,7 +57,12 @@ export async function fetchModelsForProvider({
   if (!response.ok) {
     const detail = await readErrorDetail(response);
     throw new Error(
-      `${hydratedProvider.label} model fetch failed: ${response.status} ${response.statusText}${detail}`
+      formatModelFetchHttpError(
+        hydratedProvider.label,
+        response.status,
+        response.statusText,
+        detail
+      )
     );
   }
 
@@ -57,19 +70,6 @@ export async function fetchModelsForProvider({
   return parseProviderModelList(hydratedProvider, body).map((model) =>
     toForgeModel(hydratedProvider, model)
   );
-}
-
-// 把 fetch 失败原因压成一行中文提示, 避免 HTML 响应挤压 UI
-function createNetworkErrorMessage(provider: ForgeProvider, url: string, error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error);
-
-  return [
-    `${provider.label} model fetch failed: network request failed`,
-    detail ? `(${detail})` : "",
-    `Check Base URL, Electron proxy/network access, and whether this provider exposes ${url}.`
-  ]
-    .filter(Boolean)
-    .join(" ");
 }
 
 // 在 Electron 运行时优先使用 net.fetch, 测试和浏览器回退到全局 fetch
@@ -112,20 +112,16 @@ async function readJsonBody(providerLabel: string, response: Response): Promise<
   const trimmedText = text.trim();
 
   if (!trimmedText) {
-    throw new Error(`${providerLabel} returned an empty response`);
+    throw new Error(formatEmptyProviderResponse(providerLabel));
   }
 
   try {
     return JSON.parse(trimmedText) as unknown;
   } catch {
     if (trimmedText.startsWith("<")) {
-      throw new Error(
-        `${providerLabel} returned HTML instead of JSON. Check Base URL and model API compatibility.`
-      );
+      throw new Error(formatHtmlInsteadOfJson(providerLabel, "模型 API 兼容性"));
     }
 
-    throw new Error(
-      `${providerLabel} returned invalid JSON. Check Base URL and model API compatibility.`
-    );
+    throw new Error(formatInvalidJson(providerLabel, "模型 API 兼容性"));
   }
 }

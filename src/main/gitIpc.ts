@@ -34,7 +34,7 @@ export function registerGitHandlers(
 // 校验 Git 状态请求, 防止空路径传入命令层
 function assertStatusRequest(value: unknown): ProjectGitStatusRequest {
   if (!isRecord(value) || typeof value.projectRoot !== "string") {
-    throw new Error("Invalid Git status request");
+    throw new Error("无效的 Git 状态请求。");
   }
 
   return { projectRoot: value.projectRoot };
@@ -43,7 +43,7 @@ function assertStatusRequest(value: unknown): ProjectGitStatusRequest {
 // 校验提交请求, 项目路径和提交信息都必须由用户明确提供
 function assertCommitRequest(value: unknown): ProjectGitCommitRequest {
   if (!isRecord(value) || typeof value.projectRoot !== "string" || typeof value.message !== "string") {
-    throw new Error("Invalid Git commit request");
+    throw new Error("无效的 Git 提交请求。");
   }
 
   return { projectRoot: value.projectRoot, message: value.message };

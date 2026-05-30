@@ -5,6 +5,10 @@ import {
   parseProviderModelList,
   toForgeModel
 } from "@shared/providerModels";
+import {
+  formatModelFetchHttpError,
+  formatModelFetchNetworkError
+} from "@shared/userFacingErrors";
 
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -29,31 +33,20 @@ export async function fetchProviderModels({
       headers: request.headers
     });
   } catch (error) {
-    throw new Error(createNetworkErrorMessage(provider, request.url, error), {
+    throw new Error(formatModelFetchNetworkError(provider.label, request.url, error), {
       cause: error
     });
   }
 
   if (!response.ok) {
     const detail = await readErrorDetail(response);
-    throw new Error(`${provider.label} model fetch failed: ${response.status} ${response.statusText}${detail}`);
+    throw new Error(
+      formatModelFetchHttpError(provider.label, response.status, response.statusText, detail)
+    );
   }
 
   const body = (await response.json()) as unknown;
   return parseProviderModelList(provider, body).map((model) => toForgeModel(provider, model));
-}
-
-// 把网络错误整理成一行状态, 避免长错误撑坏按钮区域
-function createNetworkErrorMessage(provider: ForgeProvider, url: string, error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error);
-
-  return [
-    `${provider.label} model fetch failed: network request failed`,
-    detail ? `(${detail})` : "",
-    `Check Base URL, proxy/network access, and whether this provider exposes ${url}.`
-  ]
-    .filter(Boolean)
-    .join(" ");
 }
 
 // 从错误对象里提取短原因, 没有内容时给出通用提示

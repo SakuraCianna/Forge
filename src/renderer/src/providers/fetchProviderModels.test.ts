@@ -40,7 +40,7 @@ describe("fetchProviderModels", () => {
         apiKey: "bad-key",
         fetcher: async () => new Response("Unauthorized", { status: 401, statusText: "Unauthorized" })
       })
-    ).rejects.toThrow("OpenAI model fetch failed: 401 Unauthorized - Unauthorized");
+    ).rejects.toThrow("无法拉取 OpenAI 模型列表：401 Unauthorized - Unauthorized");
   });
 
   it("wraps network failures with Base URL guidance", async () => {
@@ -52,6 +52,6 @@ describe("fetchProviderModels", () => {
           throw new TypeError("fetch failed");
         }
       })
-    ).rejects.toThrow("OpenAI model fetch failed: network request failed (fetch failed) Check Base URL");
+    ).rejects.toThrow("无法拉取 OpenAI 模型列表：网络请求失败 (fetch failed) 请检查 Base URL");
   });
 });

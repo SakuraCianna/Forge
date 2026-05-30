@@ -51,7 +51,7 @@ function assertRunCommandRequest(value: unknown): RunProjectCommandOptions {
     typeof value.cwd !== "string" ||
     typeof value.command !== "string"
   ) {
-    throw new Error("Invalid command request");
+    throw new Error("无效的命令请求。");
   }
 
   return {
@@ -66,7 +66,7 @@ function assertRunCommandRequest(value: unknown): RunProjectCommandOptions {
 // 校验取消命令请求, 只允许通过 runId 取消已登记的进程
 function assertCancelCommandRequest(value: unknown): CancelProjectCommandOptions {
   if (!isRecord(value) || typeof value.runId !== "string") {
-    throw new Error("Invalid command cancellation request");
+    throw new Error("无效的命令取消请求。");
   }
 
   return { runId: value.runId };

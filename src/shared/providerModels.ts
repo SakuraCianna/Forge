@@ -6,6 +6,11 @@ import type {
   ReasoningControl,
   SpeedMode
 } from "./modelTypes.js";
+import {
+  formatHeaderLineBreaks,
+  formatHeaderNonAscii,
+  formatMissingBaseUrl
+} from "./userFacingErrors.js";
 
 type ModelListRequest = {
   url: string;
@@ -30,7 +35,7 @@ export function buildModelListRequest(provider: ForgeProvider, apiKey: string): 
   const extraHeaders = validateHeaders(provider.requestHeaders ?? {});
 
   if (!baseUrl && !provider.modelListUrl) {
-    throw new Error(`${provider.label} Base URL is not configured`);
+    throw new Error(formatMissingBaseUrl(provider.label));
   }
 
   if (provider.kind === "anthropic") {
@@ -114,13 +119,11 @@ export function assertHeaderValue(headerName: string, value: string): string {
     const codePoint = character.codePointAt(0) ?? 0;
 
     if (codePoint > 255) {
-      throw new Error(
-        `${headerName} contains non-ASCII characters. Paste the raw API key only, without labels, Chinese punctuation, or extra notes.`
-      );
+      throw new Error(formatHeaderNonAscii(headerName));
     }
 
     if (character === "\r" || character === "\n") {
-      throw new Error(`${headerName} contains line breaks. Paste the raw API key on one line.`);
+      throw new Error(formatHeaderLineBreaks(headerName));
     }
   }
 

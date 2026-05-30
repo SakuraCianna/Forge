@@ -368,7 +368,7 @@ describe("textGeneration", () => {
         input: "Plan the change",
         intelligence: "medium"
       })
-    ).toThrow("non-ASCII characters");
+    ).toThrow("包含非 ASCII 字符");
   });
 
   it("extracts generated text from supported provider responses", () => {

@@ -33,7 +33,7 @@ export function registerKeyVaultHandlers(vault: KeyVault, registerHandler: Regis
 // 校验 IPC 字符串参数, 防止 providerId 或 apiKey 为空类型
 function assertString(value: unknown): string {
   if (typeof value !== "string") {
-    throw new Error("Invalid IPC argument");
+    throw new Error("无效的 IPC 参数。");
   }
 
   return value;

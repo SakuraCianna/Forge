@@ -45,7 +45,7 @@ export async function getProjectGitStatus({
   const status = await runGit(["status", "--porcelain"], cwd);
 
   if (status.exitCode !== 0) {
-    throw new Error(status.stderr.trim() || "git status failed");
+    throw new Error(status.stderr.trim() || "git status 执行失败。");
   }
 
   const changes = await readGitChanges(status.stdout, cwd, runGit);
@@ -67,18 +67,18 @@ export async function commitProjectChanges({
   const normalizedMessage = message.trim();
 
   if (!normalizedMessage) {
-    throw new Error("Commit message is required");
+    throw new Error("请输入提交信息。");
   }
 
   const cwd = await realpath(projectRoot);
   const status = await getProjectGitStatus({ projectRoot: cwd, runGit });
 
   if (!status.isRepo) {
-    throw new Error("Selected project is not a Git repository");
+    throw new Error("当前项目不是 Git 仓库。");
   }
 
   if (status.changedFiles.length === 0) {
-    throw new Error("No changes to commit");
+    throw new Error("没有可提交的改动。");
   }
 
   await runGitOrThrow(["add", "-A"], cwd);
@@ -95,7 +95,7 @@ export async function commitProjectChanges({
     const result = await runGit(args, commandCwd);
 
     if (result.exitCode !== 0) {
-      throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args[0]} failed`);
+      throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args[0]} 执行失败。`);
     }
 
     return result;

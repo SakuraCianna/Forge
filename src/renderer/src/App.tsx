@@ -25,6 +25,7 @@ import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
 } from "@/agent/failureFixPrompt";
+import { formatRemoteModelError, formatRuntimeError } from "@/i18n/runtimeErrors";
 import { useI18n } from "@/i18n/useI18n";
 import { removeFileChangePreview, upsertFileChangePreview } from "@/state/fileChanges";
 import {
@@ -695,7 +696,7 @@ export function App(): ReactElement {
         return false;
       }
 
-      setTaskNotice(error instanceof Error ? error.message : String(error));
+      setTaskNotice(formatRuntimeError(settings.language, error));
       return false;
     }
   }
@@ -711,7 +712,7 @@ export function App(): ReactElement {
       setGitStatus(status);
       setGitNotice(null);
     } catch (error) {
-      setGitNotice(error instanceof Error ? error.message : String(error));
+      setGitNotice(formatRuntimeError(settings.language, error));
     }
   }
 
@@ -738,7 +739,7 @@ export function App(): ReactElement {
         setThreads((current) => completeNextPendingAgentAction(current, selectedThreadId, "commit"));
       }
     } catch (error) {
-      setGitNotice(error instanceof Error ? error.message : String(error));
+      setGitNotice(formatRuntimeError(settings.language, error));
     }
   }
 
@@ -950,7 +951,7 @@ export function App(): ReactElement {
     } catch (error) {
       appendThreadError(
         selectedThread.id,
-        `模型文件修改失败: ${error instanceof Error ? error.message : String(error)}`
+        `模型文件修改失败: ${formatRemoteModelError(settings.language, error)}`
       );
       return false;
     }
@@ -2152,7 +2153,7 @@ export function App(): ReactElement {
                         </span>
                         <span className="min-w-0 truncate">{change.path}</span>
                         <span className="shrink-0 text-[11px] text-[#8e8ea0]">
-                          {formatGitStatus(change.status)}
+                          {formatGitStatus(change.status, settings.language)}
                         </span>
                       </button>
                     ))}
@@ -2378,11 +2379,13 @@ function formatAgentRuntimeError(
   kind: "file" | "command",
   message: string
 ): string {
+  const detail = formatRuntimeError(language, message);
+
   if (language === "zh-CN") {
-    return `${kind === "file" ? "文件动作" : "命令执行"}失败: ${message}`;
+    return `${kind === "file" ? "文件动作" : "命令执行"}失败: ${detail}`;
   }
 
-  return `${kind === "file" ? "File action" : "Command execution"} failed: ${message}`;
+  return `${kind === "file" ? "File action" : "Command execution"} failed: ${detail}`;
 }
 
 // 将工具权限拒绝转成用户可读提示, 执行层仍使用稳定英文工具名
@@ -2499,24 +2502,24 @@ function getDiffLineClass(line: string): string {
 }
 
 // 把 Git 状态字母翻译成中文状态
-function formatGitStatus(status: string): string {
+function formatGitStatus(status: string, language: Language): string {
   if (status === "??") {
-    return "new";
+    return language === "zh-CN" ? "未跟踪" : "new";
   }
 
   if (status.includes("D")) {
-    return "deleted";
+    return language === "zh-CN" ? "已删除" : "deleted";
   }
 
   if (status.includes("R")) {
-    return "renamed";
+    return language === "zh-CN" ? "已重命名" : "renamed";
   }
 
   if (status.includes("A")) {
-    return "added";
+    return language === "zh-CN" ? "已新增" : "added";
   }
 
-  return "modified";
+  return language === "zh-CN" ? "已修改" : "modified";
 }
 
 // 合并索引和工作区状态字母, 空状态用占位符对齐
@@ -2544,21 +2547,7 @@ function formatGitStatusLetter(status: string): string {
 function isMissingProjectError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
 
-  return /Project path does not exist|ENOENT|cannot find|no such file/i.test(message);
-}
-
-// 清洗远端模型错误, 避免 HTML 或 JSON 细节直接暴露给用户
-function formatRemoteModelError(language: Language, error: unknown): string {
-  const rawMessage = error instanceof Error ? error.message : String(error);
-  const message = rawMessage.replace(/^Error invoking remote method '[^']+':\s*/u, "");
-
-  if (/Unexpected token '<'|<!doctype|not valid JSON|returned HTML|invalid JSON/i.test(message)) {
-    return language === "zh-CN"
-      ? "API 返回了 HTML 而不是 JSON, 请检查 Base URL 是否指向兼容的 /v1 接口, 以及模型 ID 是否正确"
-      : "API returned HTML instead of JSON. Check the Base URL, compatible /v1 endpoint, and model ID.";
-  }
-
-  return message;
+  return /Project path does not exist|项目路径不存在|ENOENT|cannot find|no such file/i.test(message);
 }
 
 // 把预览状态翻译成审查列表里的中文标签
@@ -2579,7 +2568,11 @@ function formatPreviewStatus(
   }
 
   if (result.status === "error") {
-    return result.message ?? (language === "zh-CN" ? "格式化失败" : "Formatting failed");
+    return result.message
+      ? formatRuntimeError(language, result.message)
+      : language === "zh-CN"
+        ? "格式化失败"
+        : "Formatting failed";
   }
 
   return language === "zh-CN" ? "原始内容" : "Raw content";

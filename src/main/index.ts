@@ -111,7 +111,7 @@ void app.whenReady().then(() => {
     codec: {
       encryptString: (value) => {
         if (!safeStorage.isEncryptionAvailable()) {
-          throw new Error("Secure storage is not available on this system");
+          throw new Error("当前系统不可用安全存储，无法保存 API Key。");
         }
 
         return safeStorage.encryptString(value);

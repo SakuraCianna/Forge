@@ -95,11 +95,11 @@ async function runProjectCommandWithRegistry(
   const resolvedCwd = await realpath(cwd);
 
   if (!isPathInside(resolvedCwd, resolvedProjectRoot)) {
-    throw new Error("Command cwd must stay inside the selected project");
+    throw new Error("命令工作目录必须位于当前项目内。");
   }
 
   if (runId && runningCommands.has(runId)) {
-    throw new Error("Command run id is already active");
+    throw new Error("该命令运行 ID 已在执行中。");
   }
 
   return new Promise((resolve, reject) => {
@@ -186,7 +186,7 @@ async function runProjectCommandWithRegistry(
 
     child.on("error", (error) => {
       cleanup();
-      reject(new Error(`Failed to start command shell: ${error.message}`));
+      reject(new Error(`启动命令 Shell 失败：${error.message}`));
     });
   });
 }

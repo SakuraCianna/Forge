@@ -42,7 +42,7 @@ describe("providerModelService", () => {
         },
         fetcher: async () => new Response(null, { status: 200 })
       })
-    ).rejects.toThrow("OpenAI API Key is not configured");
+    ).rejects.toThrow("OpenAI API Key 未配置");
   });
 
   it("fetches models for providers that do not require an API key", async () => {
@@ -118,7 +118,7 @@ describe("providerModelService", () => {
         },
         fetcher: async () => new Response("bad key", { status: 401, statusText: "Unauthorized" })
       })
-    ).rejects.toThrow("OpenAI model fetch failed: 401 Unauthorized - bad key");
+    ).rejects.toThrow("无法拉取 OpenAI 模型列表：401 Unauthorized - bad key");
   });
 
   it("turns network failures into actionable model fetch errors", async () => {
@@ -132,8 +132,6 @@ describe("providerModelService", () => {
           throw new TypeError("fetch failed");
         }
       })
-    ).rejects.toThrow(
-      "OpenAI model fetch failed: network request failed (fetch failed) Check Base URL"
-    );
+    ).rejects.toThrow("无法拉取 OpenAI 模型列表：网络请求失败 (fetch failed) 请检查 Base URL");
   });
 });

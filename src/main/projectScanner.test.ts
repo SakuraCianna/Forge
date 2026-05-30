@@ -71,7 +71,7 @@ describe("projectScanner", () => {
 
   it("throws a readable error when the project path no longer exists", async () => {
     await expect(scanProjectFiles(join(testRoot, "missing"))).rejects.toThrow(
-      "Project path does not exist"
+      "项目路径不存在"
     );
   });
 });
