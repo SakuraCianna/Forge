@@ -41,6 +41,33 @@ describe("projectScanner", () => {
     expect(result.truncated).toBe(true);
   });
 
+  it("reads project instruction files for agent context", async () => {
+    await mkdir(join(testRoot, ".cursor", "rules"), { recursive: true });
+    await writeFile(join(testRoot, "AGENTS.md"), "Use PowerShell-safe commands\n", "utf8");
+    await writeFile(join(testRoot, "CLAUDE.md"), "Prefer concise answers\n", "utf8");
+    await writeFile(join(testRoot, ".cursor", "rules", "style.mdc"), "Use React patterns\n", "utf8");
+
+    const result = await scanProjectFiles(testRoot);
+
+    expect(result.instructionFiles).toEqual([
+      {
+        relativePath: "AGENTS.md",
+        content: "Use PowerShell-safe commands",
+        truncated: false
+      },
+      {
+        relativePath: "CLAUDE.md",
+        content: "Prefer concise answers",
+        truncated: false
+      },
+      {
+        relativePath: ".cursor/rules/style.mdc",
+        content: "Use React patterns",
+        truncated: false
+      }
+    ]);
+  });
+
   it("throws a readable error when the project path no longer exists", async () => {
     await expect(scanProjectFiles(join(testRoot, "missing"))).rejects.toThrow(
       "Project path does not exist"

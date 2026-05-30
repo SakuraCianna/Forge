@@ -619,12 +619,14 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     .join("\n");
   const truncatedNote = request.projectScan.truncated ? "\nProject scan was truncated." : "";
   const memoryContext = formatAgentMemories(request.memories);
+  const instructionContext = formatProjectInstructions(request.projectScan);
 
   return [
     `Task:\n${request.taskPrompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`,
     memoryContext,
+    instructionContext,
     `Project root:\n${request.projectScan.rootPath}`,
     `Indexed files:\n${files || "- No files indexed"}${truncatedNote}`
   ]
@@ -634,11 +636,13 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
 
 function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): string {
   const memoryContext = formatAgentMemories(request.memories);
+  const instructionContext = formatProjectInstructions(request.projectScan);
 
   return [
     `Task:\n${request.taskPrompt}`,
     `Speed mode:\n${request.speed}`,
     memoryContext,
+    instructionContext,
     `File path:\n${request.relativePath}`,
     `Current file content:\n${request.currentContent}`
   ]
@@ -648,6 +652,7 @@ function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): st
 
 function createAskInput(request: GenerateAgentAskRequest): string {
   const memoryContext = formatAgentMemories(request.memories);
+  const instructionContext = formatProjectInstructions(request.projectScan);
   const parts = [
     `User message:\n${request.prompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
@@ -656,6 +661,10 @@ function createAskInput(request: GenerateAgentAskRequest): string {
 
   if (memoryContext) {
     parts.push(memoryContext);
+  }
+
+  if (instructionContext) {
+    parts.push(instructionContext);
   }
 
   if (request.conversation?.length) {
@@ -706,6 +715,30 @@ function formatAgentMemories(
   }
 
   return ["Relevant memories:", ...lines.map((line) => `- ${line}`)].join("\n");
+}
+
+function formatProjectInstructions(projectScan?: GenerateAgentAskRequest["projectScan"]): string {
+  const instructionFiles =
+    projectScan?.instructionFiles
+      ?.map((file) => ({
+        ...file,
+        content: file.content.trim()
+      }))
+      .filter((file) => file.content)
+      .slice(0, 6) ?? [];
+
+  if (instructionFiles.length === 0) {
+    return "";
+  }
+
+  return [
+    "Project instructions:",
+    ...instructionFiles.map((file) =>
+      [`From ${file.relativePath}${file.truncated ? " (truncated)" : ""}:`, file.content].join(
+        "\n"
+      )
+    )
+  ].join("\n\n");
 }
 
 function createAskContinuationInput(request: GenerateAgentAskRequest, partialAnswer: string): string {

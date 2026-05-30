@@ -859,6 +859,7 @@ export function App(): ReactElement {
         intelligence: selectedThread.intelligence,
         memories: selectRelevantAgentMemories(agentMemories, currentProject.path),
         personalization: createPersonalizationPrompt(personalization),
+        projectScan: projectScanResult,
         speed: selectedThread.speed,
         taskPrompt: selectedThread.prompt,
         relativePath,

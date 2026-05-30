@@ -242,6 +242,44 @@ describe("agentPlanService", () => {
     });
   });
 
+  it("includes project instruction files in file change prompts", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "export const label = 'new';"
+          })
+        )
+    );
+
+    await generateAgentFileChange({
+      request: {
+        ...fileChangeRequest,
+        projectScan: {
+          rootPath: "E:\\CodeHome\\Forge",
+          files: [],
+          truncated: false,
+          instructionFiles: [
+            {
+              relativePath: "AGENTS.md",
+              content: "Never use unsafe shell commands",
+              truncated: false
+            }
+          ]
+        }
+      },
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    const [_url, init] = fetcher.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+
+    expect(body.input).toContain("Project instructions");
+    expect(body.input).toContain("AGENTS.md");
+    expect(body.input).toContain("Never use unsafe shell commands");
+  });
+
   it("generates a direct answer without project context", async () => {
     const fetcher = vi.fn(
       async () =>
@@ -300,6 +338,53 @@ describe("agentPlanService", () => {
 
     expect(body.input).toContain("Relevant memories");
     expect(body.input).toContain("This workspace prefers PowerShell-safe commands");
+  });
+
+  it("includes project instruction files in plan and direct answer prompts", async () => {
+    const projectScanWithInstructions = {
+      ...request.projectScan,
+      instructionFiles: [
+        {
+          relativePath: "AGENTS.md",
+          content: "Use PowerShell-safe commands and keep Chinese comments with English punctuation",
+          truncated: false
+        }
+      ]
+    };
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "Use the project rules."
+          })
+        )
+    );
+
+    await generateAgentPlan({
+      request: {
+        ...request,
+        projectScan: projectScanWithInstructions
+      },
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+    await generateAgentAsk({
+      request: {
+        ...askRequest,
+        projectScan: projectScanWithInstructions
+      },
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    const planBody = JSON.parse(String(fetcher.mock.calls[0][1].body));
+    const askBody = JSON.parse(String(fetcher.mock.calls[1][1].body));
+
+    expect(planBody.input).toContain("Project instructions");
+    expect(planBody.input).toContain("AGENTS.md");
+    expect(planBody.input).toContain("Use PowerShell-safe commands");
+    expect(askBody.input).toContain("Project instructions");
+    expect(askBody.input).toContain("Use PowerShell-safe commands");
   });
 
   it("includes recent conversation turns in direct answers", async () => {

@@ -26,6 +26,7 @@ export type GenerateAgentFileChangeRequest = {
   intelligence: IntelligenceLevel;
   memories?: AgentMemoryContext[];
   personalization?: string;
+  projectScan?: ProjectScanResult | null;
   speed: SpeedMode;
   taskPrompt: string;
   relativePath: string;
