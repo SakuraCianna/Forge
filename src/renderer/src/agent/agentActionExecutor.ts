@@ -15,6 +15,15 @@ export type AgentActionPermissionResult =
   | { ok: true }
   | { ok: false; tool: AgentToolPermission; message: string };
 
+export type AgentCommandRisk =
+  | { level: "allow" }
+  | { level: "ask" | "deny"; reason: string };
+
+const dependencyChangeReason = "command may change dependencies or project state";
+const gitMutationReason = "command may change Git history or remote state";
+const destructiveCommandReason = "command can delete files or rewrite history";
+const unknownCommandReason = "command is not in the safe allowlist";
+
 // 根据动作类型决定执行方式, 不能自动执行的动作返回阻塞原因
 export function resolveAgentActionExecution(action: AgentAction): AgentActionExecution {
   if (action.kind === "manual" || action.kind === "commit") {
@@ -56,6 +65,26 @@ export function resolveAgentActionPermission(
     tool: requiredTool,
     message: `Agent profile ${agentProfile.name} does not allow ${requiredTool} actions`
   };
+}
+
+// 将命令分成自动允许, 需要确认和直接拒绝, 复合命令按最高风险处理
+export function resolveAgentCommandRisk(command: string): AgentCommandRisk {
+  const segments = splitShellCommandSegments(command);
+  let strongestRisk: AgentCommandRisk = { level: "allow" };
+
+  for (const segment of segments) {
+    const risk = resolveSingleCommandRisk(segment);
+
+    if (risk.level === "deny") {
+      return risk;
+    }
+
+    if (risk.level === "ask") {
+      strongestRisk = risk;
+    }
+  }
+
+  return strongestRisk;
 }
 
 // 找到队列里第一个还没完成的动作, 用于决定下一步提示
@@ -192,4 +221,70 @@ function getRequiredToolForAction(action: AgentAction): AgentToolPermission | nu
   }
 
   return null;
+}
+
+// 轻量拆分命令链, 先覆盖常见 PowerShell 和 POSIX 连接符
+function splitShellCommandSegments(command: string): string[] {
+  return command
+    .split(/(?:&&|\|\||;|\|)/u)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+// 判断单条命令风险, 默认未知命令走人工确认而不是直接执行
+function resolveSingleCommandRisk(command: string): AgentCommandRisk {
+  const normalized = command.trim().replace(/\s+/g, " ").toLowerCase();
+
+  if (!normalized) {
+    return { level: "allow" };
+  }
+
+  if (isDestructiveCommand(normalized)) {
+    return { level: "deny", reason: destructiveCommandReason };
+  }
+
+  if (isDependencyChangingCommand(normalized)) {
+    return { level: "ask", reason: dependencyChangeReason };
+  }
+
+  if (isGitMutatingCommand(normalized)) {
+    return { level: "ask", reason: gitMutationReason };
+  }
+
+  if (isAllowedCommand(normalized)) {
+    return { level: "allow" };
+  }
+
+  return { level: "ask", reason: unknownCommandReason };
+}
+
+// 识别会删除文件或重写历史的命令
+function isDestructiveCommand(command: string): boolean {
+  return (
+    /\b(remove-item|rm|del|erase|rmdir|rd)\b/u.test(command) ||
+    /^git\s+(?:reset\s+--hard|clean\b|push\b.*\s--force(?:-with-lease)?\b)/u.test(command)
+  );
+}
+
+// 识别会改变依赖或项目状态的包管理命令
+function isDependencyChangingCommand(command: string): boolean {
+  return /^(npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall|update|upgrade)\b/u.test(command);
+}
+
+// 识别需要用户明确确认的 Git 写操作
+function isGitMutatingCommand(command: string): boolean {
+  return /^git\s+(?:add|commit|push|pull|merge|rebase|checkout|switch|restore|tag|stash)\b/u.test(command);
+}
+
+// 允许常见本地只读和验证命令自动运行
+function isAllowedCommand(command: string): boolean {
+  return (
+    /^git\s+(?:status|diff|log|show|branch)(?:\s|$)/u.test(command) ||
+    /^npm\s+(?:test|t|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^pnpm\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^yarn\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^bun\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^(npx\s+)?(?:vitest|tsc|eslint)(?:\s|$)/u.test(command) ||
+    /^(rg|git\s+grep|get-childitem|dir|ls)(?:\s|$)/u.test(command)
+  );
 }

@@ -14,6 +14,7 @@ import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPan
 import { TaskComposer } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import {
+  resolveAgentCommandRisk,
   resolveAgentActionPermission,
   resolveAgentActionExecution,
   runAgentActionBatch,
@@ -1598,11 +1599,61 @@ export function App(): ReactElement {
         continueBatch: status !== "completed"
       };
     } else if (execution.kind === "run-command") {
+      const commandRisk = resolveAgentCommandRisk(execution.command);
+
+      if (commandRisk.level === "deny") {
+        return blockAgentCommandAction(
+          threadId,
+          action,
+          formatAgentCommandDenied(settings.language, commandRisk.reason),
+          "failed"
+        );
+      }
+
+      if (commandRisk.level === "ask" && !generalPreferences.fullAccess) {
+        return blockAgentCommandAction(
+          threadId,
+          action,
+          formatAgentCommandNeedsApproval(settings.language, execution.command, commandRisk.reason),
+          "pending"
+        );
+      }
+
       return await runThreadCommand(threadId, execution.command, action.id);
     }
 
     updateAgentActionStatus(threadId, action.id, "completed");
     return "completed";
+  }
+
+  // 阻止高风险命令继续执行, 并把原因写入线程时间线
+  function blockAgentCommandAction(
+    threadId: string,
+    action: AgentAction,
+    message: string,
+    status: Extract<AgentAction["status"], "failed" | "pending">
+  ): AgentAction["status"] {
+    const createdAt = new Date().toISOString();
+
+    updateAgentActionStatus(threadId, action.id, status);
+    setTaskNotice(message);
+    setThreads((current) =>
+      appendThreadEvents(
+        current,
+        threadId,
+        [
+          {
+            id: `${threadId}-command-blocked-${action.id}-${createdAt}`,
+            kind: status === "pending" ? "plan" : "error",
+            message,
+            createdAt
+          }
+        ],
+        "blocked"
+      )
+    );
+
+    return status;
   }
 
   // 批量执行动作队列, 每一步都通过线程事件回写进度
@@ -2313,6 +2364,28 @@ function formatAgentPermissionDenied(
   }
 
   return `Agent profile ${profileName} does not allow ${tool} actions`;
+}
+
+// 将命令风险提示转成用户可读文案
+function formatAgentCommandDenied(language: Language, reason: string): string {
+  if (language === "zh-CN") {
+    return `命令已被安全策略拒绝: ${reason}`;
+  }
+
+  return `Command denied by safety policy: ${reason}`;
+}
+
+// 将需要确认的命令提示转成用户可读文案
+function formatAgentCommandNeedsApproval(
+  language: Language,
+  command: string,
+  reason: string
+): string {
+  if (language === "zh-CN") {
+    return `命令需要完全访问权限确认: ${command} (${reason})`;
+  }
+
+  return `Command requires full access confirmation: ${command} (${reason})`;
 }
 
 // 用时间和随机数生成命令运行 id, 避免并发命令串流

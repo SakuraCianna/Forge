@@ -5,6 +5,7 @@ import type { AgentProfileContext } from "@shared/agentTypes";
 import {
   findNextPendingAgentAction,
   getRunnablePendingAgentActions,
+  resolveAgentCommandRisk,
   resolveAgentActionPermission,
   resolveAgentActionExecution,
   runAgentActionBatch
@@ -236,6 +237,34 @@ describe("agentActionExecutor", () => {
         createProfile({ enabledTools: ["command"] })
       )
     ).toEqual({ ok: true });
+  });
+
+  it("allows common local inspection and verification commands", () => {
+    expect(resolveAgentCommandRisk("git status --short")).toEqual({ level: "allow" });
+    expect(resolveAgentCommandRisk("npm test -- --reporter=dot")).toEqual({ level: "allow" });
+    expect(resolveAgentCommandRisk("npm run typecheck")).toEqual({ level: "allow" });
+  });
+
+  it("requires approval for mutating package and Git commands", () => {
+    expect(resolveAgentCommandRisk("npm install")).toEqual({
+      level: "ask",
+      reason: "command may change dependencies or project state"
+    });
+    expect(resolveAgentCommandRisk("git commit -m test")).toEqual({
+      level: "ask",
+      reason: "command may change Git history or remote state"
+    });
+  });
+
+  it("denies destructive commands and compound commands containing denied segments", () => {
+    expect(resolveAgentCommandRisk("git status; Remove-Item -Recurse src")).toEqual({
+      level: "deny",
+      reason: "command can delete files or rewrite history"
+    });
+    expect(resolveAgentCommandRisk("git reset --hard HEAD")).toEqual({
+      level: "deny",
+      reason: "command can delete files or rewrite history"
+    });
   });
 });
 
