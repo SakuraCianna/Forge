@@ -104,6 +104,41 @@ describe("ThreadWorkspace", () => {
     expect(screen.queryByText(/T13:01/)).not.toBeInTheDocument();
   });
 
+  it("renders follow-up user turns as minimal prompt bubbles", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        threads={[
+          {
+            ...thread,
+            prompt: "你好",
+            events: [
+              {
+                id: "answer-1",
+                kind: "result",
+                message: "你好, 我在",
+                createdAt: "2026-05-27T13:01:00.000Z"
+              },
+              {
+                id: "user-2",
+                kind: "user",
+                message: "继续刚才的话题",
+                createdAt: "2026-05-27T13:02:00.000Z"
+              }
+            ]
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    expect(screen.getByText("你好")).toBeInTheDocument();
+    expect(screen.getByText("继续刚才的话题")).toBeInTheDocument();
+    expect(screen.queryByText("Run transcript")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when there are no task threads", () => {
     render(
       <ThreadWorkspace

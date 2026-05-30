@@ -892,12 +892,56 @@ export function App(): ReactElement {
 
   function submitTask(prompt: string): void {
     if (isDirectAnswerPrompt(prompt)) {
+      const activeThread = selectedThreadId
+        ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
+        : null;
       const result = createThreadFromSettings(settings, prompt);
 
       if (!result.ok) {
         setTaskNotice(
           result.reason === "empty-prompt" ? t("composer.emptyPrompt") : t("composer.missingModel")
         );
+        return;
+      }
+
+      if (activeThread && activeThread.status !== "running") {
+        const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
+        const selectedProvider = selectedModel
+          ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
+          : null;
+        const createdAt = new Date().toISOString();
+
+        setTaskNotice(null);
+        cancelledThreadIdsRef.current.delete(activeThread.id);
+        setThreads((current) =>
+          appendThreadEvents(
+            current,
+            activeThread.id,
+            [
+              {
+                id: `${activeThread.id}-user-${createdAt}`,
+                kind: "user",
+                message: prompt,
+                createdAt
+              }
+            ],
+            "running"
+          )
+        );
+
+        if (!selectedModel || !selectedProvider) {
+          appendThreadError(activeThread.id, "未找到当前模型或提供商配置");
+          return;
+        }
+
+        void generateAskResponse({
+          threadId: activeThread.id,
+          prompt,
+          model: selectedModel,
+          provider: selectedProvider,
+          projectScan: activeThread.projectPath || currentProject ? projectScanResult : null,
+          conversation: createThreadConversation(activeThread)
+        });
         return;
       }
 
@@ -1149,19 +1193,22 @@ export function App(): ReactElement {
     prompt,
     model,
     provider,
-    projectScan
+    projectScan,
+    conversation
   }: {
     threadId: string;
     prompt: string;
     model: ForgeModel;
     provider: ForgeProvider;
     projectScan?: ProjectScanResult | null;
+    conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   }): Promise<void> {
     const request = {
       provider,
       model,
       intelligence: settings.intelligence,
       personalization: createPersonalizationPrompt(personalization),
+      conversation,
       projectScan,
       speed: settings.speed,
       prompt
@@ -2013,6 +2060,24 @@ function createAgentPlanResultEvents(
     message: `${index + 1}. ${getAgentStepKindLabel(step.kind)}: ${step.description}`,
     createdAt
   }));
+}
+
+function createThreadConversation(
+  thread: TaskThread
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const turns: Array<{ role: "user" | "assistant"; content: string }> = [
+    { role: "user", content: thread.prompt }
+  ];
+
+  for (const event of thread.events) {
+    if (event.kind === "user") {
+      turns.push({ role: "user", content: event.message });
+    } else if (event.kind === "result") {
+      turns.push({ role: "assistant", content: event.message });
+    }
+  }
+
+  return turns;
 }
 
 function getAgentStepKindLabel(kind: AgentPlanStep["kind"]): string {

@@ -43,6 +43,8 @@ const thinkingBudgetByLevel: Record<IntelligenceLevel, number> = {
   xhigh: 8192
 };
 
+const defaultOutputTokenLimit = 8192;
+
 export function buildTextGenerationRequest({
   provider,
   model,
@@ -174,6 +176,7 @@ function buildOpenAIRequest({
     model: model.modelName,
     instructions,
     input,
+    max_output_tokens: defaultOutputTokenLimit,
     store: false
   };
   const effort = resolveEffort(model, intelligence);
@@ -205,7 +208,7 @@ function buildAnthropicRequest({
     model: model.modelName,
     system: instructions,
     messages: [{ role: "user", content: input }],
-    max_tokens: 4096
+    max_tokens: defaultOutputTokenLimit
   };
 
   if (model.capabilities.reasoning.type === "budget") {
@@ -250,11 +253,15 @@ function buildGeminiRequest({
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: instructions }] },
-    contents: [{ role: "user", parts: [{ text: input }] }]
+    contents: [{ role: "user", parts: [{ text: input }] }],
+    generationConfig: {
+      maxOutputTokens: defaultOutputTokenLimit
+    }
   };
 
   if (model.capabilities.reasoning.type !== "none") {
     body.generationConfig = {
+      ...(body.generationConfig as Record<string, unknown>),
       thinkingConfig: {
         thinkingLevel: intelligence === "xhigh" ? "high" : intelligence
       }
@@ -293,7 +300,7 @@ function buildOpenAICompatibleRequest({
       { role: "system", content: instructions },
       { role: "user", content: input }
     ],
-    max_tokens: 4096,
+    max_tokens: defaultOutputTokenLimit,
     stream: false
   };
   const effort = resolveEffort(model, intelligence);

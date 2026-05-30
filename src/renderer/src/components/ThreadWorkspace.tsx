@@ -365,6 +365,17 @@ export function ThreadWorkspace({
   );
 
   function renderCompactEvent(event: TaskThreadEvent): ReactElement {
+    if (event.kind === "user") {
+      return (
+        <article
+          key={event.id}
+          className="ml-auto max-w-[72%] rounded-[18px] bg-[#f3f3f3] px-4 py-3 text-sm leading-6 text-[#202123]"
+        >
+          <p className="whitespace-pre-wrap">{event.message}</p>
+        </article>
+      );
+    }
+
     const result = event.commandResult;
     const runningCommand = event.commandRun;
     const failed = Boolean(result && !result.cancelled && (result.timedOut || result.exitCode !== 0));

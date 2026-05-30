@@ -65,6 +65,7 @@ describe("textGeneration", () => {
       instructions: "You are Forge",
       input: "Plan the change",
       store: false,
+      max_output_tokens: 8192,
       reasoning: { effort: "xhigh" }
     });
   });
@@ -202,6 +203,7 @@ describe("textGeneration", () => {
       systemInstruction: { parts: [{ text: "You are Forge" }] },
       contents: [{ role: "user", parts: [{ text: "Plan the change" }] }],
       generationConfig: {
+        maxOutputTokens: 8192,
         thinkingConfig: { thinkingLevel: "high" }
       }
     });
@@ -233,7 +235,7 @@ describe("textGeneration", () => {
         { role: "system", content: "You are Forge" },
         { role: "user", content: "Plan the change" }
       ],
-      max_tokens: 4096,
+      max_tokens: 8192,
       stream: false
     });
   });

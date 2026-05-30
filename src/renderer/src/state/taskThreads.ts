@@ -5,7 +5,7 @@ import { getEnabledModels } from "./modelSettings";
 
 export type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
 
-export type TaskThreadEventKind = "plan" | "command" | "file" | "error" | "result";
+export type TaskThreadEventKind = "user" | "plan" | "command" | "file" | "error" | "result";
 
 export type CommandRunResult = {
   runId?: string;

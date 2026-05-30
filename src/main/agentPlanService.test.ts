@@ -269,6 +269,38 @@ describe("agentPlanService", () => {
     });
   });
 
+  it("includes recent conversation turns in direct answers", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "Continuing the same thread."
+          })
+        )
+    );
+
+    await generateAgentAsk({
+      request: {
+        ...askRequest,
+        conversation: [
+          { role: "user", content: "你好" },
+          { role: "assistant", content: "你好, 我在" }
+        ],
+        prompt: "继续刚才的话题"
+      },
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    const [_url, init] = fetcher.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+
+    expect(body.input).toContain("Previous conversation");
+    expect(body.input).toContain("User: 你好");
+    expect(body.input).toContain("Assistant: 你好, 我在");
+    expect(body.input).toContain("User message:\n继续刚才的话题");
+  });
+
   it("throws a readable error when an ask endpoint returns HTML instead of JSON", async () => {
     const fetcher = vi.fn(async () => new Response("<!doctype html><html></html>"));
 
@@ -326,6 +358,69 @@ describe("agentPlanService", () => {
     expect(JSON.parse(String(init.body)).stream).toBe(true);
     expect(deltas).toEqual(["**项目", "概览**"]);
     expect(result.text).toBe("**项目概览**");
+  });
+
+  it("continues an OpenAI-compatible stream when the provider stops at the token limit", async () => {
+    const compatibleProvider: ForgeProvider = {
+      ...provider,
+      id: "deepseek",
+      kind: "openai-compatible",
+      baseUrl: "https://api.deepseek.com",
+      label: "DeepSeek"
+    };
+    const compatibleRequest: GenerateAgentAskRequest = {
+      ...askRequest,
+      provider: compatibleProvider,
+      model: {
+        ...model,
+        providerId: "deepseek",
+        id: "deepseek:deepseek-v4-flash",
+        modelName: "deepseek-v4-flash"
+      }
+    };
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          [
+            'data: {"choices":[{"delta":{"content":"OpenAI /"}}]}',
+            "",
+            'data: {"choices":[{"delta":{},"finish_reason":"length"}]}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n"),
+          { headers: { "content-type": "text/event-stream" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          [
+            'data: {"choices":[{"delta":{"content":" DeepSeek compatible providers."}}]}',
+            "",
+            'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+            "",
+            "data: [DONE]",
+            ""
+          ].join("\n"),
+          { headers: { "content-type": "text/event-stream" } }
+        )
+      );
+    const deltas: string[] = [];
+
+    const result = await generateAgentAskStream({
+      request: compatibleRequest,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher,
+      onDelta: (delta) => deltas.push(delta)
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetcher.mock.calls[0][1].body)).max_tokens).toBe(8192);
+    expect(JSON.parse(String(fetcher.mock.calls[1][1].body)).messages.at(-1).content).toContain(
+      "Continue exactly where the previous answer stopped"
+    );
+    expect(deltas).toEqual(["OpenAI /", " DeepSeek compatible providers."]);
+    expect(result.text).toBe("OpenAI / DeepSeek compatible providers.");
   });
 
   it("falls back to a single delta for providers without SSE ask streaming", async () => {

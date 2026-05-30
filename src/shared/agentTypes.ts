@@ -28,6 +28,7 @@ export type GenerateAgentAskRequest = {
   model: ForgeModel;
   intelligence: IntelligenceLevel;
   personalization?: string;
+  conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   projectScan?: ProjectScanResult | null;
   speed: SpeedMode;
   prompt: string;

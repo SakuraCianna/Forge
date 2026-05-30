@@ -47,10 +47,17 @@ type GenerateAgentAskStreamOptions = GenerateAgentAskOptions & {
   onDelta: (delta: string) => void;
 };
 
+type StreamReadResult = {
+  text: string;
+  truncated: boolean;
+};
+
 const maxFilesBySpeed = {
   fast: 24,
   balanced: 60
 } as const;
+
+const maxStreamContinuations = 1;
 
 export async function generateAgentPlan({
   request,
@@ -249,9 +256,49 @@ export async function generateAgentAskStream({
     };
   }
 
-  const text =
-    (await readEventStreamText(response.clone(), provider.kind, onDelta)) ||
-    readEventStreamTextFromBody(await response.text(), provider.kind, onDelta);
+  let streamResult = await readStreamingResponseText(response, provider.kind, onDelta);
+  let text = streamResult.text;
+
+  for (
+    let continuationIndex = 0;
+    streamResult.truncated && continuationIndex < maxStreamContinuations;
+    continuationIndex += 1
+  ) {
+    const continuationRequest = maybeEnableTextGenerationStreaming(
+      provider,
+      buildTextGenerationRequest({
+        provider,
+        model: request.model,
+        apiKey: apiKey ?? "",
+        instructions: createAskInstructions(request.personalization),
+        input: createAskContinuationInput(request, text),
+        intelligence: request.intelligence,
+        speed: request.speed
+      })
+    );
+    const continuationResponse = await fetcher(continuationRequest.url, continuationRequest.init);
+
+    if (!continuationResponse.ok) {
+      throw new Error(
+        `${provider.label} ask continuation failed: ${continuationResponse.status} ${continuationResponse.statusText}`
+      );
+    }
+
+    if (!isEventStreamResponse(continuationResponse)) {
+      const body = await readJsonBody(provider.label, continuationResponse);
+      const continuationText = extractGeneratedText(provider.kind, body).trim();
+
+      if (continuationText) {
+        text += continuationText;
+        onDelta(continuationText);
+      }
+
+      break;
+    }
+
+    streamResult = await readStreamingResponseText(continuationResponse, provider.kind, onDelta);
+    text += streamResult.text;
+  }
 
   if (!text.trim()) {
     throw new Error(`${provider.label} returned an empty ask response`);
@@ -354,11 +401,25 @@ function isEventStreamResponse(response: Response): boolean {
   return response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ?? false;
 }
 
+async function readStreamingResponseText(
+  response: Response,
+  providerKind: ForgeProvider["kind"],
+  onDelta: (delta: string) => void
+): Promise<StreamReadResult> {
+  const streamResult = await readEventStreamText(response.clone(), providerKind, onDelta);
+
+  if (streamResult.text || streamResult.truncated) {
+    return streamResult;
+  }
+
+  return readEventStreamTextFromBody(await response.text(), providerKind, onDelta);
+}
+
 async function readEventStreamText(
   response: Response,
   providerKind: ForgeProvider["kind"],
   onDelta: (delta: string) => void
-): Promise<string> {
+): Promise<StreamReadResult> {
   const reader = response.body?.getReader();
 
   if (!reader) {
@@ -368,6 +429,7 @@ async function readEventStreamText(
   const decoder = new TextDecoder();
   let buffer = "";
   let text = "";
+  let truncated = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -381,15 +443,19 @@ async function readEventStreamText(
     buffer = lines.pop() ?? "";
 
     for (const line of lines) {
-      const delta = readStreamEventDeltaLine(line, providerKind);
+      const event = readStreamEventDeltaLine(line, providerKind);
 
-      if (delta === "[DONE]") {
-        return text;
+      if (event.truncated) {
+        truncated = true;
       }
 
-      if (delta) {
-        text += delta;
-        onDelta(delta);
+      if (event.done) {
+        return { text, truncated };
+      }
+
+      if (event.delta) {
+        text += event.delta;
+        onDelta(event.delta);
       }
     }
   }
@@ -398,37 +464,47 @@ async function readEventStreamText(
   buffer += tail;
 
   if (buffer.trim()) {
-    const delta = readStreamEventDeltaLine(buffer, providerKind);
+    const event = readStreamEventDeltaLine(buffer, providerKind);
 
-    if (delta && delta !== "[DONE]") {
-      text += delta;
-      onDelta(delta);
+    if (event.truncated) {
+      truncated = true;
+    }
+
+    if (event.delta && !event.done) {
+      text += event.delta;
+      onDelta(event.delta);
     }
   }
 
-  return text;
+  return { text, truncated };
 }
 
 function readStreamEventDeltaLine(
   lineText: string,
   providerKind: ForgeProvider["kind"]
-): string | null {
+): { delta: string | null; done: boolean; truncated: boolean } {
   const line = lineText.trim();
 
   if (!line.startsWith("data:")) {
-    return null;
+    return { delta: null, done: false, truncated: false };
   }
 
   const data = line.slice(5).trim();
 
   if (data === "[DONE]") {
-    return "[DONE]";
+    return { delta: null, done: true, truncated: false };
   }
 
   try {
-    return extractStreamDelta(providerKind, JSON.parse(data) as unknown);
+    const event = JSON.parse(data) as unknown;
+
+    return {
+      delta: extractStreamDelta(providerKind, event),
+      done: false,
+      truncated: isStreamTruncated(providerKind, event)
+    };
   } catch {
-    return null;
+    return { delta: null, done: false, truncated: false };
   }
 }
 
@@ -436,23 +512,28 @@ function readEventStreamTextFromBody(
   body: string,
   providerKind: ForgeProvider["kind"],
   onDelta: (delta: string) => void
-): string {
+): StreamReadResult {
   let text = "";
+  let truncated = false;
 
   for (const line of body.split(/\r?\n/)) {
-    const delta = readStreamEventDeltaLine(line, providerKind);
+    const event = readStreamEventDeltaLine(line, providerKind);
 
-    if (delta === "[DONE]") {
-      return text;
+    if (event.truncated) {
+      truncated = true;
     }
 
-    if (delta) {
-      text += delta;
-      onDelta(delta);
+    if (event.done) {
+      return { text, truncated };
+    }
+
+    if (event.delta) {
+      text += event.delta;
+      onDelta(event.delta);
     }
   }
 
-  return text;
+  return { text, truncated };
 }
 
 function extractStreamDelta(
@@ -480,6 +561,43 @@ function extractStreamDelta(
   }
 
   return null;
+}
+
+function isStreamTruncated(
+  providerKind: ForgeProvider["kind"],
+  event: unknown
+): boolean {
+  if (!isRecord(event)) {
+    return false;
+  }
+
+  if (
+    providerKind === "openai" &&
+    isRecord(event.response) &&
+    isRecord(event.response.incomplete_details) &&
+    event.response.incomplete_details.reason === "max_output_tokens"
+  ) {
+    return true;
+  }
+
+  if (
+    providerKind === "anthropic" &&
+    event.type === "message_delta" &&
+    isRecord(event.delta) &&
+    event.delta.stop_reason === "max_tokens"
+  ) {
+    return true;
+  }
+
+  if (!Array.isArray(event.choices)) {
+    return false;
+  }
+
+  return event.choices.some(
+    (choice) =>
+      isRecord(choice) &&
+      (choice.finish_reason === "length" || choice.finish_reason === "max_tokens")
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -518,6 +636,19 @@ function createAskInput(request: GenerateAgentAskRequest): string {
     `Speed mode:\n${request.speed}`
   ];
 
+  if (request.conversation?.length) {
+    parts.push(
+      [
+        "Previous conversation:",
+        ...request.conversation.slice(-8).map((turn) => {
+          const label = turn.role === "assistant" ? "Assistant" : "User";
+
+          return `${label}: ${turn.content}`;
+        })
+      ].join("\n")
+    );
+  }
+
   if (request.projectScan) {
     const files = request.projectScan.files
       .slice(0, maxFilesBySpeed[request.speed])
@@ -537,6 +668,15 @@ function createAskInput(request: GenerateAgentAskRequest): string {
   }
 
   return parts.join("\n\n");
+}
+
+function createAskContinuationInput(request: GenerateAgentAskRequest, partialAnswer: string): string {
+  return [
+    createAskInput(request),
+    "The previous assistant answer stopped because the provider reached the output token limit.",
+    "Continue exactly where the previous answer stopped. Do not repeat existing content.",
+    `Partial assistant answer:\n${partialAnswer}`
+  ].join("\n\n");
 }
 
 function stripMarkdownCodeFence(value: string): string {
