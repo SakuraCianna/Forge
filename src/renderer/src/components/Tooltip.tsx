@@ -12,7 +12,7 @@ export function Tooltip({ children, label }: TooltipProps): ReactElement {
     <span className="forge-tooltip-shell relative inline-flex">
       {children}
       {/* 统一悬停提示, 避免浏览器原生 title 黑框破坏工作台观感 */}
-      <span role="tooltip" className="forge-tooltip">
+      <span role="tooltip" className="forge-tooltip forge-tooltip-readable">
         {label}
       </span>
     </span>

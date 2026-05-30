@@ -21,7 +21,6 @@ import {
   type GeneralPreferences
 } from "@/state/generalPreferences";
 import { ModelSelector } from "./ModelSelector";
-import { Tooltip } from "./Tooltip";
 
 type ComposerPermissionMode = "auto" | "full";
 
@@ -157,17 +156,16 @@ export function TaskComposer({
             onSelectIntelligence={onSelectIntelligence}
             onSelectSpeed={onSelectSpeed}
             onOpenSettings={onOpenSettings}
+            showTooltip={false}
           />
-          <Tooltip label={busy ? copy.stopResponse : t("composer.send")}>
-            <button
-              type="button"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white outline-none transition hover:bg-black active:scale-[0.97] focus:outline-none focus-visible:outline-none"
-              aria-label={busy ? copy.stopResponse : t("composer.send")}
-              onClick={handlePrimaryAction}
-            >
-              {busy ? <Square className="h-3.5 w-3.5 fill-current" /> : <ArrowUp className="h-4 w-4" />}
-            </button>
-          </Tooltip>
+          <button
+            type="button"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white outline-none transition hover:bg-black active:scale-[0.97] focus:outline-none focus-visible:outline-none"
+            aria-label={busy ? copy.stopResponse : t("composer.send")}
+            onClick={handlePrimaryAction}
+          >
+            {busy ? <Square className="h-3.5 w-3.5 fill-current" /> : <ArrowUp className="h-4 w-4" />}
+          </button>
         </div>
       </div>
     </div>
@@ -196,21 +194,19 @@ export function TaskComposer({
 
     return (
       <DropdownMenu.Root>
-        <Tooltip label={permissionOption.label}>
-          <DropdownMenu.Trigger asChild>
-            <button
-              type="button"
-              className={`inline-flex h-7 min-w-0 max-w-[190px] items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none ${
-                permissionMode === "full" ? "text-[#f05a1a]" : "text-[#565869]"
-              }`}
-              aria-label={permissionOption.label}
-            >
-              <permissionOption.Icon className="h-4 w-4 shrink-0" />
-              <span className="truncate">{permissionOption.label}</span>
-              <ChevronDown className="h-4 w-4 shrink-0" />
-            </button>
-          </DropdownMenu.Trigger>
-        </Tooltip>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            className={`inline-flex h-7 min-w-0 max-w-[190px] items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[10px] font-medium outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none ${
+              permissionMode === "full" ? "text-[#f05a1a]" : "text-[#565869]"
+            }`}
+            aria-label={permissionOption.label}
+          >
+            <permissionOption.Icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{permissionOption.label}</span>
+            <ChevronDown className="h-4 w-4 shrink-0" />
+          </button>
+        </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
             align="start"
@@ -244,17 +240,15 @@ export function TaskComposer({
   function renderAddMenu(): ReactElement {
     return (
       <DropdownMenu.Root>
-        <Tooltip label={copy.openAddMenu}>
-          <DropdownMenu.Trigger asChild>
-            <button
-              type="button"
-              aria-label={copy.openAddMenu}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </DropdownMenu.Trigger>
-        </Tooltip>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label={copy.openAddMenu}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
             align="start"

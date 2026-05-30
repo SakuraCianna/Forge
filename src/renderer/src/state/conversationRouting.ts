@@ -70,7 +70,7 @@ function hasAnswerIntent(prompt: string): boolean {
 
 // 识别修改, 运行, 修复等项目动作意图
 function hasProjectActionIntent(prompt: string): boolean {
-  return /(修复|实现|添加|新增|删除|移除|改成|修改|重构|运行|测试|构建|提交|保存|生成|接入|安装|升级)/u.test(
+  return /(修复|实现|添加|新增|删除|移除|改成|修改|重构|运行|测试|构建|提交|保存|生成|接入|安装|升级|写|写入|创建|新建|create|write|save|generate|add|implement|fix|run|test|build)/iu.test(
     prompt
   );
 }

@@ -73,6 +73,26 @@ describe("projectFileService", () => {
     ]);
   });
 
+  it("previews a new text file update from empty content", async () => {
+    await mkdir(testRoot, { recursive: true });
+
+    const preview = await previewProjectTextFileUpdate({
+      projectRoot: testRoot,
+      relativePath: "docs/usage.md",
+      nextContent: "# Usage\n"
+    });
+
+    expect(preview).toEqual({
+      relativePath: "docs/usage.md",
+      currentContent: "",
+      nextContent: "# Usage\n",
+      diff: [
+        { kind: "add", newLineNumber: 1, text: "# Usage" },
+        { kind: "add", newLineNumber: 2, text: "" }
+      ]
+    });
+  });
+
   it("writes a text file update inside the selected project", async () => {
     await mkdir(testRoot, { recursive: true });
     await writeFile(join(testRoot, "notes.txt"), "old", "utf8");
@@ -84,5 +104,19 @@ describe("projectFileService", () => {
     });
 
     await expect(readFile(join(testRoot, "notes.txt"), "utf8")).resolves.toBe("new");
+  });
+
+  it("creates a new text file and missing parent directories inside the selected project", async () => {
+    await mkdir(testRoot, { recursive: true });
+
+    await writeProjectTextFile({
+      projectRoot: testRoot,
+      relativePath: "docs/usage.md",
+      nextContent: "# Usage\n"
+    });
+
+    await expect(readFile(join(testRoot, "docs", "usage.md"), "utf8")).resolves.toBe(
+      "# Usage\n"
+    );
   });
 });

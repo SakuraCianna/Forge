@@ -1,6 +1,6 @@
 // 本文件说明: 在项目根目录内安全读取, 预览和写入文本文件
-import { readFile, realpath, stat, writeFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve, sep } from "node:path";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 import { createLineDiff } from "../shared/textDiff.js";
 
@@ -49,7 +49,7 @@ export async function previewProjectTextFileUpdate({
   nextContent,
   maxBytes = 256000
 }: ReadProjectTextFileOptions & { nextContent: string }): Promise<ProjectFileChangePreview> {
-  const currentFile = await readProjectTextFile({ projectRoot, relativePath, maxBytes });
+  const currentFile = await readProjectTextFileOrEmpty({ projectRoot, relativePath, maxBytes });
 
   return {
     relativePath: currentFile.relativePath,
@@ -74,15 +74,73 @@ export async function writeProjectTextFile({
     throw new Error("文件路径必须位于当前项目内。");
   }
 
-  const resolvedFilePath = await realpath(absoluteFilePath);
+  const existingResolvedFilePath = await resolveExistingFilePath(absoluteFilePath);
 
-  if (!isPathInside(resolvedFilePath, resolvedProjectRoot)) {
+  if (existingResolvedFilePath && !isPathInside(existingResolvedFilePath, resolvedProjectRoot)) {
     throw new Error("文件路径必须位于当前项目内。");
   }
 
-  await writeFile(resolvedFilePath, nextContent, "utf8");
+  await mkdir(dirname(absoluteFilePath), { recursive: true });
+  const resolvedParentPath = await realpath(dirname(absoluteFilePath));
+
+  if (!isPathInside(resolvedParentPath, resolvedProjectRoot)) {
+    throw new Error("文件路径必须位于当前项目内。");
+  }
+
+  await writeFile(existingResolvedFilePath ?? absoluteFilePath, nextContent, "utf8");
 
   return readProjectTextFile({ projectRoot, relativePath });
+}
+
+// 新文件预览使用空内容作为旧版本, 让 Agent 可以先生成再审查
+async function readProjectTextFileOrEmpty({
+  projectRoot,
+  relativePath,
+  maxBytes
+}: ReadProjectTextFileOptions): Promise<ProjectTextFile> {
+  try {
+    return await readProjectTextFile({ projectRoot, relativePath, maxBytes });
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error;
+    }
+
+    const resolvedProjectRoot = await realpath(projectRoot);
+    const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
+
+    if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
+      throw new Error("文件路径必须位于当前项目内。", { cause: error });
+    }
+
+    return {
+      relativePath: relativePath.replace(/\\/g, "/"),
+      content: "",
+      size: 0
+    };
+  }
+}
+
+// 读取已存在文件的真实路径, 新文件保持 null 继续走创建流程
+async function resolveExistingFilePath(absoluteFilePath: string): Promise<string | null> {
+  try {
+    return await realpath(absoluteFilePath);
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+// 只吞掉文件不存在错误, 路径越界和大小限制仍继续抛出
+function isFileNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 // 判断目标路径是否仍在项目根目录内

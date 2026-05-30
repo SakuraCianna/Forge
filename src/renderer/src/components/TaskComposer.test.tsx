@@ -183,7 +183,7 @@ describe("TaskComposer", () => {
     expect(screen.getByRole("button", { name: "Configure model" })).not.toHaveClass("border");
   });
 
-  it("removes browser focus outlines from the composer controls", () => {
+  it("removes browser focus outlines and hover tooltips from input-box controls", () => {
     const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
 
     const { container } = render(
@@ -202,9 +202,48 @@ describe("TaskComposer", () => {
     expect(screen.getByRole("button", { name: "Auto review" })).toHaveClass("outline-none");
     expect(screen.getByRole("button", { name: "Start" })).toHaveClass("outline-none");
     expect(container.querySelector("button[title]")).toBeNull();
-    expect(screen.getByRole("tooltip", { name: "Open add menu" })).toHaveClass("forge-tooltip");
-    expect(screen.getByRole("tooltip", { name: "Auto review" })).toHaveClass("forge-tooltip");
-    expect(screen.getByRole("tooltip", { name: "Start" })).toHaveClass("forge-tooltip");
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("uses smaller typography for the prompt, permission, and model controls", () => {
+    let settings = mergeFetchedModels(
+      { ...createDefaultModelSettings(), language: "en-US" as const },
+      [
+        {
+          id: "deepseek:deepseek-v4-flash",
+          providerId: "deepseek",
+          label: "deepseek-v4-flash",
+          modelName: "deepseek-v4-flash",
+          enabled: true,
+          capabilities: {
+            reasoning: { type: "none" },
+            toolCalling: "unknown",
+            streaming: "unknown",
+            vision: "unknown"
+          },
+          capabilitySource: "provider-api"
+        }
+      ]
+    );
+    settings = updateModelEnabled(settings, "deepseek:deepseek-v4-flash", true);
+
+    render(
+      <TaskComposer
+        settings={settings}
+        generalPreferences={{ ...createDefaultGeneralPreferences(), fullAccess: true }}
+        onUpdateGeneralPreferences={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectModel={vi.fn()}
+        onSelectSpeed={vi.fn()}
+        onSubmitTask={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("textbox")).toHaveClass("text-[10px]");
+    expect(screen.getByRole("button", { name: "Full access" })).toHaveClass("text-[10px]");
+    expect(screen.getByRole("button", { name: /deepseek-v4-flash/ })).toHaveClass(
+      "text-[10px]"
+    );
   });
 
   it("uses a shorter dock input and exposes a stop button while generating", async () => {

@@ -156,6 +156,37 @@ describe("agentPlanService", () => {
     ]);
   });
 
+  it("treats create or write file plan steps as editable file targets", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: [
+              "1. Create `说明书.md` with project usage instructions.",
+              "2. Write `docs/usage.md` with setup notes."
+            ].join("\n")
+          })
+        )
+    );
+
+    const result = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(result.steps).toEqual([
+      expect.objectContaining({
+        kind: "edit",
+        target: "说明书.md"
+      }),
+      expect.objectContaining({
+        kind: "edit",
+        target: "docs/usage.md"
+      })
+    ]);
+  });
+
   it("throws a readable error when the provider key is missing", async () => {
     await expect(
       generateAgentPlan({

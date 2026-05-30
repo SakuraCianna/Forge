@@ -1745,10 +1745,21 @@ export function App(): ReactElement {
     }
 
     try {
-      const file = await window.forge.files.readText({
-        projectRoot: currentProject.path,
-        relativePath
-      });
+      let file: ProjectTextFile;
+
+      try {
+        file = await window.forge.files.readText({
+          projectRoot: currentProject.path,
+          relativePath
+        });
+      } catch (error) {
+        if (!isMissingProjectFileError(error)) {
+          throw error;
+        }
+
+        file = createEmptyProjectTextFile(relativePath);
+      }
+
       setPreviewFile(file);
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
 
@@ -2581,6 +2592,22 @@ function isMissingProjectError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
 
   return /Project path does not exist|项目路径不存在|ENOENT|cannot find|no such file/i.test(message);
+}
+
+// Agent 新建文件时使用空快照进入 diff 审查流程
+function createEmptyProjectTextFile(relativePath: string): ProjectTextFile {
+  return {
+    relativePath: relativePath.replace(/\\/g, "/"),
+    content: "",
+    size: 0
+  };
+}
+
+// 识别单个目标文件不存在, 不把项目根目录缺失误判成新建文件
+function isMissingProjectFileError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return /\bENOENT\b|no such file or directory|cannot find the path|找不到指定/i.test(message);
 }
 
 // 把预览状态翻译成审查列表里的中文标签

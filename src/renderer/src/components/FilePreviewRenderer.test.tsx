@@ -18,6 +18,28 @@ describe("FilePreviewRenderer", () => {
     expect(screen.getByText("const")).toHaveClass("text-[#8b5cf6]");
   });
 
+  it("renders GitHub-style markdown tables as tables", () => {
+    render(
+      <FilePreviewRenderer
+        content={[
+          "`.env` 主要配置项:",
+          "",
+          "| 变量 | 说明 | 示例 |",
+          "| ---- | ---- | ---- |",
+          "| `LLM_PROVIDER` | AI 提供商 | `openai` |",
+          "| `OPENAI_API_KEY` | OpenAI API Key | `sk-xxx` |"
+        ].join("\n")}
+        mode="rendered"
+        path="README.md"
+      />
+    );
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "变量" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "AI 提供商" })).toBeInTheDocument();
+    expect(screen.queryByText("| ---- | ---- | ---- |")).not.toBeInTheDocument();
+  });
+
   it("highlights code tokens for source previews", () => {
     render(
       <FilePreviewRenderer

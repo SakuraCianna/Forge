@@ -3,6 +3,11 @@ import { describe, expect, it } from "vitest";
 import { isDirectAnswerPrompt, isPlainChatPrompt } from "./conversationRouting";
 
 describe("conversationRouting", () => {
+  it("routes file creation requests to the project workflow", () => {
+    expect(isDirectAnswerPrompt("你写一份说明书.md 介绍一下怎么使用这个项目")).toBe(false);
+    expect(isDirectAnswerPrompt("Create docs/usage.md for this project")).toBe(false);
+  });
+
   it("routes short greetings as direct chat instead of project planning", () => {
     expect(isPlainChatPrompt("你好")).toBe(true);
     expect(isPlainChatPrompt("hello")).toBe(true);

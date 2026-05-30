@@ -345,6 +345,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
     "Prefer a numbered list of concrete steps. Mention target files or commands in backticks when known.",
+    "If the user asks to create, write, or save a named file, include an edit step targeting that exact file path in backticks.",
     "Do not reveal hidden chain-of-thought. Show only actionable engineering steps.",
     "Prefer Chinese when the user writes Chinese. Keep file paths exact when mentioned.",
     "Do not claim you changed files or ran commands. This response is planning only."
@@ -869,7 +870,7 @@ function inferStepKind(description: string): AgentPlanStepKind {
     return "verify";
   }
 
-  if (/(modify|edit|change|implement|add|remove|refactor|update|修改|实现|新增|删除|重构|更新)/.test(normalized)) {
+  if (/(modify|edit|change|implement|add|remove|refactor|update|create|write|save|修改|实现|新增|删除|重构|更新|创建|新建|写|写入|保存)/.test(normalized)) {
     return "edit";
   }
 

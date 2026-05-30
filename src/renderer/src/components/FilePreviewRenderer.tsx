@@ -12,6 +12,7 @@ type MarkdownBlock =
   | { kind: "heading"; level: 1 | 2 | 3; text: string }
   | { kind: "paragraph"; text: string }
   | { kind: "list"; ordered: boolean; items: string[] }
+  | { kind: "table"; headers: string[]; rows: string[][] }
   | { kind: "blockquote"; text: string }
   | { kind: "code"; language: string; content: string }
   | { kind: "rule" };
@@ -106,6 +107,42 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number): ReactElement 
           <li key={`${index}-${itemIndex}`}>{renderInlineMarkdown(item)}</li>
         ))}
       </Tag>
+    );
+  }
+
+  if (block.kind === "table") {
+    return (
+      <div key={index} className="max-w-full overflow-x-auto rounded-[12px] border border-[#ececf1]">
+        <table className="w-full min-w-[560px] border-collapse text-left text-[13px] leading-6">
+          <thead className="bg-[#f7f7f8] text-[#202123]">
+            <tr>
+              {block.headers.map((header, headerIndex) => (
+                <th
+                  key={`${index}-header-${headerIndex}`}
+                  scope="col"
+                  className="border-b border-[#ececf1] px-3 py-2 font-semibold"
+                >
+                  {renderInlineMarkdown(header)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, rowIndex) => (
+              <tr key={`${index}-row-${rowIndex}`} className="border-t border-[#f3f3f6]">
+                {block.headers.map((_, cellIndex) => (
+                  <td
+                    key={`${index}-cell-${rowIndex}-${cellIndex}`}
+                    className="align-top px-3 py-2 text-[#343541]"
+                  >
+                    {renderInlineMarkdown(row[cellIndex] ?? "")}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     );
   }
 
@@ -260,6 +297,29 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
       continue;
     }
 
+    if (isMarkdownTableStart(lines, index)) {
+      const tableRows: string[][] = [splitMarkdownTableRow(trimmed)];
+      index += 2;
+
+      while (index < lines.length) {
+        const row = (lines[index] ?? "").trim();
+
+        if (!isMarkdownTableRow(row)) {
+          break;
+        }
+
+        tableRows.push(splitMarkdownTableRow(row));
+        index += 1;
+      }
+
+      blocks.push({
+        kind: "table",
+        headers: tableRows[0],
+        rows: tableRows.slice(1)
+      });
+      continue;
+    }
+
     if (trimmed.startsWith(">")) {
       blocks.push({ kind: "blockquote", text: trimmed.replace(/^>\s?/, "") });
       index += 1;
@@ -292,7 +352,7 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
     while (index < lines.length) {
       const nextLine = (lines[index] ?? "").trim();
 
-      if (!nextLine || /^(```|#{1,3}\s+|[-*]\s+|\d+[.)]\s+|>)/.test(nextLine)) {
+      if (!nextLine || /^(```|#{1,3}\s+|[-*]\s+|\d+[.)]\s+|>)/.test(nextLine) || isMarkdownTableStart(lines, index)) {
         break;
       }
 
@@ -304,6 +364,38 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
   }
 
   return blocks;
+}
+
+// 判断当前位置是否是 GitHub 风格表格的表头和分隔行
+function isMarkdownTableStart(lines: string[], index: number): boolean {
+  const header = (lines[index] ?? "").trim();
+  const separator = (lines[index + 1] ?? "").trim();
+
+  return isMarkdownTableRow(header) && isMarkdownTableSeparator(separator);
+}
+
+// 识别包含至少两列的管道表格行
+function isMarkdownTableRow(line: string): boolean {
+  return line.includes("|") && splitMarkdownTableRow(line).length >= 2;
+}
+
+// 识别 Markdown 表格分隔行, 支持 :--- 和 ---:
+function isMarkdownTableSeparator(line: string): boolean {
+  const cells = splitMarkdownTableRow(line);
+
+  return cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/u.test(cell.trim()));
+}
+
+// 拆分管道表格行并去掉首尾空单元格
+function splitMarkdownTableRow(line: string): string[] {
+  const cells = line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+
+  return cells;
 }
 
 // 渲染行内代码和强调文本, 其他内容保持原样

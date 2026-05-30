@@ -97,6 +97,26 @@ describe("ModelSelector", () => {
     expect(screen.getByRole("tooltip", { name: "配置模型" })).toHaveClass("forge-tooltip");
   });
 
+  it("can disable the trigger tooltip when rendered inside the composer", () => {
+    const settings = {
+      ...createDefaultModelSettings(),
+      currentModelId: null,
+      models: []
+    };
+
+    const { container } = render(
+      <ModelSelector
+        settings={settings}
+        showTooltip={false}
+        onSelectModel={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectSpeed={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector("[role='tooltip']")).toBeNull();
+  });
+
   it("shows only standard and fast speed choices when the model declares speed modes", async () => {
     const user = userEvent.setup();
     let settings = setLanguage(

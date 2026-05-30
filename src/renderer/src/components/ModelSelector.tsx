@@ -11,6 +11,7 @@ import { Tooltip } from "./Tooltip";
 
 type ModelSelectorProps = {
   settings: ModelSettings;
+  showTooltip?: boolean;
   onSelectModel: (modelId: string) => void;
   onSelectIntelligence: (level: IntelligenceLevel) => void;
   onSelectSpeed: (speed: SpeedMode) => void;
@@ -34,6 +35,7 @@ const speedLabels: Record<SpeedMode, MessageKey> = {
 // 渲染紧凑模型选择器, 输入框内和设置页都使用同一套选项数据
 export function ModelSelector({
   settings,
+  showTooltip = true,
   onSelectModel,
   onSelectIntelligence,
   onSelectSpeed,
@@ -63,41 +65,47 @@ export function ModelSelector({
     : t("selector.configureModel");
 
   if (!currentModel && onOpenSettings) {
-    return (
-      <Tooltip label={triggerLabel}>
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
-          aria-label={triggerLabel}
-        >
-          <span className="truncate">{triggerLabel}</span>
-        </button>
-      </Tooltip>
+    const settingsButton = (
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[10px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
+        aria-label={triggerLabel}
+      >
+        <span className="truncate">{triggerLabel}</span>
+      </button>
     );
+
+    return showTooltip ? <Tooltip label={triggerLabel}>{settingsButton}</Tooltip> : settingsButton;
   }
+
+  const triggerButton = (
+    <button
+      type="button"
+      className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[10px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
+      aria-label={triggerLabel}
+    >
+      {isFast ? <Zap className="h-3 w-3 text-[#202123]" /> : null}
+      {currentProvider ? (
+        <ProviderMark
+          provider={currentProvider}
+          fallbackLabel={currentProviderLabel}
+          size="xs"
+        />
+      ) : null}
+      <span className="truncate">{triggerLabel}</span>
+    </button>
+  );
 
   return (
     <DropdownMenu.Root>
-      <Tooltip label={triggerLabel}>
-        <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
-            className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
-            aria-label={triggerLabel}
-          >
-            {isFast ? <Zap className="h-3 w-3 text-[#202123]" /> : null}
-            {currentProvider ? (
-              <ProviderMark
-                provider={currentProvider}
-                fallbackLabel={currentProviderLabel}
-                size="xs"
-              />
-            ) : null}
-            <span className="truncate">{triggerLabel}</span>
-          </button>
-        </DropdownMenu.Trigger>
-      </Tooltip>
+      {showTooltip ? (
+        <Tooltip label={triggerLabel}>
+          <DropdownMenu.Trigger asChild>{triggerButton}</DropdownMenu.Trigger>
+        </Tooltip>
+      ) : (
+        <DropdownMenu.Trigger asChild>{triggerButton}</DropdownMenu.Trigger>
+      )}
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align="start"
