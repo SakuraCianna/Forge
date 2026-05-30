@@ -90,11 +90,11 @@ describe("TaskComposer", () => {
 
     expect(screen.getByRole("button", { name: "Add project" })).toBeInTheDocument();
     expect(screen.getByTestId("composer-left-controls")).toContainElement(
-      screen.getByRole("button", { name: "Default permission" })
+      screen.getByRole("button", { name: "Auto review" })
     );
   });
 
-  it("offers permission choices without exposing chat-only separation", async () => {
+  it("offers only auto review and full access permission choices", async () => {
     const user = userEvent.setup();
     const onUpdateGeneralPreferences = vi.fn();
     const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
@@ -113,7 +113,14 @@ describe("TaskComposer", () => {
     );
 
     expect(screen.queryByText(/Chat only/)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Default permission" }));
+    expect(screen.queryByRole("button", { name: "Default permission" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Auto review" }));
+
+    expect(screen.queryByRole("menuitem", { name: "Default permission" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Auto review" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Full access" })).toBeInTheDocument();
+
     await user.click(await screen.findByRole("menuitem", { name: /Full access/ }));
 
     expect(onUpdateGeneralPreferences).toHaveBeenCalledWith(

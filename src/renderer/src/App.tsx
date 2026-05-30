@@ -101,6 +101,15 @@ import {
   saveGeneralPreferences,
   type GeneralPreferences
 } from "@/state/generalPreferences";
+import {
+  deleteAgentMemory,
+  extractAgentMemoryCandidate,
+  loadAgentMemories,
+  saveAgentMemories,
+  selectRelevantAgentMemories,
+  upsertAgentMemory,
+  type AgentMemoryEntry
+} from "@/state/agentMemory";
 import type { TokenUsage, UsageEvent, UsageEventKind } from "@shared/usageTypes";
 
 type ProviderKeyStatus = {
@@ -238,6 +247,13 @@ export function App(): ReactElement {
 
     return loadGeneralPreferences(window.localStorage);
   });
+  const [agentMemories, setAgentMemories] = useState<AgentMemoryEntry[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    return loadAgentMemories(window.localStorage);
+  });
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
@@ -271,6 +287,10 @@ export function App(): ReactElement {
   useEffect(() => {
     saveGeneralPreferences(window.localStorage, generalPreferences);
   }, [generalPreferences]);
+
+  useEffect(() => {
+    saveAgentMemories(window.localStorage, agentMemories);
+  }, [agentMemories]);
 
   useEffect(() => {
     return window.forge.commands.onOutput((chunk) => {
@@ -836,6 +856,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: selectedThread.intelligence,
+        memories: selectRelevantAgentMemories(agentMemories, currentProject.path),
         personalization: createPersonalizationPrompt(personalization),
         speed: selectedThread.speed,
         taskPrompt: selectedThread.prompt,
@@ -926,6 +947,11 @@ export function App(): ReactElement {
             }
           )
         );
+        rememberPromptIfNeeded(
+          activeThread.id,
+          prompt,
+          getProjectScanForThread(activeThread)?.rootPath ?? activeThread.projectPath ?? null
+        );
 
         if (!selectedModel || !selectedProvider) {
           appendThreadError(activeThread.id, "未找到当前模型或提供商配置");
@@ -959,6 +985,7 @@ export function App(): ReactElement {
       cancelledThreadIdsRef.current.delete(result.thread.id);
       setThreads((current) => [askThread, ...current]);
       setSelectedThreadId(result.thread.id);
+      rememberPromptIfNeeded(result.thread.id, prompt, currentProject?.path ?? null);
 
       if (!selectedModel || !selectedProvider) {
         appendThreadError(result.thread.id, "未找到当前模型或提供商配置");
@@ -1108,6 +1135,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: settings.intelligence,
+        memories: selectRelevantAgentMemories(agentMemories, projectScan.rootPath),
         personalization: createPersonalizationPrompt(personalization),
         speed: settings.speed,
         taskPrompt,
@@ -1249,6 +1277,31 @@ export function App(): ReactElement {
     return null;
   }
 
+  function getThreadProjectPath(threadId: string): string | null {
+    const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+
+    return thread?.projectPath ?? currentProject?.path ?? null;
+  }
+
+  function rememberPromptIfNeeded(
+    threadId: string,
+    prompt: string,
+    projectPath: string | null
+  ): void {
+    const candidate = extractAgentMemoryCandidate(prompt, projectPath ?? getThreadProjectPath(threadId));
+
+    if (!candidate) {
+      return;
+    }
+
+    setAgentMemories((current) =>
+      upsertAgentMemory(current, {
+        ...candidate,
+        sourceThreadId: threadId
+      })
+    );
+  }
+
   async function generateAskResponse({
     threadId,
     prompt,
@@ -1268,6 +1321,7 @@ export function App(): ReactElement {
       provider,
       model,
       intelligence: settings.intelligence,
+      memories: selectRelevantAgentMemories(agentMemories, projectScan?.rootPath ?? null),
       personalization: createPersonalizationPrompt(personalization),
       conversation,
       projectScan,
@@ -1310,6 +1364,7 @@ export function App(): ReactElement {
         usage: answer.usage,
         createdAt: answer.createdAt
       });
+      rememberPromptIfNeeded(threadId, prompt, projectScan?.rootPath ?? null);
       setThreads((current) => {
         if (receivedDelta) {
           return appendThreadResultDelta(current, threadId, {
@@ -1969,9 +2024,14 @@ export function App(): ReactElement {
       <div className="h-full min-h-0 p-5">
         <SettingsPanel
           settings={settings}
+          agentMemories={agentMemories}
           generalPreferences={generalPreferences}
           keyStatuses={keyStatuses}
           archivedThreads={threads.filter((thread) => thread.archived)}
+          onClearAgentMemories={() => setAgentMemories([])}
+          onDeleteAgentMemory={(memoryId) =>
+            setAgentMemories((current) => deleteAgentMemory(current, memoryId))
+          }
           onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
           onFetchModels={(providerId, apiKey) => void fetchModels(providerId, apiKey)}
           onAddManualModel={(providerId, modelName, apiKey) =>

@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, Check, ChevronDown, Hand, Plus, ShieldAlert, ShieldCheck, Square } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, Plus, ShieldAlert, ShieldCheck, Square } from "lucide-react";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@/state/generalPreferences";
 import { ModelSelector } from "./ModelSelector";
 
-type ComposerPermissionMode = "default" | "auto" | "full";
+type ComposerPermissionMode = "auto" | "full";
 
 type TaskComposerProps = {
   busy?: boolean;
@@ -208,7 +208,7 @@ export function TaskComposer({
             sideOffset={8}
             className="forge-dropdown-content forge-dropdown-fast z-50 w-44 rounded-[12px] border border-[#d9d9e3] bg-white p-1 text-[12px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
-            {(["default", "auto", "full"] as const).map((mode) => {
+            {(["auto", "full"] as const).map((mode) => {
               const option = getPermissionOption(copy, mode);
 
               return (
@@ -235,7 +235,6 @@ export function TaskComposer({
 function getComposerCopy(language: ModelSettings["language"]): {
   addProject: string;
   autoReviewPermission: string;
-  defaultPermission: string;
   fullAccessPermission: string;
   stopResponse: string;
 } {
@@ -243,7 +242,6 @@ function getComposerCopy(language: ModelSettings["language"]): {
     return {
       addProject: "新增项目",
       autoReviewPermission: "自动审查",
-      defaultPermission: "默认权限",
       fullAccessPermission: "完全访问权限",
       stopResponse: "停止回答"
     };
@@ -252,7 +250,6 @@ function getComposerCopy(language: ModelSettings["language"]): {
   return {
     addProject: "Add project",
     autoReviewPermission: "Auto review",
-    defaultPermission: "Default permission",
     fullAccessPermission: "Full access",
     stopResponse: "Stop response"
   };
@@ -263,11 +260,7 @@ function getPermissionMode(preferences: GeneralPreferences): ComposerPermissionM
     return "full";
   }
 
-  if (preferences.autoReview) {
-    return "auto";
-  }
-
-  return "default";
+  return "auto";
 }
 
 function applyPermissionMode(
@@ -277,7 +270,7 @@ function applyPermissionMode(
   return {
     ...preferences,
     defaultPermission: true,
-    autoReview: mode === "auto" || mode === "full",
+    autoReview: true,
     fullAccess: mode === "full"
   };
 }
@@ -286,16 +279,12 @@ function getPermissionOption(
   copy: ReturnType<typeof getComposerCopy>,
   mode: ComposerPermissionMode
 ): {
-  Icon: typeof Hand;
+  Icon: typeof ShieldCheck;
   label: string;
 } {
   if (mode === "full") {
     return { Icon: ShieldAlert, label: copy.fullAccessPermission };
   }
 
-  if (mode === "auto") {
-    return { Icon: ShieldCheck, label: copy.autoReviewPermission };
-  }
-
-  return { Icon: Hand, label: copy.defaultPermission };
+  return { Icon: ShieldCheck, label: copy.autoReviewPermission };
 }

@@ -269,6 +269,39 @@ describe("agentPlanService", () => {
     });
   });
 
+  it("includes relevant agent memories in direct answer prompts", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "I will keep that in mind."
+          })
+        )
+    );
+
+    await generateAgentAsk({
+      request: {
+        ...askRequest,
+        memories: [
+          {
+            id: "memory-1",
+            scope: "project",
+            content: "This workspace prefers PowerShell-safe commands",
+            projectPath: "E:\\CodeHome\\Forge"
+          }
+        ]
+      },
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    const [_url, init] = fetcher.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+
+    expect(body.input).toContain("Relevant memories");
+    expect(body.input).toContain("This workspace prefers PowerShell-safe commands");
+  });
+
   it("includes recent conversation turns in direct answers", async () => {
     const fetcher = vi.fn(
       async () =>

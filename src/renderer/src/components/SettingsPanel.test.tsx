@@ -12,8 +12,11 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
   return render(
     <SettingsPanel
       settings={settings}
+      agentMemories={[]}
       generalPreferences={createDefaultGeneralPreferences()}
       keyStatuses={{}}
+      onClearAgentMemories={vi.fn()}
+      onDeleteAgentMemory={vi.fn()}
       onClearUsage={vi.fn()}
       onDeleteProviderKey={vi.fn()}
       onFetchModels={vi.fn()}
@@ -78,10 +81,11 @@ describe("SettingsPanel", () => {
       expect.objectContaining({ workMode: "daily" })
     );
 
-    await user.click(screen.getByRole("button", { name: "Auto review" }));
+    expect(screen.queryByRole("button", { name: "Default permission" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Full access" }));
 
     expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
-      expect.objectContaining({ autoReview: false })
+      expect.objectContaining({ autoReview: true, fullAccess: true })
     );
   });
 
@@ -111,6 +115,36 @@ describe("SettingsPanel", () => {
     expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
       expect.objectContaining({ backgroundImageDataUrl: null })
     );
+  });
+
+  it("shows local agent memories and lets users delete one", async () => {
+    const user = userEvent.setup();
+    const onDeleteAgentMemory = vi.fn();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+
+    renderSettingsPanel({
+      settings,
+      onDeleteAgentMemory,
+      agentMemories: [
+        {
+          id: "memory-1",
+          scope: "project",
+          projectPath: "E:\\CodeHome\\Forge",
+          content: "Use PowerShell-safe commands",
+          createdAt: "2026-05-30T10:00:00.000Z",
+          updatedAt: "2026-05-30T10:00:00.000Z"
+        }
+      ]
+    });
+
+    await user.click(screen.getByRole("button", { name: /Memory/ }));
+
+    expect(screen.getByText("Agent memory")).toBeInTheDocument();
+    expect(screen.getByText("Use PowerShell-safe commands")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete memory" }));
+
+    expect(onDeleteAgentMemory).toHaveBeenCalledWith("memory-1");
   });
 
   it("saves provider API keys without exposing them in settings state", async () => {

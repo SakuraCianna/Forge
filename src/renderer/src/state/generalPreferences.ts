@@ -37,10 +37,10 @@ export function updateGeneralPreferences(
   preferences: GeneralPreferences,
   patch: Partial<GeneralPreferences>
 ): GeneralPreferences {
-  return {
+  return normalizePermissionPreferences({
     ...preferences,
     ...patch
-  };
+  });
 }
 
 export function loadGeneralPreferences(storage: Storage): GeneralPreferences {
@@ -53,11 +53,20 @@ export function loadGeneralPreferences(storage: Storage): GeneralPreferences {
   try {
     const value = JSON.parse(rawValue) as unknown;
     return isPersistedGeneralPreferences(value)
-      ? { ...createDefaultGeneralPreferences(), ...value }
+      ? normalizePermissionPreferences({ ...createDefaultGeneralPreferences(), ...value })
       : createDefaultGeneralPreferences();
   } catch {
     return createDefaultGeneralPreferences();
   }
+}
+
+function normalizePermissionPreferences(preferences: GeneralPreferences): GeneralPreferences {
+  return {
+    ...preferences,
+    defaultPermission: true,
+    autoReview: true,
+    fullAccess: preferences.fullAccess
+  };
 }
 
 export function saveGeneralPreferences(storage: Storage, preferences: GeneralPreferences): void {

@@ -610,31 +610,45 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     .map((file) => `- ${file.relativePath} (${file.size} bytes)`)
     .join("\n");
   const truncatedNote = request.projectScan.truncated ? "\nProject scan was truncated." : "";
+  const memoryContext = formatAgentMemories(request.memories);
 
   return [
     `Task:\n${request.taskPrompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`,
+    memoryContext,
     `Project root:\n${request.projectScan.rootPath}`,
     `Indexed files:\n${files || "- No files indexed"}${truncatedNote}`
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): string {
+  const memoryContext = formatAgentMemories(request.memories);
+
   return [
     `Task:\n${request.taskPrompt}`,
     `Speed mode:\n${request.speed}`,
+    memoryContext,
     `File path:\n${request.relativePath}`,
     `Current file content:\n${request.currentContent}`
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function createAskInput(request: GenerateAgentAskRequest): string {
+  const memoryContext = formatAgentMemories(request.memories);
   const parts = [
     `User message:\n${request.prompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`
   ];
+
+  if (memoryContext) {
+    parts.push(memoryContext);
+  }
 
   if (request.conversation?.length) {
     parts.push(
@@ -668,6 +682,22 @@ function createAskInput(request: GenerateAgentAskRequest): string {
   }
 
   return parts.join("\n\n");
+}
+
+function formatAgentMemories(
+  memories: GenerateAgentAskRequest["memories"] | GenerateAgentPlanRequest["memories"]
+): string {
+  const lines =
+    memories
+      ?.map((memory) => memory.content.trim())
+      .filter(Boolean)
+      .slice(0, 8) ?? [];
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return ["Relevant memories:", ...lines.map((line) => `- ${line}`)].join("\n");
 }
 
 function createAskContinuationInput(request: GenerateAgentAskRequest, partialAnswer: string): string {

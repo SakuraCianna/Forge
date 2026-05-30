@@ -36,6 +36,10 @@ export function isDirectAnswerPrompt(prompt: string): boolean {
     return false;
   }
 
+  if (hasMemoryIntent(normalizedPrompt)) {
+    return true;
+  }
+
   if (hasProjectActionIntent(normalizedPrompt)) {
     return false;
   }
@@ -45,6 +49,10 @@ export function isDirectAnswerPrompt(prompt: string): boolean {
 
 function normalizePrompt(prompt: string): string {
   return prompt.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function hasMemoryIntent(prompt: string): boolean {
+  return /(?:请记住|记住|以后记得|帮我记住|remember|note that)[:：,\s]+/iu.test(prompt);
 }
 
 function hasAnswerIntent(prompt: string): boolean {

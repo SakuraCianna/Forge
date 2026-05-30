@@ -45,7 +45,6 @@ describe("generalPreferences", () => {
     const storage = createMemoryStorage();
     const preferences = updateGeneralPreferences(createDefaultGeneralPreferences(), {
       workMode: "daily",
-      autoReview: false,
       terminalShell: "cmd",
       backgroundImageDataUrl: "data:image/png;base64,abc",
       backgroundOpacity: 0.24
@@ -55,10 +54,28 @@ describe("generalPreferences", () => {
 
     expect(loadGeneralPreferences(storage)).toMatchObject({
       workMode: "daily",
-      autoReview: false,
+      autoReview: true,
       terminalShell: "cmd",
       backgroundImageDataUrl: "data:image/png;base64,abc",
       backgroundOpacity: 0.24
+    });
+  });
+
+  it("normalizes old permission data to auto review or full access only", () => {
+    expect(
+      loadGeneralPreferences(
+        createMemoryStorage(
+          JSON.stringify({
+            defaultPermission: false,
+            autoReview: false,
+            fullAccess: false
+          })
+        )
+      )
+    ).toMatchObject({
+      defaultPermission: true,
+      autoReview: true,
+      fullAccess: false
     });
   });
 

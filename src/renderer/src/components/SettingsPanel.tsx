@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Archive,
+  Brain,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -26,6 +27,7 @@ import type { UsageEvent } from "@shared/usageTypes";
 import { useI18n } from "@/i18n/useI18n";
 import type { PersonalizationSettings } from "@/state/personalization";
 import type { TaskThread } from "@/state/taskThreads";
+import type { AgentMemoryEntry } from "@/state/agentMemory";
 import type { GeneralPreferences } from "@/state/generalPreferences";
 import { getModelsForDisplay } from "@/state/modelSettings";
 import {
@@ -47,8 +49,11 @@ type SettingsPanelProps = {
   settings: ModelSettings;
   keyStatuses: Record<string, { hasKey: boolean; last4: string | null }>;
   archivedThreads: TaskThread[];
+  agentMemories: AgentMemoryEntry[];
   generalPreferences: GeneralPreferences;
+  onClearAgentMemories: () => void;
   onDeleteProviderKey: (providerId: string) => void;
+  onDeleteAgentMemory: (memoryId: string) => void;
   onFetchModels: (providerId: string, apiKey?: string) => void;
   onAddManualModel: (providerId: string, modelName: string, apiKey?: string) => void;
   onAddProvider: (label: string, baseUrl: string) => void;
@@ -70,7 +75,14 @@ type SettingsPanelProps = {
   usageRates: UsageRateMap;
 };
 
-type SettingsSection = "general" | "models" | "providers" | "usage" | "personalization" | "archived";
+type SettingsSection =
+  | "general"
+  | "models"
+  | "providers"
+  | "memory"
+  | "usage"
+  | "personalization"
+  | "archived";
 
 type SectionItem = {
   id: SettingsSection;
@@ -83,7 +95,10 @@ export function SettingsPanel({
   settings,
   keyStatuses,
   archivedThreads,
+  agentMemories,
   generalPreferences,
+  onClearAgentMemories,
+  onDeleteAgentMemory,
   onDeleteProviderKey,
   onFetchModels,
   onAddManualModel,
@@ -150,6 +165,17 @@ export function SettingsPanel({
       icon: KeyRound
     },
     {
+      id: "memory",
+      label: settings.language === "zh-CN" ? "记忆" : "Memory",
+      description:
+        agentMemories.length > 0
+          ? `${agentMemories.length}`
+          : settings.language === "zh-CN"
+            ? "暂无"
+            : "None",
+      icon: Brain
+    },
+    {
       id: "usage",
       label: t("settings.usage"),
       description: t("settings.usageMenuDescription"),
@@ -214,6 +240,7 @@ export function SettingsPanel({
             {activeSection === "general" ? renderGeneralSection() : null}
             {activeSection === "models" ? renderModelsSection() : null}
             {activeSection === "providers" ? renderProvidersSection() : null}
+            {activeSection === "memory" ? renderMemorySection() : null}
             {activeSection === "usage" ? renderUsageSection() : null}
             {activeSection === "personalization" ? renderPersonalizationSection() : null}
             {activeSection === "archived" ? renderArchivedSection() : null}
@@ -441,24 +468,15 @@ export function SettingsPanel({
             </div>
             <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
               <PreferenceToggle
-                label={copy.defaultPermission}
-                description={copy.defaultPermissionDescription}
-                enabled={generalPreferences.defaultPermission}
-                onToggle={() =>
-                  onUpdateGeneralPreferences({
-                    ...generalPreferences,
-                    defaultPermission: !generalPreferences.defaultPermission
-                  })
-                }
-              />
-              <PreferenceToggle
                 label={copy.autoReview}
                 description={copy.autoReviewDescription}
                 enabled={generalPreferences.autoReview}
                 onToggle={() =>
                   onUpdateGeneralPreferences({
                     ...generalPreferences,
-                    autoReview: !generalPreferences.autoReview
+                    defaultPermission: true,
+                    autoReview: true,
+                    fullAccess: false
                   })
                 }
               />
@@ -469,6 +487,8 @@ export function SettingsPanel({
                 onToggle={() =>
                   onUpdateGeneralPreferences({
                     ...generalPreferences,
+                    defaultPermission: true,
+                    autoReview: true,
                     fullAccess: !generalPreferences.fullAccess
                   })
                 }
@@ -911,6 +931,71 @@ export function SettingsPanel({
     );
   }
 
+  function renderMemorySection(): ReactElement {
+    const copy = getMemorySettingsCopy(settings.language);
+
+    return (
+      <SectionFrame>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-[#202123]">{copy.title}</h2>
+            <p className="mt-1 text-xs leading-5 text-[#6e6e80]">{copy.description}</p>
+          </div>
+          {agentMemories.length > 0 ? (
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-[12px] border border-[#f4c7c7] bg-white px-3 text-sm text-[#b42318] transition hover:bg-[#fff5f5]"
+              onClick={onClearAgentMemories}
+            >
+              <Trash2 className="h-4 w-4" />
+              {copy.clearAll}
+            </button>
+          ) : null}
+        </div>
+
+        {agentMemories.length > 0 ? (
+          <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+            {agentMemories.map((memory, index) => (
+              <div
+                key={memory.id}
+                className={`grid gap-3 px-4 py-3 text-sm md:grid-cols-[minmax(0,1fr)_auto] ${
+                  index === 0 ? "" : "border-t border-[#ececf1]"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-[#d9d9e3] bg-[#f7f7f8] px-2 py-0.5 text-[11px] font-medium text-[#565869]">
+                      {memory.scope === "project" ? copy.projectScope : copy.globalScope}
+                    </span>
+                    <span className="truncate text-xs text-[#8e8ea0]">
+                      {memory.projectPath ?? copy.allProjects}
+                    </span>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-[#202123]">
+                    {memory.content}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label={copy.deleteMemory}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[10px] px-2 text-xs text-[#b42318] transition hover:bg-[#fff5f5]"
+                  onClick={() => onDeleteAgentMemory(memory.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {copy.delete}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-[16px] border border-dashed border-[#d9d9e3] bg-white px-4 py-10 text-center text-sm leading-6 text-[#6e6e80]">
+            {copy.empty}
+          </div>
+        )}
+      </SectionFrame>
+    );
+  }
+
   function renderUsageSection(): ReactElement {
     return (
       <SectionFrame>
@@ -1182,6 +1267,12 @@ export function SettingsPanel({
 
     if (section === "usage") {
       return t("settings.usageDescription");
+    }
+
+    if (section === "memory") {
+      return settings.language === "zh-CN"
+        ? "管理会被注入 Agent 上下文的本地记忆"
+        : "Manage local memories injected into agent context";
     }
 
     if (section === "archived") {
@@ -1474,6 +1565,44 @@ function getUsageModelOutputLabel(language: Language): string {
   return language === "zh-CN" ? "模型输出单价 / 1M" : "Model output price / 1M";
 }
 
+function getMemorySettingsCopy(language: Language): {
+  allProjects: string;
+  clearAll: string;
+  delete: string;
+  deleteMemory: string;
+  description: string;
+  empty: string;
+  globalScope: string;
+  projectScope: string;
+  title: string;
+} {
+  if (language === "zh-CN") {
+    return {
+      allProjects: "全部项目",
+      clearAll: "清空记忆",
+      delete: "删除",
+      deleteMemory: "删除记忆",
+      description: "Forge 会把匹配当前项目的记忆注入到模型上下文",
+      empty: "还没有记忆, 在对话里说“记住...”即可保存到当前项目",
+      globalScope: "全局",
+      projectScope: "项目",
+      title: "Agent 记忆"
+    };
+  }
+
+  return {
+    allProjects: "All projects",
+    clearAll: "Clear memory",
+    delete: "Delete",
+    deleteMemory: "Delete memory",
+    description: "Forge injects memories that match the current project into model context",
+    empty: 'No memories yet. Say "remember..." in chat to save one for the current project',
+    globalScope: "Global",
+    projectScope: "Project",
+    title: "Agent memory"
+  };
+}
+
 function getGeneralSettingsCopy(language: Language): {
   agentRuntime: string;
   agentRuntimeDescription: string;
@@ -1491,8 +1620,6 @@ function getGeneralSettingsCopy(language: Language): {
   dailyModeDescription: string;
   defaultOpenTarget: string;
   defaultOpenTargetDescription: string;
-  defaultPermission: string;
-  defaultPermissionDescription: string;
   fullAccess: string;
   fullAccessDescription: string;
   languageDescription: string;
@@ -1528,8 +1655,6 @@ function getGeneralSettingsCopy(language: Language): {
       dailyModeDescription: "同样强大, 技术细节更少",
       defaultOpenTarget: "默认打开目标",
       defaultOpenTargetDescription: "默认打开文件和文件夹的位置",
-      defaultPermission: "默认权限",
-      defaultPermissionDescription: "允许 Forge 读取和编辑当前工作区中的文件",
       fullAccess: "完全访问权限",
       fullAccessDescription: "允许请求额外文件和联网命令, 生产操作仍需谨慎",
       languageDescription: "应用 UI 语言",
@@ -1567,8 +1692,6 @@ function getGeneralSettingsCopy(language: Language): {
     dailyModeDescription: "Same power, fewer implementation details",
     defaultOpenTarget: "Default open target",
     defaultOpenTargetDescription: "Default location for opening files and folders",
-    defaultPermission: "Default permission",
-    defaultPermissionDescription: "Allow Forge to read and edit files in the current workspace",
     fullAccess: "Full access",
     fullAccessDescription: "Allow extra file access and network commands when needed",
     languageDescription: "Application UI language",

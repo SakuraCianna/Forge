@@ -18,4 +18,8 @@ describe("conversationRouting", () => {
     expect(isDirectAnswerPrompt("修复登录页面的样式问题")).toBe(false);
     expect(isDirectAnswerPrompt("帮我添加设置页面并运行测试")).toBe(false);
   });
+  it("routes explicit memory requests to direct answers", () => {
+    expect(isDirectAnswerPrompt("remember that this project uses PowerShell")).toBe(true);
+    expect(isDirectAnswerPrompt("请记住: 这个项目使用 Electron")).toBe(true);
+  });
 });

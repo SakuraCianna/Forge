@@ -2,10 +2,18 @@ import type { ForgeModel, ForgeProvider, IntelligenceLevel, SpeedMode } from "./
 import type { ProjectScanResult } from "./projectTypes.js";
 import type { TokenUsage } from "./usageTypes.js";
 
+export type AgentMemoryContext = {
+  id: string;
+  scope: "global" | "project";
+  content: string;
+  projectPath?: string | null;
+};
+
 export type GenerateAgentPlanRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
   intelligence: IntelligenceLevel;
+  memories?: AgentMemoryContext[];
   personalization?: string;
   speed: SpeedMode;
   taskPrompt: string;
@@ -16,6 +24,7 @@ export type GenerateAgentFileChangeRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
   intelligence: IntelligenceLevel;
+  memories?: AgentMemoryContext[];
   personalization?: string;
   speed: SpeedMode;
   taskPrompt: string;
@@ -27,6 +36,7 @@ export type GenerateAgentAskRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
   intelligence: IntelligenceLevel;
+  memories?: AgentMemoryContext[];
   personalization?: string;
   conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   projectScan?: ProjectScanResult | null;
