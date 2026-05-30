@@ -15,7 +15,6 @@
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "release:check": "npm run lint && npm test && npm run build",
-    "package:dir": "npm run build && electron-builder --dir",
     "dist:win": "npm run build && electron-builder --win --x64 --publish never",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest --run",

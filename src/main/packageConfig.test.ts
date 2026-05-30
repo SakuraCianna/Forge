@@ -28,7 +28,7 @@ describe("package config", () => {
 
     expect(pkg.devDependencies?.["electron-builder"]).toBeDefined();
     expect(pkg.scripts?.["release:check"]).toBe("npm run lint && npm test && npm run build");
-    expect(pkg.scripts?.["package:dir"]).toBe("npm run build && electron-builder --dir");
+    expect(pkg.scripts?.["package:dir"]).toBeUndefined();
     expect(pkg.scripts?.["dist:win"]).toBe(
       "npm run build && electron-builder --win --x64 --publish never"
     );
