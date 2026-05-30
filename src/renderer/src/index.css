@@ -89,6 +89,36 @@ button:focus-visible,
   will-change: transform, opacity;
 }
 
+.forge-tooltip-shell > .forge-tooltip {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 80;
+  min-width: max-content;
+  max-width: 220px;
+  transform: translate3d(-50%, 4px, 0);
+  border: 1px solid #ececf1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.12);
+  color: #202123;
+  font-size: 12px;
+  line-height: 18px;
+  opacity: 0;
+  padding: 4px 8px;
+  transition:
+    opacity 90ms cubic-bezier(0.2, 0, 0, 1),
+    transform 90ms cubic-bezier(0.2, 0, 0, 1);
+  white-space: nowrap;
+}
+
+.forge-tooltip-shell:hover > .forge-tooltip,
+.forge-tooltip-shell:focus-within > .forge-tooltip {
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0);
+}
+
 .forge-provider-panel {
   overflow: hidden;
   border-top: 1px solid #ececf1;

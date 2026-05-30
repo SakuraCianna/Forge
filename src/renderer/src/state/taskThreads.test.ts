@@ -47,7 +47,7 @@ describe("taskThreads", () => {
     });
   });
 
-  it("creates a task thread with the selected model, intelligence, speed, and initial event", () => {
+  it("creates a task thread without synthetic planning events", () => {
     let settings = createDefaultModelSettings();
     settings = mergeFetchedModels(settings, [
       createFetchedModel("openai", "gpt-5.5", "GPT-5.5")
@@ -68,14 +68,7 @@ describe("taskThreads", () => {
         intelligence: "high",
         speed: "balanced",
         createdAt: "2026-05-27T13:00:00.000Z",
-        events: [
-          {
-            id: "thread-1-event-1",
-            kind: "plan",
-            message: "任务已创建, 等待 Forge 生成执行计划",
-            createdAt: "2026-05-27T13:00:00.000Z"
-          }
-        ]
+        events: []
       }
     });
   });
@@ -107,10 +100,7 @@ describe("taskThreads", () => {
     );
 
     expect(threads[0].status).toBe("running");
-    expect(threads[0].events.map((event) => event.message)).toEqual([
-      "任务已创建, 等待 Forge 生成执行计划",
-      "初始计划"
-    ]);
+    expect(threads[0].events.map((event) => event.message)).toEqual(["初始计划"]);
   });
 
   it("continues a conversation by appending the next user prompt to the same thread", () => {
@@ -304,7 +294,16 @@ describe("taskThreads", () => {
       throw new Error("Expected threads");
     }
 
-    let threads = toggleThreadPinned([first.thread, second.thread], "thread-2");
+    let threads = appendThreadEvents([first.thread, second.thread], "thread-1", [
+      {
+        id: "thread-1-result",
+        kind: "result",
+        message: "Finished",
+        createdAt: "2026-05-27T13:01:00.000Z"
+      }
+    ]);
+
+    threads = toggleThreadPinned(threads, "thread-2");
     expect(threads.find((thread) => thread.id === "thread-2")?.pinned).toBe(true);
 
     threads = archiveThread(threads, "thread-1");

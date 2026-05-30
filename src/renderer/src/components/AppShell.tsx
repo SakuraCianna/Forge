@@ -22,6 +22,7 @@ import { useI18n } from "@/i18n/useI18n";
 import type { ForgeProject } from "@/state/projects";
 import { getProjectDisplayName } from "@/state/projects";
 import type { TaskThread } from "@/state/taskThreads";
+import { Tooltip } from "./Tooltip";
 
 type AppShellProps = {
   language: Language;
@@ -201,7 +202,6 @@ export function AppShell({
         >
           <button
             type="button"
-            title={t("nav.newChat")}
             onClick={() => {
               if (onNewTask) {
                 onNewTask();
@@ -240,7 +240,6 @@ export function AppShell({
             <button
               type="button"
               onClick={() => onNavigate("settings")}
-              title={t("nav.settings")}
               className={`flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[12px] transition active:scale-[0.99] ${
                 activeView === "settings"
                   ? "bg-[#ececf1] text-[#202123]"
@@ -289,16 +288,17 @@ export function AppShell({
           <span className="text-[10px] text-[#8e8ea0]">{t("nav.projects")}</span>
           <span className="flex items-center gap-1">
             <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <button
-                  type="button"
-                  aria-label={copy.projectOptions}
-                  title={language === "zh-CN" ? "更多" : "More"}
-                  className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
-                >
-                  <Ellipsis className="h-4 w-4" />
-                </button>
-              </DropdownMenu.Trigger>
+              <Tooltip label={copy.projectOptions}>
+                <DropdownMenu.Trigger asChild>
+                  <button
+                    type="button"
+                    aria-label={copy.projectOptions}
+                    className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
+                  >
+                    <Ellipsis className="h-4 w-4" />
+                  </button>
+                </DropdownMenu.Trigger>
+              </Tooltip>
               <MenuContent align="end">
                 <MenuItem onSelect={() => onArchiveAllChats?.()}>
                   <Archive className="h-4 w-4" />
@@ -306,15 +306,16 @@ export function AppShell({
                 </MenuItem>
               </MenuContent>
             </DropdownMenu.Root>
-            <button
-              type="button"
-              aria-label={copy.addProject}
-              title={copy.addProject}
-              onClick={onPickProject}
-              className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
-            >
-              <FolderPlus className="h-4 w-4" />
-            </button>
+            <Tooltip label={copy.addProject}>
+              <button
+                type="button"
+                aria-label={copy.addProject}
+                onClick={onPickProject}
+                className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
+              >
+                <FolderPlus className="h-4 w-4" />
+              </button>
+            </Tooltip>
           </span>
         </div>
 
@@ -347,27 +348,29 @@ export function AppShell({
                   </span>
                 </button>
 
-                <button
-                  type="button"
-                  aria-label={copy.newProjectChat(displayName)}
-                  title={t("nav.newChat")}
-                  onClick={() => onNewProjectChat?.(project.path)}
-                  className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
-                >
-                  <SquarePen className="h-4 w-4" />
-                </button>
+                <Tooltip label={copy.newProjectChat(displayName)}>
+                  <button
+                    type="button"
+                    aria-label={copy.newProjectChat(displayName)}
+                    onClick={() => onNewProjectChat?.(project.path)}
+                    className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                  >
+                    <SquarePen className="h-4 w-4" />
+                  </button>
+                </Tooltip>
 
                 <DropdownMenu.Root>
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      type="button"
-                      aria-label={`${copy.projectOptions} ${displayName}`}
-                      title={language === "zh-CN" ? "更多" : "More"}
-                      className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
-                    >
-                      <Ellipsis className="h-4 w-4" />
-                    </button>
-                  </DropdownMenu.Trigger>
+                  <Tooltip label={`${copy.projectOptions} ${displayName}`}>
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`${copy.projectOptions} ${displayName}`}
+                        className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                      >
+                        <Ellipsis className="h-4 w-4" />
+                      </button>
+                    </DropdownMenu.Trigger>
+                  </Tooltip>
                   <MenuContent align="start" sideOffset={6}>
                     <MenuItem onSelect={() => onTogglePinProject?.(project.path)}>
                       <Pin className="h-4 w-4" />
@@ -475,16 +478,17 @@ export function AppShell({
                 {thread.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
               </button>
               <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button
-                    type="button"
-                    aria-label={copy.threadOptions(thread.title)}
-                    title={language === "zh-CN" ? "更多" : "More"}
-                    className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
-                  >
-                    <Ellipsis className="h-4 w-4" />
-                  </button>
-                </DropdownMenu.Trigger>
+                <Tooltip label={copy.threadOptions(thread.title)}>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      aria-label={copy.threadOptions(thread.title)}
+                      className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                    >
+                      <Ellipsis className="h-4 w-4" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                </Tooltip>
                 <MenuContent align="start" sideOffset={6}>
                   <MenuItem onSelect={() => onTogglePinThread?.(thread.id)}>
                     <Pin className="h-4 w-4" />

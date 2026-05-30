@@ -6,6 +6,7 @@ import type { MessageKey } from "@/i18n/messages";
 import { useI18n } from "@/i18n/useI18n";
 import { getEnabledModels } from "@/state/modelSettings";
 import { ProviderMark } from "./ProviderMark";
+import { Tooltip } from "./Tooltip";
 
 type ModelSelectorProps = {
   settings: ModelSettings;
@@ -61,38 +62,40 @@ export function ModelSelector({
 
   if (!currentModel && onOpenSettings) {
     return (
-      <button
-        type="button"
-        onClick={onOpenSettings}
-        className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
-        aria-label={triggerLabel}
-        title={triggerLabel}
-      >
-        <span className="truncate">{triggerLabel}</span>
-      </button>
+      <Tooltip label={triggerLabel}>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
+          aria-label={triggerLabel}
+        >
+          <span className="truncate">{triggerLabel}</span>
+        </button>
+      </Tooltip>
     );
   }
 
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
-          aria-label={triggerLabel}
-          title={triggerLabel}
-        >
-          {isFast ? <Zap className="h-3 w-3 text-[#202123]" /> : null}
-          {currentProvider ? (
-            <ProviderMark
-              provider={currentProvider}
-              fallbackLabel={currentProviderLabel}
-              size="xs"
-            />
-          ) : null}
-          <span className="truncate">{triggerLabel}</span>
-        </button>
-      </DropdownMenu.Trigger>
+      <Tooltip label={triggerLabel}>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
+            aria-label={triggerLabel}
+          >
+            {isFast ? <Zap className="h-3 w-3 text-[#202123]" /> : null}
+            {currentProvider ? (
+              <ProviderMark
+                provider={currentProvider}
+                fallbackLabel={currentProviderLabel}
+                size="xs"
+              />
+            ) : null}
+            <span className="truncate">{triggerLabel}</span>
+          </button>
+        </DropdownMenu.Trigger>
+      </Tooltip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align="start"

@@ -79,7 +79,7 @@ describe("ModelSelector", () => {
       models: []
     };
 
-    render(
+    const { container } = render(
       <ModelSelector
         settings={settings}
         onSelectModel={vi.fn()}
@@ -92,6 +92,8 @@ describe("ModelSelector", () => {
     await user.click(screen.getByRole("button", { name: "配置模型" }));
 
     expect(onOpenSettings).toHaveBeenCalledOnce();
+    expect(container.querySelector("button[title]")).toBeNull();
+    expect(screen.getByRole("tooltip", { name: "配置模型" })).toHaveClass("forge-tooltip");
   });
 
   it("shows only standard and fast speed choices when the model declares speed modes", async () => {

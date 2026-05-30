@@ -185,7 +185,7 @@ describe("TaskComposer", () => {
   it("removes browser focus outlines from the composer controls", () => {
     const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
 
-    render(
+    const { container } = render(
       <TaskComposer
         settings={settings}
         generalPreferences={{ ...createDefaultGeneralPreferences(), autoReview: true }}
@@ -200,6 +200,10 @@ describe("TaskComposer", () => {
     expect(screen.getByRole("button", { name: "Open add menu" })).toHaveClass("outline-none");
     expect(screen.getByRole("button", { name: "Auto review" })).toHaveClass("outline-none");
     expect(screen.getByRole("button", { name: "Start" })).toHaveClass("outline-none");
+    expect(container.querySelector("button[title]")).toBeNull();
+    expect(screen.getByRole("tooltip", { name: "Open add menu" })).toHaveClass("forge-tooltip");
+    expect(screen.getByRole("tooltip", { name: "Auto review" })).toHaveClass("forge-tooltip");
+    expect(screen.getByRole("tooltip", { name: "Start" })).toHaveClass("forge-tooltip");
   });
 
   it("uses a shorter dock input and exposes a stop button while generating", async () => {

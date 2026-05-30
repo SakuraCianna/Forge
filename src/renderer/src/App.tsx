@@ -23,7 +23,6 @@ import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
 } from "@/agent/failureFixPrompt";
-import { createInitialPlanEvents } from "@/agent/initialPlanner";
 import { useI18n } from "@/i18n/useI18n";
 import { removeFileChangePreview, upsertFileChangePreview } from "@/state/fileChanges";
 import {
@@ -1054,26 +1053,15 @@ export function App(): ReactElement {
         ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
         : null;
       const createdAt = new Date().toISOString();
-      const planEvents = createInitialPlanEvents({
-        threadId: activeProjectThread.id,
-        prompt,
-        speed: settings.speed,
-        projectScan: projectScanResult
-      });
 
       setTaskNotice(null);
       cancelledThreadIdsRef.current.delete(activeProjectThread.id);
       setThreads((current) =>
-        appendThreadEvents(
-          appendThreadFollowUpPrompt(current, activeProjectThread.id, {
-            id: `${activeProjectThread.id}-user-${createdAt}`,
-            message: prompt,
-            createdAt
-          }),
-          activeProjectThread.id,
-          planEvents,
-          "running"
-        )
+        appendThreadFollowUpPrompt(current, activeProjectThread.id, {
+          id: `${activeProjectThread.id}-user-${createdAt}`,
+          message: prompt,
+          createdAt
+        })
       );
 
       if (!selectedModel || !selectedProvider) {
@@ -1096,21 +1084,16 @@ export function App(): ReactElement {
     const projectThread: TaskThread = {
       ...result.thread,
       mode: "project",
+      // 项目任务直接等待真实模型输出, 不再插入静态计划模板
+      status: "running",
       projectPath: currentProject.path
     };
-    const planEvents = createInitialPlanEvents({
-      threadId: projectThread.id,
-      prompt: projectThread.prompt,
-      speed: projectThread.speed,
-      projectScan: projectScanResult
-    });
-    const plannedThread = appendThreadEvents([projectThread], projectThread.id, planEvents, "running")[0];
     const selectedModel = settings.models.find((model) => model.id === projectThread.modelId);
     const selectedProvider = selectedModel
       ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
       : null;
 
-    setThreads((current) => [plannedThread, ...current]);
+    setThreads((current) => [projectThread, ...current]);
     setSelectedThreadId(projectThread.id);
 
     if (!selectedModel || !selectedProvider) {
@@ -1140,18 +1123,6 @@ export function App(): ReactElement {
     provider: ForgeProvider;
     projectScan: ProjectScanResult;
   }): Promise<void> {
-    const startedAt = new Date().toISOString();
-    setThreads((current) =>
-      appendThreadEvents(current, threadId, [
-        {
-          id: `${threadId}-agent-plan-started-${startedAt}`,
-          kind: "plan",
-          message: "正在调用模型生成执行计划",
-          createdAt: startedAt
-        }
-      ])
-    );
-
     try {
       const plan = await window.forge.agent.generatePlan({
         provider,

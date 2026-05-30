@@ -13,14 +13,7 @@ const thread: TaskThread = {
   intelligence: "high",
   speed: "balanced",
   createdAt: "2026-05-27T13:00:00.000Z",
-  events: [
-    {
-      id: "event-1",
-      kind: "plan",
-      message: "任务已创建, 等待 Forge 生成执行计划",
-      createdAt: "2026-05-27T13:00:00.000Z"
-    }
-  ]
+  events: []
 };
 
 describe("ThreadWorkspace", () => {
@@ -36,25 +29,25 @@ describe("ThreadWorkspace", () => {
               {
                 id: "scaffold-created",
                 kind: "plan",
-                message: "Task created, waiting for Forge to generate an execution plan",
+                message: "Internal progress message",
                 createdAt: "2026-05-27T13:00:00.000Z"
               },
               {
                 id: "scaffold-indexed",
                 kind: "plan",
-                message: "Indexed 53 files, preparing the execution plan",
+                message: "Internal scan message",
                 createdAt: "2026-05-27T13:00:01.000Z"
               },
               {
                 id: "scaffold-mode",
                 kind: "plan",
-                message: "Balanced mode: balance code scan coverage and verification cost",
+                message: "Internal mode message",
                 createdAt: "2026-05-27T13:00:02.000Z"
               },
               {
                 id: "scaffold-calling",
                 kind: "plan",
-                message: "Calling the model to generate an execution plan",
+                message: "Internal model message",
                 createdAt: "2026-05-27T13:00:03.000Z"
               },
               {
@@ -74,10 +67,10 @@ describe("ThreadWorkspace", () => {
 
     const transcript = screen.getByRole("region", { name: "Conversation transcript" });
     expect(transcript).toHaveTextContent("A concise answer for the user.");
-    expect(transcript).not.toHaveTextContent("Task created");
-    expect(transcript).not.toHaveTextContent("Indexed 53 files");
-    expect(transcript).not.toHaveTextContent("Balanced mode");
-    expect(transcript).not.toHaveTextContent("Calling the model");
+    expect(transcript).not.toHaveTextContent("Internal progress message");
+    expect(transcript).not.toHaveTextContent("Internal scan message");
+    expect(transcript).not.toHaveTextContent("Internal mode message");
+    expect(transcript).not.toHaveTextContent("Internal model message");
     expect(screen.queryByText("Task threads")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Plan" })).not.toBeInTheDocument();
     expect(screen.queryByText("Steps")).not.toBeInTheDocument();
@@ -201,8 +194,12 @@ describe("ThreadWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Copy response" }));
 
     expect(writeText).toHaveBeenCalledWith("It builds a desktop coding workbench.");
-    expect(screen.getByRole("button", { name: "Like response" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Dislike response" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy response" })).not.toHaveAttribute("title");
+    expect(screen.getByRole("button", { name: "Like response" })).not.toHaveAttribute("title");
+    expect(screen.getByRole("button", { name: "Dislike response" })).not.toHaveAttribute("title");
+    expect(screen.getByRole("tooltip", { name: "Copy response" })).toHaveClass("forge-tooltip");
+    expect(screen.getByRole("tooltip", { name: "Like response" })).toHaveClass("forge-tooltip");
+    expect(screen.getByRole("tooltip", { name: "Dislike response" })).toHaveClass("forge-tooltip");
   });
 
   it("renders follow-up user turns as minimal prompt bubbles", () => {
@@ -275,7 +272,7 @@ describe("ThreadWorkspace", () => {
 
     expect(screen.getAllByText("实现设置持久化").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText(/openai:gpt-5.5/)).toBeInTheDocument();
-    expect(screen.getAllByText("任务已创建, 等待 Forge 生成执行计划").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Internal progress message")).not.toBeInTheDocument();
   });
 
   it("surfaces a running command in the thread header", () => {

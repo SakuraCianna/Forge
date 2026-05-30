@@ -76,7 +76,7 @@ describe("AppShell", () => {
     const onCreateProjectWorktree = vi.fn();
     const onTogglePinProject = vi.fn();
 
-    render(
+    const { container } = render(
       <AppShell
         language="en-US"
         activeView="workspace"
@@ -109,6 +109,9 @@ describe("AppShell", () => {
 
     await user.click(screen.getByRole("button", { name: "Add project" }));
     expect(onPickProject).toHaveBeenCalled();
+    expect(container.querySelector("button[title]")).toBeNull();
+    expect(screen.getByRole("tooltip", { name: "Add project" })).toHaveClass("forge-tooltip");
+    expect(screen.getByRole("tooltip", { name: "Project options" })).toHaveClass("forge-tooltip");
 
     await user.click(screen.getByRole("button", { name: "Project options" }));
     const archiveAllItem = screen.getByRole("menuitem", { name: "Archive all chats" });

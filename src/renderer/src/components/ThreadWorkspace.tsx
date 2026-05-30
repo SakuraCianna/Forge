@@ -29,6 +29,7 @@ import {
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
 import { MarkdownPreview } from "./FilePreviewRenderer";
+import { Tooltip } from "./Tooltip";
 
 type ThreadWorkspaceProps = {
   compact?: boolean;
@@ -511,16 +512,16 @@ export function ThreadWorkspace({
     return (
       <div className="mt-2 flex items-center gap-1 text-[#8e8ea0]">
         {actions.map((action) => (
-          <button
-            key={action.key}
-            type="button"
-            aria-label={action.label}
-            title={action.label}
-            onClick={action.onClick}
-            className="flex h-7 w-7 items-center justify-center rounded-[8px] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
-          >
-            <action.Icon className="h-4 w-4" />
-          </button>
+          <Tooltip key={action.key} label={action.label}>
+            <button
+              type="button"
+              aria-label={action.label}
+              onClick={action.onClick}
+              className="flex h-7 w-7 items-center justify-center rounded-[8px] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
+            >
+              <action.Icon className="h-4 w-4" />
+            </button>
+          </Tooltip>
         ))}
       </div>
     );

@@ -98,14 +98,8 @@ export function createThreadFromSettings(
       intelligence: settings.intelligence,
       speed: settings.speed,
       createdAt,
-      events: [
-        {
-          id: `${id}-event-1`,
-          kind: "plan",
-          message: "任务已创建, 等待 Forge 生成执行计划",
-          createdAt
-        }
-      ]
+      // 新线程不写入占位计划事件, 真实进度只来自模型输出和命令结果
+      events: []
     }
   };
 }
