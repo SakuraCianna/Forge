@@ -1,9 +1,11 @@
 // 本文件说明: 覆盖 Agent 动作队列的可执行判断和批量推进
 import { describe, expect, it, vi } from "vitest";
 import type { AgentAction } from "@shared/agentExecutionPlan";
+import type { AgentProfileContext } from "@shared/agentTypes";
 import {
   findNextPendingAgentAction,
   getRunnablePendingAgentActions,
+  resolveAgentActionPermission,
   resolveAgentActionExecution,
   runAgentActionBatch
 } from "./agentActionExecutor";
@@ -202,6 +204,39 @@ describe("agentActionExecutor", () => {
     });
     expect(runAction).toHaveBeenCalledTimes(2);
   });
+
+  it("denies file edits when the active agent profile lacks the edit tool", () => {
+    const result = resolveAgentActionPermission(
+      createAction({ kind: "edit-file", target: "src/App.tsx" }),
+      createProfile({ enabledTools: ["read", "command"] })
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      tool: "edit",
+      message: "Agent profile Review does not allow edit actions"
+    });
+  });
+
+  it("allows command actions only when the active agent profile exposes command access", () => {
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "run-command", command: "npm test" }),
+        createProfile({ enabledTools: ["read", "edit"] })
+      )
+    ).toEqual({
+      ok: false,
+      tool: "command",
+      message: "Agent profile Review does not allow command actions"
+    });
+
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "run-command", command: "npm test" }),
+        createProfile({ enabledTools: ["command"] })
+      )
+    ).toEqual({ ok: true });
+  });
 });
 
 // 构造测试动作并允许按用例覆盖关键字段
@@ -212,6 +247,20 @@ function createAction(overrides: Partial<AgentAction>): AgentAction {
     kind: "manual",
     label: "Review",
     status: "pending",
+    ...overrides
+  };
+}
+
+// 构造测试 Agent 配置并允许覆盖工具权限
+function createProfile(overrides: Partial<AgentProfileContext> = {}): AgentProfileContext {
+  return {
+    id: "review",
+    name: "Review",
+    description: "Read-only review",
+    instructions: "Review only",
+    permissionMode: "auto",
+    enabledTools: ["read"],
+    contextBudget: 12000,
     ...overrides
   };
 }

@@ -14,6 +14,7 @@ import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPan
 import { TaskComposer } from "@/components/TaskComposer";
 import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import {
+  resolveAgentActionPermission,
   resolveAgentActionExecution,
   runAgentActionBatch,
   type AgentActionRunOutcome
@@ -1534,6 +1535,32 @@ export function App(): ReactElement {
     threadId: string,
     action: AgentAction
   ): Promise<AgentActionRunOutcome> {
+    const activeAgentProfile = getActiveAgentProfileContext(agentProfiles);
+    const permission = resolveAgentActionPermission(action, activeAgentProfile);
+
+    if (!permission.ok) {
+      const createdAt = new Date().toISOString();
+      const message = formatAgentPermissionDenied(
+        settings.language,
+        activeAgentProfile.name,
+        permission.tool
+      );
+
+      updateAgentActionStatus(threadId, action.id, "failed");
+      setTaskNotice(message);
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-permission-denied-${action.id}-${createdAt}`,
+            kind: "error",
+            message,
+            createdAt
+          }
+        ], "blocked")
+      );
+      return "failed";
+    }
+
     const execution = resolveAgentActionExecution(action);
 
     if (execution.kind === "manual-gate") {
@@ -2266,6 +2293,26 @@ function formatAgentRuntimeError(
   }
 
   return `${kind === "file" ? "File action" : "Command execution"} failed: ${message}`;
+}
+
+// 将工具权限拒绝转成用户可读提示, 执行层仍使用稳定英文工具名
+function formatAgentPermissionDenied(
+  language: Language,
+  profileName: string,
+  tool: "read" | "edit" | "command" | "git"
+): string {
+  if (language === "zh-CN") {
+    const toolLabel = {
+      read: "读取文件",
+      edit: "编辑文件",
+      command: "运行命令",
+      git: "Git 操作"
+    }[tool];
+
+    return `Agent 配置 ${profileName} 未允许${toolLabel}`;
+  }
+
+  return `Agent profile ${profileName} does not allow ${tool} actions`;
 }
 
 // 用时间和随机数生成命令运行 id, 避免并发命令串流
