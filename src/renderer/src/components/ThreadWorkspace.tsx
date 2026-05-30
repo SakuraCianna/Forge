@@ -129,6 +129,10 @@ export function ThreadWorkspace({
     () => (selectedThread ? findLatestRunningCommandHistoryEntry(selectedThread.events) : null),
     [selectedThread]
   );
+  const visibleCompactEvents = useMemo(
+    () => (selectedThread ? selectedThread.events.filter((event) => !isCompactScaffoldEvent(event)) : []),
+    [selectedThread]
+  );
   const duration = useMemo(() => {
     if (!selectedThread) {
       return "0m";
@@ -229,8 +233,8 @@ export function ThreadWorkspace({
             aria-label="Conversation transcript"
             className="grid gap-5"
           >
-            {selectedThread.events.length > 0 ? (
-              selectedThread.events.map((event) => renderCompactEvent(event))
+            {visibleCompactEvents.length > 0 ? (
+              visibleCompactEvents.map((event) => renderCompactEvent(event))
             ) : (
               <div className="text-sm text-[#8e8ea0]">
                 {language === "zh-CN" ? "等待 Forge 开始执行" : "Waiting for Forge to start"}
@@ -2054,6 +2058,10 @@ function getCompactEventLabel(event: TaskThreadEvent, language: Language): strin
   }
 
   return language === "zh-CN" ? "执行记录" : "Run transcript";
+}
+
+function isCompactScaffoldEvent(event: TaskThreadEvent): boolean {
+  return event.kind === "plan" && !event.commandRun && !event.commandResult;
 }
 
 function findLatestUnfinishedCommandRun(events: TaskThreadEvent[]): string | null {

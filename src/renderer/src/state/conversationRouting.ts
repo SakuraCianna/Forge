@@ -58,7 +58,7 @@ function hasMemoryIntent(prompt: string): boolean {
 function hasAnswerIntent(prompt: string): boolean {
   return (
     /[?？]$/.test(prompt) ||
-    /(是什么|做了什么|有什么|有哪些|为什么|怎么回事|解释|介绍|概览|总结|说明|讲讲|看懂|分析一下)/u.test(prompt)
+    /(是什么|做了什么|能做什么|可以做什么|能够做什么|有什么|有哪些|为什么|怎么回事|解释|介绍|概览|总结|说明|讲讲|看懂|分析一下)/u.test(prompt)
   );
 }
 

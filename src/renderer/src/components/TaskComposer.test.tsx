@@ -115,6 +115,12 @@ describe("TaskComposer", () => {
     expect(screen.getByRole("menuitem", { name: "Add photos and files" })).toBeInTheDocument();
     expect(screen.getByText("Goal mode")).toBeInTheDocument();
     expect(screen.getByText("Plugin system")).toBeInTheDocument();
+    expect(screen.getByTestId("add-menu-goal-switch")).toContainElement(
+      screen.getByTestId("add-menu-goal-switch-knob")
+    );
+    expect(screen.getByTestId("add-menu-plugins-switch")).toContainElement(
+      screen.getByTestId("add-menu-plugins-switch-knob")
+    );
     expect(screen.queryByText("Plan mode")).not.toBeInTheDocument();
     expect(onPickProject).not.toHaveBeenCalled();
   });

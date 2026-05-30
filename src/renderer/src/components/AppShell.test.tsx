@@ -111,14 +111,18 @@ describe("AppShell", () => {
     expect(onPickProject).toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Project options" }));
-    await user.click(screen.getByRole("menuitem", { name: "Archive all chats" }));
+    const archiveAllItem = screen.getByRole("menuitem", { name: "Archive all chats" });
+    expect(archiveAllItem.closest("[role='menu']")).toHaveClass("text-[12px]");
+    await user.click(archiveAllItem);
     expect(onArchiveAllChats).toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "New chat in Forge" }));
     expect(onNewProjectChat).toHaveBeenCalledWith("E:\\CodeHome\\Forge");
 
     await user.click(screen.getByRole("button", { name: "Project options Forge" }));
-    await user.click(screen.getByRole("menuitem", { name: "Pin project" }));
+    const pinProjectItem = screen.getByRole("menuitem", { name: "Pin project" });
+    expect(pinProjectItem.closest("[role='menu']")).toHaveClass("text-[12px]");
+    await user.click(pinProjectItem);
     expect(onTogglePinProject).toHaveBeenCalledWith("E:\\CodeHome\\Forge");
 
     await user.click(screen.getByRole("button", { name: "Project options Forge" }));

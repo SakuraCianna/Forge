@@ -518,7 +518,7 @@ function MenuContent({
       <DropdownMenu.Content
         align={align}
         sideOffset={sideOffset}
-        className="forge-dropdown-content forge-dropdown-fast z-50 min-w-52 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-[10px] text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+        className="forge-dropdown-content forge-dropdown-fast z-50 min-w-52 rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-[12px] text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
       >
         {children}
       </DropdownMenu.Content>

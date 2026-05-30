@@ -14,6 +14,8 @@ describe("conversationRouting", () => {
   });
   it("routes project questions to direct model answers instead of task planning", () => {
     expect(isDirectAnswerPrompt("我这个项目里面做了什么")).toBe(true);
+    expect(isDirectAnswerPrompt("这个项目能做什么")).toBe(true);
+    expect(isDirectAnswerPrompt("这个项目做了什么")).toBe(true);
     expect(isDirectAnswerPrompt("解释 src/App.tsx 的状态流")).toBe(true);
     expect(isDirectAnswerPrompt("修复登录页面的样式问题")).toBe(false);
     expect(isDirectAnswerPrompt("帮我添加设置页面并运行测试")).toBe(false);

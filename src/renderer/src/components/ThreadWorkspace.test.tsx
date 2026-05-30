@@ -29,16 +29,55 @@ describe("ThreadWorkspace", () => {
       <ThreadWorkspace
         compact
         language="en-US"
-        threads={[thread]}
+        threads={[
+          {
+            ...thread,
+            events: [
+              {
+                id: "scaffold-created",
+                kind: "plan",
+                message: "Task created, waiting for Forge to generate an execution plan",
+                createdAt: "2026-05-27T13:00:00.000Z"
+              },
+              {
+                id: "scaffold-indexed",
+                kind: "plan",
+                message: "Indexed 53 files, preparing the execution plan",
+                createdAt: "2026-05-27T13:00:01.000Z"
+              },
+              {
+                id: "scaffold-mode",
+                kind: "plan",
+                message: "Balanced mode: balance code scan coverage and verification cost",
+                createdAt: "2026-05-27T13:00:02.000Z"
+              },
+              {
+                id: "scaffold-calling",
+                kind: "plan",
+                message: "Calling the model to generate an execution plan",
+                createdAt: "2026-05-27T13:00:03.000Z"
+              },
+              {
+                id: "answer",
+                kind: "result",
+                message: "A concise answer for the user.",
+                createdAt: "2026-05-27T13:00:04.000Z"
+              }
+            ]
+          }
+        ]}
         selectedThreadId="thread-1"
         onSelectThread={() => undefined}
         onPickProject={() => undefined}
       />
     );
 
-    expect(screen.getByRole("region", { name: "Conversation transcript" })).toHaveTextContent(
-      "任务已创建, 等待 Forge 生成执行计划"
-    );
+    const transcript = screen.getByRole("region", { name: "Conversation transcript" });
+    expect(transcript).toHaveTextContent("A concise answer for the user.");
+    expect(transcript).not.toHaveTextContent("Task created");
+    expect(transcript).not.toHaveTextContent("Indexed 53 files");
+    expect(transcript).not.toHaveTextContent("Balanced mode");
+    expect(transcript).not.toHaveTextContent("Calling the model");
     expect(screen.queryByText("Task threads")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Plan" })).not.toBeInTheDocument();
     expect(screen.queryByText("Steps")).not.toBeInTheDocument();

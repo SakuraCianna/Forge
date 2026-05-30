@@ -270,7 +270,16 @@ export function TaskComposer({
                   <item.Icon className="h-4 w-4 shrink-0" />
                   <span className="truncate">{item.label}</span>
                 </span>
-                <span className="h-5 w-9 rounded-full bg-[#e5e5ea]" />
+                <span
+                  aria-hidden="true"
+                  data-testid={`add-menu-${item.key}-switch`}
+                  className="flex h-5 w-9 items-center rounded-full bg-[#e5e5ea] px-0.5"
+                >
+                  <span
+                    data-testid={`add-menu-${item.key}-switch-knob`}
+                    className="h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                  />
+                </span>
               </DropdownMenu.Item>
             ))}
           </DropdownMenu.Content>
