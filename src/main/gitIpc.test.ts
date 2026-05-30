@@ -1,6 +1,10 @@
 // 本文件说明: 主进程 Git IPC 通道测试
 import { describe, expect, it, vi } from "vitest";
-import type { ProjectGitCommitResult, ProjectGitStatus } from "../shared/gitTypes.js";
+import type {
+  ProjectGitCommitResult,
+  ProjectGitStatus,
+  ProjectGitWorktreeResult
+} from "../shared/gitTypes.js";
 import { gitChannels, registerGitHandlers } from "./gitIpc.js";
 
 describe("gitIpc", () => {
@@ -16,10 +20,18 @@ describe("gitIpc", () => {
       output: "[main abc] update",
       status: { isRepo: true, changedFiles: [], changes: [], rawStatus: "" }
     };
+    const worktreeResult: ProjectGitWorktreeResult = {
+      path: "E:\\CodeHome\\Forge-feature",
+      branch: "forge/feature",
+      output: "Preparing worktree"
+    };
     const getStatus = vi.fn(async () => status);
     const commit = vi.fn(async () => commitResult);
+    const createWorktree = vi.fn(async () => worktreeResult);
 
-    registerGitHandlers(getStatus, commit, (channel, handler) => handlers.set(channel, handler));
+    registerGitHandlers(getStatus, commit, createWorktree, (channel, handler) =>
+      handlers.set(channel, handler)
+    );
 
     await expect(
       handlers.get(gitChannels.status)?.(null, { projectRoot: "E:\\CodeHome\\Forge" })
@@ -30,5 +42,11 @@ describe("gitIpc", () => {
         message: "update"
       })
     ).resolves.toEqual(commitResult);
+    await expect(
+      handlers.get(gitChannels.createWorktree)?.(null, {
+        projectRoot: "E:\\CodeHome\\Forge",
+        name: "feature"
+      })
+    ).resolves.toEqual(worktreeResult);
   });
 });

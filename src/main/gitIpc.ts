@@ -3,13 +3,19 @@ import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
   ProjectGitStatus,
-  ProjectGitStatusRequest
+  ProjectGitStatusRequest,
+  ProjectGitWorktreeRequest,
+  ProjectGitWorktreeResult
 } from "../shared/gitTypes.js";
 import { gitChannels } from "../shared/ipcChannels.js";
 
 type GitStatusReader = (request: ProjectGitStatusRequest) => Promise<ProjectGitStatus>;
 
 type GitCommitter = (request: ProjectGitCommitRequest) => Promise<ProjectGitCommitResult>;
+
+type GitWorktreeCreator = (
+  request: ProjectGitWorktreeRequest
+) => Promise<ProjectGitWorktreeResult>;
 
 type IpcHandler = (_event: unknown, ...args: unknown[]) => Promise<unknown>;
 
@@ -21,6 +27,7 @@ export { gitChannels };
 export function registerGitHandlers(
   getStatus: GitStatusReader,
   commit: GitCommitter,
+  createWorktree: GitWorktreeCreator,
   registerHandler: RegisterHandler
 ): void {
   registerHandler(gitChannels.status, async (_event, request) =>
@@ -28,6 +35,9 @@ export function registerGitHandlers(
   );
   registerHandler(gitChannels.commit, async (_event, request) =>
     commit(assertCommitRequest(request))
+  );
+  registerHandler(gitChannels.createWorktree, async (_event, request) =>
+    createWorktree(assertWorktreeRequest(request))
   );
 }
 
@@ -47,6 +57,15 @@ function assertCommitRequest(value: unknown): ProjectGitCommitRequest {
   }
 
   return { projectRoot: value.projectRoot, message: value.message };
+}
+
+// 校验工作树创建请求, 名称由服务层继续归一化成安全分支和目录片段
+function assertWorktreeRequest(value: unknown): ProjectGitWorktreeRequest {
+  if (!isRecord(value) || typeof value.projectRoot !== "string" || typeof value.name !== "string") {
+    throw new Error("无效的 Git 工作树请求。");
+  }
+
+  return { projectRoot: value.projectRoot, name: value.name };
 }
 
 // 将 unknown 转成可检查对象, 避免 IPC 参数直接信任

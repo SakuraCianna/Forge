@@ -1,12 +1,15 @@
 // 本文件说明: 封装项目 Git 状态读取和提交命令
 import { spawn } from "node:child_process";
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 import type {
   ProjectGitFileChange,
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
   ProjectGitStatus,
-  ProjectGitStatusRequest
+  ProjectGitStatusRequest,
+  ProjectGitWorktreeRequest,
+  ProjectGitWorktreeResult
 } from "../shared/gitTypes.js";
 
 type GitCommandResult = {
@@ -23,6 +26,11 @@ type ProjectGitStatusOptions = ProjectGitStatusRequest & {
 
 type ProjectGitCommitOptions = ProjectGitCommitRequest & {
   runGit?: GitRunner;
+};
+
+type ProjectGitWorktreeOptions = ProjectGitWorktreeRequest & {
+  runGit?: GitRunner;
+  pathExists?: (targetPath: string) => Promise<boolean>;
 };
 
 // 读取当前分支, 变更列表和 diff, 让源代码管理页一次拿齐状态
@@ -102,6 +110,54 @@ export async function commitProjectChanges({
   }
 }
 
+// 在当前仓库旁创建永久 Git worktree, 新目录会自动加入最近项目
+export async function createProjectWorktree({
+  projectRoot,
+  name,
+  runGit = runGitCommand,
+  pathExists = doesPathExist
+}: ProjectGitWorktreeOptions): Promise<ProjectGitWorktreeResult> {
+  const slug = normalizeWorktreeName(name);
+
+  if (!slug) {
+    throw new Error("请输入工作树名称。");
+  }
+
+  const cwd = await realpath(projectRoot);
+  const revParse = await runGit(["rev-parse", "--is-inside-work-tree"], cwd);
+
+  if (revParse.exitCode !== 0) {
+    throw new Error("当前项目不是 Git 仓库。");
+  }
+
+  const root = await runGit(["rev-parse", "--show-toplevel"], cwd);
+
+  if (root.exitCode !== 0) {
+    throw new Error(root.stderr.trim() || "无法读取 Git 仓库根目录。");
+  }
+
+  const repoRoot = root.stdout.trim() || cwd;
+  const repoName = basename(repoRoot) || "project";
+  const targetPath = resolve(dirname(repoRoot), `${repoName}-${slug}`);
+
+  if (await pathExists(targetPath)) {
+    throw new Error(`工作树目录已存在：${targetPath}`);
+  }
+
+  const branch = `forge/${slug}`;
+  const result = await runGit(["worktree", "add", "-b", branch, targetPath, "HEAD"], repoRoot);
+
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "git worktree 创建失败。");
+  }
+
+  return {
+    path: targetPath,
+    branch,
+    output: result.stdout.trim() || result.stderr.trim()
+  };
+}
+
 // 以项目目录作为 cwd 运行 Git, stdout 和 stderr 都保留下来
 function runGitCommand(args: string[], cwd: string): Promise<GitCommandResult> {
   return new Promise((resolve) => {
@@ -137,6 +193,26 @@ function runGitCommand(args: string[], cwd: string): Promise<GitCommandResult> {
       });
     });
   });
+}
+
+// 检查目标路径是否已存在, 避免覆盖用户已有目录
+async function doesPathExist(targetPath: string): Promise<boolean> {
+  try {
+    await stat(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 将用户输入转成安全的目录和分支片段
+function normalizeWorktreeName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
 }
 
 // 解析 porcelain 输出并补充每个文件的 diff 片段

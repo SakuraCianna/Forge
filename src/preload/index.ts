@@ -26,7 +26,9 @@ import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
   ProjectGitStatus,
-  ProjectGitStatusRequest
+  ProjectGitStatusRequest,
+  ProjectGitWorktreeRequest,
+  ProjectGitWorktreeResult
 } from "../shared/gitTypes.js";
 import type { ProjectScanResult } from "../shared/projectTypes.js";
 
@@ -108,7 +110,11 @@ contextBridge.exposeInMainWorld("forge", {
     status: (request: ProjectGitStatusRequest): Promise<ProjectGitStatus> =>
       ipcRenderer.invoke(gitChannels.status, request),
     commit: (request: ProjectGitCommitRequest): Promise<ProjectGitCommitResult> =>
-      ipcRenderer.invoke(gitChannels.commit, request)
+      ipcRenderer.invoke(gitChannels.commit, request),
+    createWorktree: (
+      request: ProjectGitWorktreeRequest
+    ): Promise<ProjectGitWorktreeResult> =>
+      ipcRenderer.invoke(gitChannels.createWorktree, request)
   },
   files: {
     readText: (request: {

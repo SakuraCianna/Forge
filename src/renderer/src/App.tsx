@@ -621,14 +621,44 @@ export function App(): ReactElement {
     setThreads((current) => archiveProjectThreads(current, projectPath));
   }
 
-  // 为当前项目创建永久工作树入口预留, 失败时用中文提示
-  function createProjectWorktree(projectPath: string): void {
-    selectProject(projectPath);
+  // 创建永久 Git worktree 并把新目录加入最近项目
+  async function createProjectWorktree(projectPath: string): Promise<void> {
+    const project = recentProjects.find((candidate) => candidate.path === projectPath);
+    const worktreeName = window.prompt(
+      settings.language === "zh-CN" ? "输入工作树名称" : "Enter worktree name",
+      "agent-worktree"
+    );
+
+    if (!worktreeName?.trim()) {
+      return;
+    }
+
     setTaskNotice(
       settings.language === "zh-CN"
-        ? "永久工作树入口已记录, 后续会接入 Git worktree 自动创建"
-        : "Permanent worktree action recorded. Git worktree creation will be wired next."
+        ? `正在为 ${project?.name ?? projectPath} 创建 Git worktree...`
+        : `Creating Git worktree for ${project?.name ?? projectPath}...`
     );
+
+    try {
+      const result = await window.forge.git.createWorktree({
+        projectRoot: projectPath,
+        name: worktreeName
+      });
+      const nextProject = createProjectFromPath(result.path);
+
+      setMissingProjectPath(null);
+      setCurrentProject(nextProject);
+      setRecentProjects((current) => addRecentProject(current, nextProject));
+      setSelectedThreadId(null);
+      setActiveView("workspace");
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? `已创建 Git worktree：${result.path}（分支 ${result.branch}）`
+          : `Created Git worktree: ${result.path} (branch ${result.branch})`
+      );
+    } catch (error) {
+      setTaskNotice(formatRuntimeError(settings.language, error));
+    }
   }
 
   // 重命名最近项目展示名, 原始路径保持不变

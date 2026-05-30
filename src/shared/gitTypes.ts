@@ -25,3 +25,14 @@ export type ProjectGitCommitResult = {
   output: string;
   status: ProjectGitStatus;
 };
+
+export type ProjectGitWorktreeRequest = {
+  projectRoot: string;
+  name: string;
+};
+
+export type ProjectGitWorktreeResult = {
+  path: string;
+  branch: string;
+  output: string;
+};

@@ -31,7 +31,8 @@ export const commandChannels = {
 
 export const gitChannels = {
   status: "forge:git:status",
-  commit: "forge:git:commit"
+  commit: "forge:git:commit",
+  createWorktree: "forge:git:create-worktree"
 } as const;
 
 export const fileChannels = {

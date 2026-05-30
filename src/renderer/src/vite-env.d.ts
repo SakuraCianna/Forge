@@ -17,7 +17,9 @@ import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
   ProjectGitStatus,
-  ProjectGitStatusRequest
+  ProjectGitStatusRequest,
+  ProjectGitWorktreeRequest,
+  ProjectGitWorktreeResult
 } from "@shared/gitTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 
@@ -80,6 +82,9 @@ declare global {
       git: {
         status: (request: ProjectGitStatusRequest) => Promise<ProjectGitStatus>;
         commit: (request: ProjectGitCommitRequest) => Promise<ProjectGitCommitResult>;
+        createWorktree: (
+          request: ProjectGitWorktreeRequest
+        ) => Promise<ProjectGitWorktreeResult>;
       };
       files: {
         readText: (request: {
