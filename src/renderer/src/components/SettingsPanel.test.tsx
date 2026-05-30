@@ -167,6 +167,12 @@ describe("SettingsPanel", () => {
 
     expect(screen.getAllByText("Build agent").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review agent").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("agent-profile-workbench")).toHaveClass(
+      "lg:grid-cols-[260px_minmax(0,1fr)]"
+    );
+    expect(screen.getByTestId("agent-profile-list")).toHaveClass("self-start", "content-start");
+    expect(screen.getByTestId("agent-profile-editor")).toHaveClass("bg-[#fbfbfc]");
+    expect(screen.getByTestId("agent-tool-grid")).toHaveClass("sm:grid-cols-4");
 
     await user.click(screen.getByRole("button", { name: "Select Review agent" }));
     expect(onSelectAgentProfile).toHaveBeenCalledWith("review");

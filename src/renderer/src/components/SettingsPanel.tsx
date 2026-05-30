@@ -960,30 +960,55 @@ export function SettingsPanel({
         </div>
 
         {selectedProfile ? (
-          <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-            <div className="grid gap-1">
+          <div
+            data-testid="agent-profile-workbench"
+            className="grid items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]"
+          >
+            {/* 左侧 Agent 列表按内容高度排列, 避免被右侧表单拉伸 */}
+            <div
+              data-testid="agent-profile-list"
+              className="grid self-start content-start gap-2 rounded-[18px] border border-[#ececf1] bg-[#f7f7f8] p-2"
+            >
               {agentProfiles.map((profile) => (
                 <button
                   key={profile.id}
                   type="button"
                   aria-label={copy.selectProfile(profile.name)}
                   onClick={() => onSelectAgentProfile(profile.id)}
-                  className={`rounded-[12px] px-3 py-2.5 text-left transition active:scale-[0.99] ${
+                  className={`grid min-h-[76px] grid-cols-[minmax(0,1fr)_18px] items-center gap-2 rounded-[14px] border px-3 py-3 text-left transition active:scale-[0.99] ${
                     profile.active
-                      ? "bg-[#ececf1] text-[#202123]"
-                      : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+                      ? "border-[#d9d9e3] bg-white text-[#202123] shadow-[0_8px_22px_rgba(0,0,0,0.06)]"
+                      : "border-transparent text-[#565869] hover:bg-white hover:text-[#202123]"
                   }`}
                 >
-                  <span className="block truncate text-sm font-semibold">{profile.name}</span>
-                  <span className="mt-0.5 block truncate text-xs text-[#8e8ea0]">
-                    {profile.description}
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">{profile.name}</span>
+                    <span className="mt-1 block truncate text-xs leading-5 text-[#8e8ea0]">
+                      {profile.description}
+                    </span>
                   </span>
+                  {profile.active ? <Check className="h-4 w-4 text-[#202123]" /> : <span />}
                 </button>
               ))}
             </div>
 
-            <div className="rounded-[16px] border border-[#ececf1] bg-white p-4">
-              <div className="grid gap-3">
+            <div
+              data-testid="agent-profile-editor"
+              className="overflow-hidden rounded-[20px] border border-[#ececf1] bg-[#fbfbfc] shadow-[0_18px_54px_rgba(0,0,0,0.05)]"
+            >
+              <div className="border-b border-[#ececf1] bg-white px-5 py-4">
+                <span className="text-[11px] font-semibold uppercase tracking-normal text-[#8e8ea0]">
+                  {copy.title}
+                </span>
+                <h3 className="mt-1 text-base font-semibold text-[#202123]">
+                  {selectedProfile.name}
+                </h3>
+                <p className="mt-1 text-xs leading-5 text-[#6e6e80]">
+                  {selectedProfile.description}
+                </p>
+              </div>
+
+              <div className="grid gap-4 p-5">
                 <label className="grid gap-1 text-xs text-[#6e6e80]">
                   {copy.name}
                   <input
@@ -991,7 +1016,7 @@ export function SettingsPanel({
                     onChange={(event) =>
                       onUpdateAgentProfile(selectedProfile.id, { name: event.currentTarget.value })
                     }
-                    className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                    className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
                   />
                 </label>
                 <label className="grid gap-1 text-xs text-[#6e6e80]">
@@ -1003,7 +1028,7 @@ export function SettingsPanel({
                         description: event.currentTarget.value
                       })
                     }
-                    className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                    className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
                   />
                 </label>
                 <label className="grid gap-1 text-xs text-[#6e6e80]">
@@ -1016,12 +1041,20 @@ export function SettingsPanel({
                         systemPrompt: event.currentTarget.value
                       })
                     }
-                    className="min-h-24 resize-none rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-2 text-sm leading-5 text-[#202123] outline-none transition focus:border-[#202123]"
+                    className="min-h-32 resize-none rounded-[14px] border border-[#d9d9e3] bg-white px-3 py-2.5 text-sm leading-5 text-[#202123] outline-none transition focus:border-[#202123]"
                   />
                 </label>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                  <SettingRow label={copy.permissionMode} description={copy.permissionDescription}>
+                  <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-[#202123]">
+                        {copy.permissionMode}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
+                        {copy.permissionDescription}
+                      </span>
+                    </span>
                     <InlineSelectMenu<AgentProfile["permissionMode"]>
                       ariaLabel={copy.permissionMode}
                       value={selectedProfile.permissionMode}
@@ -1033,9 +1066,16 @@ export function SettingsPanel({
                         onUpdateAgentProfile(selectedProfile.id, { permissionMode: value })
                       }
                     />
-                  </SettingRow>
-                  <label className="grid gap-1 text-xs text-[#6e6e80]">
-                    {copy.contextBudget}
+                  </div>
+                  <label className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4 text-xs text-[#6e6e80]">
+                    <span>
+                      <span className="block text-sm font-medium text-[#202123]">
+                        {copy.contextBudget}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
+                        2000 - 64000
+                      </span>
+                    </span>
                     <input
                       type="number"
                       min="2000"
@@ -1047,18 +1087,32 @@ export function SettingsPanel({
                           contextBudget: Number(event.currentTarget.value) || selectedProfile.contextBudget
                         })
                       }
-                      className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                      className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
                     />
                   </label>
                 </div>
 
-                <div className="grid gap-2 rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-3">
-                  <span className="text-xs font-semibold text-[#565869]">{copy.tools}</span>
-                  <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-3 rounded-[18px] border border-[#ececf1] bg-white p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-[#202123]">{copy.tools}</span>
+                    <span className="text-xs text-[#8e8ea0]">
+                      {
+                        (["read", "edit", "command", "git"] as const).filter(
+                          (tool) => selectedProfile.tools[tool]
+                        ).length
+                      }
+                      /4
+                    </span>
+                  </div>
+                  <div data-testid="agent-tool-grid" className="grid gap-2 sm:grid-cols-4">
                     {(["read", "edit", "command", "git"] as const).map((tool) => (
                       <label
                         key={tool}
-                        className="flex h-8 items-center gap-2 rounded-[10px] bg-white px-2 text-sm text-[#202123]"
+                        className={`flex h-10 items-center gap-2 rounded-[12px] border px-3 text-sm transition ${
+                          selectedProfile.tools[tool]
+                            ? "border-[#d9d9e3] bg-[#f7f7f8] text-[#202123]"
+                            : "border-transparent bg-[#f7f7f8] text-[#6e6e80]"
+                        }`}
                       >
                         <input
                           type="checkbox"
@@ -1071,6 +1125,7 @@ export function SettingsPanel({
                               }
                             })
                           }
+                          className="accent-[#202123]"
                         />
                         {copy.toolLabel(tool)}
                       </label>
