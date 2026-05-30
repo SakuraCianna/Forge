@@ -893,5 +893,13 @@ function readStepTarget(description: string): string | undefined {
     description
   )?.[1];
 
-  return pathTarget;
+  if (pathTarget) {
+    return pathTarget;
+  }
+
+  const fileNameTarget = /(?:^|\s)([^\s`"'“”<>|]+?\.[A-Za-z0-9]{1,12})(?=\s|$|[，。.,;:；：])/u.exec(
+    description
+  )?.[1];
+
+  return fileNameTarget;
 }

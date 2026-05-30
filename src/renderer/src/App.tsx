@@ -17,6 +17,7 @@ import {
   resolveAgentCommandRisk,
   resolveAgentActionPermission,
   resolveAgentActionExecution,
+  getRunnablePendingAgentActions,
   runAgentActionBatch,
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
@@ -282,6 +283,7 @@ export function App(): ReactElement {
   const { t } = useI18n(settings.language);
   const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
   const activeAskStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
+  const activeAgentAutoRunKeysRef = useRef<Set<string>>(new Set());
   const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
@@ -323,6 +325,42 @@ export function App(): ReactElement {
       setThreads((current) => appendCommandRunOutput(current, chunk));
     });
   }, []);
+
+  useEffect(() => {
+    if (changePreviews.length > 0) {
+      return;
+    }
+
+    const nextThread = threads.find((thread) => {
+      if (thread.archived || cancelledThreadIdsRef.current.has(thread.id)) {
+        return false;
+      }
+
+      const runnableActions = getRunnablePendingAgentActions(thread.agentActions ?? [], {
+        rules: generalPreferences.commandSafetyRules
+      });
+
+      return runnableActions.length > 0;
+    });
+
+    if (!nextThread) {
+      return;
+    }
+
+    const runnableActions = getRunnablePendingAgentActions(nextThread.agentActions ?? [], {
+      rules: generalPreferences.commandSafetyRules
+    });
+    const runKey = `${nextThread.id}:${runnableActions.map((action) => action.id).join(",")}`;
+
+    if (activeAgentAutoRunKeysRef.current.has(runKey)) {
+      return;
+    }
+
+    activeAgentAutoRunKeysRef.current.add(runKey);
+    void runAgentActions(nextThread.id, runnableActions).finally(() => {
+      activeAgentAutoRunKeysRef.current.delete(runKey);
+    });
+  }, [changePreviews.length, generalPreferences.commandSafetyRules, threads]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -893,7 +931,8 @@ export function App(): ReactElement {
   async function generateProjectFileChange(
     relativePath: string,
     currentContent: string,
-    threadId?: string
+    threadId?: string,
+    options: { autoApply?: boolean } = {}
   ): Promise<boolean | undefined> {
     if (!currentProject) {
       return false;
@@ -960,7 +999,6 @@ export function App(): ReactElement {
         nextContent: result.nextContent
       });
 
-      setChangePreviews((current) => upsertFileChangePreview(current, preview));
       recordUsageEvent({
         kind: "file-change",
         providerId: result.providerId,
@@ -968,6 +1006,31 @@ export function App(): ReactElement {
         usage: result.usage,
         createdAt: result.createdAt
       });
+
+      if (options.autoApply) {
+        const writtenFile = await window.forge.files.writeText({
+          projectRoot: currentProject.path,
+          relativePath: preview.relativePath,
+          nextContent: preview.nextContent
+        });
+
+        setPreviewFile(writtenFile);
+        setChangePreviews((current) => removeFileChangePreview(current, preview.relativePath));
+        void refreshProjectGitStatus();
+        setThreads((current) =>
+          appendThreadEvents(current, selectedThread.id, [
+            {
+              id: `${selectedThread.id}-agent-file-applied-${result.createdAt}`,
+              kind: "file",
+              message: `已自动应用文件修改: ${writtenFile.relativePath}`,
+              createdAt: result.createdAt
+            }
+          ])
+        );
+        return true;
+      }
+
+      setChangePreviews((current) => upsertFileChangePreview(current, preview));
       setThreads((current) =>
         appendThreadEvents(current, selectedThread.id, [
           {
@@ -1223,12 +1286,27 @@ export function App(): ReactElement {
         createdAt: plan.createdAt
       });
       const agentActions = createAgentActionsFromPlanSteps(plan.steps ?? []);
+      const planMessage =
+        agentActions.length > 0
+          ? settings.language === "zh-CN"
+            ? "已生成执行计划, Forge 将自动执行可安全步骤。"
+            : "Execution plan created. Forge will auto-run safe steps."
+          : settings.language === "zh-CN"
+            ? "已生成执行计划, 但没有可执行步骤。"
+            : "Execution plan created, but no executable steps were found.";
       setThreads((current) =>
         attachThreadAgentActions(
           appendThreadEvents(
             current,
             threadId,
-            [],
+            [
+              {
+                id: `${threadId}-plan-ready-${plan.createdAt}`,
+                kind: "plan",
+                message: planMessage,
+                createdAt: plan.createdAt
+              }
+            ],
             agentActions.length > 0 ? "planned" : "completed"
           ),
           threadId,
@@ -1763,7 +1841,9 @@ export function App(): ReactElement {
       setPreviewFile(file);
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
 
-      const generated = await generateProjectFileChange(file.relativePath, file.content, threadId);
+      const generated = await generateProjectFileChange(file.relativePath, file.content, threadId, {
+        autoApply: generalPreferences.fullAccess
+      });
       const status = generated ? "completed" : "failed";
       updateAgentActionStatus(threadId, actionId, status);
       return status;

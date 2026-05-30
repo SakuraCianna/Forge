@@ -1,5 +1,5 @@
 // 本文件说明: 验证桌面工作台侧边栏项目和会话交互
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { AppShell } from "./AppShell";
@@ -61,12 +61,56 @@ describe("AppShell", () => {
       </AppShell>
     );
 
-    await user.click(screen.getByRole("button", { name: "文件" }));
+    const navigation = screen.getByRole("navigation", { name: "Forge navigation" });
+
+    await user.click(within(navigation).getByRole("button", { name: "文件" }));
     await user.click(screen.getByRole("button", { name: "设置" }));
 
     expect(onNavigate).toHaveBeenNthCalledWith(1, "files");
     expect(onNavigate).toHaveBeenNthCalledWith(2, "settings");
   });
+
+  it("adds Codex-style title bar menus with real workbench actions", async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn();
+    const onNewTask = vi.fn();
+    const onPickProject = vi.fn();
+    const onRun = vi.fn();
+
+    render(
+      <AppShell
+        language="zh-CN"
+        activeView="workspace"
+        currentProjectName="Forge"
+        currentProjectPath="E:\\CodeHome\\Forge"
+        onNavigate={onNavigate}
+        onNewTask={onNewTask}
+        onPickProject={onPickProject}
+        onRun={onRun}
+      >
+        <section>Workbench</section>
+      </AppShell>
+    );
+
+    const titleMenus = screen.getByRole("navigation", { name: "Forge 标题栏菜单" });
+
+    await user.click(within(titleMenus).getByRole("button", { name: "文件" }));
+    await user.click(screen.getByRole("menuitem", { name: "新对话" }));
+    expect(onNewTask).toHaveBeenCalledOnce();
+
+    await user.click(within(titleMenus).getByRole("button", { name: "文件" }));
+    await user.click(screen.getByRole("menuitem", { name: "打开项目" }));
+    expect(onPickProject).toHaveBeenCalledOnce();
+
+    await user.click(within(titleMenus).getByRole("button", { name: "查看" }));
+    await user.click(screen.getByRole("menuitem", { name: "源代码管理" }));
+    expect(onNavigate).toHaveBeenCalledWith("source");
+
+    await user.click(within(titleMenus).getByRole("button", { name: "文件" }));
+    await user.click(screen.getByRole("menuitem", { name: "运行当前输入" }));
+    expect(onRun).toHaveBeenCalledOnce();
+  });
+
 
   it("offers project actions and conversation archive controls from the sidebar", async () => {
     const user = userEvent.setup();
@@ -119,6 +163,9 @@ describe("AppShell", () => {
     expect(screen.getByRole("tooltip", { name: "Project options" })).toHaveClass("forge-tooltip");
     expect(screen.getByRole("tooltip", { name: "Project options" })).toHaveClass(
       "forge-tooltip-align-end"
+    );
+    expect(screen.getByRole("button", { name: "New chat in Forge" })).toHaveClass(
+      "hover:bg-[#f7f7f8]"
     );
 
     await user.click(screen.getByRole("button", { name: "Project options" }));

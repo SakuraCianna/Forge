@@ -187,6 +187,31 @@ describe("agentPlanService", () => {
     ]);
   });
 
+  it("extracts bare Chinese markdown filenames from create file plan steps", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "1. 创建 项目说明书.md, 介绍这个项目怎么使用。"
+          })
+        )
+    );
+
+    const result = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(result.steps[0]).toEqual(
+      expect.objectContaining({
+        kind: "edit",
+        target: "项目说明书.md"
+      })
+    );
+  });
+
+
   it("throws a readable error when the provider key is missing", async () => {
     await expect(
       generateAgentPlan({

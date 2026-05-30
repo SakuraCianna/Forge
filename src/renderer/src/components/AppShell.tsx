@@ -11,9 +11,11 @@ import {
   FolderPlus,
   GitBranch,
   Hammer,
+  Home,
   MessageSquare,
   Pin,
   Plus,
+  Play,
   Settings,
   SquarePen,
   Trash2
@@ -65,9 +67,19 @@ type ShellCopy = {
   archiveAllChats: string;
   archiveConversation: string;
   archiveProjectChats: string;
+  editMenu: string;
+  fileMenu: string;
+  filesView: string;
+  helpMenu: string;
+  newChat: string;
+  openProject: string;
   conversations: string;
   createWorktree: string;
   newProjectChat: (name: string) => string;
+  projectSource: string;
+  resetSidebar: string;
+  runCurrentInput: string;
+  settingsView: string;
   openInSource: string;
   pinConversation: string;
   pinProject: string;
@@ -75,7 +87,11 @@ type ShellCopy = {
   removeProject: string;
   renameProject: string;
   threadOptions: (title: string) => string;
+  titleBarMenus: string;
   unpinProject: string;
+  viewMenu: string;
+  windowMenu: string;
+  workspaceView: string;
 };
 
 // 组合应用主框架和可调整侧边栏, 主内容由当前视图注入
@@ -93,6 +109,7 @@ export function AppShell({
   onNavigate,
   onNewTask,
   onNewProjectChat,
+  onRun,
   onPickProject,
   onRemoveProject,
   onRenameProject,
@@ -157,6 +174,11 @@ export function AppShell({
     window.addEventListener("pointerup", stopResize, { once: true });
   }
 
+  // 还原侧边栏宽度, 给标题栏窗口菜单一个可见的实用动作
+  function resetSidebarWidth(): void {
+    setSidebarWidth(getSidebarMaxWidth());
+  }
+
   return (
     <div
       style={layoutStyle}
@@ -195,7 +217,7 @@ export function AppShell({
           <span className="text-[12px] font-semibold tracking-normal text-[#202123]">Forge</span>
         </div>
 
-        <div className="drag-region h-12" aria-hidden="true" />
+        <div className="drag-region flex h-12 items-center">{renderTitleBarMenus()}</div>
         <div className="drag-region h-12" aria-hidden="true" />
       </header>
 
@@ -215,7 +237,7 @@ export function AppShell({
                 onNavigate("workspace");
               }
             }}
-            className="mb-1.5 flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[12px] text-[#202123] transition hover:bg-[#ececf1] active:scale-[0.99]"
+            className="mb-1.5 flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[12px] text-[#202123] transition hover:bg-[#f1f1f4] active:scale-[0.99]"
           >
             <Plus className="h-4 w-4" />
             <span className="truncate">{t("nav.newChat")}</span>
@@ -230,7 +252,7 @@ export function AppShell({
                 className={`flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[12px] transition active:scale-[0.99] ${
                   activeView === item.key
                     ? "bg-[#ececf1] text-[#202123]"
-                    : "text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
+                    : "text-[#565869] hover:bg-[#f1f1f4] hover:text-[#202123]"
                 }`}
               >
                 <item.icon className="h-4 w-4" />
@@ -249,7 +271,7 @@ export function AppShell({
               className={`flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[12px] transition active:scale-[0.99] ${
                 activeView === "settings"
                   ? "bg-[#ececf1] text-[#202123]"
-                  : "text-[#565869] hover:bg-[#ececf1] hover:text-[#202123]"
+                  : "text-[#565869] hover:bg-[#f1f1f4] hover:text-[#202123]"
               }`}
             >
               <Settings className="h-4 w-4" />
@@ -262,7 +284,7 @@ export function AppShell({
             aria-orientation="vertical"
             aria-label="Resize sidebar"
             onPointerDown={beginResize}
-            className="absolute right-[-3px] top-0 z-10 h-full w-1.5 cursor-col-resize rounded-full transition hover:bg-[#d9d9e3]"
+            className="absolute right-[-3px] top-0 z-10 h-full w-1.5 cursor-col-resize rounded-full transition hover:bg-[#ececf1]"
           />
         </aside>
 
@@ -279,6 +301,77 @@ export function AppShell({
       </div>
     </div>
   );
+
+  // 渲染标题栏菜单, 保持 Windows 桌面应用的熟悉入口
+  function renderTitleBarMenus(): ReactElement {
+    return (
+      <nav
+        aria-label={copy.titleBarMenus}
+        className="no-drag ml-3 hidden min-w-0 items-center gap-0.5 md:flex"
+      >
+        <TitleBarMenu label={copy.fileMenu}>
+          <MenuItem onSelect={onNewTask}>
+            <Plus className="h-4 w-4" />
+            {copy.newChat}
+          </MenuItem>
+          <MenuItem onSelect={onPickProject}>
+            <FolderPlus className="h-4 w-4" />
+            {copy.openProject}
+          </MenuItem>
+          <MenuItem onSelect={onRun}>
+            <Play className="h-4 w-4" />
+            {copy.runCurrentInput}
+          </MenuItem>
+        </TitleBarMenu>
+
+        <TitleBarMenu label={copy.editMenu}>
+          {currentProjectPath ? (
+            <MenuItem onSelect={() => onRenameProject?.(currentProjectPath)}>
+              <Edit3 className="h-4 w-4" />
+              {copy.renameProject}
+            </MenuItem>
+          ) : null}
+          <MenuItem onSelect={() => onNavigate("settings")}>
+            <Settings className="h-4 w-4" />
+            {copy.settingsView}
+          </MenuItem>
+        </TitleBarMenu>
+
+        <TitleBarMenu label={copy.viewMenu}>
+          <MenuItem onSelect={() => onNavigate("workspace")}>
+            <Home className="h-4 w-4" />
+            {copy.workspaceView}
+          </MenuItem>
+          <MenuItem onSelect={() => onNavigate("files")}>
+            <FileCode2 className="h-4 w-4" />
+            {copy.filesView}
+          </MenuItem>
+          <MenuItem onSelect={() => onNavigate("source")}>
+            <GitBranch className="h-4 w-4" />
+            {copy.projectSource}
+          </MenuItem>
+        </TitleBarMenu>
+
+        <TitleBarMenu label={copy.windowMenu}>
+          <MenuItem onSelect={resetSidebarWidth}>
+            <FolderOpen className="h-4 w-4" />
+            {copy.resetSidebar}
+          </MenuItem>
+          <MenuItem onSelect={() => onNavigate("settings")}>
+            <Settings className="h-4 w-4" />
+            {copy.settingsView}
+          </MenuItem>
+        </TitleBarMenu>
+
+        <TitleBarMenu label={copy.helpMenu}>
+          <MenuItem onSelect={() => onNavigate("settings")}>
+            <Hammer className="h-4 w-4" />
+            Forge
+          </MenuItem>
+        </TitleBarMenu>
+      </nav>
+    );
+  }
 
   // 渲染项目分组和项目更多菜单, 项目行保持紧凑高度
   function renderProjects(): ReactElement {
@@ -300,7 +393,7 @@ export function AppShell({
                   <button
                     type="button"
                     aria-label={copy.projectOptions}
-                    className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
+                    className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#f1f1f4] hover:text-[#202123]"
                   >
                     <Ellipsis className="h-4 w-4" />
                   </button>
@@ -318,7 +411,7 @@ export function AppShell({
                 type="button"
                 aria-label={copy.addProject}
                 onClick={onPickProject}
-                className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#ececf1] hover:text-[#202123]"
+                className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] transition hover:bg-[#f1f1f4] hover:text-[#202123]"
               >
                 <FolderPlus className="h-4 w-4" />
               </button>
@@ -338,8 +431,8 @@ export function AppShell({
                 className="space-y-0.5"
               >
                 <div
-                  className={`group grid h-8 min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 overflow-hidden rounded-[10px] pr-0.5 transition ${
-                    selected ? "bg-[#ececf1]" : "hover:bg-[#ececf1]"
+                  className={`group grid h-8 min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-[10px] pr-0.5 transition ${
+                    selected ? "bg-[#ececf1]" : "hover:bg-[#f1f1f4]"
                   }`}
                 >
                 <button
@@ -360,7 +453,7 @@ export function AppShell({
                     type="button"
                     aria-label={copy.newProjectChat(displayName)}
                     onClick={() => onNewProjectChat?.(project.path)}
-                    className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                    className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-[#f7f7f8] hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
                   >
                     <SquarePen className="h-4 w-4" />
                   </button>
@@ -372,7 +465,7 @@ export function AppShell({
                       <button
                         type="button"
                         aria-label={`${copy.projectOptions} ${displayName}`}
-                        className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                        className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-[#f7f7f8] hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
                       >
                         <Ellipsis className="h-4 w-4" />
                       </button>
@@ -425,7 +518,7 @@ export function AppShell({
                         type="button"
                         data-testid={`sidebar-thread-row-${thread.id}`}
                         onClick={() => onSelectThread?.(thread.id)}
-                        className="flex h-7 w-full min-w-0 items-center gap-2 overflow-hidden rounded-[9px] px-2 text-left text-[12px] text-[#565869] transition hover:bg-[#ececf1]"
+                        className="flex h-7 w-full min-w-0 items-center gap-2 overflow-hidden rounded-[9px] px-2 text-left text-[12px] text-[#565869] transition hover:bg-[#f1f1f4]"
                       >
                         <MessageSquare className="h-3.5 w-3.5 shrink-0" />
                         <span className="min-w-0 flex-1 truncate text-[#202123]">{thread.title}</span>
@@ -442,7 +535,7 @@ export function AppShell({
             <button
               type="button"
               onClick={onPickProject}
-              className="flex h-11 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] text-[#565869] transition hover:bg-[#ececf1] hover:text-[#202123] active:scale-[0.99]"
+              className="flex h-11 w-full items-center gap-2 rounded-[12px] px-3 text-left text-[10px] text-[#565869] transition hover:bg-[#f1f1f4] hover:text-[#202123] active:scale-[0.99]"
             >
               <FolderOpen className="h-4 w-4 shrink-0" />
               <span className="min-w-0">
@@ -473,7 +566,7 @@ export function AppShell({
           {globalThreads.map((thread) => (
             <div
               key={thread.id}
-              className="group grid h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden rounded-[9px] pr-0.5 transition hover:bg-[#ececf1]"
+              className="group grid h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-[9px] pr-0.5 transition hover:bg-[#f1f1f4]"
             >
               <button
                 type="button"
@@ -491,7 +584,7 @@ export function AppShell({
                     <button
                       type="button"
                       aria-label={copy.threadOptions(thread.title)}
-                      className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-white hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+                      className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-[#f7f7f8] hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
                     >
                       <Ellipsis className="h-4 w-4" />
                     </button>
@@ -514,6 +607,31 @@ export function AppShell({
       </section>
     );
   }
+}
+
+// 渲染标题栏下拉菜单触发器, 保持按钮轻量且可点击
+function TitleBarMenu({
+  children,
+  label
+}: {
+  children: ReactNode;
+  label: string;
+}): ReactElement {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="h-7 rounded-[8px] px-2 text-[12px] font-medium text-[#565869] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] focus-visible:bg-[#f7f7f8] focus-visible:text-[#202123]"
+        >
+          {label}
+        </button>
+      </DropdownMenu.Trigger>
+      <MenuContent align="start" sideOffset={7}>
+        {children}
+      </MenuContent>
+    </DropdownMenu.Root>
+  );
 }
 
 // 渲染统一圆角菜单容器, 所有侧边栏菜单共用阴影和字号
@@ -601,15 +719,29 @@ function getShellCopy(language: Language): ShellCopy {
       archiveProjectChats: "归档对话",
       conversations: "对话",
       createWorktree: "创建永久工作树",
+      editMenu: "编辑",
+      fileMenu: "文件",
+      filesView: "文件",
+      helpMenu: "帮助",
+      newChat: "新对话",
       newProjectChat: (name) => `在 ${name} 开启新对话`,
+      openProject: "打开项目",
       openInSource: "在源代码管理中打开",
       pinConversation: "置顶对话",
       pinProject: "置顶项目",
+      projectSource: "源代码管理",
       projectOptions: "项目更多选项",
+      resetSidebar: "重置侧边栏宽度",
       removeProject: "移除",
       renameProject: "重命名项目",
+      runCurrentInput: "运行当前输入",
+      settingsView: "设置",
       threadOptions: (title) => `对话更多选项 ${title}`,
-      unpinProject: "取消置顶项目"
+      titleBarMenus: "Forge 标题栏菜单",
+      unpinProject: "取消置顶项目",
+      viewMenu: "查看",
+      windowMenu: "窗口",
+      workspaceView: "工作台"
     };
   }
 
@@ -620,14 +752,28 @@ function getShellCopy(language: Language): ShellCopy {
     archiveProjectChats: "Archive conversations",
     conversations: "Conversations",
     createWorktree: "Create permanent worktree",
+    editMenu: "Edit",
+    fileMenu: "File",
+    filesView: "Files",
+    helpMenu: "Help",
+    newChat: "New chat",
     newProjectChat: (name) => `New chat in ${name}`,
+    openProject: "Open project",
     openInSource: "Open in source control",
     pinConversation: "Pin conversation",
     pinProject: "Pin project",
+    projectSource: "Source control",
     projectOptions: "Project options",
+    resetSidebar: "Reset sidebar width",
     removeProject: "Remove",
     renameProject: "Rename project",
+    runCurrentInput: "Run current input",
+    settingsView: "Settings",
     threadOptions: (title) => `Conversation options ${title}`,
-    unpinProject: "Unpin project"
+    titleBarMenus: "Forge title bar menus",
+    unpinProject: "Unpin project",
+    viewMenu: "View",
+    windowMenu: "Window",
+    workspaceView: "Workspace"
   };
 }
