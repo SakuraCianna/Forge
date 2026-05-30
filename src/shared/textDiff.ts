@@ -4,6 +4,13 @@ export type LineDiffEntry =
   | { kind: "remove"; oldLineNumber: number; text: string }
   | { kind: "add"; newLineNumber: number; text: string };
 
+export type AnnotatedLineDiffEntry = LineDiffEntry & {
+  hunkIndex: number | null;
+  hunkStart: boolean;
+};
+
+export type LineDiffHunkDecision = "discard" | "keep-only";
+
 // 使用 LCS 生成稳定的逐行 diff, 避免整文件替换看起来过于吓人
 export function createLineDiff(oldText: string, newText: string): LineDiffEntry[] {
   const oldLines = splitLines(oldText);
@@ -50,6 +57,62 @@ export function createLineDiff(oldText: string, newText: string): LineDiffEntry[
   }
 
   return entries;
+}
+
+// 给逐行 diff 标注变更块编号, 供 UI 做块级接受或拒绝
+export function annotateLineDiffHunks(entries: LineDiffEntry[]): AnnotatedLineDiffEntry[] {
+  let hunkIndex = -1;
+  let insideHunk = false;
+
+  return entries.map((entry) => {
+    if (entry.kind === "context") {
+      insideHunk = false;
+
+      return {
+        ...entry,
+        hunkIndex: null,
+        hunkStart: false
+      };
+    }
+
+    const hunkStart = !insideHunk;
+
+    if (hunkStart) {
+      hunkIndex += 1;
+      insideHunk = true;
+    }
+
+    return {
+      ...entry,
+      hunkIndex,
+      hunkStart
+    };
+  });
+}
+
+// 按单个变更块决策重建文本, 支持拒绝此块或只保留此块
+export function createTextFromLineDiffHunkDecision(
+  entries: LineDiffEntry[],
+  targetHunkIndex: number,
+  decision: LineDiffHunkDecision
+): string {
+  const lines = annotateLineDiffHunks(entries).flatMap((entry) => {
+    if (entry.kind === "context") {
+      return [entry.text];
+    }
+
+    const isTargetHunk = entry.hunkIndex === targetHunkIndex;
+    const shouldUseNextLine =
+      decision === "discard" ? !isTargetHunk : isTargetHunk;
+
+    if (entry.kind === "add") {
+      return shouldUseNextLine ? [entry.text] : [];
+    }
+
+    return shouldUseNextLine ? [] : [entry.text];
+  });
+
+  return lines.join("\n");
 }
 
 // 构建最长公共子序列表, 后续回溯用它判断新增和删除

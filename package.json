@@ -14,6 +14,9 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
+    "release:check": "npm run lint && npm test && npm run build",
+    "package:dir": "npm run build && electron-builder --dir",
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest --run",
     "test:watch": "vitest",
@@ -41,6 +44,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^42.3.0",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "eslint": "^10.4.0",
     "jsdom": "^29.1.1",
@@ -48,5 +52,31 @@
     "typescript-eslint": "^8.60.0",
     "vite": "^7.3.3",
     "vitest": "^4.1.7"
+  },
+  "build": {
+    "appId": "com.sakuracianna.forge",
+    "productName": "Forge",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "asar": true,
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false,
+      "artifactName": "${productName}-${version}-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    }
   }
 }

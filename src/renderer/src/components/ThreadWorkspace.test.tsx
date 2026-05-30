@@ -1497,6 +1497,58 @@ describe("ThreadWorkspace", () => {
     expect(within(commandHistory!).getByText("failed tests")).toBeInTheDocument();
   });
 
+  it("copies command output with command metadata from the command history", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Copy command output",
+            events: [
+              ...thread.events,
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "ran 199 tests",
+                  stderr: "failed tests",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+    await user.click(screen.getByRole("button", { name: "Copy output" }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      "$ npm test\ncwd: E:\\CodeHome\\Forge\nexit 1\n\nstdout:\nran 199 tests\n\nstderr:\nfailed tests"
+    );
+  });
+
   it("shows a running command in the command history", async () => {
     const user = userEvent.setup();
 
@@ -2115,6 +2167,55 @@ describe("ThreadWorkspace", () => {
 
     expect(onPreviewFile).toHaveBeenCalledWith("src/main.tsx");
     expect(onDiscardChange).toHaveBeenCalledWith("src/App.tsx");
+  });
+
+  it("accepts or rejects a single diff hunk from the preview", async () => {
+    const user = userEvent.setup();
+    const onPreviewChange = vi.fn();
+    const diff = [
+      { kind: "remove" as const, oldLineNumber: 1, text: "a" },
+      { kind: "add" as const, newLineNumber: 1, text: "A" },
+      { kind: "context" as const, oldLineNumber: 2, newLineNumber: 2, text: "b" },
+      { kind: "remove" as const, oldLineNumber: 3, text: "c" },
+      { kind: "add" as const, newLineNumber: 3, text: "C" },
+      { kind: "context" as const, oldLineNumber: 4, newLineNumber: 4, text: "d" }
+    ];
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[thread]}
+        projectScan={{
+          rootPath: "E:\\CodeHome\\Forge",
+          files: [{ relativePath: "src/App.tsx", size: 42 }],
+          truncated: false
+        }}
+        previewFile={{
+          relativePath: "src/App.tsx",
+          content: "a\nb\nc\nd",
+          size: 7
+        }}
+        changePreview={{
+          relativePath: "src/App.tsx",
+          currentContent: "a\nb\nc\nd",
+          nextContent: "A\nb\nC\nd",
+          diff
+        }}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onPreviewChange={onPreviewChange}
+        onApplyChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Changes" }));
+    await user.click(screen.getByRole("button", { name: "Reject hunk 1 src/App.tsx" }));
+    await user.click(screen.getByRole("button", { name: "Keep only hunk 2 src/App.tsx" }));
+
+    expect(onPreviewChange).toHaveBeenNthCalledWith(1, "src/App.tsx", "a\nb\nC\nd");
+    expect(onPreviewChange).toHaveBeenNthCalledWith(2, "src/App.tsx", "a\nb\nC\nd");
   });
 
   it("supports applying or discarding all pending changes", async () => {

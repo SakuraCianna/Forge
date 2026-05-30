@@ -106,6 +106,7 @@ export function getRunnablePendingAgentActions(
   policy: AgentCommandSafetyPolicy = {}
 ): AgentAction[] {
   const runnableActions: AgentAction[] = [];
+  let hasQueuedEditPreview = false;
 
   for (const action of actions) {
     if (action.status === "completed" || action.status === "skipped") {
@@ -116,10 +117,14 @@ export function getRunnablePendingAgentActions(
       break;
     }
 
+    if (hasQueuedEditPreview && action.kind !== "edit-file") {
+      break;
+    }
+
     runnableActions.push(action);
 
     if (action.kind === "edit-file") {
-      break;
+      hasQueuedEditPreview = true;
     }
   }
 

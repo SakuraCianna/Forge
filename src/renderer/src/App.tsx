@@ -1625,12 +1625,7 @@ export function App(): ReactElement {
     if (execution.kind === "open-file") {
       return await openAgentFileAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "generate-file-change") {
-      const status = await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
-
-      return {
-        status,
-        continueBatch: status !== "completed"
-      };
+      return await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "run-command") {
       const commandRisk = resolveAgentCommandRisk(execution.command, {
         rules: generalPreferences.commandSafetyRules

@@ -21,6 +21,7 @@ type FetchedModel = {
   id: string;
   label: string;
   contextWindow?: number;
+  inputModalities?: string[];
   outputModalities?: string[];
   pricing?: ModelPricing;
   supportedParameters?: string[];
@@ -97,9 +98,9 @@ export function toForgeModel(provider: ForgeProvider, fetchedModel: FetchedModel
     enabled: false,
     capabilities: {
       reasoning: capabilities.reasoning,
-      toolCalling: "unknown",
-      streaming: "unknown",
-      vision: "unknown",
+      toolCalling: capabilities.toolCalling,
+      streaming: capabilities.streaming,
+      vision: capabilities.vision,
       contextWindow: fetchedModel.contextWindow,
       speedModes: capabilities.speedModes
     },
@@ -134,30 +135,51 @@ export function assertHeaderValue(headerName: string, value: string): string {
 function inferFetchedModelCapabilities(
   provider: ForgeProvider,
   modelName: string,
-  metadata?: Pick<FetchedModel, "supportedParameters">
-): { reasoning: ReasoningControl; speedModes?: SpeedMode[] } {
+  metadata?: Pick<FetchedModel, "inputModalities" | "supportedParameters">
+): {
+  reasoning: ReasoningControl;
+  speedModes?: SpeedMode[];
+  toolCalling: boolean | "unknown";
+  streaming: boolean | "unknown";
+  vision: boolean | "unknown";
+} {
   const normalizedModelName = modelName.toLowerCase();
   const speedModes = inferSpeedModes(provider, normalizedModelName, metadata);
+  const toolCalling = inferToolCalling(metadata);
+  const streaming = inferStreaming(metadata);
+  const vision = inferVision(metadata);
 
   if (provider.reasoningStyle === "mimo-thinking" && isMimoThinkingModel(normalizedModelName)) {
     return {
       reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] },
-      speedModes
+      speedModes,
+      toolCalling,
+      streaming,
+      vision
     };
   }
 
   if (provider.kind === "gemini" && /(^|[-.])2\.5([-_.]|$)/.test(normalizedModelName)) {
-    return { reasoning: { type: "budget", min: 0, max: 32768 }, speedModes };
+    return {
+      reasoning: { type: "budget", min: 0, max: 32768 },
+      speedModes,
+      toolCalling,
+      streaming,
+      vision
+    };
   }
 
   if (provider.id === "deepseek" && /(^|[-_])(reasoner|r1)([-_]|$)/.test(normalizedModelName)) {
     return {
       reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] },
-      speedModes
+      speedModes,
+      toolCalling,
+      streaming,
+      vision
     };
   }
 
-  return { reasoning: { type: "none" }, speedModes };
+  return { reasoning: { type: "none" }, speedModes, toolCalling, streaming, vision };
 }
 
 // 排除非文本或非编码模型, 保留通用对话和代码模型
@@ -180,6 +202,40 @@ export function isUsableCodingModel(
   }
 
   return !isNonCodingModelName(normalizedModelName);
+}
+
+// 根据供应商鉴权方式写入 Authorization 或自定义请求头
+// 从供应商模型元数据里探测工具调用能力, 未返回字段时保持 unknown
+function inferToolCalling(
+  metadata?: Pick<FetchedModel, "supportedParameters">
+): boolean | "unknown" {
+  if (!metadata?.supportedParameters) {
+    return "unknown";
+  }
+
+  return metadata.supportedParameters.some((parameter) =>
+    ["tools", "tool_choice", "functions", "function_call"].includes(parameter.toLowerCase())
+  );
+}
+
+// 从供应商参数列表判断是否声明流式输出能力
+function inferStreaming(
+  metadata?: Pick<FetchedModel, "supportedParameters">
+): boolean | "unknown" {
+  if (!metadata?.supportedParameters) {
+    return "unknown";
+  }
+
+  return metadata.supportedParameters.some((parameter) => parameter.toLowerCase() === "stream");
+}
+
+// 从输入模态判断视觉输入能力, 未暴露模态时不做猜测
+function inferVision(metadata?: Pick<FetchedModel, "inputModalities">): boolean | "unknown" {
+  if (!metadata?.inputModalities) {
+    return "unknown";
+  }
+
+  return metadata.inputModalities.some((modality) => modality.toLowerCase() === "image");
 }
 
 // 根据供应商鉴权方式写入 Authorization 或自定义请求头
@@ -280,6 +336,8 @@ function parseModelItems(items: unknown[], preferDisplayName: boolean): FetchedM
       (typeof item.name === "string" && item.name !== id ? item.name : undefined) ??
       id;
     const architecture = isRecord(item.architecture) ? item.architecture : undefined;
+    const inputModalities =
+      readStringArray(item.input_modalities) ?? readStringArray(architecture?.input_modalities);
     const outputModalities =
       readStringArray(item.output_modalities) ?? readStringArray(architecture?.output_modalities);
     const pricing = readPricing(item);
@@ -291,6 +349,7 @@ function parseModelItems(items: unknown[], preferDisplayName: boolean): FetchedM
         id,
         label,
         ...(contextWindow ? { contextWindow } : {}),
+        ...(inputModalities ? { inputModalities } : {}),
         ...(outputModalities ? { outputModalities } : {}),
         ...(pricing ? { pricing } : {}),
         ...(supportedParameters ? { supportedParameters } : {})
@@ -339,7 +398,15 @@ function parseGeminiModels(response: UnknownRecord): FetchedModel[] {
     const id = item.name.replace(/^models\//, "");
     const label = typeof item.displayName === "string" ? item.displayName : id;
     const contextWindow = readContextWindow(item);
-    return [{ id, label, ...(contextWindow ? { contextWindow } : {}) }];
+    const inputModalities = readStringArray(item.inputModalities) ?? readStringArray(item.input_modalities);
+    return [
+      {
+        id,
+        label,
+        ...(contextWindow ? { contextWindow } : {}),
+        ...(inputModalities ? { inputModalities } : {})
+      }
+    ];
   });
 }
 

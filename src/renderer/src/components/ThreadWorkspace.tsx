@@ -25,6 +25,11 @@ import type { AgentMemoryContext } from "@shared/agentTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import {
+  annotateLineDiffHunks,
+  createTextFromLineDiffHunkDecision,
+  type LineDiffHunkDecision
+} from "@shared/textDiff";
+import {
   findNextPendingAgentAction,
   getRunnablePendingAgentActions,
   isRunnableAgentAction,
@@ -137,6 +142,7 @@ export function ThreadWorkspace({
       null)
     : null;
   const canEditPreview = Boolean(onPreviewChange || onApplyChange || onGenerateFileChange);
+  const diffHunkCopy = getDiffHunkCopy(language);
   const threadActivitySummary = useMemo(
     () => (selectedThread ? getThreadActivitySummary(selectedThread.events, language) : null),
     [language, selectedThread]
@@ -1748,6 +1754,22 @@ export function ThreadWorkspace({
 
   // 展示待审查文件变更, 所有写入动作都需要用户确认
   function renderChangesTab(): ReactElement {
+    const annotatedDiff = visibleChangePreview
+      ? annotateLineDiffHunks(visibleChangePreview.diff)
+      : [];
+
+    // 按单个 diff 块重建草稿并通知上层刷新预览
+    function updateDiffHunk(
+      preview: ProjectFileChangePreview,
+      hunkIndex: number,
+      decision: LineDiffHunkDecision
+    ): void {
+      const nextContent = createTextFromLineDiffHunkDecision(preview.diff, hunkIndex, decision);
+
+      setDraftContent(nextContent);
+      onPreviewChange?.(preview.relativePath, nextContent);
+    }
+
     return (
       <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
         <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
@@ -1902,28 +1924,59 @@ export function ThreadWorkspace({
                 </pre>
               )}
               {visibleChangePreview ? (
-                <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] p-3 font-mono text-xs leading-5 text-[#6e6e80]">
-                  {visibleChangePreview.diff.map((line, index) => {
+                <div className="max-h-56 overflow-auto whitespace-pre-wrap rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] p-3 font-mono text-xs leading-5 text-[#6e6e80]">
+                  {annotatedDiff.map((line, index) => {
                     const prefix =
                       line.kind === "add" ? "+ " : line.kind === "remove" ? "- " : "  ";
+                    const hunkIndex = line.hunkIndex;
 
                     return (
-                      <div
-                        key={`${line.kind}-${index}`}
-                        className={
-                          line.kind === "add"
-                            ? "text-[#37d67a]"
-                            : line.kind === "remove"
-                              ? "text-[#ff8d7a]"
-                              : "text-[#6e6e80]"
-                        }
-                      >
-                        {prefix}
-                        {line.text}
+                      <div key={`${line.kind}-${index}`}>
+                        {line.hunkStart && hunkIndex !== null && canEditPreview ? (
+                          <div className="mb-1 mt-2 flex flex-wrap items-center gap-1.5 border-t border-[#ececf1] pt-2 font-sans first:mt-0 first:border-t-0 first:pt-0">
+                            <span className="rounded-[8px] border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] font-semibold text-[#565869]">
+                              {diffHunkCopy.hunkLabel(hunkIndex + 1)}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={diffHunkCopy.keepOnlyAria(
+                                hunkIndex + 1,
+                                visibleChangePreview.relativePath
+                              )}
+                              onClick={() => updateDiffHunk(visibleChangePreview, hunkIndex, "keep-only")}
+                              className="rounded-[8px] border border-[#b7dfc8] bg-[#effaf6] px-2 py-0.5 text-[11px] font-semibold text-[#087443] hover:bg-[#dff5ec]"
+                            >
+                              {diffHunkCopy.keepOnly}
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={diffHunkCopy.rejectAria(
+                                hunkIndex + 1,
+                                visibleChangePreview.relativePath
+                              )}
+                              onClick={() => updateDiffHunk(visibleChangePreview, hunkIndex, "discard")}
+                              className="rounded-[8px] border border-[#f4c7ab] bg-[#fff7ed] px-2 py-0.5 text-[11px] font-semibold text-[#b45309] hover:bg-[#ffedd5]"
+                            >
+                              {diffHunkCopy.reject}
+                            </button>
+                          </div>
+                        ) : null}
+                        <div
+                          className={
+                            line.kind === "add"
+                              ? "text-[#087443]"
+                              : line.kind === "remove"
+                                ? "text-[#b45309]"
+                                : "text-[#6e6e80]"
+                          }
+                        >
+                          {prefix}
+                          {line.text}
+                        </div>
                       </div>
                     );
                   })}
-                </pre>
+                </div>
               ) : null}
             </div>
           ) : (
@@ -1965,6 +2018,7 @@ export function ThreadWorkspace({
             cancelled: "Cancelled"
           };
     const commandRunningCopy = language === "zh-CN" ? "运行中" : "running";
+    const commandCopyOutput = language === "zh-CN" ? "复制输出" : "Copy output";
     const commandEvents = selectedThread?.events ?? [];
     const commandHistory = getCommandHistoryEntries(commandEvents);
     const commandApprovals = commandEvents.filter((event) => event.commandApproval);
@@ -2054,7 +2108,10 @@ export function ThreadWorkspace({
           </h2>
           {commandHistory.length > 0 ? (
             <div className="space-y-3">
-              {commandHistory.map(({ id, createdAt, result, status }) => (
+              {commandHistory.map(({ id, createdAt, result, status }) => {
+                const hasCommandOutput = Boolean(result.stdout.trim() || result.stderr.trim());
+
+                return (
                 <article
                   key={id}
                   className="rounded-[16px] border border-[#ececf1] bg-[#fafafa] p-3"
@@ -2092,6 +2149,20 @@ export function ThreadWorkspace({
                         <span className="rounded-full border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] text-[#565869]">
                           {commandRunningCopy}
                         </span>
+                      ) : null}
+                      {hasCommandOutput ? (
+                        <Tooltip label={commandCopyOutput}>
+                          <button
+                            type="button"
+                            aria-label={commandCopyOutput}
+                            onClick={() =>
+                              void navigator.clipboard?.writeText(formatCommandResultForClipboard(result))
+                            }
+                            className="flex h-6 w-6 items-center justify-center rounded-[8px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                        </Tooltip>
                       ) : null}
                       {selectedThread && status === "running" && result.runId && onCancelCommand ? (
                         <button
@@ -2149,7 +2220,8 @@ export function ThreadWorkspace({
                     </div>
                   ) : null}
                 </article>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-[16px] border border-dashed border-[#d9d9e3] px-4 py-8 text-center text-sm text-[#6e6e80]">
@@ -2495,6 +2567,34 @@ function formatLlmWorkDuration(event: TaskThreadEvent): string {
 }
 
 // 根据反馈状态生成按钮文案, 后续反馈系统可以接入
+// 把 diff 变更块操作文案集中在这里, 避免审查 UI 混入硬编码英文
+function getDiffHunkCopy(language: Language): {
+  hunkLabel: (index: number) => string;
+  keepOnly: string;
+  reject: string;
+  keepOnlyAria: (index: number, relativePath: string) => string;
+  rejectAria: (index: number, relativePath: string) => string;
+} {
+  if (language === "zh-CN") {
+    return {
+      hunkLabel: (index) => `变更块 ${index}`,
+      keepOnly: "只接受此块",
+      reject: "拒绝此块",
+      keepOnlyAria: (index, relativePath) => `只接受变更块 ${index} ${relativePath}`,
+      rejectAria: (index, relativePath) => `拒绝变更块 ${index} ${relativePath}`
+    };
+  }
+
+  return {
+    hunkLabel: (index) => `Hunk ${index}`,
+    keepOnly: "Keep only hunk",
+    reject: "Reject hunk",
+    keepOnlyAria: (index, relativePath) => `Keep only hunk ${index} ${relativePath}`,
+    rejectAria: (index, relativePath) => `Reject hunk ${index} ${relativePath}`
+  };
+}
+
+// 根据反馈状态生成回答操作文案, 后续反馈系统可以接入
 function getAssistantResponseActionCopy(language: Language): {
   copy: string;
   like: string;
@@ -2513,6 +2613,35 @@ function getAssistantResponseActionCopy(language: Language): {
     like: "Like response",
     dislike: "Dislike response"
   };
+}
+
+// 压缩命令输出片段, 错误恢复提示只需要最后几行
+// 复制命令历史时保留命令, 目录, 状态和 stdout/stderr, 方便粘贴给模型继续排错
+function formatCommandResultForClipboard(result: CommandRunResult): string {
+  const metadata = [`$ ${result.command}`];
+  const outputSections: string[] = [];
+
+  if (result.cwd) {
+    metadata.push(`cwd: ${result.cwd}`);
+  }
+
+  if (result.cancelled) {
+    metadata.push("cancelled");
+  } else if (result.timedOut) {
+    metadata.push("timed out");
+  } else {
+    metadata.push(`exit ${result.exitCode === null ? "null" : result.exitCode}`);
+  }
+
+  if (result.stdout.trim()) {
+    outputSections.push(`stdout:\n${result.stdout.trimEnd()}`);
+  }
+
+  if (result.stderr.trim()) {
+    outputSections.push(`stderr:\n${result.stderr.trimEnd()}`);
+  }
+
+  return [metadata.join("\n"), outputSections.join("\n\n")].filter(Boolean).join("\n\n");
 }
 
 // 压缩命令输出片段, 错误恢复提示只需要最后几行

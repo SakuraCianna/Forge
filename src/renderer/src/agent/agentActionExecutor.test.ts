@@ -127,6 +127,32 @@ describe("agentActionExecutor", () => {
     ]);
   });
 
+  it("collects consecutive file edits into one preview batch before verification", () => {
+    const firstEdit = createAction({
+      id: "action-1",
+      status: "pending",
+      kind: "edit-file",
+      target: "src/App.tsx"
+    });
+    const secondEdit = createAction({
+      id: "action-2",
+      status: "pending",
+      kind: "edit-file",
+      target: "src/state.ts"
+    });
+    const verify = createAction({
+      id: "action-3",
+      status: "pending",
+      kind: "run-command",
+      command: "npm test"
+    });
+
+    expect(getRunnablePendingAgentActions([firstEdit, secondEdit, verify]).map((action) => action.id)).toEqual([
+      "action-1",
+      "action-2"
+    ]);
+  });
+
   it("stops safe batches before commands that require approval", () => {
     const inspect = createAction({
       id: "action-1",

@@ -259,6 +259,28 @@ describe("provider model adapters", () => {
     expect(model.capabilities.speedModes).toEqual(["balanced", "fast"]);
   });
 
+  it("probes tool calling, streaming, and vision support from provider metadata", () => {
+    const openRouterProvider = providerCatalog.find((provider) => provider.id === "openrouter")!;
+    const models = parseProviderModelList(openRouterProvider, {
+      data: [
+        {
+          id: "anthropic/claude-sonnet-4.5",
+          name: "Claude Sonnet 4.5",
+          supported_parameters: ["tools", "stream"],
+          architecture: {
+            input_modalities: ["text", "image"],
+            output_modalities: ["text"]
+          }
+        }
+      ]
+    });
+    const model = toForgeModel(openRouterProvider, models[0]);
+
+    expect(model.capabilities.toolCalling).toBe(true);
+    expect(model.capabilities.streaming).toBe(true);
+    expect(model.capabilities.vision).toBe(true);
+  });
+
   it("parses OpenRouter context length and token pricing metadata when available", () => {
     const openRouterProvider = providerCatalog.find((provider) => provider.id === "openrouter")!;
     const models = parseProviderModelList(openRouterProvider, {

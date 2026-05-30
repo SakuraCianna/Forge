@@ -10,8 +10,10 @@ type PackageJson = {
     appId?: string;
     productName?: string;
     directories?: { output?: string };
+    asar?: boolean;
     files?: string[];
     win?: { icon?: string; target?: string[]; signAndEditExecutable?: boolean };
+    nsis?: { oneClick?: boolean; allowToChangeInstallationDirectory?: boolean };
   };
 };
 
@@ -21,17 +23,38 @@ function readPackageJson(): PackageJson {
 }
 
 describe("package config", () => {
-  it("does not expose release packaging while Forge is not release-ready", () => {
+  it("exposes a local release packaging flow for Windows builds", () => {
     const pkg = readPackageJson();
 
-    expect(pkg.devDependencies?.["electron-builder"]).toBeUndefined();
-    expect(pkg.scripts?.["package:dir"]).toBeUndefined();
-    expect(pkg.scripts?.["dist:win"]).toBeUndefined();
-    expect(pkg.build).toBeUndefined();
+    expect(pkg.devDependencies?.["electron-builder"]).toBeDefined();
+    expect(pkg.scripts?.["release:check"]).toBe("npm run lint && npm test && npm run build");
+    expect(pkg.scripts?.["package:dir"]).toBe("npm run build && electron-builder --dir");
+    expect(pkg.scripts?.["dist:win"]).toBe(
+      "npm run build && electron-builder --win --x64 --publish never"
+    );
+    expect(pkg.build).toMatchObject({
+      appId: "com.sakuracianna.forge",
+      productName: "Forge",
+      directories: {
+        output: "release",
+        buildResources: "build"
+      },
+      asar: true,
+      files: ["out/**/*", "package.json"],
+      win: {
+        icon: "build/icon.ico",
+        target: ["nsis"],
+        signAndEditExecutable: false
+      },
+      nsis: {
+        oneClick: false,
+        allowToChangeInstallationDirectory: true
+      }
+    });
   });
 
-  it("does not keep release documentation or automation in the repository", () => {
-    expect(existsSync(join(process.cwd(), "docs", "RELEASE.md"))).toBe(false);
+  it("keeps release documentation local and avoids publishing automation by default", () => {
+    expect(existsSync(join(process.cwd(), "docs", "RELEASE.md"))).toBe(true);
     expect(existsSync(join(process.cwd(), ".github", "workflows", "release.yml"))).toBe(false);
   });
 
