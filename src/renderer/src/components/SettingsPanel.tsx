@@ -1678,8 +1678,17 @@ function modelMatchesSearch(
   }
 
   const provider = providers.find((candidate) => candidate.id === model.providerId);
+  const providerLabel = provider?.label ?? model.providerId;
   const normalizedHaystack = normalizeModelSearchText(
-    [model.id, model.modelName, model.label, model.providerId, provider?.label ?? ""].join(" ")
+    [
+      model.id,
+      model.modelName,
+      model.label,
+      model.providerId,
+      providerLabel,
+      formatModelDetails("en-US", model, providerLabel),
+      formatModelDetails("zh-CN", model, providerLabel)
+    ].join(" ")
   );
 
   return normalizedHaystack.includes(normalizedQuery);
@@ -1707,6 +1716,8 @@ function formatModelDetails(
     details.push(formatContextWindow(language, model.capabilities.contextWindow));
   }
 
+  details.push(...formatModelCapabilityLabels(language, model));
+
   if (model.pricing) {
     details.push(
       `$${formatPrice(model.pricing.inputPerMillion)} / $${formatPrice(
@@ -1715,7 +1726,76 @@ function formatModelDetails(
     );
   }
 
+  details.push(formatCapabilitySource(language, model.capabilitySource));
+
   return details.join(" · ");
+}
+
+// 把模型能力压成短标签, 让用户能看出 Provider API 探测到了什么
+function formatModelCapabilityLabels(language: Language, model: ForgeModel): string[] {
+  const labels: string[] = [];
+
+  if (model.capabilities.reasoning.type !== "none") {
+    labels.push(language === "zh-CN" ? "推理" : "Reasoning");
+  }
+
+  labels.push(...formatTriStateCapability(language, model.capabilities.toolCalling, "tools"));
+  labels.push(...formatTriStateCapability(language, model.capabilities.streaming, "streaming"));
+  labels.push(...formatTriStateCapability(language, model.capabilities.vision, "vision"));
+
+  return labels;
+}
+
+// 格式化布尔或未知的模型能力, 未知能力不展示以保持列表简洁
+function formatTriStateCapability(
+  language: Language,
+  capability: boolean | "unknown",
+  kind: "tools" | "streaming" | "vision"
+): string[] {
+  if (capability === "unknown") {
+    return [];
+  }
+
+  const labels = {
+    tools: {
+      enabled: language === "zh-CN" ? "工具调用" : "Tools",
+      disabled: language === "zh-CN" ? "无工具调用" : "No tools"
+    },
+    streaming: {
+      enabled: language === "zh-CN" ? "流式输出" : "Streaming",
+      disabled: language === "zh-CN" ? "无流式输出" : "No streaming"
+    },
+    vision: {
+      enabled: language === "zh-CN" ? "视觉" : "Vision",
+      disabled: language === "zh-CN" ? "纯文本" : "Text only"
+    }
+  }[kind];
+
+  return [capability ? labels.enabled : labels.disabled];
+}
+
+// 标记模型能力来自内置配置, 模型列表, 探测或手动添加
+function formatCapabilitySource(language: Language, source: ForgeModel["capabilitySource"]): string {
+  const labels: Record<ForgeModel["capabilitySource"], { zh: string; en: string }> = {
+    "built-in": {
+      zh: "内置能力",
+      en: "Built-in"
+    },
+    "provider-api": {
+      zh: "模型列表",
+      en: "Provider API"
+    },
+    probe: {
+      zh: "能力探测",
+      en: "Probe"
+    },
+    manual: {
+      zh: "手动添加",
+      en: "Manual"
+    }
+  };
+
+  return language === "zh-CN" ? labels[source].zh : labels[source].en;
 }
 
 // 把上下文窗口数字格式化成 k tokens

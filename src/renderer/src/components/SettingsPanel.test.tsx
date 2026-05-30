@@ -546,6 +546,53 @@ describe("SettingsPanel", () => {
     expect(screen.queryByText("DeepSeek V4 Flash")).not.toBeInTheDocument();
   });
 
+  it("shows and searches detected model capabilities", async () => {
+    const user = userEvent.setup();
+    const settings = mergeFetchedModels(setLanguage(createDefaultModelSettings(), "en-US"), [
+      {
+        id: "openai:gpt-4.1",
+        providerId: "openai",
+        label: "GPT-4.1",
+        modelName: "gpt-4.1",
+        enabled: false,
+        capabilities: {
+          reasoning: { type: "effort", values: ["low", "medium", "high"] },
+          toolCalling: true,
+          streaming: true,
+          vision: true,
+          contextWindow: 128000
+        },
+        capabilitySource: "provider-api"
+      },
+      {
+        id: "deepseek:deepseek-v4-flash",
+        providerId: "deepseek",
+        label: "DeepSeek V4 Flash",
+        modelName: "deepseek-v4-flash",
+        enabled: false,
+        capabilities: {
+          reasoning: { type: "none" },
+          toolCalling: "unknown",
+          streaming: "unknown",
+          vision: "unknown"
+        },
+        capabilitySource: "provider-api"
+      }
+    ]);
+
+    renderSettingsPanel({ settings });
+    await user.click(screen.getByRole("button", { name: /Available models/ }));
+
+    expect(
+      screen.getByText(/From OpenAI.*128K context.*Reasoning.*Tools.*Streaming.*Vision.*Provider API/u)
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search models" }), "vision");
+
+    expect(screen.getByText("GPT-4.1")).toBeInTheDocument();
+    expect(screen.queryByText("DeepSeek V4 Flash")).not.toBeInTheDocument();
+  });
+
   it("passes the draft API key when fetching models", async () => {
     const user = userEvent.setup();
     const onFetchModels = vi.fn();

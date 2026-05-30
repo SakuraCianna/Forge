@@ -36,6 +36,7 @@ import {
   resolveAgentCommandRisk,
   type AgentCommandSafetyPolicy
 } from "@/agent/agentActionExecutor";
+import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
@@ -1091,11 +1092,17 @@ export function ThreadWorkspace({
       const commandRisk = getCommandRiskForAction(action);
 
       if (commandRisk?.level === "ask") {
-        return actionDetailsCopy.commandNeedsApproval;
+        return `${actionDetailsCopy.commandNeedsApproval}: ${formatAgentCommandRiskReason(
+          language,
+          commandRisk.reason
+        )}`;
       }
 
       if (commandRisk?.level === "deny") {
-        return actionDetailsCopy.commandBlocked;
+        return `${actionDetailsCopy.commandBlocked}: ${formatAgentCommandRiskReason(
+          language,
+          commandRisk.reason
+        )}`;
       }
 
       if (isRunnableAgentAction(action, commandSafetyPolicy)) {
@@ -2093,7 +2100,7 @@ export function ThreadWorkspace({
                       <span className="font-semibold text-[#202123]">
                         {commandApprovalCopy.reason}:{" "}
                       </span>
-                      {approval.reason}
+                      {formatAgentCommandRiskReason(language, approval.reason)}
                     </p>
                   </article>
                 );

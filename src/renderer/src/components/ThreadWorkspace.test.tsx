@@ -824,6 +824,52 @@ describe("ThreadWorkspace", () => {
     expect(within(approvals).getByText(/2026-05-27/)).toBeInTheDocument();
   });
 
+  it("localizes built-in command approval reasons in Chinese", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="zh-CN"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "审计命令批准",
+            events: [
+              {
+                id: "event-command-approved",
+                kind: "command",
+                message:
+                  "Command approved: npm install (command may change dependencies or project state)",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandApproval: {
+                  command: "npm install",
+                  reason: "command may change dependencies or project state",
+                  approvedAt: "2026-05-27T13:05:00.000Z"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "命令" }));
+
+    const approvals = screen.getByRole("region", { name: "命令审批记录" });
+    expect(within(approvals).getByText("npm install")).toBeInTheDocument();
+    expect(within(approvals).getByText("命令会修改依赖或项目状态")).toBeInTheDocument();
+    expect(
+      within(approvals).queryByText("command may change dependencies or project state")
+    ).not.toBeInTheDocument();
+  });
+
   it("shows details for the selected agent action", async () => {
     const user = userEvent.setup();
 

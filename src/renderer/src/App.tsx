@@ -25,6 +25,7 @@ import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
 } from "@/agent/failureFixPrompt";
+import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { formatRemoteModelError, formatRuntimeError } from "@/i18n/runtimeErrors";
 import { useI18n } from "@/i18n/useI18n";
 import { removeFileChangePreview, upsertFileChangePreview } from "@/state/fileChanges";
@@ -1635,7 +1636,10 @@ export function App(): ReactElement {
         return blockAgentCommandAction(
           threadId,
           action,
-          formatAgentCommandDenied(settings.language, commandRisk.reason),
+          formatAgentCommandDenied(
+            settings.language,
+            formatAgentCommandRiskReason(settings.language, commandRisk.reason)
+          ),
           "failed"
         );
       }
@@ -1644,7 +1648,11 @@ export function App(): ReactElement {
         return blockAgentCommandAction(
           threadId,
           action,
-          formatAgentCommandNeedsApproval(settings.language, execution.command, commandRisk.reason),
+          formatAgentCommandNeedsApproval(
+            settings.language,
+            execution.command,
+            formatAgentCommandRiskReason(settings.language, commandRisk.reason)
+          ),
           "pending"
         );
       }
