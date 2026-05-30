@@ -1534,7 +1534,8 @@ export function App(): ReactElement {
   // 执行单个 Agent 动作, 失败时保留可恢复的结果说明
   async function runAgentAction(
     threadId: string,
-    action: AgentAction
+    action: AgentAction,
+    options: { approvedCommand?: boolean } = {}
   ): Promise<AgentActionRunOutcome> {
     const activeAgentProfile = getActiveAgentProfileContext(agentProfiles);
     const permission = resolveAgentActionPermission(action, activeAgentProfile);
@@ -1610,7 +1611,7 @@ export function App(): ReactElement {
         );
       }
 
-      if (commandRisk.level === "ask" && !generalPreferences.fullAccess) {
+      if (commandRisk.level === "ask" && !generalPreferences.fullAccess && !options.approvedCommand) {
         return blockAgentCommandAction(
           threadId,
           action,
@@ -1654,6 +1655,11 @@ export function App(): ReactElement {
     );
 
     return status;
+  }
+
+  // 只批准当前这一次命令动作, 不改变全局完全访问权限
+  async function approveAgentCommandAction(threadId: string, action: AgentAction): Promise<void> {
+    await runAgentAction(threadId, action, { approvedCommand: true });
   }
 
   // 批量执行动作队列, 每一步都通过线程事件回写进度
@@ -1936,6 +1942,7 @@ export function App(): ReactElement {
         onOpenRecentProject={openMostRecentProject}
         onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
         onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
+        onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
         onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
         onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
         onCompleteAgentAction={(threadId, action) =>

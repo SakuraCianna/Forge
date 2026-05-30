@@ -732,6 +732,51 @@ describe("ThreadWorkspace", () => {
     );
   });
 
+  it("approves command actions that require a one-time confirmation", async () => {
+    const user = userEvent.setup();
+    const onApproveAgentCommand = vi.fn();
+    const onRunAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Approve command",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Install dependencies",
+                status: "pending",
+                command: "npm install"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentAction={onRunAgentAction}
+        onApproveAgentCommand={onApproveAgentCommand}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Approve command npm install" }));
+
+    expect(onApproveAgentCommand).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", command: "npm install" })
+    );
+    expect(onRunAgentAction).not.toHaveBeenCalled();
+  });
+
   it("shows details for the selected agent action", async () => {
     const user = userEvent.setup();
 

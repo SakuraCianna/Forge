@@ -127,6 +127,31 @@ describe("agentActionExecutor", () => {
     ]);
   });
 
+  it("stops safe batches before commands that require approval", () => {
+    const inspect = createAction({
+      id: "action-1",
+      status: "pending",
+      kind: "inspect-file",
+      target: "src/App.tsx"
+    });
+    const install = createAction({
+      id: "action-2",
+      status: "pending",
+      kind: "run-command",
+      command: "npm install"
+    });
+    const test = createAction({
+      id: "action-3",
+      status: "pending",
+      kind: "run-command",
+      command: "npm test"
+    });
+
+    expect(getRunnablePendingAgentActions([inspect, install, test]).map((action) => action.id)).toEqual([
+      "action-1"
+    ]);
+  });
+
   it("does not auto-run when the next pending action needs manual review", () => {
     expect(
       getRunnablePendingAgentActions([

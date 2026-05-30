@@ -196,7 +196,7 @@ export function isRunnableAgentAction(action: AgentAction): boolean {
   }
 
   if (action.kind === "run-command" && action.command) {
-    return true;
+    return resolveAgentCommandRisk(action.command).level === "allow";
   }
 
   return false;

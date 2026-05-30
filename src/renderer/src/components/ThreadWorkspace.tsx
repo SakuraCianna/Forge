@@ -27,7 +27,8 @@ import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileType
 import {
   findNextPendingAgentAction,
   getRunnablePendingAgentActions,
-  isRunnableAgentAction
+  isRunnableAgentAction,
+  resolveAgentCommandRisk
 } from "@/agent/agentActionExecutor";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
@@ -49,6 +50,7 @@ type ThreadWorkspaceProps = {
   onOpenRecentProject?: () => void;
   onRunAgentAction?: (threadId: string, action: AgentAction) => void;
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
+  onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
   onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
@@ -97,6 +99,7 @@ export function ThreadWorkspace({
   onOpenRecentProject,
   onRunAgentAction,
   onRunAgentActions,
+  onApproveAgentCommand,
   onGenerateFailureFix,
   onGenerateCommandFix,
   onCompleteAgentAction,
@@ -736,6 +739,9 @@ export function ThreadWorkspace({
             manualGate: "需要人工审查",
             manualGateBody: (label: string) => `请先处理 ${label}, Forge 不会自动越过这个门禁`,
             reviewGate: "审查门禁",
+            approveCommand: "批准命令",
+            commandNeedsApproval: "命令需要批准",
+            commandBlocked: "命令已被安全策略阻止",
             markReviewComplete: "完成审查",
             openSourceControl: "打开源代码管理",
             ready: "就绪",
@@ -758,6 +764,9 @@ export function ThreadWorkspace({
             manualGateBody: (label: string) =>
               `Handle ${label} before Forge continues. This gate will not be auto-run.`,
             reviewGate: "Review gate",
+            approveCommand: "Approve command",
+            commandNeedsApproval: "Command needs approval",
+            commandBlocked: "Command blocked by policy",
             markReviewComplete: "Mark review complete",
             openSourceControl: "Open source control",
             ready: "Ready",
@@ -844,6 +853,8 @@ export function ThreadWorkspace({
             running: "正在等待命令或文件操作完成",
             ready: "可以运行",
             manualGate: "需要人工审查",
+            commandNeedsApproval: "需要批准后运行",
+            commandBlocked: "命令已被安全策略阻止",
             skipped: "已跳过"
           }
         : {
@@ -866,6 +877,8 @@ export function ThreadWorkspace({
             running: "Waiting for the command or file operation to finish",
             ready: "Ready to run",
             manualGate: "Manual review required",
+            commandNeedsApproval: "Approve this command before running it",
+            commandBlocked: "Command blocked by safety policy",
             skipped: "Skipped"
           };
     const queueStats = getQueueStats(agentActions);
@@ -914,8 +927,25 @@ export function ThreadWorkspace({
       ? findLatestCommandResult(selectedThread?.events ?? [], selectedAgentAction.command)
       : null;
 
+    // 读取命令动作的风险等级, 非命令动作不参与审批判断
+    function getCommandRiskForAction(action: AgentAction): ReturnType<typeof resolveAgentCommandRisk> | null {
+      return action.kind === "run-command" && action.command
+        ? resolveAgentCommandRisk(action.command)
+        : null;
+    }
+
     // 把动作状态转换成中文标签, 供队列和详情区复用
     function getActionStatusLabel(action: AgentAction): string {
+      const commandRisk = getCommandRiskForAction(action);
+
+      if (action.status === "pending" && commandRisk?.level === "ask") {
+        return actionQueueCopy.commandNeedsApproval;
+      }
+
+      if (action.status === "pending" && commandRisk?.level === "deny") {
+        return actionQueueCopy.commandBlocked;
+      }
+
       if (action.status === "pending" && (action.kind === "manual" || action.kind === "commit")) {
         return actionQueueCopy.reviewGate;
       }
@@ -974,6 +1004,24 @@ export function ThreadWorkspace({
 
       if (action.kind === "run-command" && action.command && selectedThread) {
         const commandToRun = action.command;
+        const commandRisk = resolveAgentCommandRisk(commandToRun);
+
+        if (commandRisk.level === "ask" && onApproveAgentCommand) {
+          return (
+            <button
+              type="button"
+              aria-label={`Approve command ${commandToRun}`}
+              onClick={() => onApproveAgentCommand(selectedThread.id, action)}
+              className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+            >
+              {actionQueueCopy.approveCommand}
+            </button>
+          );
+        }
+
+        if (commandRisk.level === "deny") {
+          return null;
+        }
 
         return (
           <button
@@ -1019,11 +1067,51 @@ export function ThreadWorkspace({
         return actionDetailsCopy.manualGate;
       }
 
+      const commandRisk = getCommandRiskForAction(action);
+
+      if (commandRisk?.level === "ask") {
+        return actionDetailsCopy.commandNeedsApproval;
+      }
+
+      if (commandRisk?.level === "deny") {
+        return actionDetailsCopy.commandBlocked;
+      }
+
       if (isRunnableAgentAction(action)) {
         return actionDetailsCopy.ready;
       }
 
       return actionQueueCopy.pending;
+    }
+
+    // 生成人工门禁或命令审批门禁标题
+    function getGateTitle(action: AgentAction): string {
+      const commandRisk = getCommandRiskForAction(action);
+
+      if (commandRisk?.level === "ask") {
+        return actionQueueCopy.commandNeedsApproval;
+      }
+
+      if (commandRisk?.level === "deny") {
+        return actionQueueCopy.commandBlocked;
+      }
+
+      return actionQueueCopy.manualGate;
+    }
+
+    // 生成人工门禁或命令审批门禁说明
+    function getGateBody(action: AgentAction): string {
+      const commandRisk = getCommandRiskForAction(action);
+
+      if (commandRisk?.level === "ask") {
+        return actionDetailsCopy.commandNeedsApproval;
+      }
+
+      if (commandRisk?.level === "deny") {
+        return actionDetailsCopy.commandBlocked;
+      }
+
+      return actionQueueCopy.manualGateBody(action.label);
     }
 
     // 展示单个动作的输入, 输出和恢复入口
@@ -1490,11 +1578,24 @@ export function ThreadWorkspace({
             {runnablePendingActions.length === 0 && activeGateAction ? (
               <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2">
                 <p className="text-sm font-medium leading-5 text-[#9a3412]">
-                  {actionQueueCopy.manualGate}
+                  {getGateTitle(activeGateAction)}
                 </p>
                 <p className="mt-0.5 text-[11px] leading-4 text-[#b45309]">
-                  {actionQueueCopy.manualGateBody(activeGateAction.label)}
+                  {getGateBody(activeGateAction)}
                 </p>
+                {activeGateAction.kind === "run-command" &&
+                activeGateAction.command &&
+                getCommandRiskForAction(activeGateAction)?.level === "ask" &&
+                selectedThread &&
+                onApproveAgentCommand ? (
+                  <button
+                    type="button"
+                    onClick={() => onApproveAgentCommand(selectedThread.id, activeGateAction)}
+                    className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+                  >
+                    {actionQueueCopy.approveCommand}
+                  </button>
+                ) : null}
                 {activeGateAction.kind === "commit" && onOpenSourceControl ? (
                   <button
                     type="button"
