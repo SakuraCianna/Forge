@@ -9,13 +9,13 @@ import type {
   ProjectGitStatusRequest
 } from "../shared/gitTypes.js";
 
-export type GitCommandResult = {
+type GitCommandResult = {
   exitCode: number | null;
   stdout: string;
   stderr: string;
 };
 
-export type GitRunner = (args: string[], cwd: string) => Promise<GitCommandResult>;
+type GitRunner = (args: string[], cwd: string) => Promise<GitCommandResult>;
 
 type ProjectGitStatusOptions = ProjectGitStatusRequest & {
   runGit?: GitRunner;

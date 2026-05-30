@@ -34,7 +34,7 @@ export type CommandResult = {
   cancelled?: boolean;
 };
 
-export type ProjectCommandRunner = {
+type ProjectCommandRunner = {
   runProjectCommand: (options: RunProjectCommandOptions) => Promise<CommandResult>;
   cancelProjectCommand: (options: CancelProjectCommandOptions) => CancelProjectCommandResult;
 };

@@ -28,30 +28,6 @@ describe("ThreadWorkspace", () => {
             ...thread,
             events: [
               {
-                id: "scaffold-created",
-                kind: "plan",
-                message: "Internal progress message",
-                createdAt: "2026-05-27T13:00:00.000Z"
-              },
-              {
-                id: "scaffold-indexed",
-                kind: "plan",
-                message: "Internal scan message",
-                createdAt: "2026-05-27T13:00:01.000Z"
-              },
-              {
-                id: "scaffold-mode",
-                kind: "plan",
-                message: "Internal mode message",
-                createdAt: "2026-05-27T13:00:02.000Z"
-              },
-              {
-                id: "scaffold-calling",
-                kind: "plan",
-                message: "Internal model message",
-                createdAt: "2026-05-27T13:00:03.000Z"
-              },
-              {
                 id: "answer",
                 kind: "result",
                 message: "A concise answer for the user.",
@@ -68,10 +44,6 @@ describe("ThreadWorkspace", () => {
 
     const transcript = screen.getByRole("region", { name: "Conversation transcript" });
     expect(transcript).toHaveTextContent("A concise answer for the user.");
-    expect(transcript).not.toHaveTextContent("Internal progress message");
-    expect(transcript).not.toHaveTextContent("Internal scan message");
-    expect(transcript).not.toHaveTextContent("Internal mode message");
-    expect(transcript).not.toHaveTextContent("Internal model message");
     expect(screen.queryByText("Task threads")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Plan" })).not.toBeInTheDocument();
     expect(screen.queryByText("Steps")).not.toBeInTheDocument();

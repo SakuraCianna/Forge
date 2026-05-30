@@ -7,12 +7,12 @@ import type {
   SpeedMode
 } from "./modelTypes.js";
 
-export type ModelListRequest = {
+type ModelListRequest = {
   url: string;
   headers: Record<string, string>;
 };
 
-export type FetchedModel = {
+type FetchedModel = {
   id: string;
   label: string;
   contextWindow?: number;
@@ -128,7 +128,7 @@ export function assertHeaderValue(headerName: string, value: string): string {
 }
 
 // 从模型名推断基础能力, 供应商未返回能力时使用
-export function inferFetchedModelCapabilities(
+function inferFetchedModelCapabilities(
   provider: ForgeProvider,
   modelName: string,
   metadata?: Pick<FetchedModel, "supportedParameters">

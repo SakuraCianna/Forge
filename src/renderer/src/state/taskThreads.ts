@@ -49,7 +49,6 @@ export type TaskThread = {
   createdAt: string;
   pinned?: boolean;
   archived?: boolean;
-  mode?: "ask" | "project";
   projectPath?: string | null;
   contextMemories?: AgentMemoryContext[];
   agentActions?: AgentAction[];

@@ -2,13 +2,13 @@
 import { fileChannels } from "../shared/ipcChannels.js";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 
-export type ReadProjectTextFileRequest = {
+type ReadProjectTextFileRequest = {
   projectRoot: string;
   relativePath: string;
   maxBytes?: number;
 };
 
-export type UpdateProjectTextFileRequest = ReadProjectTextFileRequest & {
+type UpdateProjectTextFileRequest = ReadProjectTextFileRequest & {
   nextContent: string;
 };
 

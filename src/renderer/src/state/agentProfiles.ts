@@ -149,7 +149,7 @@ export function saveAgentProfiles(storage: Storage, profiles: AgentProfile[]): v
 }
 
 // 找到当前启用的 Agent 配置, 缺失时回退到第一项
-export function getActiveAgentProfile(profiles: AgentProfile[]): AgentProfile {
+function getActiveAgentProfile(profiles: AgentProfile[]): AgentProfile {
   const normalizedProfiles = ensureActiveProfile(
     profiles.length > 0 ? profiles : createDefaultAgentProfiles()
   );

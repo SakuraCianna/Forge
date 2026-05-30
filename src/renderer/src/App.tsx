@@ -5,7 +5,6 @@ import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileType
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
-import type { AgentPlanStep } from "@shared/agentTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
 import { FilePreviewRenderer } from "@/components/FilePreviewRenderer";
@@ -1030,7 +1029,6 @@ export function App(): ReactElement {
 
       const askThread: TaskThread = {
         ...result.thread,
-        mode: currentProject ? "project" : undefined,
         projectPath: currentProject?.path ?? null,
         status: "running",
         events: []
@@ -1121,7 +1119,6 @@ export function App(): ReactElement {
     cancelledThreadIdsRef.current.delete(result.thread.id);
     const projectThread: TaskThread = {
       ...result.thread,
-      mode: "project",
       // 项目任务直接等待真实模型输出, 不再插入静态计划模板
       status: "running",
       projectPath: currentProject.path
@@ -1196,7 +1193,7 @@ export function App(): ReactElement {
           appendThreadEvents(
             current,
             threadId,
-            [...createAgentPlanResultEvents(threadId, plan.text, plan.steps, plan.createdAt)],
+            [],
             agentActions.length > 0 ? "planned" : "completed"
           ),
           threadId,
@@ -2239,32 +2236,6 @@ export function App(): ReactElement {
   );
 }
 
-// 把模型计划步骤转成简短线程事件, 不再生成内部模板流水账
-function createAgentPlanResultEvents(
-  threadId: string,
-  text: string,
-  steps: AgentPlanStep[] | undefined,
-  createdAt: string
-): Array<{ id: string; kind: "plan"; message: string; createdAt: string }> {
-  if (!steps?.length) {
-    return [
-      {
-        id: `${threadId}-agent-plan-${createdAt}`,
-        kind: "plan",
-        message: text,
-        createdAt
-      }
-    ];
-  }
-
-  return steps.map((step, index) => ({
-    id: `${threadId}-agent-plan-${createdAt}-${step.id}`,
-    kind: "plan",
-    message: `${index + 1}. ${getAgentStepKindLabel(step.kind)}: ${step.description}`,
-    createdAt
-  }));
-}
-
 // 把当前线程历史压成模型对话, 用户和输出事件按顺序保留
 function createThreadConversation(
   thread: TaskThread
@@ -2282,27 +2253,6 @@ function createThreadConversation(
   }
 
   return turns;
-}
-
-// 把 Agent 步骤类型翻译成用户能看懂的中文短标签
-function getAgentStepKindLabel(kind: AgentPlanStep["kind"]): string {
-  if (kind === "inspect") {
-    return "检查";
-  }
-
-  if (kind === "edit") {
-    return "修改";
-  }
-
-  if (kind === "verify") {
-    return "验证";
-  }
-
-  if (kind === "commit") {
-    return "提交";
-  }
-
-  return "计划";
 }
 
 // 把运行时错误收敛成一行中文提示, 隐藏 HTML 响应噪音

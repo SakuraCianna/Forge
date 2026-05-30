@@ -9,7 +9,7 @@ import type {
 import { assertHeaderValue, normalizeApiKeyForHeader } from "./providerModels.js";
 import type { TokenUsage } from "./usageTypes.js";
 
-export type TextGenerationRequestOptions = {
+type TextGenerationRequestOptions = {
   provider: ForgeProvider;
   model: ForgeModel;
   apiKey: string;
@@ -19,7 +19,7 @@ export type TextGenerationRequestOptions = {
   speed?: SpeedMode;
 };
 
-export type BuiltTextGenerationRequest = {
+type BuiltTextGenerationRequest = {
   url: string;
   init: {
     method: "POST";

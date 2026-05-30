@@ -1,7 +1,7 @@
 // 本文件说明: 判断 Agent 动作是否可执行并按队列推进动作
 import type { AgentAction } from "@shared/agentExecutionPlan";
 
-export type AgentActionExecution =
+type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }
   | { kind: "generate-file-change"; relativePath: string }
   | { kind: "run-command"; command: string }
@@ -57,7 +57,7 @@ export function getRunnablePendingAgentActions(actions: AgentAction[]): AgentAct
   return runnableActions;
 }
 
-export type AgentActionBatchResult = {
+type AgentActionBatchResult = {
   completed: number;
   stoppedAt: AgentAction | null;
   finalStatus: AgentAction["status"];

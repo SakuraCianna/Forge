@@ -135,7 +135,7 @@ export function ThreadWorkspace({
     [selectedThread]
   );
   const visibleCompactEvents = useMemo(
-    () => (selectedThread ? selectedThread.events.filter((event) => !isCompactScaffoldEvent(event)) : []),
+    () => selectedThread?.events ?? [],
     [selectedThread]
   );
   const duration = useMemo(() => {
@@ -424,7 +424,7 @@ export function ThreadWorkspace({
     );
   }
 
-  // 把线程事件压成对话区可读条目, 隐藏内部模板事件
+  // 把线程事件压成对话区可读条目, 事件源头不再生成旧模板流水账
   function renderCompactEvent(event: TaskThreadEvent): ReactElement {
     if (event.kind === "user") {
       return (
@@ -2130,11 +2130,6 @@ function getCompactEventLabel(event: TaskThreadEvent, language: Language): strin
   }
 
   return language === "zh-CN" ? "执行记录" : "Run transcript";
-}
-
-// 识别旧版脚手架模板事件, 在简洁模式里直接隐藏
-function isCompactScaffoldEvent(event: TaskThreadEvent): boolean {
-  return event.kind === "plan" && !event.commandRun && !event.commandResult;
 }
 
 // 查找最近未完成命令, 用于显示停止按钮和运行状态
