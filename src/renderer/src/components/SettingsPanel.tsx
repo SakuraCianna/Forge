@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Archive,
+  Bot,
   Brain,
   Check,
   CheckCircle2,
@@ -28,6 +29,7 @@ import { useI18n } from "@/i18n/useI18n";
 import type { PersonalizationSettings } from "@/state/personalization";
 import type { TaskThread } from "@/state/taskThreads";
 import type { AgentMemoryEntry } from "@/state/agentMemory";
+import type { AgentProfile, AgentProfilePatch, AgentProfileTool } from "@/state/agentProfiles";
 import type { GeneralPreferences } from "@/state/generalPreferences";
 import { getModelsForDisplay } from "@/state/modelSettings";
 import {
@@ -50,10 +52,12 @@ type SettingsPanelProps = {
   keyStatuses: Record<string, { hasKey: boolean; last4: string | null }>;
   archivedThreads: TaskThread[];
   agentMemories: AgentMemoryEntry[];
+  agentProfiles: AgentProfile[];
   generalPreferences: GeneralPreferences;
   onClearAgentMemories: () => void;
   onDeleteProviderKey: (providerId: string) => void;
   onDeleteAgentMemory: (memoryId: string) => void;
+  onSelectAgentProfile: (profileId: string) => void;
   onFetchModels: (providerId: string, apiKey?: string) => void;
   onAddManualModel: (providerId: string, modelName: string, apiKey?: string) => void;
   onAddProvider: (label: string, baseUrl: string) => void;
@@ -62,6 +66,7 @@ type SettingsPanelProps = {
   onSaveProviderKey: (providerId: string, apiKey: string) => void;
   onSetLanguage: (language: Language) => void;
   onToggleModelEnabled: (modelId: string, enabled: boolean) => void;
+  onUpdateAgentProfile: (profileId: string, patch: AgentProfilePatch) => void;
   onUpdateGeneralPreferences: (preferences: GeneralPreferences) => void;
   onUpdatePersonalization: (settings: PersonalizationSettings) => void;
   onUpdateProviderBaseUrl: (providerId: string, baseUrl: string) => void;
@@ -79,6 +84,7 @@ type SettingsSection =
   | "general"
   | "models"
   | "providers"
+  | "agents"
   | "memory"
   | "usage"
   | "personalization"
@@ -96,10 +102,12 @@ export function SettingsPanel({
   keyStatuses,
   archivedThreads,
   agentMemories,
+  agentProfiles,
   generalPreferences,
   onClearAgentMemories,
   onDeleteAgentMemory,
   onDeleteProviderKey,
+  onSelectAgentProfile,
   onFetchModels,
   onAddManualModel,
   onAddProvider,
@@ -108,6 +116,7 @@ export function SettingsPanel({
   onSaveProviderKey,
   onSetLanguage,
   onToggleModelEnabled,
+  onUpdateAgentProfile,
   onUpdateGeneralPreferences,
   onUpdatePersonalization,
   onUpdateProviderBaseUrl,
@@ -145,6 +154,7 @@ export function SettingsPanel({
   const totalUsage = summarizeUsage(usageEvents, usageRates);
   const providerUsage = summarizeUsageByProvider(usageEvents, usageRates);
   const modelUsage = summarizeUsageByModel(usageEvents, usageRates);
+  const activeAgentProfile = agentProfiles.find((profile) => profile.active) ?? agentProfiles[0] ?? null;
   const sectionItems: SectionItem[] = [
     {
       id: "general",
@@ -163,6 +173,12 @@ export function SettingsPanel({
       label: t("settings.providerProfiles"),
       description: t("settings.providerProfilesDescription"),
       icon: KeyRound
+    },
+    {
+      id: "agents",
+      label: settings.language === "zh-CN" ? "Agent 配置" : "Agent profiles",
+      description: activeAgentProfile?.name ?? (settings.language === "zh-CN" ? "暂无" : "None"),
+      icon: Bot
     },
     {
       id: "memory",
@@ -240,6 +256,7 @@ export function SettingsPanel({
             {activeSection === "general" ? renderGeneralSection() : null}
             {activeSection === "models" ? renderModelsSection() : null}
             {activeSection === "providers" ? renderProvidersSection() : null}
+            {activeSection === "agents" ? renderAgentProfilesSection() : null}
             {activeSection === "memory" ? renderMemorySection() : null}
             {activeSection === "usage" ? renderUsageSection() : null}
             {activeSection === "personalization" ? renderPersonalizationSection() : null}
@@ -931,6 +948,145 @@ export function SettingsPanel({
     );
   }
 
+  function renderAgentProfilesSection(): ReactElement {
+    const copy = getAgentProfilesCopy(settings.language);
+    const selectedProfile = activeAgentProfile ?? agentProfiles[0] ?? null;
+
+    return (
+      <SectionFrame>
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-[#202123]">{copy.title}</h2>
+          <p className="mt-1 text-xs leading-5 text-[#6e6e80]">{copy.description}</p>
+        </div>
+
+        {selectedProfile ? (
+          <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="grid gap-1">
+              {agentProfiles.map((profile) => (
+                <button
+                  key={profile.id}
+                  type="button"
+                  aria-label={copy.selectProfile(profile.name)}
+                  onClick={() => onSelectAgentProfile(profile.id)}
+                  className={`rounded-[12px] px-3 py-2.5 text-left transition active:scale-[0.99] ${
+                    profile.active
+                      ? "bg-[#ececf1] text-[#202123]"
+                      : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+                  }`}
+                >
+                  <span className="block truncate text-sm font-semibold">{profile.name}</span>
+                  <span className="mt-0.5 block truncate text-xs text-[#8e8ea0]">
+                    {profile.description}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="rounded-[16px] border border-[#ececf1] bg-white p-4">
+              <div className="grid gap-3">
+                <label className="grid gap-1 text-xs text-[#6e6e80]">
+                  {copy.name}
+                  <input
+                    value={selectedProfile.name}
+                    onChange={(event) =>
+                      onUpdateAgentProfile(selectedProfile.id, { name: event.currentTarget.value })
+                    }
+                    className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs text-[#6e6e80]">
+                  {copy.descriptionLabel}
+                  <input
+                    value={selectedProfile.description}
+                    onChange={(event) =>
+                      onUpdateAgentProfile(selectedProfile.id, {
+                        description: event.currentTarget.value
+                      })
+                    }
+                    className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                  />
+                </label>
+                <label className="grid gap-1 text-xs text-[#6e6e80]">
+                  {copy.instructions}
+                  <textarea
+                    aria-label={copy.instructions}
+                    value={selectedProfile.systemPrompt}
+                    onChange={(event) =>
+                      onUpdateAgentProfile(selectedProfile.id, {
+                        systemPrompt: event.currentTarget.value
+                      })
+                    }
+                    className="min-h-24 resize-none rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-2 text-sm leading-5 text-[#202123] outline-none transition focus:border-[#202123]"
+                  />
+                </label>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <SettingRow label={copy.permissionMode} description={copy.permissionDescription}>
+                    <InlineSelectMenu<AgentProfile["permissionMode"]>
+                      ariaLabel={copy.permissionMode}
+                      value={selectedProfile.permissionMode}
+                      options={[
+                        { value: "auto", label: copy.autoReview },
+                        { value: "full", label: copy.fullAccess }
+                      ]}
+                      onChange={(value) =>
+                        onUpdateAgentProfile(selectedProfile.id, { permissionMode: value })
+                      }
+                    />
+                  </SettingRow>
+                  <label className="grid gap-1 text-xs text-[#6e6e80]">
+                    {copy.contextBudget}
+                    <input
+                      type="number"
+                      min="2000"
+                      max="64000"
+                      step="1000"
+                      value={selectedProfile.contextBudget}
+                      onChange={(event) =>
+                        onUpdateAgentProfile(selectedProfile.id, {
+                          contextBudget: Number(event.currentTarget.value) || selectedProfile.contextBudget
+                        })
+                      }
+                      className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-2 rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-3">
+                  <span className="text-xs font-semibold text-[#565869]">{copy.tools}</span>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {(["read", "edit", "command", "git"] as const).map((tool) => (
+                      <label
+                        key={tool}
+                        className="flex h-8 items-center gap-2 rounded-[10px] bg-white px-2 text-sm text-[#202123]"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedProfile.tools[tool]}
+                          onChange={(event) =>
+                            onUpdateAgentProfile(selectedProfile.id, {
+                              tools: {
+                                ...selectedProfile.tools,
+                                [tool]: event.currentTarget.checked
+                              }
+                            })
+                          }
+                        />
+                        {copy.toolLabel(tool)}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-[#6e6e80]">{copy.empty}</p>
+        )}
+      </SectionFrame>
+    );
+  }
+
   function renderMemorySection(): ReactElement {
     const copy = getMemorySettingsCopy(settings.language);
 
@@ -1263,6 +1419,12 @@ export function SettingsPanel({
 
     if (section === "providers") {
       return t("settings.providerProfilesDescription");
+    }
+
+    if (section === "agents") {
+      return settings.language === "zh-CN"
+        ? "配置可复用的子 Agent 提示词, 权限和工具能力"
+        : "Configure reusable sub-agent prompts, permissions, and tools";
     }
 
     if (section === "usage") {
@@ -1600,6 +1762,71 @@ function getMemorySettingsCopy(language: Language): {
     globalScope: "Global",
     projectScope: "Project",
     title: "Agent memory"
+  };
+}
+
+function getAgentProfilesCopy(language: Language): {
+  autoReview: string;
+  contextBudget: string;
+  description: string;
+  descriptionLabel: string;
+  empty: string;
+  fullAccess: string;
+  instructions: string;
+  name: string;
+  permissionDescription: string;
+  permissionMode: string;
+  selectProfile: (name: string) => string;
+  title: string;
+  tools: string;
+  toolLabel: (tool: AgentProfileTool) => string;
+} {
+  if (language === "zh-CN") {
+    return {
+      autoReview: "自动审查",
+      contextBudget: "上下文预算",
+      description: "配置 Forge 子 Agent 的系统提示词, 权限边界, 工具能力和上下文预算",
+      descriptionLabel: "描述",
+      empty: "还没有 Agent 配置",
+      fullAccess: "完全访问权限",
+      instructions: "Agent 指令",
+      name: "名称",
+      permissionDescription: "控制这个 Agent 默认用什么权限模式运行",
+      permissionMode: "权限模式",
+      selectProfile: (name) => `选择 ${name}`,
+      title: "Agent 配置",
+      tools: "工具能力",
+      toolLabel: (tool) =>
+        ({
+          read: "读取文件",
+          edit: "编辑文件",
+          command: "运行命令",
+          git: "Git 操作"
+        })[tool]
+    };
+  }
+
+  return {
+    autoReview: "Auto review",
+    contextBudget: "Context budget",
+    description: "Configure sub-agent prompts, permissions, tools, and context budgets for Forge",
+    descriptionLabel: "Description",
+    empty: "No agent profiles yet",
+    fullAccess: "Full access",
+    instructions: "Agent instructions",
+    name: "Name",
+    permissionDescription: "Controls the default permission mode for this agent",
+    permissionMode: "Permission mode",
+    selectProfile: (name) => `Select ${name}`,
+    title: "Agent profiles",
+    tools: "Tool access",
+    toolLabel: (tool) =>
+      ({
+        read: "Read files",
+        edit: "Edit files",
+        command: "Run commands",
+        git: "Git operations"
+      })[tool]
   };
 }
 

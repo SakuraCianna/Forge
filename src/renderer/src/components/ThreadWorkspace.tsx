@@ -6,12 +6,15 @@ import {
   CheckCircle2,
   Circle,
   Code2,
+  Copy,
   FileText,
   Layers,
   ListChecks,
   Play,
   RotateCcw,
   Terminal,
+  ThumbsDown,
+  ThumbsUp,
   Wrench,
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
@@ -217,7 +220,7 @@ export function ThreadWorkspace({
     return (
       <section className="h-full min-h-0 overflow-auto px-5 py-7">
         <div className="mx-auto flex min-h-full max-w-[920px] flex-col gap-7">
-          <article className="ml-auto max-w-[72%] rounded-[18px] bg-[#f3f3f3] px-4 py-3 text-sm leading-6 text-[#202123]">
+          <article className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-sm leading-5 text-[#202123]">
             <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
           </article>
 
@@ -369,7 +372,7 @@ export function ThreadWorkspace({
       return (
         <article
           key={event.id}
-          className="ml-auto max-w-[72%] rounded-[18px] bg-[#f3f3f3] px-4 py-3 text-sm leading-6 text-[#202123]"
+          className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-sm leading-5 text-[#202123]"
         >
           <p className="whitespace-pre-wrap">{event.message}</p>
         </article>
@@ -418,6 +421,7 @@ export function ThreadWorkspace({
               <p className="whitespace-pre-wrap text-sm leading-6 text-[#202123]">{event.message}</p>
             )}
           </div>
+          {event.kind === "result" && !runningCommand && !result ? renderAssistantResponseActions(event) : null}
 
           {runningCommand ? (
             <pre className="mt-2 overflow-auto rounded-[12px] bg-[#111827] p-3 font-mono text-[11px] leading-4 text-[#f8fafc]">
@@ -474,6 +478,47 @@ export function ThreadWorkspace({
           ) : null}
         </div>
       </article>
+    );
+  }
+
+  function renderAssistantResponseActions(event: TaskThreadEvent): ReactElement {
+    const actionCopy = getAssistantResponseActionCopy(language);
+    const actions = [
+      {
+        key: "copy",
+        label: actionCopy.copy,
+        Icon: Copy,
+        onClick: () => void navigator.clipboard?.writeText(event.message)
+      },
+      {
+        key: "like",
+        label: actionCopy.like,
+        Icon: ThumbsUp,
+        onClick: () => undefined
+      },
+      {
+        key: "dislike",
+        label: actionCopy.dislike,
+        Icon: ThumbsDown,
+        onClick: () => undefined
+      }
+    ];
+
+    return (
+      <div className="mt-2 flex items-center gap-1 text-[#8e8ea0]">
+        {actions.map((action) => (
+          <button
+            key={action.key}
+            type="button"
+            aria-label={action.label}
+            title={action.label}
+            onClick={action.onClick}
+            className="flex h-7 w-7 items-center justify-center rounded-[8px] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
+          >
+            <action.Icon className="h-4 w-4" />
+          </button>
+        ))}
+      </div>
     );
   }
 
@@ -2164,6 +2209,26 @@ function formatLlmWorkDuration(event: TaskThreadEvent): string {
   }
 
   return `LLM ${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function getAssistantResponseActionCopy(language: Language): {
+  copy: string;
+  like: string;
+  dislike: string;
+} {
+  if (language === "zh-CN") {
+    return {
+      copy: "复制回答",
+      like: "赞同回答",
+      dislike: "不赞同回答"
+    };
+  }
+
+  return {
+    copy: "Copy response",
+    like: "Like response",
+    dislike: "Dislike response"
+  };
 }
 
 function formatCommandOutputSnippet(value: string): string {

@@ -88,10 +88,35 @@ describe("TaskComposer", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "Add project" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open add menu" })).toBeInTheDocument();
     expect(screen.getByTestId("composer-left-controls")).toContainElement(
       screen.getByRole("button", { name: "Auto review" })
     );
+  });
+
+  it("opens an attachment-oriented add menu without picking a project", async () => {
+    const user = userEvent.setup();
+    const onPickProject = vi.fn();
+    const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
+
+    render(
+      <TaskComposer
+        settings={settings}
+        onPickProject={onPickProject}
+        onSelectIntelligence={vi.fn()}
+        onSelectModel={vi.fn()}
+        onSelectSpeed={vi.fn()}
+        onSubmitTask={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open add menu" }));
+
+    expect(screen.getByRole("menuitem", { name: "Add photos and files" })).toBeInTheDocument();
+    expect(screen.getByText("Goal mode")).toBeInTheDocument();
+    expect(screen.getByText("Plugin system")).toBeInTheDocument();
+    expect(screen.queryByText("Plan mode")).not.toBeInTheDocument();
+    expect(onPickProject).not.toHaveBeenCalled();
   });
 
   it("offers only auto review and full access permission choices", async () => {
@@ -147,7 +172,7 @@ describe("TaskComposer", () => {
     );
 
     expect(screen.getByTestId("composer-control-row")).toHaveClass("overflow-visible");
-    expect(screen.getByRole("button", { name: "Add project" })).not.toHaveClass("border");
+    expect(screen.getByRole("button", { name: "Open add menu" })).not.toHaveClass("border");
     expect(screen.getByRole("button", { name: "Configure model" })).not.toHaveClass("border");
   });
 
@@ -166,7 +191,7 @@ describe("TaskComposer", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "Add project" })).toHaveClass("outline-none");
+    expect(screen.getByRole("button", { name: "Open add menu" })).toHaveClass("outline-none");
     expect(screen.getByRole("button", { name: "Auto review" })).toHaveClass("outline-none");
     expect(screen.getByRole("button", { name: "Start" })).toHaveClass("outline-none");
   });

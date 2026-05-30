@@ -110,6 +110,14 @@ import {
   upsertAgentMemory,
   type AgentMemoryEntry
 } from "@/state/agentMemory";
+import {
+  getActiveAgentProfileContext,
+  loadAgentProfiles,
+  saveAgentProfiles,
+  selectAgentProfile,
+  updateAgentProfile,
+  type AgentProfile
+} from "@/state/agentProfiles";
 import type { TokenUsage, UsageEvent, UsageEventKind } from "@shared/usageTypes";
 
 type ProviderKeyStatus = {
@@ -254,6 +262,13 @@ export function App(): ReactElement {
 
     return loadAgentMemories(window.localStorage);
   });
+  const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+
+    return loadAgentProfiles(window.localStorage);
+  });
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
@@ -292,6 +307,10 @@ export function App(): ReactElement {
   useEffect(() => {
     saveAgentMemories(window.localStorage, agentMemories);
   }, [agentMemories]);
+
+  useEffect(() => {
+    saveAgentProfiles(window.localStorage, agentProfiles);
+  }, [agentProfiles]);
 
   useEffect(() => {
     return window.forge.commands.onOutput((chunk) => {
@@ -857,6 +876,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: selectedThread.intelligence,
+        agentProfile: getActiveAgentProfileContext(agentProfiles),
         memories: selectRelevantAgentMemories(agentMemories, currentProject.path),
         personalization: createPersonalizationPrompt(personalization),
         projectScan: projectScanResult,
@@ -1137,6 +1157,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: settings.intelligence,
+        agentProfile: getActiveAgentProfileContext(agentProfiles),
         memories: selectRelevantAgentMemories(agentMemories, projectScan.rootPath),
         personalization: createPersonalizationPrompt(personalization),
         speed: settings.speed,
@@ -1323,6 +1344,7 @@ export function App(): ReactElement {
       provider,
       model,
       intelligence: settings.intelligence,
+      agentProfile: getActiveAgentProfileContext(agentProfiles),
       memories: selectRelevantAgentMemories(agentMemories, projectScan?.rootPath ?? null),
       personalization: createPersonalizationPrompt(personalization),
       conversation,
@@ -2036,12 +2058,19 @@ export function App(): ReactElement {
         <SettingsPanel
           settings={settings}
           agentMemories={agentMemories}
+          agentProfiles={agentProfiles}
           generalPreferences={generalPreferences}
           keyStatuses={keyStatuses}
           archivedThreads={threads.filter((thread) => thread.archived)}
           onClearAgentMemories={() => setAgentMemories([])}
           onDeleteAgentMemory={(memoryId) =>
             setAgentMemories((current) => deleteAgentMemory(current, memoryId))
+          }
+          onSelectAgentProfile={(profileId) =>
+            setAgentProfiles((current) => selectAgentProfile(current, profileId))
+          }
+          onUpdateAgentProfile={(profileId, patch) =>
+            setAgentProfiles((current) => updateAgentProfile(current, profileId, patch))
           }
           onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
           onFetchModels={(providerId, apiKey) => void fetchModels(providerId, apiKey)}

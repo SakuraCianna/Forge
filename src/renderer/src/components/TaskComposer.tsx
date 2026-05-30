@@ -1,7 +1,18 @@
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, Check, ChevronDown, Plus, ShieldAlert, ShieldCheck, Square } from "lucide-react";
+import {
+  ArrowUp,
+  Check,
+  ChevronDown,
+  Paperclip,
+  Plug,
+  Plus,
+  ShieldAlert,
+  ShieldCheck,
+  Square,
+  Target
+} from "lucide-react";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
 import {
@@ -40,7 +51,6 @@ export function TaskComposer({
   onSelectSpeed,
   onSubmitTask,
   onOpenSettings,
-  onPickProject,
   onUpdateGeneralPreferences,
   focusSignal = 0,
   placeholder,
@@ -130,15 +140,7 @@ export function TaskComposer({
           data-testid="composer-left-controls"
           className="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible"
         >
-          <button
-            type="button"
-            aria-label={copy.addProject}
-            title={copy.addProject}
-            onClick={onPickProject}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
+          {renderAddMenu()}
           {renderPermissionSelector()}
         </div>
         <div
@@ -230,27 +232,82 @@ export function TaskComposer({
       </DropdownMenu.Root>
     );
   }
+
+  function renderAddMenu(): ReactElement {
+    return (
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            aria-label={copy.openAddMenu}
+            title={copy.openAddMenu}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            align="start"
+            sideOffset={8}
+            className="forge-dropdown-content forge-dropdown-fast z-50 w-56 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[13px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
+          >
+            <DropdownMenu.Item className="flex h-9 cursor-default items-center gap-2 rounded-[10px] px-2 outline-none data-[highlighted]:bg-[#f7f7f8]">
+              <Paperclip className="h-4 w-4 shrink-0 text-[#565869]" />
+              <span>{copy.addAttachments}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator className="my-1 h-px bg-[#ececf1]" />
+            {[
+              { key: "goal", Icon: Target, label: copy.goalMode },
+              { key: "plugins", Icon: Plug, label: copy.pluginSystem }
+            ].map((item) => (
+              <DropdownMenu.Item
+                key={item.key}
+                disabled
+                className="flex h-9 cursor-default items-center justify-between gap-2 rounded-[10px] px-2 text-[#8e8ea0] outline-none data-[disabled]:opacity-100"
+              >
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <item.Icon className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </span>
+                <span className="h-5 w-9 rounded-full bg-[#e5e5ea]" />
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    );
+  }
 }
 
 function getComposerCopy(language: ModelSettings["language"]): {
-  addProject: string;
+  addAttachments: string;
   autoReviewPermission: string;
   fullAccessPermission: string;
+  goalMode: string;
+  openAddMenu: string;
+  pluginSystem: string;
   stopResponse: string;
 } {
   if (language === "zh-CN") {
     return {
-      addProject: "新增项目",
+      addAttachments: "添加照片和文件",
       autoReviewPermission: "自动审查",
       fullAccessPermission: "完全访问权限",
+      goalMode: "追求目标",
+      openAddMenu: "打开添加菜单",
+      pluginSystem: "插件系统",
       stopResponse: "停止回答"
     };
   }
 
   return {
-    addProject: "Add project",
+    addAttachments: "Add photos and files",
     autoReviewPermission: "Auto review",
     fullAccessPermission: "Full access",
+    goalMode: "Goal mode",
+    openAddMenu: "Open add menu",
+    pluginSystem: "Plugin system",
     stopResponse: "Stop response"
   };
 }

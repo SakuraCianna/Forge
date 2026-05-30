@@ -618,6 +618,7 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     .map((file) => `- ${file.relativePath} (${file.size} bytes)`)
     .join("\n");
   const truncatedNote = request.projectScan.truncated ? "\nProject scan was truncated." : "";
+  const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
   const instructionContext = formatProjectInstructions(request.projectScan);
 
@@ -625,6 +626,7 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     `Task:\n${request.taskPrompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`,
+    profileContext,
     memoryContext,
     instructionContext,
     `Project root:\n${request.projectScan.rootPath}`,
@@ -635,12 +637,14 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
 }
 
 function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): string {
+  const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
   const instructionContext = formatProjectInstructions(request.projectScan);
 
   return [
     `Task:\n${request.taskPrompt}`,
     `Speed mode:\n${request.speed}`,
+    profileContext,
     memoryContext,
     instructionContext,
     `File path:\n${request.relativePath}`,
@@ -651,6 +655,7 @@ function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): st
 }
 
 function createAskInput(request: GenerateAgentAskRequest): string {
+  const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
   const instructionContext = formatProjectInstructions(request.projectScan);
   const parts = [
@@ -658,6 +663,10 @@ function createAskInput(request: GenerateAgentAskRequest): string {
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`
   ];
+
+  if (profileContext) {
+    parts.push(profileContext);
+  }
 
   if (memoryContext) {
     parts.push(memoryContext);
@@ -715,6 +724,25 @@ function formatAgentMemories(
   }
 
   return ["Relevant memories:", ...lines.map((line) => `- ${line}`)].join("\n");
+}
+
+function formatAgentProfile(
+  agentProfile?: GenerateAgentAskRequest["agentProfile"] | GenerateAgentPlanRequest["agentProfile"]
+): string {
+  if (!agentProfile) {
+    return "";
+  }
+
+  return [
+    "Agent profile:",
+    `Name: ${agentProfile.name}`,
+    `Description: ${agentProfile.description}`,
+    `Permission mode: ${agentProfile.permissionMode}`,
+    `Context budget: ${agentProfile.contextBudget}`,
+    `Tools: ${agentProfile.enabledTools.length > 0 ? agentProfile.enabledTools.join(", ") : "none"}`,
+    "Instructions:",
+    agentProfile.instructions
+  ].join("\n");
 }
 
 function formatProjectInstructions(projectScan?: GenerateAgentAskRequest["projectScan"]): string {

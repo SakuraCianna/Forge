@@ -280,6 +280,42 @@ describe("agentPlanService", () => {
     expect(body.input).toContain("Never use unsafe shell commands");
   });
 
+  it("includes the active agent profile in model prompts", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: "Use the active profile."
+          })
+        )
+    );
+
+    await generateAgentAsk({
+      request: {
+        ...askRequest,
+        agentProfile: {
+          id: "review",
+          name: "Review agent",
+          description: "Review code before edits",
+          instructions: "Focus on concrete bugs and regressions",
+          permissionMode: "auto",
+          enabledTools: ["read", "git"],
+          contextBudget: 16000
+        }
+      },
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    const [_url, init] = fetcher.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+
+    expect(body.input).toContain("Agent profile");
+    expect(body.input).toContain("Review agent");
+    expect(body.input).toContain("Focus on concrete bugs and regressions");
+    expect(body.input).toContain("Tools: read, git");
+  });
+
   it("generates a direct answer without project context", async () => {
     const fetcher = vi.fn(
       async () =>

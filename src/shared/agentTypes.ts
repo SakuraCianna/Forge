@@ -9,10 +9,21 @@ export type AgentMemoryContext = {
   projectPath?: string | null;
 };
 
+export type AgentProfileContext = {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  permissionMode: "auto" | "full";
+  enabledTools: string[];
+  contextBudget: number;
+};
+
 export type GenerateAgentPlanRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
   intelligence: IntelligenceLevel;
+  agentProfile?: AgentProfileContext;
   memories?: AgentMemoryContext[];
   personalization?: string;
   speed: SpeedMode;
@@ -24,6 +35,7 @@ export type GenerateAgentFileChangeRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
   intelligence: IntelligenceLevel;
+  agentProfile?: AgentProfileContext;
   memories?: AgentMemoryContext[];
   personalization?: string;
   projectScan?: ProjectScanResult | null;
@@ -37,6 +49,7 @@ export type GenerateAgentAskRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
   intelligence: IntelligenceLevel;
+  agentProfile?: AgentProfileContext;
   memories?: AgentMemoryContext[];
   personalization?: string;
   conversation?: Array<{ role: "user" | "assistant"; content: string }>;

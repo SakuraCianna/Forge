@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultModelSettings, mergeFetchedModels, setLanguage } from "@/state/modelSettings";
 import { createDefaultGeneralPreferences } from "@/state/generalPreferences";
 import { createDefaultPersonalizationSettings } from "@/state/personalization";
+import { createDefaultAgentProfiles } from "@/state/agentProfiles";
 import { SettingsPanel } from "./SettingsPanel";
 
 function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>[0]> = {}) {
@@ -13,9 +14,12 @@ function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>
     <SettingsPanel
       settings={settings}
       agentMemories={[]}
+      agentProfiles={createDefaultAgentProfiles()}
       generalPreferences={createDefaultGeneralPreferences()}
       keyStatuses={{}}
       onClearAgentMemories={vi.fn()}
+      onSelectAgentProfile={vi.fn()}
+      onUpdateAgentProfile={vi.fn()}
       onDeleteAgentMemory={vi.fn()}
       onClearUsage={vi.fn()}
       onDeleteProviderKey={vi.fn()}
@@ -145,6 +149,38 @@ describe("SettingsPanel", () => {
     await user.click(screen.getByRole("button", { name: "Delete memory" }));
 
     expect(onDeleteAgentMemory).toHaveBeenCalledWith("memory-1");
+  });
+
+  it("shows configurable agent profiles and updates the active profile", async () => {
+    const user = userEvent.setup();
+    const onSelectAgentProfile = vi.fn();
+    const onUpdateAgentProfile = vi.fn();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+
+    renderSettingsPanel({
+      settings,
+      onSelectAgentProfile,
+      onUpdateAgentProfile
+    });
+
+    await user.click(screen.getByRole("button", { name: /Agent profiles/ }));
+
+    expect(screen.getAllByText("Build agent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Review agent").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Select Review agent" }));
+    expect(onSelectAgentProfile).toHaveBeenCalledWith("review");
+
+    fireEvent.change(screen.getByLabelText("Agent instructions"), {
+      target: { value: "Review risky code paths" }
+    });
+
+    expect(onUpdateAgentProfile).toHaveBeenLastCalledWith(
+      "build",
+      expect.objectContaining({
+        systemPrompt: "Review risky code paths"
+      })
+    );
   });
 
   it("saves provider API keys without exposing them in settings state", async () => {

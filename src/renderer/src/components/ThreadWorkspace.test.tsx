@@ -104,6 +104,68 @@ describe("ThreadWorkspace", () => {
     expect(screen.queryByText(/T13:01/)).not.toBeInTheDocument();
   });
 
+  it("uses tighter compact user bubbles", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        threads={[
+          {
+            ...thread,
+            prompt: "What changed?"
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    const userBubble = screen.getByText("What changed?").closest("article");
+
+    expect(userBubble).toHaveClass("px-3");
+    expect(userBubble).toHaveClass("py-1.5");
+    expect(userBubble).toHaveClass("leading-5");
+    expect(userBubble).not.toHaveClass("py-3");
+  });
+
+  it("shows assistant response actions and copies the answer", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        threads={[
+          {
+            ...thread,
+            events: [
+              {
+                id: "answer",
+                kind: "result",
+                message: "It builds a desktop coding workbench.",
+                createdAt: "2026-05-27T13:01:02.333Z",
+                completedAt: "2026-05-27T13:01:09.900Z"
+              }
+            ]
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Copy response" }));
+
+    expect(writeText).toHaveBeenCalledWith("It builds a desktop coding workbench.");
+    expect(screen.getByRole("button", { name: "Like response" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dislike response" })).toBeInTheDocument();
+  });
+
   it("renders follow-up user turns as minimal prompt bubbles", () => {
     render(
       <ThreadWorkspace
