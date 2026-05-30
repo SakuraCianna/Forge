@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 Agent 共享类型
+// 本文件说明: 定义 Agent 请求, 结果, 记忆和配置上下文类型
 import type { ForgeModel, ForgeProvider, IntelligenceLevel, SpeedMode } from "./modelTypes.js";
 import type { ProjectScanResult } from "./projectTypes.js";
 import type { TokenUsage } from "./usageTypes.js";

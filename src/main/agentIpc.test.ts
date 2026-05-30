@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 Agent IPC 通道测试
+// 本文件说明: 覆盖 Agent IPC 请求校验, 流式分片和取消处理
 import { describe, expect, it, vi } from "vitest";
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
 import type {
@@ -147,6 +147,7 @@ describe("agentIpc", () => {
   });
 });
 
+// 构造带 sender 的 IPC 事件替身, 用于验证流式分片回传
 function createSenderEvent(): unknown {
   return {
     sender: {

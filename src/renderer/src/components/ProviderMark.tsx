@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 模型供应商标识
+// 本文件说明: 渲染模型供应商图标和兜底字母标记
 import type { CSSProperties, ReactElement } from "react";
 import type { ForgeProvider } from "@shared/modelTypes";
 
@@ -36,6 +36,7 @@ const sizeClassNames = {
   lg: "h-8 w-8 p-[2px] text-[11px]"
 } as const;
 
+// 优先使用内置图标, 没有图标时显示供应商首字母
 export function ProviderMark({
   fallbackLabel,
   provider,
@@ -64,6 +65,7 @@ export function ProviderMark({
   );
 }
 
+// 从供应商名称提取最多两个首字母
 function getProviderInitials(label: string): string {
   const words = label
     .trim()

@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 模型共享类型
+// 本文件说明: 定义模型, 供应商, 速度和智能档位的共享类型
 export type ProviderKind = "openai" | "anthropic" | "gemini" | "openai-compatible";
 
 export type Language = "zh-CN" | "en-US";

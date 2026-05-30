@@ -1,7 +1,8 @@
-// 本文件说明: 渲染 Agent 失败恢复提示词
+// 本文件说明: 根据失败动作和命令输出生成后续修复提示
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
 
+// 把失败动作整理成用户可读的修复请求
 export function createFailureFixTaskPrompt(
   thread: TaskThread,
   action: AgentAction,
@@ -26,6 +27,7 @@ export function createFailureFixTaskPrompt(
   ].join("\n");
 }
 
+// 根据动作目标在命令结果里找到最相关的失败记录
 export function findLatestCommandResultForAction(
   events: TaskThreadEvent[],
   action: AgentAction
@@ -45,6 +47,7 @@ export function findLatestCommandResultForAction(
   return null;
 }
 
+// 把命令, cwd 和退出码整理成修复提示上下文
 function formatCommandResult(result: CommandRunResult): string {
   return [
     `Command result: exitCode=${result.exitCode}, timedOut=${result.timedOut}`,
@@ -56,6 +59,7 @@ function formatCommandResult(result: CommandRunResult): string {
     .join("\n");
 }
 
+// 优先使用 stderr, 没有错误输出时回退 stdout
 function formatCommandOutput(value: string): string {
   const trimmed = value.trim();
   const maxLength = 1600;

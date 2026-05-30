@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 项目状态测试
+// 本文件说明: 覆盖最近项目的新增, 置顶, 删除和持久化
 import { describe, expect, it } from "vitest";
 import {
   addRecentProject,
@@ -10,10 +10,12 @@ import {
   toggleProjectPinned
 } from "./projects";
 
+// 构造内存版 Storage, 让项目状态测试不依赖浏览器
 function createMemoryStorage(): Storage {
   const values = new Map<string, string>();
 
   return {
+    // 让被测代码可以读取当前键数量
     get length() {
       return values.size;
     },

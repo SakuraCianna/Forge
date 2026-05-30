@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 密钥保险库
+// 本文件说明: 在用户数据目录加密保存供应商 API Key
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -26,6 +26,7 @@ export type ProviderKeyStatus = {
   last4: string | null;
 };
 
+// 创建基于文件的密钥保险库, 加解密能力由 Electron safeStorage 注入
 export function createKeyVault({ directory, codec }: KeyVaultOptions): {
   saveProviderKey: (providerId: string, apiKey: string) => Promise<void>;
   readProviderKey: (providerId: string) => Promise<string | null>;
@@ -34,6 +35,7 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
 } {
   const filePath = join(directory, "forge-secrets.json");
 
+  // 保存前先读取现有文件, 避免覆盖其他供应商密钥
   async function saveProviderKey(providerId: string, apiKey: string): Promise<void> {
     const secrets = await readSecretFile(filePath);
     const encryptedValue = codec.encryptString(apiKey).toString("base64");
@@ -46,6 +48,7 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
     await writeSecretFile(directory, filePath, secrets);
   }
 
+  // 读取并解密单个供应商密钥, 失败或不存在时返回 null
   async function readProviderKey(providerId: string): Promise<string | null> {
     const secrets = await readSecretFile(filePath);
     const secret = secrets.providerKeys[providerId];
@@ -57,6 +60,7 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
     return codec.decryptString(Buffer.from(secret.encryptedValue, "base64"));
   }
 
+  // 只暴露是否存在和 last4, 设置页不接触完整密钥
   async function getProviderKeyStatus(providerId: string): Promise<ProviderKeyStatus> {
     const secrets = await readSecretFile(filePath);
     const secret = secrets.providerKeys[providerId];
@@ -64,6 +68,7 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
     return secret ? { hasKey: true, last4: secret.last4 } : { hasKey: false, last4: null };
   }
 
+  // 删除单个供应商密钥后重写密钥文件
   async function deleteProviderKey(providerId: string): Promise<void> {
     const secrets = await readSecretFile(filePath);
     delete secrets.providerKeys[providerId];
@@ -78,6 +83,7 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
   };
 }
 
+// 读取密钥文件并解密 JSON, 文件不存在时返回空对象
 async function readSecretFile(filePath: string): Promise<SecretFile> {
   try {
     const rawValue = await readFile(filePath, "utf8");
@@ -90,6 +96,7 @@ async function readSecretFile(filePath: string): Promise<SecretFile> {
   }
 }
 
+// 把密钥对象序列化后加密写入磁盘
 async function writeSecretFile(directory: string, filePath: string, secrets: SecretFile): Promise<void> {
   await mkdir(directory, { recursive: true });
   await writeFile(filePath, JSON.stringify(secrets, null, 2), "utf8");

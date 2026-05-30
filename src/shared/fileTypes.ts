@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 文件共享类型
+// 本文件说明: 定义项目文件读取和修改预览的数据结构
 import type { LineDiffEntry } from "./textDiff.js";
 
 export type ProjectTextFile = {

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 对话工作区测试
+// 本文件说明: 验证对话工作区的流式输出, 反馈按钮和记忆上下文展示
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -201,6 +201,50 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByRole("tooltip", { name: "Copy response" })).toHaveClass("forge-tooltip");
     expect(screen.getByRole("tooltip", { name: "Like response" })).toHaveClass("forge-tooltip");
     expect(screen.getByRole("tooltip", { name: "Dislike response" })).toHaveClass("forge-tooltip");
+  });
+
+  it("shows compact memory context without expanding the transcript", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="zh-CN"
+        threads={[
+          {
+            ...thread,
+            contextMemories: [
+              {
+                id: "memory-1",
+                scope: "project",
+                projectPath: "E:\\CodeHome\\Forge",
+                content: "这个项目默认终端是 PowerShell"
+              },
+              {
+                id: "memory-2",
+                scope: "global",
+                projectPath: null,
+                content: "回答保持简洁"
+              }
+            ],
+            events: [
+              {
+                id: "answer",
+                kind: "result",
+                message: "我会按这些记忆回答。",
+                createdAt: "2026-05-27T13:01:02.333Z"
+              }
+            ]
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    const memoryContext = screen.getByRole("group", { name: "Agent 记忆上下文" });
+
+    expect(memoryContext).toHaveTextContent("已使用 2 条记忆");
+    expect(memoryContext).toHaveTextContent("这个项目默认终端是 PowerShell");
+    expect(memoryContext).toHaveTextContent("回答保持简洁");
   });
 
   it("renders follow-up user turns as minimal prompt bubbles", () => {

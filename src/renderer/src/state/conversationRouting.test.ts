@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 对话路由状态测试
+// 本文件说明: 验证普通问答不会被误判成项目执行任务
 import { describe, expect, it } from "vitest";
 import { isDirectAnswerPrompt, isPlainChatPrompt } from "./conversationRouting";
 

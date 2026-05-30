@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 Agent 配置状态测试
+// 本文件说明: 覆盖 Agent 配置的默认值, 持久化和迁移
 import { describe, expect, it } from "vitest";
 import {
   createDefaultAgentProfiles,
@@ -13,26 +13,32 @@ import {
 class ProfileStorage implements Storage {
   private readonly values = new Map<string, string>();
 
+  // 让被测逻辑可以像真实 localStorage 一样读取键数量
   get length(): number {
     return this.values.size;
   }
 
+  // 清空测试存储, 每个用例都能独立运行
   clear(): void {
     this.values.clear();
   }
 
+  // 按 Storage 接口返回字符串或 null
   getItem(key: string): string | null {
     return this.values.get(key) ?? null;
   }
 
+  // 支持按索引读取键名, 补齐 Storage 接口契约
   key(index: number): string | null {
     return Array.from(this.values.keys())[index] ?? null;
   }
 
+  // 删除单个键, 模拟 localStorage 的移除行为
   removeItem(key: string): void {
     this.values.delete(key);
   }
 
+  // 写入字符串值, 保持和 localStorage 一样的序列化边界
   setItem(key: string, value: string): void {
     this.values.set(key, value);
   }

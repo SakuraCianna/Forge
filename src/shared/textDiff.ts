@@ -1,9 +1,10 @@
-// 本文件说明: 共享模块 文本差异逻辑
+// 本文件说明: 生成文本文件的逐行 diff 预览
 export type LineDiffEntry =
   | { kind: "context"; oldLineNumber: number; newLineNumber: number; text: string }
   | { kind: "remove"; oldLineNumber: number; text: string }
   | { kind: "add"; newLineNumber: number; text: string };
 
+// 使用 LCS 生成稳定的逐行 diff, 避免整文件替换看起来过于吓人
 export function createLineDiff(oldText: string, newText: string): LineDiffEntry[] {
   const oldLines = splitLines(oldText);
   const newLines = splitLines(newText);
@@ -51,6 +52,7 @@ export function createLineDiff(oldText: string, newText: string): LineDiffEntry[
   return entries;
 }
 
+// 构建最长公共子序列表, 后续回溯用它判断新增和删除
 function buildLcsTable(oldLines: string[], newLines: string[]): number[][] {
   const table = Array.from({ length: oldLines.length + 1 }, () =>
     Array.from({ length: newLines.length + 1 }, () => 0)
@@ -68,6 +70,7 @@ function buildLcsTable(oldLines: string[], newLines: string[]): number[][] {
   return table;
 }
 
+// 保留空文件语义, 其他文本按换行拆成 diff 行
 function splitLines(value: string): string[] {
   return value.length === 0 ? [] : value.replace(/\r\n/g, "\n").split("\n");
 }

@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 Agent 执行计划共享逻辑测试
+// 本文件说明: 验证模型计划步骤能转成正确的 Agent 动作队列
 import { describe, expect, it } from "vitest";
 import type { AgentPlanStep } from "./agentTypes.js";
 import { createAgentActionsFromPlanSteps } from "./agentExecutionPlan.js";

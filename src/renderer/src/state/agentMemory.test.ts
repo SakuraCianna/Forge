@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 Agent 记忆状态测试
+// 本文件说明: 覆盖 Agent 记忆的持久化, 去重, 项目隔离和中文召回
 import { describe, expect, it } from "vitest";
 import {
   createAgentMemoryEntry,
@@ -13,26 +13,32 @@ import {
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
 
+  // 让被测逻辑可以像真实 localStorage 一样读取键数量
   get length(): number {
     return this.values.size;
   }
 
+  // 清空测试存储, 每个用例都能从干净状态开始
   clear(): void {
     this.values.clear();
   }
 
+  // 按 Storage 接口返回字符串或 null, 避免测试依赖 Map 细节
   getItem(key: string): string | null {
     return this.values.get(key) ?? null;
   }
 
+  // 支持按索引读取键名, 补齐 Storage 接口契约
   key(index: number): string | null {
     return Array.from(this.values.keys())[index] ?? null;
   }
 
+  // 删除单个键, 用于模拟浏览器存储的移除行为
   removeItem(key: string): void {
     this.values.delete(key);
   }
 
+  // 写入字符串值, 与 localStorage 的序列化边界保持一致
   setItem(key: string, value: string): void {
     this.values.set(key, value);
   }
@@ -96,6 +102,22 @@ describe("agentMemory", () => {
     ).toEqual(["Use Playwright for browser checks", "Use PowerShell-safe commands"]);
   });
 
+  it("matches Chinese memory fragments with short semantic grams", () => {
+    const memories: AgentMemoryEntry[] = [
+      createMemory("project", "E:\\CodeHome\\Forge", "这个项目默认终端是 PowerShell", "2026-05-30T09:00:00.000Z"),
+      createMemory("project", "E:\\CodeHome\\Forge", "提交后需要推送到 main", "2026-05-30T10:30:00.000Z")
+    ];
+
+    expect(
+      selectRelevantAgentMemories(
+        memories,
+        "E:\\CodeHome\\Forge",
+        1,
+        "这个项目的默认终端是什么"
+      ).map((memory) => memory.content)
+    ).toEqual(["这个项目默认终端是 PowerShell"]);
+  });
+
   it("extracts explicit remember requests and upserts duplicates", () => {
     const candidate = extractAgentMemoryCandidate(
       "请记住: 这个项目的默认终端是 PowerShell",
@@ -123,6 +145,7 @@ describe("agentMemory", () => {
   });
 });
 
+// 快速构造不同作用域的记忆记录, 让排序和过滤断言更聚焦
 function createMemory(
   scope: AgentMemoryEntry["scope"],
   projectPath: string | null,

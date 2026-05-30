@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 IPC 通道常量
+// 本文件说明: 集中定义主进程和渲染进程之间的 IPC 通道名
 export const keyVaultChannels = {
   save: "forge:provider-key:save",
   status: "forge:provider-key:status",

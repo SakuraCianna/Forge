@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 文件变更状态测试
+// 本文件说明: 验证文件变更预览的新增, 覆盖和删除
 import { describe, expect, it } from "vitest";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import { removeFileChangePreview, upsertFileChangePreview } from "./fileChanges";

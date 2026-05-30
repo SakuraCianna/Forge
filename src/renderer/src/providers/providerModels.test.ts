@@ -1,4 +1,4 @@
-// 本文件说明: 渲染供应商 供应商模型处理逻辑测试
+// 本文件说明: 验证远端模型列表筛选, 能力推断和请求头清理
 import { describe, expect, it } from "vitest";
 import type { ForgeProvider } from "@shared/modelTypes";
 import { hydrateProviderFromCatalog, providerCatalog } from "@shared/providerCatalog";

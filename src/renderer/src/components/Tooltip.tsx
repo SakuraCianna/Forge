@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 统一悬停提示
+// 本文件说明: 渲染统一样式悬停提示, 替代浏览器原生 title
 import type { ReactElement, ReactNode } from "react";
 
 type TooltipProps = {
@@ -6,6 +6,7 @@ type TooltipProps = {
   label: string;
 };
 
+// 使用统一样式渲染悬停提示, 避免浏览器原生 title 破坏界面一致性
 export function Tooltip({ children, label }: TooltipProps): ReactElement {
   return (
     <span className="forge-tooltip-shell relative inline-flex">

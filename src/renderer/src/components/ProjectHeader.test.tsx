@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 项目标题栏测试
+// 本文件说明: 验证项目标题栏的 Git 摘要和操作按钮
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

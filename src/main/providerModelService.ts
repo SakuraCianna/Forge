@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 供应商模型服务
+// 本文件说明: 拉取远端模型列表并转换成 Forge 可用模型
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
 import { hydrateProviderFromCatalog } from "../shared/providerCatalog.js";
 import {
@@ -19,6 +19,7 @@ type FetchModelsForProviderOptions = {
   fetcher?: Fetcher;
 };
 
+// 构造供应商请求并解析返回模型, 网络错误统一转成中文可读提示
 export async function fetchModelsForProvider({
   provider,
   keyVault,
@@ -58,6 +59,7 @@ export async function fetchModelsForProvider({
   );
 }
 
+// 把 fetch 失败原因压成一行中文提示, 避免 HTML 响应挤压 UI
 function createNetworkErrorMessage(provider: ForgeProvider, url: string, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
 
@@ -70,6 +72,7 @@ function createNetworkErrorMessage(provider: ForgeProvider, url: string, error: 
     .join(" ");
 }
 
+// 在 Electron 运行时优先使用 net.fetch, 测试和浏览器回退到全局 fetch
 async function runtimeFetch(url: string, init: RequestInit): Promise<Response> {
   if (isElectronRuntime()) {
     try {
@@ -86,10 +89,12 @@ async function runtimeFetch(url: string, init: RequestInit): Promise<Response> {
   return fetch(url, init);
 }
 
+// 判断当前是否在 Electron 主进程运行
 function isElectronRuntime(): boolean {
   return typeof process !== "undefined" && Boolean(process.versions?.electron);
 }
 
+// 从错误响应中提取短文本, JSON 和纯文本都尽量读出关键原因
 async function readErrorDetail(response: Response): Promise<string> {
   try {
     const text = await response.text();
@@ -101,6 +106,7 @@ async function readErrorDetail(response: Response): Promise<string> {
   }
 }
 
+// 读取并校验 JSON 响应体, 非 JSON 内容会返回结构化错误
 async function readJsonBody(providerLabel: string, response: Response): Promise<unknown> {
   const text = await response.text();
   const trimmedText = text.trim();

@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 命令运行器
+// 本文件说明: 在项目边界内运行可取消命令并回传输出
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { sep } from "node:path";
@@ -47,6 +47,7 @@ type RunningCommand = {
   cancel: () => boolean;
 };
 
+// 创建带进程注册表的命令运行器, 多个命令可以独立取消
 export function createProjectCommandRunner({
   killProcessTree = killDefaultProcessTree
 }: ProjectCommandRunnerDeps = {}): ProjectCommandRunner {
@@ -64,16 +65,19 @@ export function createProjectCommandRunner({
 
 const defaultRunner = createProjectCommandRunner();
 
+// 使用默认全局运行器执行命令, 兼容简单调用路径
 export function runProjectCommand(options: RunProjectCommandOptions): Promise<CommandResult> {
   return defaultRunner.runProjectCommand(options);
 }
 
+// 使用默认全局运行器取消命令, UI 停止按钮会走这里
 export function cancelProjectCommand(
   options: CancelProjectCommandOptions
 ): CancelProjectCommandResult {
   return defaultRunner.cancelProjectCommand(options);
 }
 
+// 在确认 cwd 属于项目后启动子进程, 输出通过回调实时上报
 async function runProjectCommandWithRegistry(
   {
     projectRoot,
@@ -137,6 +141,7 @@ async function runProjectCommandWithRegistry(
       });
     }
 
+    // 清理注册表和计时器, 确保正常结束和取消都释放资源
     function cleanup(): void {
       settled = true;
       clearTimeout(timer);
@@ -186,6 +191,7 @@ async function runProjectCommandWithRegistry(
   });
 }
 
+// 优先杀掉整棵进程树, 失败时回退到子进程自身
 function terminateCommandProcess(
   child: ChildProcessWithoutNullStreams,
   killProcessTree: (pid: number) => boolean
@@ -203,6 +209,7 @@ function terminateCommandProcess(
   }
 }
 
+// Windows 通过 taskkill 终止子进程树, 其他平台使用负 pid 进程组
 function killDefaultProcessTree(pid: number): boolean {
   if (process.platform !== "win32") {
     return false;
@@ -216,6 +223,7 @@ function killDefaultProcessTree(pid: number): boolean {
   return result.status === 0;
 }
 
+// 确认命令 cwd 没有逃出项目根目录
 function isPathInside(candidatePath: string, rootPath: string): boolean {
   const normalizedCandidate = candidatePath.toLocaleLowerCase();
   const normalizedRoot = rootPath.toLocaleLowerCase();

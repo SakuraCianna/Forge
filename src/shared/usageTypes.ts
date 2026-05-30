@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 用量共享类型
+// 本文件说明: 定义模型用量, 价格和统计事件类型
 export type TokenUsage = {
   inputTokens: number;
   outputTokens: number;

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 模型选择器测试
+// 本文件说明: 验证模型选择器的模型, 智能档位和速度选择
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 文本差异逻辑测试
+// 本文件说明: 验证文本 diff 能稳定显示新增, 删除和未变化行
 import { describe, expect, it } from "vitest";
 import { createLineDiff } from "./textDiff.js";
 

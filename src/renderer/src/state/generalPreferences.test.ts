@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 通用偏好状态测试
+// 本文件说明: 覆盖通用偏好的默认值, 持久化和权限迁移
 import { describe, expect, it } from "vitest";
 import {
   createDefaultGeneralPreferences,
@@ -7,6 +7,7 @@ import {
   updateGeneralPreferences
 } from "./generalPreferences";
 
+// 构造内存版 Storage, 让偏好测试不依赖浏览器环境
 function createMemoryStorage(initialValue?: string): Storage {
   const values = new Map<string, string>();
 
@@ -15,6 +16,7 @@ function createMemoryStorage(initialValue?: string): Storage {
   }
 
   return {
+    // 让被测代码可以读取当前键数量
     get length() {
       return values.size;
     },

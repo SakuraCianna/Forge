@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 项目扫描器
+// 本文件说明: 扫描项目文件和规则说明, 为 Agent 提供轻量上下文
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type {
@@ -36,6 +36,7 @@ const rootInstructionFilePaths = [
   ".claude/CLAUDE.md"
 ] as const;
 
+// 遍历项目文件并读取说明文档, 跳过依赖目录和大文件
 export async function scanProjectFiles(
   rootPath: string,
   options: ScanOptions = {}
@@ -61,6 +62,7 @@ export async function scanProjectFiles(
 
   const instructionFiles = await readProjectInstructionFiles(rootPath);
 
+  // 递归遍历目录时保留数量和大小限制, 避免扫描拖垮界面
   async function walk(directoryPath: string): Promise<void> {
     if (files.length >= limit) {
       truncated = true;
@@ -107,6 +109,7 @@ export async function scanProjectFiles(
   };
 }
 
+// 汇总 AGENTS, README 和规则文件内容, 作为模型的项目说明
 async function readProjectInstructionFiles(rootPath: string): Promise<ProjectInstructionFile[]> {
   const candidatePaths = await collectInstructionFilePaths(rootPath);
   const instructionFiles: ProjectInstructionFile[] = [];
@@ -147,6 +150,7 @@ async function readProjectInstructionFiles(rootPath: string): Promise<ProjectIns
   return instructionFiles;
 }
 
+// 收集常见项目说明文件路径, 不存在的文件交给读取阶段忽略
 async function collectInstructionFilePaths(rootPath: string): Promise<string[]> {
   const cursorRulePaths = await readCursorRulePaths(rootPath);
   const seenPaths = new Set<string>();
@@ -163,6 +167,7 @@ async function collectInstructionFilePaths(rootPath: string): Promise<string[]> 
   });
 }
 
+// 扫描 Cursor 规则目录, 支持文件和目录两种形态
 async function readCursorRulePaths(rootPath: string): Promise<string[]> {
   const rulesDirectoryPath = join(rootPath, ".cursor", "rules");
 
@@ -182,22 +187,27 @@ async function readCursorRulePaths(rootPath: string): Promise<string[]> {
   }
 }
 
+// 压缩说明文件空白并截断长度, 让提示词保持可控
 function normalizeInstructionContent(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
 }
 
+// 将绝对路径转成统一的项目相对路径
 function toProjectFilePath(rootPath: string, relativePath: string): string {
   return join(rootPath, ...relativePath.split("/"));
 }
 
+// 识别路径不存在错误, 扫描时把缺失目录当作空目录处理
 function isMissingPathError(error: unknown): boolean {
   return isRecord(error) && error.code === "ENOENT";
 }
 
+// 将 Windows 路径分隔符统一成前端展示使用的斜杠
 function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
+// 将 unknown 缩窄成对象, 用于安全读取错误码
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

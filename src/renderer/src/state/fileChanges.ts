@@ -1,6 +1,7 @@
-// 本文件说明: 渲染状态 文件变更状态
+// 本文件说明: 管理模型生成但尚未写入磁盘的文件变更预览
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 
+// 同一路径只保留最新预览, 让审查列表不会重复堆积
 export function upsertFileChangePreview(
   previews: ProjectFileChangePreview[],
   preview: ProjectFileChangePreview
@@ -16,6 +17,7 @@ export function upsertFileChangePreview(
   return previews.map((candidate, index) => (index === existingIndex ? preview : candidate));
 }
 
+// 按相对路径移除预览, 丢弃操作不会触碰真实文件
 export function removeFileChangePreview(
   previews: ProjectFileChangePreview[],
   relativePath: string

@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 命令运行器测试
+// 本文件说明: 覆盖命令运行器的输出流, 取消逻辑和路径边界
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -166,6 +166,7 @@ describe("commandRunner", () => {
   });
 });
 
+// 等待异步进程事件落到断言里, 只在取消测试中使用
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);

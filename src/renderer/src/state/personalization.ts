@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 个性化状态
+// 本文件说明: 保存回答风格偏好并生成模型可读的个性化提示
 const personalizationStorageKey = "forge.personalization";
 
 export type ReplyTone = "friendly" | "concise" | "technical";
@@ -8,6 +8,7 @@ export type PersonalizationSettings = {
   customInstructions: string;
 };
 
+// 创建个性化默认值, 默认保持简洁回答
 export function createDefaultPersonalizationSettings(): PersonalizationSettings {
   return {
     replyTone: "friendly",
@@ -15,6 +16,7 @@ export function createDefaultPersonalizationSettings(): PersonalizationSettings 
   };
 }
 
+// 从 localStorage 读取个性化设置, 无效值回退到默认值
 export function loadPersonalizationSettings(storage: Storage): PersonalizationSettings {
   const rawValue = storage.getItem(personalizationStorageKey);
 
@@ -35,6 +37,7 @@ export function loadPersonalizationSettings(storage: Storage): PersonalizationSe
   }
 }
 
+// 保存个性化设置, 让后续模型请求继续沿用
 export function savePersonalizationSettings(
   storage: Storage,
   settings: PersonalizationSettings
@@ -42,6 +45,7 @@ export function savePersonalizationSettings(
   storage.setItem(personalizationStorageKey, JSON.stringify(settings));
 }
 
+// 把界面里的语气选择转换成系统提示追加文本
 export function createPersonalizationPrompt(settings: PersonalizationSettings): string {
   const toneInstruction =
     settings.replyTone === "concise"
@@ -53,6 +57,7 @@ export function createPersonalizationPrompt(settings: PersonalizationSettings): 
   return [toneInstruction, settings.customInstructions.trim()].filter(Boolean).join("\n");
 }
 
+// 校验持久化语气字段, 避免未知值进入提示词
 function isReplyTone(value: unknown): value is ReplyTone {
   return value === "friendly" || value === "concise" || value === "technical";
 }

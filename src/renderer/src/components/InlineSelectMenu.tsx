@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 统一下拉选择组件
+// 本文件说明: 渲染统一样式的下拉选择菜单, 避免原生方形 select
 import type { ReactElement } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronDown } from "lucide-react";
@@ -68,6 +68,7 @@ export function InlineSelectMenu<T extends string>({
   );
 }
 
+// 合并可选 className, 让菜单组件调用处保持干净
 function joinClassNames(...values: Array<string | undefined>): string {
   return values.filter(Boolean).join(" ");
 }

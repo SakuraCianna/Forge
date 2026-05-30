@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 Git 共享类型
+// 本文件说明: 定义 Git 状态, diff 和提交结果的数据结构
 export type ProjectGitFileChange = {
   path: string;
   status: string;

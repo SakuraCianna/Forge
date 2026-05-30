@@ -1,4 +1,4 @@
-// 本文件说明: 渲染 Agent Agent 动作执行器测试
+// 本文件说明: 覆盖 Agent 动作队列的可执行判断和批量推进
 import { describe, expect, it, vi } from "vitest";
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import {
@@ -204,6 +204,7 @@ describe("agentActionExecutor", () => {
   });
 });
 
+// 构造测试动作并允许按用例覆盖关键字段
 function createAction(overrides: Partial<AgentAction>): AgentAction {
   return {
     id: "action-1",

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 模型设置状态测试
+// 本文件说明: 覆盖模型设置的持久化, 模型合并和自定义供应商
 import { describe, expect, it } from "vitest";
 import {
   addCustomProvider,
@@ -18,6 +18,7 @@ import {
   updateProviderBaseUrl
 } from "./modelSettings";
 
+// 构造内存版 Storage, 让模型设置测试独立运行
 function createMemoryStorage(initialValue?: string): Storage {
   const values = new Map<string, string>();
 
@@ -26,6 +27,7 @@ function createMemoryStorage(initialValue?: string): Storage {
   }
 
   return {
+    // 让被测代码可以读取当前键数量
     get length() {
       return values.size;
     },
@@ -411,6 +413,7 @@ describe("modelSettings", () => {
   });
 });
 
+// 构造远端拉取模型, 用于测试合并和排序逻辑
 function createFetchedModel(providerId: string, modelName: string, label: string) {
   return {
     id: `${providerId}:${modelName}`,

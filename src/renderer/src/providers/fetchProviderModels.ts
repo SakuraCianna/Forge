@@ -1,4 +1,4 @@
-// 本文件说明: 渲染供应商 供应商模型拉取逻辑
+// 本文件说明: 从渲染层发起模型列表请求并统一错误文案
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import {
   buildModelListRequest,
@@ -14,6 +14,7 @@ type FetchProviderModelsOptions = {
   fetcher?: Fetcher;
 };
 
+// 调用主进程模型接口, 失败时返回中文错误而不是抛到界面
 export async function fetchProviderModels({
   provider,
   apiKey,
@@ -42,6 +43,7 @@ export async function fetchProviderModels({
   return parseProviderModelList(provider, body).map((model) => toForgeModel(provider, model));
 }
 
+// 把网络错误整理成一行状态, 避免长错误撑坏按钮区域
 function createNetworkErrorMessage(provider: ForgeProvider, url: string, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
 
@@ -54,6 +56,7 @@ function createNetworkErrorMessage(provider: ForgeProvider, url: string, error: 
     .join(" ");
 }
 
+// 从错误对象里提取短原因, 没有内容时给出通用提示
 async function readErrorDetail(response: Response): Promise<string> {
   try {
     const text = await response.text();

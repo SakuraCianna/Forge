@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 Agent 配置状态
+// 本文件说明: 管理可选 Agent 子配置, 包括提示词, 权限和工具能力
 import type { AgentProfileContext } from "@shared/agentTypes";
 
 const agentProfileStorageKey = "forge.agentProfiles";
@@ -112,10 +112,12 @@ const legacyDefaultProfileText: Record<
   }
 };
 
+// 深拷贝内置 Agent 配置, 避免调用方改到共享默认对象
 export function createDefaultAgentProfiles(): AgentProfile[] {
   return defaultProfiles.map((profile) => ({ ...profile, tools: { ...profile.tools } }));
 }
 
+// 从 localStorage 读取 Agent 配置, 坏数据回退到内置配置
 export function loadAgentProfiles(storage: Storage): AgentProfile[] {
   const rawValue = storage.getItem(agentProfileStorageKey);
 
@@ -141,10 +143,12 @@ export function loadAgentProfiles(storage: Storage): AgentProfile[] {
   }
 }
 
+// 保存 Agent 配置列表, 设置页的编辑结果会走这里
 export function saveAgentProfiles(storage: Storage, profiles: AgentProfile[]): void {
   storage.setItem(agentProfileStorageKey, JSON.stringify(ensureActiveProfile(profiles)));
 }
 
+// 找到当前启用的 Agent 配置, 缺失时回退到第一项
 export function getActiveAgentProfile(profiles: AgentProfile[]): AgentProfile {
   const normalizedProfiles = ensureActiveProfile(
     profiles.length > 0 ? profiles : createDefaultAgentProfiles()
@@ -153,6 +157,7 @@ export function getActiveAgentProfile(profiles: AgentProfile[]): AgentProfile {
   return normalizedProfiles.find((profile) => profile.active) ?? normalizedProfiles[0];
 }
 
+// 生成模型请求需要的 Agent 配置快照, 不暴露设置页内部字段
 export function getActiveAgentProfileContext(profiles: AgentProfile[]): AgentProfileContext {
   const activeProfile = getActiveAgentProfile(profiles);
 
@@ -167,6 +172,7 @@ export function getActiveAgentProfileContext(profiles: AgentProfile[]): AgentPro
   };
 }
 
+// 将指定配置设为唯一激活项
 export function selectAgentProfile(profiles: AgentProfile[], profileId: string): AgentProfile[] {
   if (!profiles.some((profile) => profile.id === profileId)) {
     return ensureActiveProfile(profiles);
@@ -178,6 +184,7 @@ export function selectAgentProfile(profiles: AgentProfile[], profileId: string):
   }));
 }
 
+// 更新单个 Agent 配置并刷新更新时间
 export function updateAgentProfile(
   profiles: AgentProfile[],
   profileId: string,
@@ -198,6 +205,7 @@ export function updateAgentProfile(
   );
 }
 
+// 确保配置列表始终有一个激活项, 避免模型请求缺少 Agent 约束
 function ensureActiveProfile(profiles: AgentProfile[]): AgentProfile[] {
   const normalizedProfiles = (profiles.length > 0 ? profiles : createDefaultAgentProfiles()).map(
     normalizeAgentProfile
@@ -211,6 +219,7 @@ function ensureActiveProfile(profiles: AgentProfile[]): AgentProfile[] {
   return normalizedProfiles.map((profile, index) => ({ ...profile, active: index === activeIndex }));
 }
 
+// 归一化持久化配置, 文本长度和预算范围都在这里收口
 function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
   const contextBudget = Number.isFinite(profile.contextBudget)
     ? Math.min(64000, Math.max(2000, Math.round(profile.contextBudget)))
@@ -227,6 +236,7 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
   };
 }
 
+// 把旧版英文内置配置迁移成中文, 保留用户自定义内容
 function migrateBuiltInProfileText(profile: AgentProfile): AgentProfile {
   const defaultProfile = defaultProfiles.find((candidate) => candidate.id === profile.id);
   const legacyProfileText = legacyDefaultProfileText[profile.id];
@@ -250,6 +260,7 @@ function migrateBuiltInProfileText(profile: AgentProfile): AgentProfile {
   };
 }
 
+// 补齐工具开关对象, 缺失字段使用内置默认值
 function normalizeTools(tools: AgentProfileTools): AgentProfileTools {
   return {
     read: Boolean(tools.read),
@@ -259,14 +270,17 @@ function normalizeTools(tools: AgentProfileTools): AgentProfileTools {
   };
 }
 
+// 将工具开关转成模型可读的工具名称数组
 function getEnabledAgentTools(tools: AgentProfileTools): string[] {
   return (["read", "edit", "command", "git"] as const).filter((tool) => tools[tool]);
 }
 
+// 压缩文本空白并限制长度, 防止设置页输入撑爆提示词
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+// 校验持久化 Agent 配置, 只有完整对象才能进入运行态
 function isPersistedAgentProfile(value: unknown): value is AgentProfile {
   if (!isRecord(value)) {
     return false;
@@ -287,6 +301,7 @@ function isPersistedAgentProfile(value: unknown): value is AgentProfile {
   );
 }
 
+// 将 unknown 缩窄成普通对象, 供字段校验复用
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 通用偏好状态
+// 本文件说明: 持久化通用偏好, 包括权限模式和软件背景
 const generalPreferencesStorageKey = "forge.generalPreferences";
 
 export type WorkMode = "code" | "daily";
@@ -19,6 +19,7 @@ export type GeneralPreferences = {
   telemetry: boolean;
 };
 
+// 创建通用偏好的默认值, 首次启动和损坏数据都回退到这里
 export function createDefaultGeneralPreferences(): GeneralPreferences {
   return {
     workMode: "code",
@@ -34,6 +35,7 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
   };
 }
 
+// 用局部补丁更新偏好, 背景和权限都共享这个入口
 export function updateGeneralPreferences(
   preferences: GeneralPreferences,
   patch: Partial<GeneralPreferences>
@@ -44,6 +46,7 @@ export function updateGeneralPreferences(
   });
 }
 
+// 从 localStorage 读取偏好并做结构校验
 export function loadGeneralPreferences(storage: Storage): GeneralPreferences {
   const rawValue = storage.getItem(generalPreferencesStorageKey);
 
@@ -61,6 +64,7 @@ export function loadGeneralPreferences(storage: Storage): GeneralPreferences {
   }
 }
 
+// 兼容旧版权限字段, 目前只保留自动审查和完全访问权限
 function normalizePermissionPreferences(preferences: GeneralPreferences): GeneralPreferences {
   return {
     ...preferences,
@@ -70,10 +74,12 @@ function normalizePermissionPreferences(preferences: GeneralPreferences): Genera
   };
 }
 
+// 保存通用偏好, 让设置页刷新后保持用户选择
 export function saveGeneralPreferences(storage: Storage, preferences: GeneralPreferences): void {
   storage.setItem(generalPreferencesStorageKey, JSON.stringify(preferences));
 }
 
+// 校验持久化偏好对象, 坏数据不会进入运行态
 function isPersistedGeneralPreferences(value: unknown): value is Partial<GeneralPreferences> {
   if (!isRecord(value)) {
     return false;
@@ -107,6 +113,7 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
   );
 }
 
+// 将 unknown 缩窄成普通对象, 方便做字段校验
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

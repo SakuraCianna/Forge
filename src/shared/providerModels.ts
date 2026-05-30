@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 供应商模型处理逻辑
+// 本文件说明: 构造供应商模型列表请求并筛选适合编码的模型
 import type {
   ForgeModel,
   ForgeProvider,
@@ -23,6 +23,7 @@ export type FetchedModel = {
 
 type UnknownRecord = Record<string, unknown>;
 
+// 根据供应商类型拼出模型列表请求, 鉴权头在这里统一处理
 export function buildModelListRequest(provider: ForgeProvider, apiKey: string): ModelListRequest {
   const baseUrl = trimTrailingSlash(provider.baseUrl ?? "");
   const headerApiKey = normalizeApiKeyForHeader(apiKey);
@@ -58,7 +59,9 @@ export function buildModelListRequest(provider: ForgeProvider, apiKey: string): 
   };
 }
 
+// 把不同供应商返回解析成 ForgeModel 列表
 export function parseProviderModelList(provider: ForgeProvider, response: unknown): FetchedModel[] {
+  // 先保留适合编码的模型, 避免下拉框塞入语音图片模型
   const filterCodingModels = (models: FetchedModel[]): FetchedModel[] =>
     models.filter((model) => isUsableCodingModel(provider, model.id, model));
 
@@ -77,6 +80,7 @@ export function parseProviderModelList(provider: ForgeProvider, response: unknow
   return filterCodingModels(parseOpenAICompatibleModels(response, provider.kind === "anthropic"));
 }
 
+// 把远端模型条目转换成 Forge 内部模型结构
 export function toForgeModel(provider: ForgeProvider, fetchedModel: FetchedModel): ForgeModel {
   const capabilities = inferFetchedModelCapabilities(provider, fetchedModel.id, fetchedModel);
 
@@ -99,10 +103,12 @@ export function toForgeModel(provider: ForgeProvider, fetchedModel: FetchedModel
   };
 }
 
+// 清理 Key 空白和换行, 防止无效请求头
 export function normalizeApiKeyForHeader(apiKey: string): string {
   return apiKey.trim().replace(/^Bearer\s+/i, "").replace(/^["']|["']$/g, "");
 }
 
+// 阻止控制字符进入请求头, 避免 fetch 直接抛错
 export function assertHeaderValue(headerName: string, value: string): string {
   for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0;
@@ -121,6 +127,7 @@ export function assertHeaderValue(headerName: string, value: string): string {
   return value;
 }
 
+// 从模型名推断基础能力, 供应商未返回能力时使用
 export function inferFetchedModelCapabilities(
   provider: ForgeProvider,
   modelName: string,
@@ -150,6 +157,7 @@ export function inferFetchedModelCapabilities(
   return { reasoning: { type: "none" }, speedModes };
 }
 
+// 排除非文本或非编码模型, 保留通用对话和代码模型
 export function isUsableCodingModel(
   provider: ForgeProvider,
   modelName: string,
@@ -171,6 +179,7 @@ export function isUsableCodingModel(
   return !isNonCodingModelName(normalizedModelName);
 }
 
+// 根据供应商鉴权方式写入 Authorization 或自定义请求头
 function applyAuthHeader(
   headers: Record<string, string>,
   provider: ForgeProvider,
@@ -189,6 +198,7 @@ function applyAuthHeader(
   return headers;
 }
 
+// 识别 Mimo 思考模型, 给推理能力设置更准确标签
 function isMimoThinkingModel(normalizedModelName: string): boolean {
   if (normalizedModelName.includes("tts")) {
     return false;
@@ -197,12 +207,14 @@ function isMimoThinkingModel(normalizedModelName: string): boolean {
   return /^mimo-v(2|2\.5)(-(pro|omni|flash))?$/.test(normalizedModelName);
 }
 
+// 识别语音, 图像和嵌入模型名, 不放进编码模型列表
 function isNonCodingModelName(normalizedModelName: string): boolean {
   return /(^|[-_.:/])(tts|voiceclone|voicedesign|speech|audio|whisper|embedding|embed|rerank|image|video|moderation|guard)([-_.:/]|$)/.test(
     normalizedModelName
   );
 }
 
+// 根据模型名推断速度档位, 前端模型选择器用它显示模式
 function inferSpeedModes(
   provider: ForgeProvider,
   normalizedModelName: string,
@@ -226,12 +238,14 @@ function inferSpeedModes(
   return undefined;
 }
 
+// 验证请求头值, 在真正发请求前给出明确错误
 function validateHeaders(headers: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
     Object.entries(headers).map(([name, value]) => [name, assertHeaderValue(name, value)])
   );
 }
 
+// 解析 OpenAI compatible 的模型列表格式
 function parseOpenAICompatibleModels(response: UnknownRecord, preferDisplayName: boolean): FetchedModel[] {
   if (Array.isArray(response.data)) {
     return parseModelItems(response.data, preferDisplayName);
@@ -244,6 +258,7 @@ function parseOpenAICompatibleModels(response: UnknownRecord, preferDisplayName:
   return [];
 }
 
+// 兼容数组和 data.items 结构, 提取可能的模型条目
 function parseModelItems(items: unknown[], preferDisplayName: boolean): FetchedModel[] {
   return items.flatMap((item) => {
     if (!isRecord(item)) {
@@ -281,6 +296,7 @@ function parseModelItems(items: unknown[], preferDisplayName: boolean): FetchedM
   });
 }
 
+// 读取供应商返回的字符串数组字段
 function readStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
     return undefined;
@@ -289,6 +305,7 @@ function readStringArray(value: unknown): string[] | undefined {
   return value;
 }
 
+// 从多种字段名读取模型 id
 function readModelId(item: UnknownRecord): string | null {
   if (typeof item.id === "string") {
     return item.id;
@@ -305,6 +322,7 @@ function readModelId(item: UnknownRecord): string | null {
   return null;
 }
 
+// 解析 Gemini 模型列表并去掉 models/ 前缀
 function parseGeminiModels(response: UnknownRecord): FetchedModel[] {
   if (!Array.isArray(response.models)) {
     return [];
@@ -322,6 +340,7 @@ function parseGeminiModels(response: UnknownRecord): FetchedModel[] {
   });
 }
 
+// 读取模型价格字段, 不存在时保持 undefined
 function readPricing(item: UnknownRecord): ModelPricing | undefined {
   const pricing = isRecord(item.pricing) ? item.pricing : item;
   const inputPerMillion =
@@ -347,6 +366,7 @@ function readPricing(item: UnknownRecord): ModelPricing | undefined {
   };
 }
 
+// 读取上下文窗口大小, 兼容不同供应商字段名
 function readContextWindow(item: UnknownRecord): number | undefined {
   const topProvider = isRecord(item.top_provider) ? item.top_provider : undefined;
   const limits = isRecord(item.limits) ? item.limits : undefined;
@@ -372,12 +392,14 @@ function readContextWindow(item: UnknownRecord): number | undefined {
   return Math.round(tokenLimit);
 }
 
+// 把 token 级价格转换成每百万 token 价格
 function readPerTokenPricePerMillion(value: unknown): number | undefined {
   const perTokenPrice = readNumber(value);
 
   return perTokenPrice === undefined ? undefined : perTokenPrice * 1_000_000;
 }
 
+// 从 unknown 中读取有限数字
 function readNumber(value: unknown): number | undefined {
   const parsedValue =
     typeof value === "number"
@@ -389,10 +411,12 @@ function readNumber(value: unknown): number | undefined {
   return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : undefined;
 }
 
+// 安全缩窄普通对象
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
 }
 
+// 去掉 Base URL 尾部斜杠, 拼接路径时避免双斜杠
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染层根组件
+// 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
@@ -61,6 +61,7 @@ import {
 } from "@/state/projects";
 import {
   attachThreadAgentActions,
+  attachThreadMemoryContext,
   appendThreadEvents,
   appendThreadFollowUpPrompt,
   appendCommandRunOutput,
@@ -194,6 +195,7 @@ const enHeroPrompts = [
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
 
+// 根组件集中持有持久化状态和跨视图动作, 子组件只接收明确回调
 export function App(): ReactElement {
   const [settings, setSettings] = useState(() => {
     if (typeof window === "undefined") {
@@ -388,11 +390,13 @@ export function App(): ReactElement {
     }
   }, [settings.providers]);
 
+  // 刷新某个供应商的密钥状态, 用 last4 给设置页做安全提示
   async function refreshProviderKeyStatus(providerId: string): Promise<void> {
     const status = await window.forge.secrets.getProviderKeyStatus(providerId);
     setKeyStatuses((current) => ({ ...current, [providerId]: status }));
   }
 
+  // 保存 API Key 后立刻刷新状态, 避免设置页展示旧的配置结果
   async function saveProviderKey(providerId: string, apiKey: string): Promise<void> {
     if (!apiKey.trim()) {
       return;
@@ -402,12 +406,14 @@ export function App(): ReactElement {
     await refreshProviderKeyStatus(providerId);
   }
 
+  // 删除供应商密钥并同步清空本地状态提示
   async function deleteProviderKey(providerId: string): Promise<void> {
     await window.forge.secrets.deleteProviderKey(providerId);
     setSettings((current) => removeProviderModels(current, providerId));
     await refreshProviderKeyStatus(providerId);
   }
 
+  // 先保存当前配置再拉取模型, 自定义 Base URL 和 Key 都以最新输入为准
   async function fetchModels(providerId: string, apiKey?: string): Promise<void> {
     const provider = settings.providers.find((candidate) => candidate.id === providerId);
 
@@ -462,6 +468,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 把用户手动填写的模型 id 合入可选列表, 检测通过后立即选中
   async function addManualProviderModel(
     providerId: string,
     modelName: string,
@@ -543,10 +550,12 @@ export function App(): ReactElement {
     }
   }
 
+  // 切换界面语言并持久化, 不影响模型和项目状态
   function setInterfaceLanguage(language: Language): void {
     setSettings((current) => setLanguage(current, language));
   }
 
+  // 通过系统目录选择器加入项目, 成功后切换到工作台
   async function pickProject(): Promise<void> {
     const projectPath = await window.forge.projects.pickDirectory();
 
@@ -561,6 +570,7 @@ export function App(): ReactElement {
     setActiveView("workspace");
   }
 
+  // 选中侧边栏项目并刷新缺失提示, 不在这里做昂贵扫描
   function selectProject(projectPath: string): void {
     const project = recentProjects.find((candidate) => candidate.path === projectPath);
 
@@ -577,6 +587,7 @@ export function App(): ReactElement {
     setActiveView("workspace");
   }
 
+  // 移除最近项目记录, 当前项目被移除时自动选择下一个项目
   function removeProjectRecord(projectPath: string): void {
     setRecentProjects((current) => removeRecentProjectRecord(current, projectPath));
 
@@ -586,6 +597,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 切换项目置顶状态并同步当前项目引用
   function togglePinnedProject(projectPath: string): void {
     setRecentProjects((current) => {
       const nextProjects = toggleProjectPinned(current, projectPath);
@@ -601,10 +613,12 @@ export function App(): ReactElement {
     });
   }
 
+  // 归档指定项目的全部会话, 用于项目更多菜单的清理动作
   function archiveProjectConversations(projectPath: string): void {
     setThreads((current) => archiveProjectThreads(current, projectPath));
   }
 
+  // 为当前项目创建永久工作树入口预留, 失败时用中文提示
   function createProjectWorktree(projectPath: string): void {
     selectProject(projectPath);
     setTaskNotice(
@@ -614,6 +628,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 重命名最近项目展示名, 原始路径保持不变
   function renameProject(projectPath: string): void {
     const project = recentProjects.find((candidate) => candidate.path === projectPath);
 
@@ -641,6 +656,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 启动后优先恢复最近项目, 项目不存在时给出可处理提示
   function openMostRecentProject(): void {
     const recentProject = recentProjects[0];
 
@@ -654,6 +670,7 @@ export function App(): ReactElement {
     setActiveView("workspace");
   }
 
+  // 读取项目文件索引, 供文件页和 Agent 上下文共用
   async function scanProject(projectPath: string): Promise<boolean> {
     try {
       const result = await window.forge.projects.scan(projectPath);
@@ -681,6 +698,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 刷新当前项目 Git 状态, 同时保留用户当前选择的文件
   async function refreshProjectGitStatus(projectPath = currentProject?.path): Promise<void> {
     if (!projectPath) {
       return;
@@ -695,6 +713,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 使用用户填写的消息提交当前项目, 成功后重刷 Git 状态
   async function commitCurrentProject(message: string): Promise<void> {
     if (!currentProject) {
       return;
@@ -721,6 +740,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 按路径读取项目文件并生成可阅读预览
   async function previewProjectFile(relativePath: string): Promise<void> {
     if (!currentProject) {
       return;
@@ -734,6 +754,7 @@ export function App(): ReactElement {
     setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
   }
 
+  // 展示待应用文件变更的 diff, 让用户先审查再落盘
   async function previewProjectFileChange(relativePath: string, nextContent: string): Promise<void> {
     if (!currentProject) {
       return;
@@ -747,6 +768,7 @@ export function App(): ReactElement {
     setChangePreviews((current) => upsertFileChangePreview(current, preview));
   }
 
+  // 应用单个文件变更并更新待审查列表
   async function applyProjectFileChange(relativePath: string, nextContent: string): Promise<void> {
     if (!currentProject) {
       return;
@@ -778,10 +800,12 @@ export function App(): ReactElement {
     );
   }
 
+  // 丢弃单个待审查变更, 不触碰真实项目文件
   function discardProjectFileChange(relativePath: string): void {
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
   }
 
+  // 按顺序应用全部变更, 任一失败都停下并提示用户
   async function applyAllProjectFileChanges(): Promise<void> {
     if (!currentProject || changePreviews.length === 0) {
       return;
@@ -826,10 +850,12 @@ export function App(): ReactElement {
     );
   }
 
+  // 清空全部待审查变更, 用于用户决定重做方案
   function discardAllProjectFileChanges(): void {
     setChangePreviews([]);
   }
 
+  // 调用模型生成单文件修改预览, 结果只进入审查队列
   async function generateProjectFileChange(
     relativePath: string,
     currentContent: string,
@@ -872,17 +898,21 @@ export function App(): ReactElement {
     );
 
     try {
+      const memories = selectRelevantAgentMemories(
+        agentMemories,
+        currentProject.path,
+        8,
+        `${selectedThread.prompt} ${relativePath} ${currentContent.slice(0, 1200)}`
+      );
+
+      setThreads((current) => attachThreadMemoryContext(current, selectedThread.id, memories));
+
       const result = await window.forge.agent.generateFileChange({
         provider,
         model,
         intelligence: selectedThread.intelligence,
         agentProfile: getActiveAgentProfileContext(agentProfiles),
-        memories: selectRelevantAgentMemories(
-          agentMemories,
-          currentProject.path,
-          8,
-          `${selectedThread.prompt} ${relativePath} ${currentContent.slice(0, 1200)}`
-        ),
+        memories,
         personalization: createPersonalizationPrompt(personalization),
         projectScan: projectScanResult,
         speed: selectedThread.speed,
@@ -924,6 +954,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 针对用户选中文件逐个请求修改, 避免一次改动过大
   async function generateSelectedProjectFileChanges(relativePaths: string[]): Promise<void> {
     if (!currentProject) {
       return;
@@ -939,6 +970,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 创建或续写会话, 普通问答和项目任务统一进入同一线程
   function submitTask(prompt: string): void {
     const activeThread = selectedThreadId
       ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
@@ -1116,6 +1148,7 @@ export function App(): ReactElement {
     });
   }
 
+  // 为线程请求 Agent 计划, 生成动作队列前先注入当前记忆
   async function generateThreadPlan({
     threadId,
     taskPrompt,
@@ -1130,12 +1163,16 @@ export function App(): ReactElement {
     projectScan: ProjectScanResult;
   }): Promise<void> {
     try {
+      const memories = selectRelevantAgentMemories(agentMemories, projectScan.rootPath, 8, taskPrompt);
+
+      setThreads((current) => attachThreadMemoryContext(current, threadId, memories));
+
       const plan = await window.forge.agent.generatePlan({
         provider,
         model,
         intelligence: settings.intelligence,
         agentProfile: getActiveAgentProfileContext(agentProfiles),
-        memories: selectRelevantAgentMemories(agentMemories, projectScan.rootPath, 8, taskPrompt),
+        memories,
         personalization: createPersonalizationPrompt(personalization),
         speed: settings.speed,
         taskPrompt,
@@ -1178,6 +1215,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 基于失败结果生成修复计划, 把错误上下文重新喂给模型
   async function generateFailureFixPlan(
     threadId: string,
     action: AgentAction,
@@ -1249,6 +1287,7 @@ export function App(): ReactElement {
     });
   }
 
+  // 为失败命令生成修复动作, 让恢复循环沿用同一个线程
   async function generateCommandFixPlan(
     threadId: string,
     result: CommandRunResult
@@ -1265,6 +1304,7 @@ export function App(): ReactElement {
     await generateFailureFixPlan(threadId, action, result);
   }
 
+  // 按线程所属项目取得扫描结果, 缺失时回退到当前项目扫描
   function getProjectScanForThread(thread: TaskThread): ProjectScanResult | null {
     if (!currentProject || !projectScanResult) {
       return null;
@@ -1277,12 +1317,14 @@ export function App(): ReactElement {
     return null;
   }
 
+  // 解析线程项目路径, 优先使用线程快照避免当前项目切换造成串线
   function getThreadProjectPath(threadId: string): string | null {
     const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
 
     return thread?.projectPath ?? currentProject?.path ?? null;
   }
 
+  // 用户显式要求记住时写入长期记忆, 普通消息不保存
   function rememberPromptIfNeeded(
     threadId: string,
     prompt: string,
@@ -1302,6 +1344,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 为同一线程生成流式回答, 记忆和个性化提示在这里统一注入
   async function generateAskResponse({
     threadId,
     prompt,
@@ -1317,12 +1360,13 @@ export function App(): ReactElement {
     projectScan?: ProjectScanResult | null;
     conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   }): Promise<void> {
+    const memories = selectRelevantAgentMemories(agentMemories, projectScan?.rootPath ?? null, 8, prompt);
     const request = {
       provider,
       model,
       intelligence: settings.intelligence,
       agentProfile: getActiveAgentProfileContext(agentProfiles),
-      memories: selectRelevantAgentMemories(agentMemories, projectScan?.rootPath ?? null, 8, prompt),
+      memories,
       personalization: createPersonalizationPrompt(personalization),
       conversation,
       projectScan,
@@ -1335,6 +1379,7 @@ export function App(): ReactElement {
 
     try {
       let receivedDelta = false;
+      setThreads((current) => attachThreadMemoryContext(current, threadId, memories));
       activeAskStreamRequestIdsRef.current.set(threadId, streamEventId);
       unsubscribeStream = window.forge.agent.onAskStreamChunk((chunk) => {
         if (chunk.requestId !== streamEventId || chunk.type !== "delta") {
@@ -1403,6 +1448,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 终止当前线程的活跃请求, UI 状态和 AbortController 一起清理
   function cancelActiveThread(): void {
     if (!selectedThreadId) {
       return;
@@ -1424,6 +1470,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 把模型或工具错误压成一行中文提示, 不让错误撑坏输入区
   function appendThreadError(threadId: string, message: string): void {
     const createdAt = new Date().toISOString();
 
@@ -1444,6 +1491,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 记录模型用量和耗时, 后续统计页只读取这个事件流
   function recordUsageEvent({
     kind,
     providerId,
@@ -1475,6 +1523,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 更新动作状态并保持线程列表和当前选中线程一致
   function updateAgentActionStatus(
     threadId: string,
     actionId: string,
@@ -1483,6 +1532,7 @@ export function App(): ReactElement {
     setThreads((current) => updateThreadAgentActionStatus(current, threadId, actionId, status));
   }
 
+  // 执行单个 Agent 动作, 失败时保留可恢复的结果说明
   async function runAgentAction(
     threadId: string,
     action: AgentAction
@@ -1531,10 +1581,12 @@ export function App(): ReactElement {
     return "completed";
   }
 
+  // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
     await runAgentActionBatch(actions, (action) => runAgentAction(threadId, action));
   }
 
+  // 执行文件修改动作时先生成预览, 用户审查后才写入磁盘
   async function generateAgentFileChangeAction(
     threadId: string,
     actionId: string,
@@ -1572,6 +1624,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 打开动作关联文件, 方便用户从计划直接跳到代码
   async function openAgentFileAction(
     threadId: string,
     actionId: string,
@@ -1601,6 +1654,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 在项目目录运行命令并把实时输出绑定到线程事件
   async function runThreadCommand(
     threadId: string,
     command: string,
@@ -1666,6 +1720,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 取消正在运行的命令, 结果事件标记为用户终止
   async function cancelThreadCommand(threadId: string, runId: string): Promise<void> {
     setTaskNotice(null);
 
@@ -1692,6 +1747,7 @@ export function App(): ReactElement {
     }
   }
 
+  // 根据当前项目状态选择空页面, 缺失提示或真实工作台
   function renderWorkspaceView(): ReactElement {
     if (!selectedThreadId) {
       return renderNewConversationView();
@@ -1708,6 +1764,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染无会话首页, 保持 Codex 风格的轻量输入入口
   function renderNewConversationView(): ReactElement {
     return (
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
@@ -1732,6 +1789,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染统一输入框, 权限, 附件和模型选择都从这里传入
   function renderTaskComposer(variant: "dock" | "hero"): ReactElement {
     const activeThread = selectedThreadId
       ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
@@ -1758,6 +1816,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染项目缺失提示, 引导用户重新选择本地目录
   function renderProjectMissingNotice(): ReactElement | null {
     if (!currentProject) {
       return null;
@@ -1772,6 +1831,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染线程详情并连接执行, 取消和反馈按钮
   function renderThreadWorkspace(): ReactElement {
     const selectedThread = threads.find((thread) => thread.id === selectedThreadId) ?? null;
     const workspaceProjectPath = selectedThread?.projectPath ?? currentProject?.path ?? null;
@@ -1829,6 +1889,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染项目文件阅读页, 只有一种格式化模式时禁用下拉
   function renderFilesView(): ReactElement {
     const previewContent = formattedPreview?.content ?? previewFile?.content ?? "";
     const formatterMessage =
@@ -1924,6 +1985,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染源代码管理视图, Git 选择和提交动作集中在这里
   function renderSourceView(): ReactElement {
     const changedFiles = gitStatus?.changedFiles ?? [];
     const changes = gitStatus?.changes ?? [];
@@ -2029,6 +2091,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染设置页并传入模型, API, Agent 和记忆配置
   function renderSettingsView(): ReactElement {
     return (
       <div className="h-full min-h-0 p-5">
@@ -2093,6 +2156,7 @@ export function App(): ReactElement {
     );
   }
 
+  // 根据侧边栏选中项决定主内容, 设置默认进入常规页
   function renderActiveView(): ReactElement {
     if (activeView === "settings") {
       return renderSettingsView();
@@ -2175,6 +2239,7 @@ export function App(): ReactElement {
   );
 }
 
+// 把模型计划步骤转成简短线程事件, 不再生成内部模板流水账
 function createAgentPlanResultEvents(
   threadId: string,
   text: string,
@@ -2200,6 +2265,7 @@ function createAgentPlanResultEvents(
   }));
 }
 
+// 把当前线程历史压成模型对话, 用户和输出事件按顺序保留
 function createThreadConversation(
   thread: TaskThread
 ): Array<{ role: "user" | "assistant"; content: string }> {
@@ -2218,6 +2284,7 @@ function createThreadConversation(
   return turns;
 }
 
+// 把 Agent 步骤类型翻译成用户能看懂的中文短标签
 function getAgentStepKindLabel(kind: AgentPlanStep["kind"]): string {
   if (kind === "inspect") {
     return "检查";
@@ -2238,6 +2305,7 @@ function getAgentStepKindLabel(kind: AgentPlanStep["kind"]): string {
   return "计划";
 }
 
+// 把运行时错误收敛成一行中文提示, 隐藏 HTML 响应噪音
 function formatAgentRuntimeError(
   language: Language,
   kind: "file" | "command",
@@ -2250,10 +2318,12 @@ function formatAgentRuntimeError(
   return `${kind === "file" ? "File action" : "Command execution"} failed: ${message}`;
 }
 
+// 用时间和随机数生成命令运行 id, 避免并发命令串流
 function createCommandRunId(threadId: string): string {
   return `${threadId}-command-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// 重复项目名加序号, 侧边栏展示时保持可区分
 function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPath: string): string {
   const existing = new Set(
     projects
@@ -2276,6 +2346,7 @@ function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPa
   return candidate;
 }
 
+// 把文本 diff 渲染成逐行预览, 供文件页和审查面板复用
 function renderDiffPreview(diff: string): ReactElement[] {
   const lines = diff.split(/\r?\n/);
   const visibleLines = lines.slice(0, 600);
@@ -2297,6 +2368,7 @@ function renderDiffPreview(diff: string): ReactElement[] {
   return renderedLines;
 }
 
+// 根据 diff 前缀返回行样式, 不在渲染处散落判断
 function getDiffLineClass(line: string): string {
   if (line.startsWith("+") && !line.startsWith("+++")) {
     return "bg-[#eefaf3] text-[#087443]";
@@ -2317,6 +2389,7 @@ function getDiffLineClass(line: string): string {
   return "text-[#565869]";
 }
 
+// 把 Git 状态字母翻译成中文状态
 function formatGitStatus(status: string): string {
   if (status === "??") {
     return "new";
@@ -2337,6 +2410,7 @@ function formatGitStatus(status: string): string {
   return "modified";
 }
 
+// 合并索引和工作区状态字母, 空状态用占位符对齐
 function formatGitStatusLetter(status: string): string {
   if (status === "??") {
     return "U";
@@ -2357,12 +2431,14 @@ function formatGitStatusLetter(status: string): string {
   return "M";
 }
 
+// 识别项目路径缺失类错误, 用于切换到重新选择提示
 function isMissingProjectError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
 
   return /Project path does not exist|ENOENT|cannot find|no such file/i.test(message);
 }
 
+// 清洗远端模型错误, 避免 HTML 或 JSON 细节直接暴露给用户
 function formatRemoteModelError(language: Language, error: unknown): string {
   const rawMessage = error instanceof Error ? error.message : String(error);
   const message = rawMessage.replace(/^Error invoking remote method '[^']+':\s*/u, "");
@@ -2376,6 +2452,7 @@ function formatRemoteModelError(language: Language, error: unknown): string {
   return message;
 }
 
+// 把预览状态翻译成审查列表里的中文标签
 function formatPreviewStatus(
   result: CodeFormatResult | null,
   language: Language
@@ -2399,6 +2476,7 @@ function formatPreviewStatus(
   return language === "zh-CN" ? "原始内容" : "Raw content";
 }
 
+// 渲染轻量提示条, 不把提示样式散落在多个视图
 function Notice({ message }: { message: string }): ReactElement {
   return (
     <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2 text-[12px] text-[#b45309]">
@@ -2407,6 +2485,7 @@ function Notice({ message }: { message: string }): ReactElement {
   );
 }
 
+// 渲染页面标题和副标题, 保持文件页和设置页层级一致
 function ViewHeader({
   title,
   description
@@ -2422,6 +2501,7 @@ function ViewHeader({
   );
 }
 
+// 渲染空状态行动入口, 图标和文案由调用方决定
 function EmptyAction({
   message,
   action,

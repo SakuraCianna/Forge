@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 文本生成共享类型
+// 本文件说明: 构造不同模型供应商的文本生成请求并解析返回
 import type {
   ForgeModel,
   ForgeProvider,
@@ -46,6 +46,7 @@ const thinkingBudgetByLevel: Record<IntelligenceLevel, number> = {
 
 const defaultOutputTokenLimit = 8192;
 
+// 根据供应商 kind 选择请求构造器, 调用方不用关心 API 差异
 export function buildTextGenerationRequest({
   provider,
   model,
@@ -121,6 +122,7 @@ export function buildTextGenerationRequest({
   });
 }
 
+// 从供应商响应里提取最终文本, 缺失时返回空字符串
 export function extractGeneratedText(providerKind: ProviderKind, response: unknown): string {
   if (!isRecord(response)) {
     return "";
@@ -141,6 +143,7 @@ export function extractGeneratedText(providerKind: ProviderKind, response: unkno
   return extractChatCompletionsText(response);
 }
 
+// 从响应里提取 token 用量, 供统计页累计成本
 export function extractTokenUsage(providerKind: ProviderKind, response: unknown): TokenUsage | undefined {
   if (!isRecord(response)) {
     return undefined;
@@ -161,6 +164,7 @@ export function extractTokenUsage(providerKind: ProviderKind, response: unknown)
   return extractChatCompletionsTokenUsage(response);
 }
 
+// 构造 OpenAI Responses 请求, 同时映射推理强度和服务档位
 function buildOpenAIRequest({
   baseUrl,
   model,
@@ -195,6 +199,7 @@ function buildOpenAIRequest({
   return postJson(`${baseUrl}/responses`, apiKey, body, requestHeaders, requiresApiKey, authHeader);
 }
 
+// 构造 Anthropic Messages 请求, 将系统提示和对话内容分开
 function buildAnthropicRequest({
   baseUrl,
   model,
@@ -244,6 +249,7 @@ function buildAnthropicRequest({
   };
 }
 
+// 构造 Gemini generateContent 请求, 系统提示放入 systemInstruction
 function buildGeminiRequest({
   baseUrl,
   model,
@@ -281,6 +287,7 @@ function buildGeminiRequest({
   };
 }
 
+// 构造 OpenAI compatible Chat Completions 请求, 自定义供应商共用这条路径
 function buildOpenAICompatibleRequest({
   baseUrl,
   model,
@@ -321,6 +328,7 @@ function buildOpenAICompatibleRequest({
   return postJson(`${baseUrl}/chat/completions`, apiKey, body, requestHeaders, requiresApiKey, authHeader);
 }
 
+// 生成 JSON POST 请求配置, 请求头在发送前统一校验
 function postJson(
   url: string,
   apiKey: string,
@@ -353,6 +361,7 @@ function postJson(
   };
 }
 
+// 将 Forge 智能档位映射成模型供应商接受的推理 effort
 function resolveEffort(model: ForgeModel, intelligence: IntelligenceLevel): IntelligenceLevel | null {
   if (model.capabilities.reasoning.type !== "effort") {
     return null;
@@ -365,6 +374,7 @@ function resolveEffort(model: ForgeModel, intelligence: IntelligenceLevel): Inte
   return model.capabilities.reasoning.values.at(-1) ?? null;
 }
 
+// OpenAI 服务档位按速度选择, 快速模式优先 lower latency
 function resolveOpenAIServiceTier(model: ForgeModel, speed?: SpeedMode): string | null {
   if (!speed || !model.capabilities.speedModes?.includes(speed)) {
     return null;
@@ -373,6 +383,7 @@ function resolveOpenAIServiceTier(model: ForgeModel, speed?: SpeedMode): string 
   return speed === "fast" ? "priority" : "default";
 }
 
+// Anthropic 服务档位按速度选择, 保持和 Forge 速度语义一致
 function resolveAnthropicServiceTier(model: ForgeModel, speed?: SpeedMode): string | null {
   if (!speed || !model.capabilities.speedModes?.includes(speed)) {
     return null;
@@ -381,6 +392,7 @@ function resolveAnthropicServiceTier(model: ForgeModel, speed?: SpeedMode): stri
   return speed === "fast" ? "auto" : "standard_only";
 }
 
+// OpenAI compatible 不强写未知服务档位, 只保留通用 auto
 function resolveOpenAICompatibleServiceTier(
   providerId: string,
   model: ForgeModel,
@@ -397,6 +409,7 @@ function resolveOpenAICompatibleServiceTier(
   return "priority";
 }
 
+// 从 OpenAI Responses 的 output 数组中收集文本片段
 function extractOpenAIText(response: Record<string, unknown>): string {
   if (typeof response.output_text === "string") {
     return response.output_text;
@@ -412,6 +425,7 @@ function extractOpenAIText(response: Record<string, unknown>): string {
     .join("\n");
 }
 
+// 从 Anthropic content blocks 中收集 text 类型内容
 function extractAnthropicText(response: Record<string, unknown>): string {
   if (!Array.isArray(response.content)) {
     return "";
@@ -426,6 +440,7 @@ function extractAnthropicText(response: Record<string, unknown>): string {
     .join("\n");
 }
 
+// 从 Gemini candidates 中提取 parts 文本
 function extractGeminiText(response: Record<string, unknown>): string {
   if (!Array.isArray(response.candidates)) {
     return "";
@@ -443,6 +458,7 @@ function extractGeminiText(response: Record<string, unknown>): string {
     .join("\n");
 }
 
+// 从 Chat Completions choices 中读取第一条 assistant 内容
 function extractChatCompletionsText(response: Record<string, unknown>): string {
   if (!Array.isArray(response.choices)) {
     return "";
@@ -469,6 +485,7 @@ function extractChatCompletionsText(response: Record<string, unknown>): string {
     .join("\n");
 }
 
+// 读取 OpenAI Responses 的 input 和 output token 用量
 function extractOpenAITokenUsage(response: Record<string, unknown>): TokenUsage | undefined {
   if (!isRecord(response.usage)) {
     return undefined;
@@ -493,6 +510,7 @@ function extractOpenAITokenUsage(response: Record<string, unknown>): TokenUsage 
   });
 }
 
+// 读取 Anthropic usage 里的 input 和 output token 用量
 function extractAnthropicTokenUsage(response: Record<string, unknown>): TokenUsage | undefined {
   if (!isRecord(response.usage)) {
     return undefined;
@@ -510,6 +528,7 @@ function extractAnthropicTokenUsage(response: Record<string, unknown>): TokenUsa
   });
 }
 
+// 读取 Gemini usageMetadata 里的提示词和候选 token 用量
 function extractGeminiTokenUsage(response: Record<string, unknown>): TokenUsage | undefined {
   if (!isRecord(response.usageMetadata)) {
     return undefined;
@@ -528,6 +547,7 @@ function extractGeminiTokenUsage(response: Record<string, unknown>): TokenUsage 
   });
 }
 
+// 读取 Chat Completions usage 并兼容不同字段命名
 function extractChatCompletionsTokenUsage(response: Record<string, unknown>): TokenUsage | undefined {
   if (!isRecord(response.usage)) {
     return undefined;
@@ -552,6 +572,7 @@ function extractChatCompletionsTokenUsage(response: Record<string, unknown>): To
   });
 }
 
+// 统一组装 token 用量, 已知分项相加得到总量
 function createTokenUsage(usage: {
   inputTokens?: number;
   outputTokens?: number;
@@ -578,10 +599,12 @@ function createTokenUsage(usage: {
   };
 }
 
+// 从 unknown 中读取有限数字
 function readNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+// 只对已知数字求和, 所有分项缺失时返回 undefined
 function sumKnown(first?: number, second?: number): number | undefined {
   if (first === undefined && second === undefined) {
     return undefined;
@@ -590,18 +613,22 @@ function sumKnown(first?: number, second?: number): number | undefined {
   return (first ?? 0) + (second ?? 0);
 }
 
+// 把数值限制到供应商允许范围内
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+// 去掉 Base URL 尾部斜杠, 拼接路径时避免双斜杠
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+// 将 unknown 缩窄成普通对象, 供响应解析安全读字段
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+// 校验请求头没有控制字符, 提前暴露 Key 配置错误
 function validateHeaders(headers: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
     Object.entries(headers).map(([name, value]) => [name, assertHeaderValue(name, value)])

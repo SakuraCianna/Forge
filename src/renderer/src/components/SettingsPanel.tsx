@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 设置面板
+// 本文件说明: 渲染常规, 模型, API, Agent, 记忆和用量设置
 import type { ComponentType, ReactElement } from "react";
 import { useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -98,6 +98,7 @@ type SectionItem = {
   icon: ComponentType<{ className?: string }>;
 };
 
+// 管理设置页分区切换和表单状态, 默认进入常规设置
 export function SettingsPanel({
   settings,
   keyStatuses,
@@ -268,6 +269,7 @@ export function SettingsPanel({
     </section>
   );
 
+  // 读取用户选择的背景图并转成 data URL 保存
   function handleBackgroundFile(file: File | null): void {
     if (!file) {
       return;
@@ -288,6 +290,7 @@ export function SettingsPanel({
     reader.readAsDataURL(file);
   }
 
+  // 渲染通用设置, 包含工作模式, 语言和软件背景
   function renderGeneralSection(): ReactElement {
     const copy = getGeneralSettingsCopy(settings.language);
 
@@ -529,6 +532,7 @@ export function SettingsPanel({
     );
   }
 
+  // 渲染可用模型管理, 搜索和启用状态都在这里处理
   function renderModelsSection(): ReactElement {
     return (
       <SectionFrame>
@@ -641,6 +645,7 @@ export function SettingsPanel({
     );
   }
 
+  // 渲染 API 配置和自定义模型添加入口
   function renderProvidersSection(): ReactElement {
     return (
       <SectionFrame>
@@ -949,6 +954,7 @@ export function SettingsPanel({
     );
   }
 
+  // 渲染 Agent 配置编辑器, 权限和工具能力在这里配置
   function renderAgentProfilesSection(): ReactElement {
     const copy = getAgentProfilesCopy(settings.language);
     const selectedProfile = activeAgentProfile ?? agentProfiles[0] ?? null;
@@ -1143,6 +1149,7 @@ export function SettingsPanel({
     );
   }
 
+  // 渲染长期记忆列表, 只显示已保存的用户偏好和项目事实
   function renderMemorySection(): ReactElement {
     const copy = getMemorySettingsCopy(settings.language);
 
@@ -1208,6 +1215,7 @@ export function SettingsPanel({
     );
   }
 
+  // 渲染用量和价格设置, 成本统计依赖这里的价格表
   function renderUsageSection(): ReactElement {
     return (
       <SectionFrame>
@@ -1344,6 +1352,7 @@ export function SettingsPanel({
     );
   }
 
+  // 过滤供应商模型行, 搜索词同时匹配名称和模型 id
   function getProviderModelRows(providerId: string): Array<{ id: string; label: string }> {
     const rowsById = new Map<string, { id: string; label: string }>();
 
@@ -1364,6 +1373,7 @@ export function SettingsPanel({
     return Array.from(rowsById.values());
   }
 
+  // 渲染个性化设置, 这些内容会追加到模型系统提示
   function renderPersonalizationSection(): ReactElement {
     return (
       <SectionFrame>
@@ -1414,6 +1424,7 @@ export function SettingsPanel({
     );
   }
 
+  // 渲染已归档对话列表, 方便用户恢复旧会话
   function renderArchivedSection(): ReactElement {
     return (
       <SectionFrame>
@@ -1450,6 +1461,7 @@ export function SettingsPanel({
     );
   }
 
+  // 把语气枚举翻译成设置页标签
   function getToneLabel(tone: PersonalizationSettings["replyTone"]): string {
     if (tone === "concise") {
       return t("settings.tone.concise");
@@ -1462,6 +1474,7 @@ export function SettingsPanel({
     return t("settings.tone.friendly");
   }
 
+  // 根据当前分区返回页面副标题
   function getSectionDescription(section: SettingsSection): string {
     if (section === "general") {
       return settings.language === "zh-CN"
@@ -1501,10 +1514,12 @@ export function SettingsPanel({
   }
 }
 
+// 给设置分区提供统一外框, 保持表单密度一致
 function SectionFrame({ children }: { children: ReactElement | ReactElement[] }): ReactElement {
   return <section>{children}</section>;
 }
 
+// 生成模型启用按钮的可访问文案
 function getModelToggleLabel(language: Language, modelLabel: string, enabled: boolean): string {
   if (language === "zh-CN") {
     return `${enabled ? "停用" : "启用"} ${modelLabel}`;
@@ -1513,6 +1528,7 @@ function getModelToggleLabel(language: Language, modelLabel: string, enabled: bo
   return `${enabled ? "Disable" : "Enable"} ${modelLabel}`;
 }
 
+// 判断模型是否匹配搜索词, 供应商和能力信息都参与匹配
 function modelMatchesSearch(
   model: ForgeModel,
   providers: ModelSettings["providers"],
@@ -1532,10 +1548,12 @@ function modelMatchesSearch(
   return normalizedHaystack.includes(normalizedQuery);
 }
 
+// 统一模型搜索文本大小写和空白
 function normalizeModelSearchText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
 }
 
+// 生成模型详情短文本, 显示上下文窗口和价格
 function formatModelDetails(
   language: Language,
   model: ForgeModel,
@@ -1563,6 +1581,7 @@ function formatModelDetails(
   return details.join(" · ");
 }
 
+// 把上下文窗口数字格式化成 k tokens
 function formatContextWindow(language: Language, contextWindow: number): string {
   const compactValue =
     contextWindow >= 1000 ? `${Math.round(contextWindow / 1000)}K` : formatInteger(contextWindow);
@@ -1570,12 +1589,14 @@ function formatContextWindow(language: Language, contextWindow: number): string 
   return language === "zh-CN" ? `${compactValue} 上下文` : `${compactValue} context`;
 }
 
+// 把每百万 token 价格格式化成美元字符串
 function formatPrice(value: number): string {
   return Number.isInteger(value)
     ? String(value)
     : value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
 }
 
+// 渲染工作模式卡片, 用于常规设置的二选一入口
 function ModeCard({
   description,
   icon: Icon,
@@ -1610,6 +1631,7 @@ function ModeCard({
   );
 }
 
+// 渲染设置行, 左侧说明和右侧控件保持固定结构
 function SettingRow({
   children,
   description,
@@ -1630,6 +1652,7 @@ function SettingRow({
   );
 }
 
+// 渲染统一开关控件, 禁用态仍保留未来功能位置
 function PreferenceToggle({
   description,
   enabled,
@@ -1662,6 +1685,7 @@ function PreferenceToggle({
   );
 }
 
+// 渲染供应商模型折叠区, 使用原生 DOM 展开避免昂贵动画
 function ProviderModelDropdown({
   currentModelId,
   language,
@@ -1724,6 +1748,7 @@ function ProviderModelDropdown({
   );
 }
 
+// 渲染状态概览卡片, 用于用量页顶部指标
 function StatusTile({
   icon: Icon,
   label,
@@ -1742,6 +1767,7 @@ function StatusTile({
   );
 }
 
+// 渲染模型或供应商维度的用量指标
 function MetricTile({ label, value }: { label: string; value: string }): ReactElement {
   return (
     <div className="rounded-[16px] border border-[#ececf1] bg-[#f7f7f8] p-3">
@@ -1751,6 +1777,7 @@ function MetricTile({ label, value }: { label: string; value: string }): ReactEl
   );
 }
 
+// 渲染价格输入框, 空值代表未知价格
 function PriceInput({
   label,
   value,
@@ -1775,14 +1802,17 @@ function PriceInput({
   );
 }
 
+// 生成模型输入价格字段标签
 function getUsageModelInputLabel(language: Language): string {
   return language === "zh-CN" ? "模型输入单价 / 1M" : "Model input price / 1M";
 }
 
+// 生成模型输出价格字段标签
 function getUsageModelOutputLabel(language: Language): string {
   return language === "zh-CN" ? "模型输出单价 / 1M" : "Model output price / 1M";
 }
 
+// 返回记忆设置文案, 后续扩展记忆类型时集中维护
 function getMemorySettingsCopy(language: Language): {
   allProjects: string;
   clearAll: string;
@@ -1821,6 +1851,7 @@ function getMemorySettingsCopy(language: Language): {
   };
 }
 
+// 返回 Agent 配置页文案, 内置配置显示也走这里
 function getAgentProfilesCopy(language: Language): {
   autoReview: string;
   contextBudget: string;
@@ -1886,6 +1917,7 @@ function getAgentProfilesCopy(language: Language): {
   };
 }
 
+// 返回常规设置页文案, 中英文 UI 只维护一份结构
 function getGeneralSettingsCopy(language: Language): {
   agentRuntime: string;
   agentRuntimeDescription: string;
@@ -1994,6 +2026,7 @@ function getGeneralSettingsCopy(language: Language): {
   };
 }
 
+// 格式化整数并提供中文环境下的分组展示
 function formatInteger(value: number): string {
   return Math.round(value).toLocaleString();
 }

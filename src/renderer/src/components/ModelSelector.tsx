@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 模型选择器
+// 本文件说明: 渲染输入框内的紧凑模型选择器
 import type { ReactElement } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Zap } from "lucide-react";
@@ -31,6 +31,7 @@ const speedLabels: Record<SpeedMode, MessageKey> = {
   balanced: "selector.balanced"
 };
 
+// 渲染紧凑模型选择器, 输入框内和设置页都使用同一套选项数据
 export function ModelSelector({
   settings,
   onSelectModel,

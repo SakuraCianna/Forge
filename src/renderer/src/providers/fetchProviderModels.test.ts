@@ -1,4 +1,4 @@
-// 本文件说明: 渲染供应商 供应商模型拉取逻辑测试
+// 本文件说明: 验证模型拉取错误会被整理成稳定中文提示
 import { describe, expect, it } from "vitest";
 import type { ForgeProvider } from "@shared/modelTypes";
 import { fetchProviderModels } from "./fetchProviderModels";

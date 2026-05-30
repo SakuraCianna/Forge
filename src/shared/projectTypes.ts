@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 项目共享类型
+// 本文件说明: 定义项目扫描结果, 文件索引和说明文件类型
 export type ProjectFile = {
   relativePath: string;
   size: number;

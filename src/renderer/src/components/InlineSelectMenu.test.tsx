@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 统一下拉选择组件测试
+// 本文件说明: 验证统一下拉菜单的选项选择和禁用态
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

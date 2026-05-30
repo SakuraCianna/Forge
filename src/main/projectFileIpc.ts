@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 项目文件 IPC 通道
+// 本文件说明: 注册项目文件 IPC, 读取和写入都经过路径边界检查
 import { fileChannels } from "../shared/ipcChannels.js";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 
@@ -26,6 +26,7 @@ type RegisterHandler = (channel: string, handler: IpcHandler) => void;
 
 export { fileChannels };
 
+// 暴露读取, 预览修改和写入文本文件的受控入口
 export function registerProjectFileHandlers(
   readProjectTextFile: ReadProjectTextFile,
   previewProjectTextFileUpdate: PreviewProjectTextFileUpdate,
@@ -45,6 +46,7 @@ export function registerProjectFileHandlers(
   );
 }
 
+// 校验文件读取请求, 项目根路径和相对路径都必须明确
 function assertReadRequest(value: unknown): ReadProjectTextFileRequest {
   if (
     !isRecord(value) ||
@@ -61,6 +63,7 @@ function assertReadRequest(value: unknown): ReadProjectTextFileRequest {
   };
 }
 
+// 校验文件更新请求, nextContent 必须是渲染层传来的完整文本
 function assertUpdateRequest(value: unknown): UpdateProjectTextFileRequest {
   const readRequest = assertReadRequest(value);
 
@@ -74,6 +77,7 @@ function assertUpdateRequest(value: unknown): UpdateProjectTextFileRequest {
   };
 }
 
+// 缩窄 IPC 入参, 避免直接访问 unknown 上的字段
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 桌面工作台外壳
+// 本文件说明: 渲染桌面工作台外壳, 侧边栏, 项目列表和会话列表
 import type { ComponentType, CSSProperties, PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -78,6 +78,7 @@ type ShellCopy = {
   unpinProject: string;
 };
 
+// 组合应用主框架和可调整侧边栏, 主内容由当前视图注入
 export function AppShell({
   language,
   activeView,
@@ -124,6 +125,7 @@ export function AppShell({
   const hasWallpaper = Boolean(backgroundImageDataUrl);
 
   useEffect(() => {
+    // 从本地存储恢复侧边栏宽度, 窗口变化时重新夹紧范围
     function syncSidebarWidth(): void {
       const maxWidth = getSidebarMaxWidth();
       setSidebarWidth((current) => clampSidebarWidth(current, maxWidth));
@@ -135,14 +137,17 @@ export function AppShell({
     return () => window.removeEventListener("resize", syncSidebarWidth);
   }, []);
 
+  // 开始拖拽侧边栏宽度, 只响应鼠标主按钮
   function beginResize(event: ReactPointerEvent<HTMLDivElement>): void {
     event.currentTarget.setPointerCapture(event.pointerId);
     const maxWidth = getSidebarMaxWidth();
 
+    // 根据指针位置计算侧边栏宽度并限制在可用范围内
     function moveSidebar(pointerEvent: PointerEvent): void {
       setSidebarWidth(clampSidebarWidth(pointerEvent.clientX, maxWidth));
     }
 
+    // 结束拖拽并移除全局监听器
     function stopResize(): void {
       window.removeEventListener("pointermove", moveSidebar);
       window.removeEventListener("pointerup", stopResize);
@@ -275,6 +280,7 @@ export function AppShell({
     </div>
   );
 
+  // 渲染项目分组和项目更多菜单, 项目行保持紧凑高度
   function renderProjects(): ReactElement {
     const projectsToRender =
       projects.length > 0
@@ -452,6 +458,7 @@ export function AppShell({
     );
   }
 
+  // 渲染当前项目会话, 会话从属于项目而不是全局散落
   function renderConversations(): ReactElement | null {
     const globalThreads = visibleThreads.filter((thread) => !thread.projectPath);
 
@@ -509,6 +516,7 @@ export function AppShell({
   }
 }
 
+// 渲染统一圆角菜单容器, 所有侧边栏菜单共用阴影和字号
 function MenuContent({
   align = "start",
   children,
@@ -531,6 +539,7 @@ function MenuContent({
   );
 }
 
+// 渲染统一菜单项, danger 状态只改变颜色不改变布局
 function MenuItem({
   children,
   onSelect,
@@ -552,10 +561,12 @@ function MenuItem({
   );
 }
 
+// 读取初始侧边栏宽度, 无存储值时使用默认宽度
 function getInitialSidebarWidth(): number {
   return getSidebarMaxWidth();
 }
 
+// 根据窗口宽度计算侧边栏最大宽度
 function getSidebarMaxWidth(): number {
   if (typeof window === "undefined") {
     return 220;
@@ -568,16 +579,19 @@ function getSidebarMaxWidth(): number {
   return Math.max(148, Math.min(screenMaxWidth, viewportMaxWidth));
 }
 
+// 将侧边栏宽度限制在最小和最大范围内
 function clampSidebarWidth(width: number, maxWidth: number): number {
   const minWidth = Math.min(176, maxWidth);
 
   return Math.min(Math.max(width, minWidth), maxWidth);
 }
 
+// 将背景图透明度限制在可读范围内
 function clampWallpaperOpacity(value: number): number {
   return Math.min(Math.max(value, 0), 0.6);
 }
 
+// 根据语言返回侧边栏菜单文案
 function getShellCopy(language: Language): ShellCopy {
   if (language === "zh-CN") {
     return {

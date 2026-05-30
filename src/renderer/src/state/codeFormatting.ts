@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 代码格式化状态
+// 本文件说明: 为文件预览选择可用格式化方式并懒加载 Prettier
 import type { Options, Plugin } from "prettier";
 
 export type CodeFormatterMode = "raw" | "prettier" | "rendered";
@@ -34,6 +34,7 @@ const parserByExtension: Record<string, string> = {
   ".yml": "yaml"
 };
 
+// 根据文件扩展名选择 Prettier parser, 不支持的文件保持原始预览
 export function getPrettierParserForPath(path: string): string | null {
   const normalizedPath = path.toLowerCase();
   const extension = Object.keys(parserByExtension)
@@ -43,6 +44,7 @@ export function getPrettierParserForPath(path: string): string | null {
   return extension ? parserByExtension[extension] : null;
 }
 
+// 返回当前文件可用的预览模式, 单一模式时前端会禁用下拉
 export function getAvailableCodeFormatterModes(path: string): CodeFormatterMode[] {
   const modes: CodeFormatterMode[] = [];
 
@@ -57,10 +59,12 @@ export function getAvailableCodeFormatterModes(path: string): CodeFormatterMode[
   return modes;
 }
 
+// 支持 Prettier 的文件默认格式化, 其他文件直接原始显示
 export function getDefaultCodeFormatterMode(path: string): CodeFormatterMode {
   return getAvailableCodeFormatterModes(path)[0] ?? "raw";
 }
 
+// 按用户选择格式化预览内容, 格式化失败时返回中文错误
 export async function formatCodePreview(
   path: string,
   content: string,
@@ -98,6 +102,7 @@ export async function formatCodePreview(
   }
 }
 
+// 懒加载 Prettier 和插件, 避免首次打开文件页拖慢主界面
 async function loadPrettier(): Promise<{ prettier: PrettierStandalone; plugins: Plugin[] }> {
   const [standalone, babel, estree, typescript, html, postcss, markdown, yaml] = await Promise.all([
     import("prettier/standalone"),
@@ -118,14 +123,17 @@ async function loadPrettier(): Promise<{ prettier: PrettierStandalone; plugins: 
   };
 }
 
+// 兼容 ESM 默认导出和具名对象两种打包结果
 function unwrapDefault<T>(module: unknown): T {
   return isRecord(module) && "default" in module ? (module.default as T) : (module as T);
 }
 
+// 将 unknown 缩窄成对象, 用于读取动态导入结果
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+// 根据扩展名判断是否走 Markdown parser
 function isMarkdownPath(path: string): boolean {
   const normalizedPath = path.toLowerCase();
 

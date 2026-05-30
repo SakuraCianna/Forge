@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 任务输入框
+// 本文件说明: 渲染统一输入框, 附件菜单, 权限选择和模型入口
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -43,6 +43,7 @@ type TaskComposerProps = {
   variant?: "dock" | "hero";
 };
 
+// 控制输入框提交和底部工具条布局, 新会话和线程底栏共用
 export function TaskComposer({
   busy = false,
   settings,
@@ -99,6 +100,7 @@ export function TaskComposer({
     }
   }, [submitSignal, submitTask]);
 
+  // Enter 直接发送, Shift Enter 保留换行
   function handlePromptKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
     if (
       event.key !== "Enter" ||
@@ -187,6 +189,7 @@ export function TaskComposer({
     </section>
   );
 
+  // 渲染权限模式菜单, 目前只开放自动审查和完全访问权限
   function renderPermissionSelector(): ReactElement {
     const permissionMode = getPermissionMode(resolvedGeneralPreferences);
     const permissionOption = getPermissionOption(copy, permissionMode);
@@ -237,6 +240,7 @@ export function TaskComposer({
     );
   }
 
+  // 渲染加号菜单, 预留未来目标模式和插件系统入口
   function renderAddMenu(): ReactElement {
     return (
       <DropdownMenu.Root>
@@ -294,6 +298,7 @@ export function TaskComposer({
   }
 }
 
+// 根据语言返回输入框文案, 让组件主体只关心布局
 function getComposerCopy(language: ModelSettings["language"]): {
   addAttachments: string;
   autoReviewPermission: string;
@@ -326,6 +331,7 @@ function getComposerCopy(language: ModelSettings["language"]): {
   };
 }
 
+// 从通用偏好读取当前权限模式, 旧值统一回退自动审查
 function getPermissionMode(preferences: GeneralPreferences): ComposerPermissionMode {
   if (preferences.fullAccess) {
     return "full";
@@ -334,6 +340,7 @@ function getPermissionMode(preferences: GeneralPreferences): ComposerPermissionM
   return "auto";
 }
 
+// 将权限选择写回通用偏好结构
 function applyPermissionMode(
   preferences: GeneralPreferences,
   mode: ComposerPermissionMode
@@ -346,6 +353,7 @@ function applyPermissionMode(
   };
 }
 
+// 找到权限菜单选项, 缺失时回退自动审查
 function getPermissionOption(
   copy: ReturnType<typeof getComposerCopy>,
   mode: ComposerPermissionMode

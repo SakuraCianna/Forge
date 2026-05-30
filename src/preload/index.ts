@@ -1,4 +1,4 @@
-// 本文件说明: 预加载 入口模块
+// 本文件说明: 把受控 IPC API 暴露给渲染层, 屏蔽 Electron 内部对象
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
   agentChannels,
@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld("forge", {
     cancelAskStream: (requestId: string): Promise<{ ok: boolean; requestId: string }> =>
       ipcRenderer.invoke(agentChannels.cancelAskStream, requestId),
     onAskStreamChunk: (listener: (chunk: AgentAskStreamChunk) => void) => {
+      // 把主进程的回答增量转给渲染层监听器, 卸载时同步移除事件
       const handler = (_event: IpcRendererEvent, chunk: AgentAskStreamChunk) => listener(chunk);
       ipcRenderer.on(agentChannels.askStreamChunk, handler);
 
@@ -96,6 +97,7 @@ contextBridge.exposeInMainWorld("forge", {
     cancel: (request: { runId: string }): Promise<{ ok: boolean; runId: string }> =>
       ipcRenderer.invoke(commandChannels.cancel, request),
     onOutput: (listener: (chunk: CommandOutputChunk) => void) => {
+      // 把命令输出流转给渲染层监听器, 返回清理函数防止重复订阅
       const handler = (_event: IpcRendererEvent, chunk: CommandOutputChunk) => listener(chunk);
       ipcRenderer.on(commandChannels.output, handler);
 

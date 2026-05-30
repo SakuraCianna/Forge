@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 供应商目录
+// 本文件说明: 定义内置供应商目录并补齐运行时供应商配置
 import type { ForgeModel, ForgeProvider } from "./modelTypes.js";
 
 export const providerCatalog: ForgeProvider[] = [
@@ -315,6 +315,7 @@ export const providerCatalog: ForgeProvider[] = [
   }
 ];
 
+// 用目录里的默认值补齐供应商, 用户自定义字段优先保留
 export function hydrateProviderFromCatalog(provider: ForgeProvider): ForgeProvider {
   const catalogProvider = providerCatalog.find((candidate) => candidate.id === provider.id);
 

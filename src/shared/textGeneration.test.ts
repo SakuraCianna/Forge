@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 文本生成共享类型测试
+// 本文件说明: 验证多供应商文本请求构造, 响应解析和 token 统计
 import { describe, expect, it } from "vitest";
 import type { ForgeModel, ForgeProvider } from "./modelTypes.js";
 import {

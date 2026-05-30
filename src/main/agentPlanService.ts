@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 Agent 执行计划服务
+// 本文件说明: 调用模型生成 Agent 计划, 文件变更和流式问答
 import type {
   AgentFileChangeResult,
   AgentAskResult,
@@ -61,6 +61,7 @@ const maxFilesBySpeed = {
 
 const maxStreamContinuations = 1;
 
+// 生成可执行计划并解析成步骤, 这里只请求模型不直接改文件
 export async function generateAgentPlan({
   request,
   keyVault,
@@ -109,6 +110,7 @@ export async function generateAgentPlan({
   };
 }
 
+// 生成单文件新内容, 返回预览给渲染层审查
 export async function generateAgentFileChange({
   request,
   keyVault,
@@ -157,6 +159,7 @@ export async function generateAgentFileChange({
   };
 }
 
+// 生成非流式问答结果, 用作流式不可用时的备用路径
 export async function generateAgentAsk({
   request,
   keyVault,
@@ -204,6 +207,7 @@ export async function generateAgentAsk({
   };
 }
 
+// 生成流式问答并回传 delta, 结束时返回完整文本和用量
 export async function generateAgentAskStream({
   request,
   keyVault,
@@ -321,6 +325,7 @@ export async function generateAgentAskStream({
   };
 }
 
+// 构造计划模式系统提示, 强调少量明确动作和验证
 function createAgentPlanInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
@@ -332,6 +337,7 @@ function createAgentPlanInstructions(personalization?: string): string {
   ], personalization);
 }
 
+// 构造文件修改提示, 要求模型只输出完整文件内容
 function createAgentFileChangeInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
@@ -342,6 +348,7 @@ function createAgentFileChangeInstructions(personalization?: string): string {
   ], personalization);
 }
 
+// 构造普通问答提示, 保持简洁并允许 Markdown
 function createAskInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge in direct answer mode inside a coding workbench.",
@@ -353,6 +360,7 @@ function createAskInstructions(personalization?: string): string {
   ], personalization);
 }
 
+// 把用户个性化提示拼到系统提示末尾, 空值直接跳过
 function appendPersonalization(instructions: string[], personalization?: string): string {
   if (!personalization?.trim()) {
     return instructions.join("\n");
@@ -361,6 +369,7 @@ function appendPersonalization(instructions: string[], personalization?: string)
   return [...instructions, "User personalization:", personalization.trim()].join("\n");
 }
 
+// 读取 JSON 响应并把解析失败包装成供应商错误
 async function readJsonBody(providerLabel: string, response: Response): Promise<unknown> {
   const text = await response.text();
   const trimmedText = text.trim();
@@ -384,6 +393,7 @@ async function readJsonBody(providerLabel: string, response: Response): Promise<
   }
 }
 
+// 在请求体支持时打开流式参数, 不破坏非流式供应商
 function maybeEnableTextGenerationStreaming(
   provider: ForgeProvider,
   request: ReturnType<typeof buildTextGenerationRequest>
@@ -406,10 +416,12 @@ function maybeEnableTextGenerationStreaming(
   };
 }
 
+// 根据响应头判断是否是 SSE 流
 function isEventStreamResponse(response: Response): boolean {
   return response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ?? false;
 }
 
+// 优先读取 SSE 增量, 非 SSE 响应回退到普通 JSON
 async function readStreamingResponseText(
   response: Response,
   providerKind: ForgeProvider["kind"],
@@ -424,6 +436,7 @@ async function readStreamingResponseText(
   return readEventStreamTextFromBody(await response.text(), providerKind, onDelta);
 }
 
+// 解析 SSE 文本并累计最终回答, 同时把 delta 发给 UI
 async function readEventStreamText(
   response: Response,
   providerKind: ForgeProvider["kind"],
@@ -488,6 +501,7 @@ async function readEventStreamText(
   return { text, truncated };
 }
 
+// 读取单行 SSE 事件里的文本增量
 function readStreamEventDeltaLine(
   lineText: string,
   providerKind: ForgeProvider["kind"]
@@ -517,6 +531,7 @@ function readStreamEventDeltaLine(
   }
 }
 
+// 按字节读取响应体, 处理跨 chunk 的 SSE 行
 function readEventStreamTextFromBody(
   body: string,
   providerKind: ForgeProvider["kind"],
@@ -545,6 +560,7 @@ function readEventStreamTextFromBody(
   return { text, truncated };
 }
 
+// 从不同供应商的流式事件中提取文本片段
 function extractStreamDelta(
   providerKind: ForgeProvider["kind"],
   event: unknown
@@ -572,6 +588,7 @@ function extractStreamDelta(
   return null;
 }
 
+// 判断流是否可能因为长度或截断原因提前结束
 function isStreamTruncated(
   providerKind: ForgeProvider["kind"],
   event: unknown
@@ -609,10 +626,12 @@ function isStreamTruncated(
   );
 }
 
+// 将 unknown 缩窄成对象, 供响应解析安全读字段
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+// 把项目扫描, 记忆和用户目标整理成计划模型输入
 function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
   const files = request.projectScan.files
     .slice(0, maxFilesBySpeed[request.speed])
@@ -637,6 +656,7 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     .join("\n\n");
 }
 
+// 把文件内容和任务要求整理成单文件修改输入
 function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): string {
   const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
@@ -655,6 +675,7 @@ function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): st
     .join("\n\n");
 }
 
+// 把历史对话, 项目信息和记忆整理成普通问答输入
 function createAskInput(request: GenerateAgentAskRequest): string {
   const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
@@ -711,6 +732,7 @@ function createAskInput(request: GenerateAgentAskRequest): string {
   return parts.join("\n\n");
 }
 
+// 将选中的长期记忆转成提示词块, 未命中时返回空字符串
 function formatAgentMemories(
   memories: GenerateAgentAskRequest["memories"] | GenerateAgentPlanRequest["memories"]
 ): string {
@@ -727,6 +749,7 @@ function formatAgentMemories(
   return ["Relevant memories:", ...lines.map((line) => `- ${line}`)].join("\n");
 }
 
+// 把 Agent 配置转成模型可读约束, 控制权限和工具边界
 function formatAgentProfile(
   agentProfile?: GenerateAgentAskRequest["agentProfile"] | GenerateAgentPlanRequest["agentProfile"]
 ): string {
@@ -746,6 +769,7 @@ function formatAgentProfile(
   ].join("\n");
 }
 
+// 压缩项目说明文件, 保留路径名帮助模型判断来源
 function formatProjectInstructions(projectScan?: GenerateAgentAskRequest["projectScan"]): string {
   const instructionFiles =
     projectScan?.instructionFiles
@@ -770,6 +794,7 @@ function formatProjectInstructions(projectScan?: GenerateAgentAskRequest["projec
   ].join("\n\n");
 }
 
+// 流被截断时请求模型续写, 只要求补剩余回答
 function createAskContinuationInput(request: GenerateAgentAskRequest, partialAnswer: string): string {
   return [
     createAskInput(request),
@@ -779,6 +804,7 @@ function createAskContinuationInput(request: GenerateAgentAskRequest, partialAns
   ].join("\n\n");
 }
 
+// 去掉模型包裹的代码块, 文件写入需要纯内容
 function stripMarkdownCodeFence(value: string): string {
   const trimmed = value.trim();
   const match = /^```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)\r?\n```$/.exec(trimmed);
@@ -786,6 +812,7 @@ function stripMarkdownCodeFence(value: string): string {
   return match ? match[1] : value;
 }
 
+// 从模型文本里解析步骤列表, 失败时回退到单个说明步骤
 function parseAgentPlanSteps(text: string): AgentPlanStep[] {
   return text
     .split(/\r?\n/)
@@ -811,6 +838,7 @@ function parseAgentPlanSteps(text: string): AgentPlanStep[] {
     });
 }
 
+// 为步骤生成短标题, UI 队列只展示前几个字
 function createStepTitle(description: string): string {
   const withoutTrailingPeriod = description.replace(/[.。]\s*$/, "");
   const sentenceBreak = withoutTrailingPeriod.search(/[。.!?]\s/);
@@ -819,6 +847,7 @@ function createStepTitle(description: string): string {
   return title.slice(0, 96);
 }
 
+// 根据步骤文本推断动作类型, 用于后续执行器分派
 function inferStepKind(description: string): AgentPlanStepKind {
   const normalized = description.toLowerCase();
 
@@ -841,6 +870,7 @@ function inferStepKind(description: string): AgentPlanStepKind {
   return "other";
 }
 
+// 从步骤文本里提取文件路径或命令目标
 function readStepTarget(description: string): string | undefined {
   const backtickTarget = /`([^`]+)`/.exec(description)?.[1]?.trim();
 

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 模型设置状态
+// 本文件说明: 管理模型供应商, 可用模型和用户选择的持久化状态
 import { catalogModels, providerCatalog } from "@shared/providerCatalog";
 import { isUsableCodingModel, toForgeModel } from "@shared/providerModels";
 import type {
@@ -47,6 +47,7 @@ type PersistedDetectedModel = {
   lastSelectedAt?: string;
 };
 
+// 创建模型设置默认值, 首次启动不默认启用任何远端模型
 export function createDefaultModelSettings(): ModelSettings {
   return {
     language: "zh-CN",
@@ -58,6 +59,7 @@ export function createDefaultModelSettings(): ModelSettings {
   };
 }
 
+// 返回已启用模型并按当前选择优先排序
 export function getEnabledModels(settings: ModelSettings): ForgeModel[] {
   return sortModelsForSelection(
     settings.models.filter((model) => model.enabled),
@@ -65,10 +67,12 @@ export function getEnabledModels(settings: ModelSettings): ForgeModel[] {
   );
 }
 
+// 返回设置页展示用模型列表, 包含未启用模型
 export function getModelsForDisplay(settings: ModelSettings): ForgeModel[] {
   return sortModelsForSelection(settings.models, settings.currentModelId);
 }
 
+// 切换模型启用状态, 关闭当前模型时自动选择下一个可用模型
 export function updateModelEnabled(
   settings: ModelSettings,
   modelId: string,
@@ -104,6 +108,7 @@ export function updateModelEnabled(
   };
 }
 
+// 记录当前模型并提升选择权重, 下次排序会优先显示
 export function setCurrentModel(settings: ModelSettings, modelId: string): ModelSettings {
   const model = settings.models.find((candidate) => candidate.id === modelId);
 
@@ -130,6 +135,7 @@ export function setCurrentModel(settings: ModelSettings, modelId: string): Model
   };
 }
 
+// 更新智能档位, 发送请求时会映射到供应商推理参数
 export function setIntelligence(
   settings: ModelSettings,
   intelligence: IntelligenceLevel
@@ -137,16 +143,19 @@ export function setIntelligence(
   return { ...settings, intelligence };
 }
 
+// 更新速度档位, 后续请求会按模型能力选择服务档位
 export function setSpeed(settings: ModelSettings, speed: SpeedMode): ModelSettings {
   const currentModel = settings.models.find((model) => model.id === settings.currentModelId) ?? null;
 
   return { ...settings, speed: normalizeSpeedForModel(speed, currentModel) };
 }
 
+// 更新界面语言, 模型设置和 UI 文案共用这个字段
 export function setLanguage(settings: ModelSettings, language: Language): ModelSettings {
   return { ...settings, language };
 }
 
+// 合并远端拉取模型, 已存在模型保留用户启用状态和选择次数
 export function mergeFetchedModels(settings: ModelSettings, fetchedModels: ForgeModel[]): ModelSettings {
   const existingModelsById = new Map(settings.models.map((model) => [model.id, model]));
   const nextModels = [...settings.models];
@@ -209,6 +218,7 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
   };
 }
 
+// 更新供应商 Base URL, 空值会恢复目录默认配置
 export function updateProviderBaseUrl(
   settings: ModelSettings,
   providerId: string,
@@ -222,6 +232,7 @@ export function updateProviderBaseUrl(
   };
 }
 
+// 更新自定义供应商展示名, 内置供应商不允许改名
 export function updateProviderLabel(
   settings: ModelSettings,
   providerId: string,
@@ -246,6 +257,7 @@ export function updateProviderLabel(
   };
 }
 
+// 创建 OpenAI compatible 自定义供应商, id 和名称都要去重
 export function addCustomProvider(
   settings: ModelSettings,
   label: string,
@@ -272,6 +284,7 @@ export function addCustomProvider(
   };
 }
 
+// 删除自定义供应商并清理它的模型和当前选择
 export function deleteCustomProvider(settings: ModelSettings, providerId: string): ModelSettings {
   const provider = settings.providers.find((candidate) => candidate.id === providerId);
 
@@ -299,6 +312,7 @@ export function deleteCustomProvider(settings: ModelSettings, providerId: string
   };
 }
 
+// 清空某个供应商的检测模型, 保留用户手动添加的配置入口
 export function removeProviderModels(settings: ModelSettings, providerId: string): ModelSettings {
   const models = settings.models.filter((model) => model.providerId !== providerId);
   const enabledModels = sortModelsForSelection(
@@ -318,6 +332,7 @@ export function removeProviderModels(settings: ModelSettings, providerId: string
   };
 }
 
+// 添加用户手动填写的模型 id, 保存后立即作为可选模型使用
 export function addManualModel(settings: ModelSettings, providerId: string, modelName: string): ModelSettings {
   const normalizedModelName = modelName.trim();
 
@@ -340,6 +355,7 @@ export function addManualModel(settings: ModelSettings, providerId: string, mode
   };
 }
 
+// 只持久化用户可变字段, 内置目录每次启动重新合并
 export function saveModelSettings(storage: Storage, settings: ModelSettings): void {
   const persisted: PersistedModelSettings = {
     language: settings.language,
@@ -382,6 +398,7 @@ export function saveModelSettings(storage: Storage, settings: ModelSettings): vo
   storage.setItem(modelSettingsStorageKey, JSON.stringify(persisted));
 }
 
+// 从 localStorage 读取模型设置, 失败时回退默认并重新合并目录
 export function loadModelSettings(storage: Storage): ModelSettings {
   const rawValue = storage.getItem(modelSettingsStorageKey);
 
@@ -396,6 +413,7 @@ export function loadModelSettings(storage: Storage): ModelSettings {
   }
 }
 
+// 把持久化字段合并到最新目录, 兼容供应商和模型目录变更
 function mergePersistedSettings(persisted: PersistedModelSettings): ModelSettings {
   const defaults = createDefaultModelSettings();
   const customProviders = (persisted.customProviders ?? [])
@@ -477,6 +495,7 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
   };
 }
 
+// 按模型 id 去重, 后出现的同 id 模型覆盖旧条目
 function dedupeModelsById(models: ForgeModel[]): ForgeModel[] {
   const modelsById = new Map<string, ForgeModel>();
 
@@ -487,6 +506,7 @@ function dedupeModelsById(models: ForgeModel[]): ForgeModel[] {
   return Array.from(modelsById.values());
 }
 
+// 从持久化远端模型恢复 ForgeModel, 无效编码模型会被过滤
 function createDetectedModel(
   providers: ForgeProvider[],
   providerId: string,
@@ -527,16 +547,19 @@ function createDetectedModel(
   };
 }
 
+// 校验速度字段, 旧数据里的未知值统一回到 balanced
 function normalizeSpeed(value: unknown, fallback: SpeedMode): SpeedMode {
   return value === "fast" || value === "balanced" ? value : fallback;
 }
 
+// 读取持久化上下文窗口, 非正数直接忽略
 function readPersistedContextWindow(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.round(value)
     : undefined;
 }
 
+// 校验模型价格对象, 输入和输出价格可以单独存在
 function isModelPricing(value: unknown): value is ModelPricing {
   return (
     typeof value === "object" &&
@@ -552,10 +575,12 @@ function isModelPricing(value: unknown): value is ModelPricing {
   );
 }
 
+// 模型不支持当前速度时回退到该模型的第一个可用速度
 function normalizeSpeedForModel(speed: SpeedMode, model: ForgeModel | null): SpeedMode {
   return model?.capabilities.speedModes?.includes(speed) ? speed : "balanced";
 }
 
+// 当前模型排最前, 其余模型按选择次数和最近使用时间排序
 function sortModelsForSelection(models: ForgeModel[], currentModelId: string | null): ForgeModel[] {
   return [...models].sort((first, second) => {
     if (first.id === currentModelId && second.id !== currentModelId) {
@@ -587,6 +612,7 @@ function sortModelsForSelection(models: ForgeModel[], currentModelId: string | n
   });
 }
 
+// 根据供应商名称生成稳定 id, 冲突时自动追加序号
 function createCustomProviderId(label: string, existingIds: Set<string>): string {
   const normalizedLabel =
     label
@@ -605,6 +631,7 @@ function createCustomProviderId(label: string, existingIds: Set<string>): string
   return id;
 }
 
+// 为重复名称生成带序号的展示名
 function createUniqueLabel(label: string, existingLabels: string[]): string {
   const normalizedLabel = label.trim() || "Custom Provider";
   const existing = new Set(existingLabels.map((candidate) => candidate.trim().toLowerCase()));
@@ -624,6 +651,7 @@ function createUniqueLabel(label: string, existingLabels: string[]): string {
   return candidate;
 }
 
+// 构造手动模型并默认启用, 供用户绕过远端模型列表失败
 function createManualModel(
   providerId: string,
   modelName: string,

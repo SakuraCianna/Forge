@@ -1,8 +1,9 @@
-// 本文件说明: 渲染组件 项目缺失提示
+// 本文件说明: 提示项目路径缺失并提供重新选择入口
 import type { ReactElement } from "react";
 import { CircleAlert, Trash2 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
 
+// 渲染项目路径缺失提示, 引导用户重新选择或打开最近项目
 export function ProjectMissingNotice({
   language,
   onRemove,
@@ -40,6 +41,7 @@ export function ProjectMissingNotice({
   );
 }
 
+// 根据语言返回项目缺失提示文案
 function getProjectMissingCopy(language: Language): {
   description: string;
   remove: string;

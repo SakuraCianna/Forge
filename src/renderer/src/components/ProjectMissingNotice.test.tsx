@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 项目缺失提示测试
+// 本文件说明: 验证项目缺失提示的重新选择和打开最近项目操作
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 设置面板测试
+// 本文件说明: 验证设置面板的常规, API, Agent 和记忆配置交互
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { createDefaultPersonalizationSettings } from "@/state/personalization";
 import { createDefaultAgentProfiles } from "@/state/agentProfiles";
 import { SettingsPanel } from "./SettingsPanel";
 
+// 使用默认 props 渲染设置页, 用例只覆盖关心的差异
 function renderSettingsPanel(overrides: Partial<Parameters<typeof SettingsPanel>[0]> = {}) {
   const settings = overrides.settings ?? setLanguage(createDefaultModelSettings(), "en-US");
 

@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 密钥保险库 IPC 通道
+// 本文件说明: 注册密钥保险库 IPC, API Key 只在主进程读写
 import type { ProviderKeyStatus } from "./keyVault.js";
 import { keyVaultChannels } from "../shared/ipcChannels.js";
 
@@ -15,6 +15,7 @@ type RegisterHandler = (channel: string, handler: IpcHandler) => void;
 
 export { keyVaultChannels };
 
+// 暴露保存, 状态查询和删除密钥的受控入口
 export function registerKeyVaultHandlers(vault: KeyVault, registerHandler: RegisterHandler): void {
   registerHandler(keyVaultChannels.save, async (_event, providerId, apiKey) => {
     await vault.saveProviderKey(assertString(providerId), assertString(apiKey));
@@ -29,6 +30,7 @@ export function registerKeyVaultHandlers(vault: KeyVault, registerHandler: Regis
   });
 }
 
+// 校验 IPC 字符串参数, 防止 providerId 或 apiKey 为空类型
 function assertString(value: unknown): string {
   if (typeof value !== "string") {
     throw new Error("Invalid IPC argument");

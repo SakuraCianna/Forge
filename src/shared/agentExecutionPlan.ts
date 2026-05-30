@@ -1,4 +1,4 @@
-// 本文件说明: 共享模块 Agent 执行计划共享逻辑
+// 本文件说明: 将模型计划步骤转成前端可执行动作队列
 import type { AgentPlanStep } from "./agentTypes.js";
 
 export type AgentActionKind = "inspect-file" | "edit-file" | "run-command" | "commit" | "manual";
@@ -15,6 +15,7 @@ export type AgentAction = {
   command?: string;
 };
 
+// 把模型步骤映射成带状态的动作队列, 执行器只消费这种稳定结构
 export function createAgentActionsFromPlanSteps(steps: AgentPlanStep[]): AgentAction[] {
   return steps.map((step, index) => {
     const normalizedTarget = normalizeActionTarget(step.target);
@@ -75,12 +76,14 @@ export function createAgentActionsFromPlanSteps(steps: AgentPlanStep[]): AgentAc
   });
 }
 
+// 清理动作目标文本, 空字符串统一变成 undefined
 function normalizeActionTarget(target: string | undefined): string | undefined {
   const normalized = target?.trim().replace(/^`|`$/g, "");
 
   return normalized || undefined;
 }
 
+// 用轻量规则判断目标是否像文件路径, 避免误把普通说明当文件
 function isLikelyFilePath(target: string): boolean {
   if (/^[a-z]+(\s|$)/i.test(target)) {
     return false;

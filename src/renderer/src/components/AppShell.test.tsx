@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 桌面工作台外壳测试
+// 本文件说明: 验证桌面工作台侧边栏项目和会话交互
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染 Agent Agent 动作执行器
+// 本文件说明: 判断 Agent 动作是否可执行并按队列推进动作
 import type { AgentAction } from "@shared/agentExecutionPlan";
 
 export type AgentActionExecution =
@@ -8,6 +8,7 @@ export type AgentActionExecution =
   | { kind: "manual-gate"; reason: "review" | "commit" }
   | { kind: "complete" };
 
+// 根据动作类型决定执行方式, 不能自动执行的动作返回阻塞原因
 export function resolveAgentActionExecution(action: AgentAction): AgentActionExecution {
   if (action.kind === "manual" || action.kind === "commit") {
     return { kind: "manual-gate", reason: action.kind === "commit" ? "commit" : "review" };
@@ -28,10 +29,12 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
   return { kind: "complete" };
 }
 
+// 找到队列里第一个还没完成的动作, 用于决定下一步提示
 export function findNextPendingAgentAction(actions: AgentAction[]): AgentAction | null {
   return actions.find((action) => action.status === "pending") ?? null;
 }
 
+// 从队列开头收集可自动执行动作, 遇到人工步骤就停下
 export function getRunnablePendingAgentActions(actions: AgentAction[]): AgentAction[] {
   const runnableActions: AgentAction[] = [];
 
@@ -68,6 +71,7 @@ export type AgentActionRunOutcome =
       continueBatch?: boolean;
     };
 
+// 顺序执行动作批次, 前一个失败时不继续冒进
 export async function runAgentActionBatch(
   actions: AgentAction[],
   runAction: (action: AgentAction) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>
@@ -109,6 +113,7 @@ export async function runAgentActionBatch(
   };
 }
 
+// 把空执行结果归一成成功, 让简单动作无需手写返回值
 function normalizeAgentActionRunOutcome(outcome: AgentActionRunOutcome): {
   status: AgentAction["status"];
   continueBatch: boolean;
@@ -126,6 +131,7 @@ function normalizeAgentActionRunOutcome(outcome: AgentActionRunOutcome): {
   };
 }
 
+// 判断动作是否适合自动执行, manual 和 commit 必须留给用户确认
 export function isRunnableAgentAction(action: AgentAction): boolean {
   if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
     return true;

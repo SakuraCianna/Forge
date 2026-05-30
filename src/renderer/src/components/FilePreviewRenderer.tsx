@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 文件预览渲染器
+// 本文件说明: 渲染代码和 Markdown 文件预览, 支持轻量语法高亮
 import type { ReactElement, ReactNode } from "react";
 import type { CodeFormatterMode } from "@/state/codeFormatting";
 
@@ -19,6 +19,7 @@ type MarkdownBlock =
 const keywordPattern =
   /^(?:abstract|async|await|break|case|catch|class|const|continue|default|do|else|enum|export|extends|finally|for|from|function|if|import|in|interface|let|new|of|return|switch|throw|try|type|var|while|with|yield)$/;
 
+// 根据预览模式选择 Markdown 渲染或代码渲染
 export function FilePreviewRenderer({
   content,
   mode,
@@ -31,6 +32,7 @@ export function FilePreviewRenderer({
   return <CodePreview content={content} path={path} />;
 }
 
+// 渲染简化 Markdown, 对话输出和文件预览共用
 export function MarkdownPreview({
   compact = false,
   content
@@ -55,6 +57,7 @@ export function MarkdownPreview({
   );
 }
 
+// 将解析后的 Markdown 块映射成对应 HTML 结构
 function renderMarkdownBlock(block: MarkdownBlock, index: number): ReactElement {
   if (block.kind === "heading") {
     const className =
@@ -125,6 +128,7 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number): ReactElement 
   );
 }
 
+// 渲染代码块并按行做轻量高亮
 function CodePreview({
   compact = false,
   content,
@@ -153,6 +157,7 @@ function CodePreview({
   );
 }
 
+// 将一行代码拆成 token, 保持高亮简单且可控
 function highlightCodeLine(line: string): ReactNode[] {
   const tokens: ReactNode[] = [];
   const tokenPattern =
@@ -181,6 +186,7 @@ function highlightCodeLine(line: string): ReactNode[] {
   return tokens.length > 0 ? tokens : [line];
 }
 
+// 根据 token 类型返回高亮 className
 function getCodeTokenClassName(token: string): string {
   if (token.startsWith("//") || token.startsWith("/*")) {
     return "text-[#6e6e80]";
@@ -205,6 +211,7 @@ function getCodeTokenClassName(token: string): string {
   return "text-[#202123]";
 }
 
+// 用轻量解析器拆分 Markdown 块, 避免引入重型运行时依赖
 function parseMarkdownBlocks(content: string): MarkdownBlock[] {
   const lines = content.split(/\r?\n/);
   const blocks: MarkdownBlock[] = [];
@@ -299,6 +306,7 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
   return blocks;
 }
 
+// 渲染行内代码和强调文本, 其他内容保持原样
 function renderInlineMarkdown(text: string): ReactNode[] {
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
 
@@ -319,6 +327,7 @@ function renderInlineMarkdown(text: string): ReactNode[] {
   });
 }
 
+// 根据扩展名判断是否可以渲染 Markdown
 function isMarkdownPath(path: string): boolean {
   const normalizedPath = path.toLowerCase();
 

@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 包配置读取逻辑测试
+// 本文件说明: 确认 Electron 和 Vite 配置指向正确的构建产物
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -15,6 +15,7 @@ type PackageJson = {
   };
 };
 
+// 读取 package.json 作为普通对象, 让配置断言不依赖导入缓存
 function readPackageJson(): PackageJson {
   return JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as PackageJson;
 }

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 任务线程状态测试
+// 本文件说明: 验证线程事件, 流式输出, 动作队列和记忆快照
 import { describe, expect, it } from "vitest";
 import {
   createDefaultModelSettings,
@@ -12,6 +12,7 @@ import {
   appendThreadFollowUpPrompt,
   appendThreadResultDelta,
   appendThreadEvents,
+  attachThreadMemoryContext,
   archiveAllThreads,
   archiveProjectThreads,
   archiveThread,
@@ -138,6 +139,40 @@ describe("taskThreads", () => {
       message: "Now add cancellation support"
     });
     expect(threads[0].title).toBe("Project question");
+  });
+
+  it("attaches the memory context used for a thread without mutating source memories", () => {
+    const thread: TaskThread = {
+      id: "thread-1",
+      title: "Project question",
+      prompt: "What does this project remember?",
+      status: "running",
+      modelId: "openai:gpt-5.5",
+      intelligence: "high",
+      speed: "balanced",
+      createdAt: "2026-05-27T13:00:00.000Z",
+      events: []
+    };
+
+    const threads = attachThreadMemoryContext([thread], "thread-1", [
+      {
+        id: "memory-1",
+        scope: "project",
+        projectPath: "E:\\CodeHome\\Forge",
+        content: "这个项目默认终端是 PowerShell",
+        createdAt: "2026-05-30T10:00:00.000Z",
+        updatedAt: "2026-05-30T10:00:00.000Z"
+      }
+    ]);
+
+    expect(threads[0].contextMemories).toEqual([
+      {
+        id: "memory-1",
+        scope: "project",
+        projectPath: "E:\\CodeHome\\Forge",
+        content: "这个项目默认终端是 PowerShell"
+      }
+    ]);
   });
 
   it("marks a running thread as cancelled with a visible event", () => {
@@ -605,6 +640,7 @@ describe("taskThreads", () => {
   });
 });
 
+// 构造来自供应商 API 的模型记录, 用于测试线程创建时的模型选择
 function createFetchedModel(providerId: string, modelName: string, label: string) {
   return {
     id: `${providerId}:${modelName}`,

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 用量统计状态测试
+// 本文件说明: 验证模型用量事件, 费用汇总和价格表持久化
 import { describe, expect, it } from "vitest";
 import type { UsageEvent } from "@shared/usageTypes";
 import { mergeModelPricingRates, summarizeUsage, summarizeUsageByModel, summarizeUsageByProvider } from "./usage";

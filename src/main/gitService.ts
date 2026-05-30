@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 Git 服务
+// 本文件说明: 封装项目 Git 状态读取和提交命令
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import type {
@@ -25,6 +25,7 @@ type ProjectGitCommitOptions = ProjectGitCommitRequest & {
   runGit?: GitRunner;
 };
 
+// 读取当前分支, 变更列表和 diff, 让源代码管理页一次拿齐状态
 export async function getProjectGitStatus({
   projectRoot,
   runGit = runGitCommand
@@ -57,6 +58,7 @@ export async function getProjectGitStatus({
   };
 }
 
+// 提交前先检查项目是否有变更, 避免生成空提交
 export async function commitProjectChanges({
   projectRoot,
   message,
@@ -88,6 +90,7 @@ export async function commitProjectChanges({
     status: nextStatus
   };
 
+  // 执行 Git 命令并把失败包装成可读错误
   async function runGitOrThrow(args: string[], commandCwd: string): Promise<GitCommandResult> {
     const result = await runGit(args, commandCwd);
 
@@ -99,6 +102,7 @@ export async function commitProjectChanges({
   }
 }
 
+// 以项目目录作为 cwd 运行 Git, stdout 和 stderr 都保留下来
 function runGitCommand(args: string[], cwd: string): Promise<GitCommandResult> {
   return new Promise((resolve) => {
     const child = spawn("git", args, {
@@ -135,6 +139,7 @@ function runGitCommand(args: string[], cwd: string): Promise<GitCommandResult> {
   });
 }
 
+// 解析 porcelain 输出并补充每个文件的 diff 片段
 async function readGitChanges(
   output: string,
   cwd: string,
@@ -150,6 +155,7 @@ async function readGitChanges(
   );
 }
 
+// 优先读取普通 diff, 没有内容时再读取 staged diff
 async function readGitDiff(
   entry: Omit<ProjectGitFileChange, "diff">,
   cwd: string,
@@ -171,6 +177,7 @@ async function readGitDiff(
   return [stagedDiff.stdout, unstagedDiff.stdout].filter(Boolean).join("\n");
 }
 
+// 把 Git 双字符状态拆成索引状态和工作区状态
 function parseGitStatusEntries(output: string): Array<Omit<ProjectGitFileChange, "diff">> {
   return output
     .split(/\r?\n/)

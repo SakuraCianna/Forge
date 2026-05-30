@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 命令 IPC 通道
+// 本文件说明: 注册命令运行 IPC, 所有命令请求先经过结构校验
 import { commandChannels } from "../shared/ipcChannels.js";
 import type {
   CancelProjectCommandOptions,
@@ -24,6 +24,7 @@ type RegisterHandler = (channel: string, handler: IpcHandler) => void;
 
 export { commandChannels };
 
+// 把命令运行和取消能力暴露给渲染层, 输出流通过 sender 回传
 export function registerCommandHandlers(
   runCommand: RunCommand,
   registerHandler: RegisterHandler,
@@ -42,6 +43,7 @@ export function registerCommandHandlers(
   );
 }
 
+// 校验命令运行请求, projectRoot, cwd 和 command 都必须是字符串
 function assertRunCommandRequest(value: unknown): RunProjectCommandOptions {
   if (
     !isRecord(value) ||
@@ -61,6 +63,7 @@ function assertRunCommandRequest(value: unknown): RunProjectCommandOptions {
   };
 }
 
+// 校验取消命令请求, 只允许通过 runId 取消已登记的进程
 function assertCancelCommandRequest(value: unknown): CancelProjectCommandOptions {
   if (!isRecord(value) || typeof value.runId !== "string") {
     throw new Error("Invalid command cancellation request");
@@ -69,6 +72,7 @@ function assertCancelCommandRequest(value: unknown): CancelProjectCommandOptions
   return { runId: value.runId };
 }
 
+// 将 IPC 入参缩窄为普通对象, 后续字段校验才有类型保证
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

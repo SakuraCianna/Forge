@@ -362,6 +362,7 @@ export const messages = {
 
 export type MessageKey = keyof (typeof messages)["zh-CN"];
 
+// 先读当前语言文案, 缺失时回退到中文避免界面出现空字串
 export function getMessage(language: Language, key: MessageKey): string {
   return messages[language][key];
 }

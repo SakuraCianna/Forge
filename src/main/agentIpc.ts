@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 Agent IPC 通道
+// 本文件说明: 注册 Agent 相关 IPC, 统一校验请求并转发流式片段
 import type {
   AgentFileChangeResult,
   AgentAskStreamChunk,
@@ -30,6 +30,7 @@ type RegisterHandler = (channel: string, handler: IpcHandler) => void;
 
 export { agentChannels };
 
+// 注册计划, 文件修改, 问答和取消流式回答的主进程处理器
 export function registerAgentHandlers(
   generatePlan: AgentPlanGenerator,
   generateFileChange: AgentFileChangeGenerator,
@@ -100,6 +101,7 @@ export function registerAgentHandlers(
   }
 }
 
+// 校验生成计划请求的最小结构, 防止渲染层传入脏数据
 function assertGenerateAgentPlanRequest(value: unknown): GenerateAgentPlanRequest {
   if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.model)) {
     throw new Error("Invalid agent plan request");
@@ -112,6 +114,7 @@ function assertGenerateAgentPlanRequest(value: unknown): GenerateAgentPlanReques
   return value as GenerateAgentPlanRequest;
 }
 
+// 校验文件修改请求, 确保模型只拿到明确的项目文件内容
 function assertGenerateAgentFileChangeRequest(value: unknown): GenerateAgentFileChangeRequest {
   if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.model)) {
     throw new Error("Invalid agent file change request");
@@ -128,6 +131,7 @@ function assertGenerateAgentFileChangeRequest(value: unknown): GenerateAgentFile
   return value as GenerateAgentFileChangeRequest;
 }
 
+// 校验问答请求, conversation 必须保持数组结构才能拼接上下文
 function assertGenerateAgentAskRequest(value: unknown): GenerateAgentAskRequest {
   if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.model)) {
     throw new Error("Invalid agent ask request");
@@ -140,6 +144,7 @@ function assertGenerateAgentAskRequest(value: unknown): GenerateAgentAskRequest 
   return value as GenerateAgentAskRequest;
 }
 
+// 校验流式请求 id, 取消和分片事件都依赖这个稳定标识
 function assertRequestId(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error("Invalid agent ask stream request id");
@@ -148,6 +153,7 @@ function assertRequestId(value: unknown): string {
   return value;
 }
 
+// 把回答分片发回原窗口, 窗口已关闭时直接忽略
 function sendAskStreamChunk(event: unknown, chunk: AgentAskStreamChunk): void {
   if (!isRecord(event) || !isRecord(event.sender) || typeof event.sender.send !== "function") {
     return;
@@ -156,6 +162,7 @@ function sendAskStreamChunk(event: unknown, chunk: AgentAskStreamChunk): void {
   event.sender.send(agentChannels.askStreamChunk, chunk);
 }
 
+// 将 unknown 缩窄成对象后再读取 IPC 请求字段
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

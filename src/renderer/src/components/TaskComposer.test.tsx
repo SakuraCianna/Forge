@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 任务输入框测试
+// 本文件说明: 验证输入框发送快捷键, 权限菜单和加号菜单
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

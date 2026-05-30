@@ -1,9 +1,10 @@
-// 本文件说明: 渲染组件 对话工作区
+// 本文件说明: 渲染单个任务线程的回答, 操作队列, 命令输出和反馈控件
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowRight,
+  Brain,
   CheckCircle2,
   Circle,
   Code2,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
+import type { AgentMemoryContext } from "@shared/agentTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
 import {
@@ -79,6 +81,7 @@ type ThreadActivitySummary = {
   meta: string | null;
 };
 
+// 把线程状态拆成简洁对话视图, 复杂执行细节只在需要的标签里展示
 export function ThreadWorkspace({
   compact = false,
   language,
@@ -160,6 +163,7 @@ export function ThreadWorkspace({
     }
   }, [projectScan]);
 
+  // 从命令输入区创建运行请求, 交给主流程负责真实执行
   function submitCommand(): void {
     const normalizedCommand = command.trim();
 
@@ -229,6 +233,8 @@ export function ThreadWorkspace({
           <article className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-sm leading-5 text-[#202123]">
             <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
           </article>
+
+          {renderCompactMemoryContext(selectedThread.contextMemories ?? [])}
 
           <section
             role="region"
@@ -373,6 +379,52 @@ export function ThreadWorkspace({
     </section>
   );
 
+  // 只展示本次注入的记忆摘要, 避免把来源信息做成新负担
+  function renderCompactMemoryContext(memories: AgentMemoryContext[]): ReactElement | null {
+    if (memories.length === 0) {
+      return null;
+    }
+
+    const copy =
+      language === "zh-CN"
+        ? {
+            aria: "Agent 记忆上下文",
+            used: (count: number) => `已使用 ${count} 条记忆`,
+            global: "全局",
+            project: "项目"
+          }
+        : {
+            aria: "Agent memory context",
+            used: (count: number) => `${count} ${count === 1 ? "memory" : "memories"} used`,
+            global: "Global",
+            project: "Project"
+          };
+
+    return (
+      <section
+        role="group"
+        aria-label={copy.aria}
+        className="mx-auto w-full max-w-[680px] rounded-[14px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-[12px] text-[#565869]"
+      >
+        <div className="flex items-center gap-2 font-medium text-[#202123]">
+          <Brain className="h-3.5 w-3.5 text-[#8e8ea0]" />
+          <span>{copy.used(memories.length)}</span>
+        </div>
+        <ul className="mt-1.5 grid gap-1">
+          {memories.slice(0, 4).map((memory) => (
+            <li key={memory.id} className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[10px] text-[#8e8ea0]">
+                {memory.scope === "global" ? copy.global : copy.project}
+              </span>
+              <span className="min-w-0 truncate">{memory.content}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
+  // 把线程事件压成对话区可读条目, 隐藏内部模板事件
   function renderCompactEvent(event: TaskThreadEvent): ReactElement {
     if (event.kind === "user") {
       return (
@@ -487,6 +539,7 @@ export function ThreadWorkspace({
     );
   }
 
+  // 为模型回答提供复制和反馈入口, 反馈先只保留交互位置
   function renderAssistantResponseActions(event: TaskThreadEvent): ReactElement {
     const actionCopy = getAssistantResponseActionCopy(language);
     const actions = [
@@ -528,6 +581,7 @@ export function ThreadWorkspace({
     );
   }
 
+  // 展示正在运行的命令和可终止操作, 避免命令信息散落在正文
   function renderActiveCommandPanel(entry: CommandHistoryEntry): ReactElement {
     const copy =
       language === "zh-CN"
@@ -621,6 +675,7 @@ export function ThreadWorkspace({
     );
   }
 
+  // 保留计划标签的动作队列视图, 只在用户需要查看细节时出现
   function renderPlanTab(): ReactElement {
     const timelineEvents = selectedThread?.events.slice(-8) ?? [];
     const agentActions = selectedThread?.agentActions ?? [];
@@ -859,6 +914,7 @@ export function ThreadWorkspace({
       ? findLatestCommandResult(selectedThread?.events ?? [], selectedAgentAction.command)
       : null;
 
+    // 把动作状态转换成中文标签, 供队列和详情区复用
     function getActionStatusLabel(action: AgentAction): string {
       if (action.status === "pending" && (action.kind === "manual" || action.kind === "commit")) {
         return actionQueueCopy.reviewGate;
@@ -875,6 +931,7 @@ export function ThreadWorkspace({
       return action.status;
     }
 
+    // 根据动作状态渲染运行或打开按钮, 不让不可执行动作误触
     function renderAgentActionControl(action: AgentAction): ReactElement | null {
       if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
         const target = action.target;
@@ -940,6 +997,7 @@ export function ThreadWorkspace({
       return null;
     }
 
+    // 为动作详情生成下一步提示, 帮助用户理解为什么被阻塞
     function getActionNextStep(action: AgentAction): string {
       if (action.status === "completed") {
         return actionDetailsCopy.completed;
@@ -968,6 +1026,7 @@ export function ThreadWorkspace({
       return actionQueueCopy.pending;
     }
 
+    // 展示单个动作的输入, 输出和恢复入口
     function renderAgentActionDetails(
       action: AgentAction,
       commandResult: CommandRunResult | null
@@ -1057,6 +1116,7 @@ export function ThreadWorkspace({
       );
     }
 
+    // 渲染模型回答和命令结果, Markdown 输出在这里保持连续
     function renderTranscriptOutput(label: string, value: string, tone: "dark" | "warning"): ReactElement | null {
       const output = value.trim();
 
@@ -1086,6 +1146,7 @@ export function ThreadWorkspace({
       );
     }
 
+    // 失败命令下方展示恢复入口, 用户可以沿同一线程继续修复
     function renderCommandRecovery(result: CommandRunResult): ReactElement | null {
       const failed = !result.cancelled && (result.timedOut || result.exitCode !== 0);
       const canRetry = result.cancelled || result.timedOut || result.exitCode !== 0;
@@ -1141,6 +1202,7 @@ export function ThreadWorkspace({
       );
     }
 
+    // 把不同类型事件映射成简洁对话消息, 普通用户只看必要内容
     function renderTranscriptEvent(event: TaskThreadEvent, index: number): ReactElement {
       const isLast = index === timelineEvents.length - 1;
       const isActive = isLast && selectedThread?.status === "running";
@@ -1546,6 +1608,7 @@ export function ThreadWorkspace({
     );
   }
 
+  // 展示待审查文件变更, 所有写入动作都需要用户确认
   function renderChangesTab(): ReactElement {
     return (
       <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -1735,6 +1798,7 @@ export function ThreadWorkspace({
     );
   }
 
+  // 展示命令历史和实时输出, 便于复盘 Agent 做过什么
   function renderCommandsTab(): ReactElement {
     const commandHistoryCopy =
       language === "zh-CN"
@@ -1906,6 +1970,7 @@ export function ThreadWorkspace({
     );
   }
 
+  // 展示原始事件日志, 作为调试入口而不是默认视图
   function renderLogsTab(): ReactElement {
     return (
       <div className="space-y-2">
@@ -1930,6 +1995,7 @@ export function ThreadWorkspace({
   }
 }
 
+// 找到当前阻塞队列推进的动作, 用于提示用户下一步
 function getNextGateAction(
   actions: AgentAction[],
   runnablePendingActions: AgentAction[]
@@ -1953,6 +2019,7 @@ function getNextGateAction(
   );
 }
 
+// 统计动作队列完成度, 让顶部状态只显示简短数字
 function getQueueStats(actions: AgentAction[]): {
   completed: number;
   failed: number;
@@ -1968,6 +2035,7 @@ function getQueueStats(actions: AgentAction[]): {
   );
 }
 
+// 找到第一个失败或待人工处理动作, 用于恢复提示
 function getQueueBlockerAction(actions: AgentAction[]): AgentAction | null {
   for (const action of actions) {
     if (action.status === "completed" || action.status === "skipped") {
@@ -1988,6 +2056,7 @@ function getQueueBlockerAction(actions: AgentAction[]): AgentAction | null {
   return null;
 }
 
+// 从事件和动作里生成一行活动摘要, 侧边栏和标题区共用
 function getThreadActivitySummary(
   events: TaskThreadEvent[],
   language: Language
@@ -2031,6 +2100,7 @@ function getThreadActivitySummary(
   };
 }
 
+// 把事件类型压成短标签, 避免对话区出现内部术语
 function getCompactEventLabel(event: TaskThreadEvent, language: Language): string {
   if (event.commandRun) {
     return language === "zh-CN" ? "正在运行命令" : "Running command";
@@ -2062,10 +2132,12 @@ function getCompactEventLabel(event: TaskThreadEvent, language: Language): strin
   return language === "zh-CN" ? "执行记录" : "Run transcript";
 }
 
+// 识别旧版脚手架模板事件, 在简洁模式里直接隐藏
 function isCompactScaffoldEvent(event: TaskThreadEvent): boolean {
   return event.kind === "plan" && !event.commandRun && !event.commandResult;
 }
 
+// 查找最近未完成命令, 用于显示停止按钮和运行状态
 function findLatestUnfinishedCommandRun(events: TaskThreadEvent[]): string | null {
   const finishedRuns = new Set<string>();
 
@@ -2088,6 +2160,7 @@ function findLatestUnfinishedCommandRun(events: TaskThreadEvent[]): string | nul
   return null;
 }
 
+// 查找最近失败命令结果, 用于生成修复入口
 function findLatestFailedCommandResult(events: TaskThreadEvent[]): CommandRunResult | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const result = events[index]?.commandResult;
@@ -2100,6 +2173,7 @@ function findLatestFailedCommandResult(events: TaskThreadEvent[]): CommandRunRes
   return null;
 }
 
+// 查找最近命令结果, 成功和失败都可以用于上下文
 function findLatestCommandResult(
   events: TaskThreadEvent[],
   command: string
@@ -2115,6 +2189,7 @@ function findLatestCommandResult(
   return null;
 }
 
+// 在命令历史里按 runId 找结果, 支持实时输出和最终结果对齐
 function findLatestCommandRunResult(events: TaskThreadEvent[]): CommandRunResult | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const result = events[index]?.commandResult;
@@ -2127,12 +2202,14 @@ function findLatestCommandRunResult(events: TaskThreadEvent[]): CommandRunResult
   return null;
 }
 
+// 查找命令历史里仍在运行的记录, 供命令面板持续显示
 function findLatestRunningCommandHistoryEntry(
   events: TaskThreadEvent[]
 ): CommandHistoryEntry | null {
   return getCommandHistoryEntries(events).find((entry) => entry.status === "running") ?? null;
 }
 
+// 把命令开始和结束事件整理成时间线, 相同 runId 合并展示
 function getCommandHistoryEntries(events: TaskThreadEvent[]): CommandHistoryEntry[] {
   return events
     .flatMap<CommandHistoryEntry>((event, index) => {
@@ -2183,10 +2260,12 @@ function getCommandHistoryEntries(events: TaskThreadEvent[]): CommandHistoryEntr
     .reverse();
 }
 
+// 生成命令事件的稳定 key, 没有 runId 时回退到命令和目录
 function getCommandRunKey(command: string, runId?: string): string {
   return runId ? `run:${runId}` : `command:${command}`;
 }
 
+// 把 ISO 时间格式化到秒, 不在界面暴露 T 分隔符
 function formatEventTimestamp(value: string): string {
   const date = new Date(value);
 
@@ -2204,6 +2283,7 @@ function formatEventTimestamp(value: string): string {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+// 把 LLM 工作耗时压成短文本, 用于输出元信息
 function formatLlmWorkDuration(event: TaskThreadEvent): string {
   const started = Date.parse(event.createdAt);
   const completed = Date.parse(event.completedAt ?? event.createdAt);
@@ -2221,6 +2301,7 @@ function formatLlmWorkDuration(event: TaskThreadEvent): string {
   return `LLM ${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+// 根据反馈状态生成按钮文案, 后续反馈系统可以接入
 function getAssistantResponseActionCopy(language: Language): {
   copy: string;
   like: string;
@@ -2241,6 +2322,7 @@ function getAssistantResponseActionCopy(language: Language): {
   };
 }
 
+// 压缩命令输出片段, 错误恢复提示只需要最后几行
 function formatCommandOutputSnippet(value: string): string {
   const trimmed = value.trim();
   const maxLength = 900;

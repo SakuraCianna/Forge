@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 模型供应商标识测试
+// 本文件说明: 验证供应商图标和兜底字母标识
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { providerCatalog } from "@shared/providerCatalog";

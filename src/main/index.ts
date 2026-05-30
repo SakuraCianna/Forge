@@ -1,4 +1,4 @@
-// 本文件说明: 主进程 入口模块
+// 本文件说明: 启动 Electron 主窗口并注册所有受控 IPC 能力
 import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import { registerAgentHandlers } from "./agentIpc.js";
@@ -29,14 +29,17 @@ import { windowChannels } from "../shared/ipcChannels.js";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
+// 从 IPC 事件反查发送窗口, 窗口控制按钮只影响当前窗口
 function getSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender);
 }
 
+// 最小化发起 IPC 的窗口, 避免影响其他未来窗口
 function minimizeSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
   getSenderWindow(event)?.minimize();
 }
 
+// 在最大化和还原之间切换当前窗口
 function toggleSenderWindowMaximize(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
   const window = getSenderWindow(event);
 
@@ -51,10 +54,12 @@ function toggleSenderWindowMaximize(event: Electron.IpcMainEvent | Electron.IpcM
   }
 }
 
+// 关闭发起 IPC 的窗口, 让自定义标题栏保持原生行为
 function closeSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): void {
   getSenderWindow(event)?.close();
 }
 
+// 创建主窗口并接入预加载脚本, 开发和生产加载路径分开
 function createWindow(): void {
   // Windows 使用隐藏标题栏, 自定义顶部工作台区域保持和原生窗口按钮对齐
   const titleBarOptions: Electron.BrowserWindowConstructorOptions =

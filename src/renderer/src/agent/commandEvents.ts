@@ -1,4 +1,4 @@
-// 本文件说明: 渲染 Agent 命令事件转换
+// 本文件说明: 把命令运行开始和结束结果转换成线程事件
 import type { CommandRunResult, TaskThreadEvent } from "@/state/taskThreads";
 
 export type CommandResult = CommandRunResult;
@@ -18,6 +18,7 @@ type CreateCommandFinishedEventOptions = {
 
 const maxLogLength = 1600;
 
+// 创建命令开始事件, 实时 stdout 和 stderr 会继续追加到这里
 export function createCommandStartedEvent({
   threadId,
   command,
@@ -39,6 +40,7 @@ export function createCommandStartedEvent({
   };
 }
 
+// 创建命令结束事件, 保留退出码和被取消状态
 export function createCommandFinishedEvent({
   threadId,
   result,
@@ -62,6 +64,7 @@ export function createCommandFinishedEvent({
   };
 }
 
+// 截断过长日志, 对话区只需要最后一段关键输出
 function truncateLog(value: string): string {
   if (value.length <= maxLogLength) {
     return value;

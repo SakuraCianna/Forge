@@ -1,4 +1,4 @@
-// 本文件说明: 渲染状态 代码格式化状态测试
+// 本文件说明: 验证文件预览格式化模式和 Prettier 失败回退
 import { describe, expect, it } from "vitest";
 import {
   formatCodePreview,

@@ -1,4 +1,4 @@
-// 本文件说明: 渲染组件 项目标题栏
+// 本文件说明: 渲染项目标题栏, Git 摘要和项目级操作入口
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import { FolderOpen, GitBranch, RefreshCw } from "lucide-react";
@@ -21,6 +21,7 @@ type ProjectHeaderProps = {
   onRefreshGitStatus?: () => void;
 };
 
+// 渲染当前项目标题, Git 摘要和主要操作入口
 export function ProjectHeader({
   language,
   project,
@@ -113,6 +114,7 @@ export function ProjectHeader({
     </header>
   );
 
+  // 根据 Git 状态生成一行摘要, 没有仓库时保持安静
   function createGitSummary(status: ProjectGitStatus | null): string | null {
     if (!status) {
       return null;
