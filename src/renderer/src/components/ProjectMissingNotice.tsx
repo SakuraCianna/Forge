@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 项目缺失提示
 import type { ReactElement } from "react";
 import { CircleAlert, Trash2 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";

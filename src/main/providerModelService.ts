@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 供应商模型服务
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
 import { hydrateProviderFromCatalog } from "../shared/providerCatalog.js";
 import {

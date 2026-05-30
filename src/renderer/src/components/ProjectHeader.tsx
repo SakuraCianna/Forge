@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 项目标题栏
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import { FolderOpen, GitBranch, RefreshCw } from "lucide-react";

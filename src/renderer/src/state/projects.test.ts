@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 项目状态测试
 import { describe, expect, it } from "vitest";
 import {
   addRecentProject,

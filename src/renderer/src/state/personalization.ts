@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 个性化状态
 const personalizationStorageKey = "forge.personalization";
 
 export type ReplyTone = "friendly" | "concise" | "technical";

@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 文本差异逻辑
 export type LineDiffEntry =
   | { kind: "context"; oldLineNumber: number; newLineNumber: number; text: string }
   | { kind: "remove"; oldLineNumber: number; text: string }

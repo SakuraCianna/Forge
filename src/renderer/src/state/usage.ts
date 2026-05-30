@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 用量统计状态
 import type { TokenUsage, UsageEvent, UsageEventKind } from "@shared/usageTypes";
 import type { ForgeModel } from "@shared/modelTypes";
 

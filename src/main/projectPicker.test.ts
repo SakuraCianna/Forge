@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 项目选择器测试
 import { describe, expect, it } from "vitest";
 import { pickProjectDirectory } from "./projectPicker";
 

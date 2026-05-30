@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 Git 共享类型
 export type ProjectGitFileChange = {
   path: string;
   status: string;

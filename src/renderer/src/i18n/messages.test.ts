@@ -1,3 +1,4 @@
+// 本文件说明: 渲染国际化 国际化文案表测试
 import { describe, expect, it } from "vitest";
 import { getMessage, messages } from "./messages";
 

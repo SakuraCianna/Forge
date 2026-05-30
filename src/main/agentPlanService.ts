@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 Agent 执行计划服务
 import type {
   AgentFileChangeResult,
   AgentAskResult,

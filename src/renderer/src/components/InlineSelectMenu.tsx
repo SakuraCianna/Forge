@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 统一下拉选择组件
 import type { ReactElement } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronDown } from "lucide-react";

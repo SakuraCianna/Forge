@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 项目选择器
 type OpenDialogResult = {
   canceled: boolean;
   filePaths: string[];

@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 项目状态
 const recentProjectsStorageKey = "forge.recentProjects";
 const maxRecentProjects = 12;
 

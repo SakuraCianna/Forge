@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 Agent 配置状态测试
 import { describe, expect, it } from "vitest";
 import {
   createDefaultAgentProfiles,
@@ -44,10 +45,54 @@ describe("agentProfiles", () => {
 
     expect(activeProfile).toMatchObject({
       id: "build",
-      name: "Build agent",
+      name: "编码 Agent",
       permissionMode: "auto",
       enabledTools: ["read", "edit", "command", "git"],
       contextBudget: 12000
+    });
+
+    expect(profiles.map((profile) => profile.name)).toEqual([
+      "编码 Agent",
+      "审查 Agent",
+      "文档 Agent"
+    ]);
+    expect(activeProfile.instructions).toContain("先阅读项目");
+  });
+
+  it("migrates legacy English built-in profiles to Chinese defaults", () => {
+    const storage = new ProfileStorage();
+
+    storage.setItem(
+      "forge.agentProfiles",
+      JSON.stringify([
+        {
+          id: "build",
+          name: "Build agent",
+          description: "Full coding work with guarded edits and verification",
+          systemPrompt:
+            "Implement requested code changes with small, reviewable steps. Read the project first, preserve local style, and verify with relevant commands.",
+          permissionMode: "auto",
+          tools: {
+            read: true,
+            edit: true,
+            command: true,
+            git: true
+          },
+          contextBudget: 12000,
+          active: true,
+          builtIn: true,
+          createdAt: "2026-05-30T00:00:00.000Z",
+          updatedAt: "2026-05-30T00:00:00.000Z"
+        }
+      ])
+    );
+
+    const [profile] = loadAgentProfiles(storage);
+
+    expect(profile).toMatchObject({
+      name: "编码 Agent",
+      description: "完整编码任务, 包含受控编辑和验证",
+      systemPrompt: expect.stringContaining("先阅读项目")
     });
   });
 

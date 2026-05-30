@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 Git 服务测试
 import { describe, expect, it, vi } from "vitest";
 import { commitProjectChanges, getProjectGitStatus } from "./gitService.js";
 

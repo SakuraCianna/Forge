@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 Agent IPC 通道测试
 import { describe, expect, it, vi } from "vitest";
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
 import type {

@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 项目扫描器
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type {

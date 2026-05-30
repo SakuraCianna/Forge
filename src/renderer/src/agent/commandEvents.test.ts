@@ -1,3 +1,4 @@
+// 本文件说明: 渲染 Agent 命令事件转换测试
 import { describe, expect, it } from "vitest";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "./commandEvents";
 

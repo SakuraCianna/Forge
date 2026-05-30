@@ -1,3 +1,4 @@
+// 本文件说明: Electron 与 Vite 构建配置
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";

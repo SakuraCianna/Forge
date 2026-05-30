@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 供应商模型 IPC 通道
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
 import { providerModelChannels } from "../shared/ipcChannels.js";
 

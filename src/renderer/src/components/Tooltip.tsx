@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 统一悬停提示
 import type { ReactElement, ReactNode } from "react";
 
 type TooltipProps = {

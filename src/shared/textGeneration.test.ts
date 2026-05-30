@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 文本生成共享类型测试
 import { describe, expect, it } from "vitest";
 import type { ForgeModel, ForgeProvider } from "./modelTypes.js";
 import {

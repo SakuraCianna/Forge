@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 命令运行器
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { sep } from "node:path";

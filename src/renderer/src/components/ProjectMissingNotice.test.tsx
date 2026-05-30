@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 项目缺失提示测试
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

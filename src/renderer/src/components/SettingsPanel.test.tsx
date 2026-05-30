@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 设置面板测试
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -155,7 +156,7 @@ describe("SettingsPanel", () => {
     const user = userEvent.setup();
     const onSelectAgentProfile = vi.fn();
     const onUpdateAgentProfile = vi.fn();
-    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+    const settings = setLanguage(createDefaultModelSettings(), "zh-CN");
 
     renderSettingsPanel({
       settings,
@@ -163,10 +164,11 @@ describe("SettingsPanel", () => {
       onUpdateAgentProfile
     });
 
-    await user.click(screen.getByRole("button", { name: /Agent profiles/ }));
+    await user.click(screen.getByRole("button", { name: /Agent 配置/ }));
 
-    expect(screen.getAllByText("Build agent").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Review agent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("编码 Agent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("审查 Agent").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Build agent")).not.toBeInTheDocument();
     expect(screen.getByTestId("agent-profile-workbench")).toHaveClass(
       "lg:grid-cols-[260px_minmax(0,1fr)]"
     );
@@ -174,10 +176,10 @@ describe("SettingsPanel", () => {
     expect(screen.getByTestId("agent-profile-editor")).toHaveClass("bg-[#fbfbfc]");
     expect(screen.getByTestId("agent-tool-grid")).toHaveClass("sm:grid-cols-4");
 
-    await user.click(screen.getByRole("button", { name: "Select Review agent" }));
+    await user.click(screen.getByRole("button", { name: "选择 审查 Agent" }));
     expect(onSelectAgentProfile).toHaveBeenCalledWith("review");
 
-    fireEvent.change(screen.getByLabelText("Agent instructions"), {
+    fireEvent.change(screen.getByLabelText("Agent 指令"), {
       target: { value: "Review risky code paths" }
     });
 

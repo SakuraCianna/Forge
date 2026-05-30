@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 文件变更状态
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 
 export function upsertFileChangePreview(

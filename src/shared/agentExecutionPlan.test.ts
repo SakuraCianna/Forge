@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 Agent 执行计划共享逻辑测试
 import { describe, expect, it } from "vitest";
 import type { AgentPlanStep } from "./agentTypes.js";
 import { createAgentActionsFromPlanSteps } from "./agentExecutionPlan.js";

@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 用量共享类型
 export type TokenUsage = {
   inputTokens: number;
   outputTokens: number;

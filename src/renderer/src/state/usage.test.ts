@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 用量统计状态测试
 import { describe, expect, it } from "vitest";
 import type { UsageEvent } from "@shared/usageTypes";
 import { mergeModelPricingRates, summarizeUsage, summarizeUsageByModel, summarizeUsageByProvider } from "./usage";

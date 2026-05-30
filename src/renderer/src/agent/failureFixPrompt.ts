@@ -1,3 +1,4 @@
+// 本文件说明: 渲染 Agent 失败恢复提示词
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
 

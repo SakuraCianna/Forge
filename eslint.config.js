@@ -1,3 +1,4 @@
+// 本文件说明: ESLint 代码检查配置
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 

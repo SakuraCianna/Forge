@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 供应商目录
 import type { ForgeModel, ForgeProvider } from "./modelTypes.js";
 
 export const providerCatalog: ForgeProvider[] = [

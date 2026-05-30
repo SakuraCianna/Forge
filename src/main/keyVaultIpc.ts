@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 密钥保险库 IPC 通道
 import type { ProviderKeyStatus } from "./keyVault.js";
 import { keyVaultChannels } from "../shared/ipcChannels.js";
 

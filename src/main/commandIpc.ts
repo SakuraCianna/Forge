@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 命令 IPC 通道
 import { commandChannels } from "../shared/ipcChannels.js";
 import type {
   CancelProjectCommandOptions,

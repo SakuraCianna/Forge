@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 Agent 执行计划共享逻辑
 import type { AgentPlanStep } from "./agentTypes.js";
 
 export type AgentActionKind = "inspect-file" | "edit-file" | "run-command" | "commit" | "manual";

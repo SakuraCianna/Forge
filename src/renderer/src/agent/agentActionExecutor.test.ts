@@ -1,3 +1,4 @@
+// 本文件说明: 渲染 Agent Agent 动作执行器测试
 import { describe, expect, it, vi } from "vitest";
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import {

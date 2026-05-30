@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 密钥保险库
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 

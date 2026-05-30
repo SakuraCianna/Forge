@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 设置面板
 import type { ComponentType, ReactElement } from "react";
 import { useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";

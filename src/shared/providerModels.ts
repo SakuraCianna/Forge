@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 供应商模型处理逻辑
 import type {
   ForgeModel,
   ForgeProvider,

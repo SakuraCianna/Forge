@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 Agent 记忆状态测试
 import { describe, expect, it } from "vitest";
 import {
   createAgentMemoryEntry,

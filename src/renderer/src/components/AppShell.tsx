@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 桌面工作台外壳
 import type { ComponentType, CSSProperties, PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";

@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 代码格式化状态
 import type { Options, Plugin } from "prettier";
 
 export type CodeFormatterMode = "raw" | "prettier" | "rendered";

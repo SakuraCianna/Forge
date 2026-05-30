@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 模型选择器
 import type { ReactElement } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Zap } from "lucide-react";

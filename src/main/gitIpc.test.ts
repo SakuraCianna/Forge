@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 Git IPC 通道测试
 import { describe, expect, it, vi } from "vitest";
 import type { ProjectGitCommitResult, ProjectGitStatus } from "../shared/gitTypes.js";
 import { gitChannels, registerGitHandlers } from "./gitIpc.js";

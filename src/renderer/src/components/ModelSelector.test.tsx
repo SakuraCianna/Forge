@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 模型选择器测试
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

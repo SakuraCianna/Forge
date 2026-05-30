@@ -1,3 +1,4 @@
+// 本文件说明: 渲染供应商 供应商模型拉取逻辑
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import {
   buildModelListRequest,

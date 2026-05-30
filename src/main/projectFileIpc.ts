@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 项目文件 IPC 通道
 import { fileChannels } from "../shared/ipcChannels.js";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
 

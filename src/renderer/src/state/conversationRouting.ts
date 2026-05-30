@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 对话路由状态
 const plainChatPatterns = [
   /^hi$/,
   /^hello$/,

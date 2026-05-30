@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 Agent 记忆状态
 const agentMemoryStorageKey = "forge.agentMemories";
 const maxMemoryContentLength = 420;
 

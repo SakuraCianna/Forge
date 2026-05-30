@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 对话工作区
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {

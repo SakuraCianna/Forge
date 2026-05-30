@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 任务线程状态
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { CommandOutputChunk } from "@shared/commandTypes";

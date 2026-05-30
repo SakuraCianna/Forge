@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 模型供应商标识
 import type { CSSProperties, ReactElement } from "react";
 import type { ForgeProvider } from "@shared/modelTypes";
 

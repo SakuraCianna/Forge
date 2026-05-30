@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 文件预览渲染器测试
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FilePreviewRenderer } from "./FilePreviewRenderer";

@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 密钥保险库 IPC 通道测试
 import { describe, expect, it } from "vitest";
 import { keyVaultChannels, registerKeyVaultHandlers } from "./keyVaultIpc";
 import type { ProviderKeyStatus } from "./keyVault";

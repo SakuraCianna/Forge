@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 供应商模型服务测试
 import { describe, expect, it } from "vitest";
 import type { ForgeProvider } from "../shared/modelTypes";
 import { fetchModelsForProvider } from "./providerModelService";

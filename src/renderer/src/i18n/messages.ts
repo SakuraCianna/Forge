@@ -1,3 +1,4 @@
+// 本文件说明: 渲染国际化 国际化文案表
 import type { Language } from "@shared/modelTypes";
 
 export const messages = {

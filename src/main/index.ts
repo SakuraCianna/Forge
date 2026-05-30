@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 入口模块
 import { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell } from "electron";
 import { join } from "node:path";
 import { registerAgentHandlers } from "./agentIpc.js";

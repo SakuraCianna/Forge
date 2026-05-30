@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 供应商模型 IPC 通道测试
 import { describe, expect, it } from "vitest";
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes";
 import { providerModelChannels, registerProviderModelHandlers } from "./providerModelsIpc";

@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 包配置读取逻辑测试
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

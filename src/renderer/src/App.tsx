@@ -1,3 +1,4 @@
+// 本文件说明: 渲染层根组件
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";

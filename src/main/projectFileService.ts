@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 项目文件服务
 import { readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";

@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 通用偏好状态
 const generalPreferencesStorageKey = "forge.generalPreferences";
 
 export type WorkMode = "code" | "daily";

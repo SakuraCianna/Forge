@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 IPC 通道常量
 export const keyVaultChannels = {
   save: "forge:provider-key:save",
   status: "forge:provider-key:status",

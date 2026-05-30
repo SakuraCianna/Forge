@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 项目文件服务测试
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";

@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 文本生成共享类型
 import type {
   ForgeModel,
   ForgeProvider,

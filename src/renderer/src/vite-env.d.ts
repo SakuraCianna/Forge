@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+// 本文件说明: Vite 类型声明
 
 import type { CommandOutputChunk } from "@shared/commandTypes";
 import type {

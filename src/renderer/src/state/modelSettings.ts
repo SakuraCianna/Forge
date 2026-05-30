@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 模型设置状态
 import { catalogModels, providerCatalog } from "@shared/providerCatalog";
 import { isUsableCodingModel, toForgeModel } from "@shared/providerModels";
 import type {

@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 模型供应商标识测试
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { providerCatalog } from "@shared/providerCatalog";

@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 项目共享类型
 export type ProjectFile = {
   relativePath: string;
   size: number;

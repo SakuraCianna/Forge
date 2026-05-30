@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 桌面工作台外壳测试
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

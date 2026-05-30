@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 命令运行器测试
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";

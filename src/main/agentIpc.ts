@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 Agent IPC 通道
 import type {
   AgentFileChangeResult,
   AgentAskStreamChunk,

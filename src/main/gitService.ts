@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 Git 服务
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import type {

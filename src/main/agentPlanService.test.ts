@@ -1,3 +1,4 @@
+// 本文件说明: 主进程 Agent 执行计划服务测试
 import { describe, expect, it, vi } from "vitest";
 import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
 import type {

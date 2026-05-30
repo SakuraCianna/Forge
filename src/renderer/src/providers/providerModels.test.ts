@@ -1,3 +1,4 @@
+// 本文件说明: 渲染供应商 供应商模型处理逻辑测试
 import { describe, expect, it } from "vitest";
 import type { ForgeProvider } from "@shared/modelTypes";
 import { hydrateProviderFromCatalog, providerCatalog } from "@shared/providerCatalog";

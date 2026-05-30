@@ -1,3 +1,4 @@
+// 本文件说明: 共享模块 模型共享类型
 export type ProviderKind = "openai" | "anthropic" | "gemini" | "openai-compatible";
 
 export type Language = "zh-CN" | "en-US";

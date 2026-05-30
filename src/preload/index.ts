@@ -1,3 +1,4 @@
+// 本文件说明: 预加载 入口模块
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
   agentChannels,

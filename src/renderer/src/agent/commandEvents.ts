@@ -1,3 +1,4 @@
+// 本文件说明: 渲染 Agent 命令事件转换
 import type { CommandRunResult, TaskThreadEvent } from "@/state/taskThreads";
 
 export type CommandResult = CommandRunResult;

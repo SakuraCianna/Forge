@@ -1,3 +1,4 @@
+// 本文件说明: 渲染组件 文件预览渲染器
 import type { ReactElement, ReactNode } from "react";
 import type { CodeFormatterMode } from "@/state/codeFormatting";
 

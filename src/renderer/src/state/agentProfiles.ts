@@ -1,3 +1,4 @@
+// 本文件说明: 渲染状态 Agent 配置状态
 import type { AgentProfileContext } from "@shared/agentTypes";
 
 const agentProfileStorageKey = "forge.agentProfiles";
@@ -30,10 +31,10 @@ const defaultProfileTimestamp = "2026-05-30T00:00:00.000Z";
 const defaultProfiles: AgentProfile[] = [
   {
     id: "build",
-    name: "Build agent",
-    description: "Full coding work with guarded edits and verification",
+    name: "编码 Agent",
+    description: "完整编码任务, 包含受控编辑和验证",
     systemPrompt:
-      "Implement requested code changes with small, reviewable steps. Read the project first, preserve local style, and verify with relevant commands.",
+      "先阅读项目, 保持现有代码风格, 用小而可审查的步骤实现用户请求, 修改后运行相关命令验证",
     permissionMode: "auto",
     tools: {
       read: true,
@@ -49,10 +50,10 @@ const defaultProfiles: AgentProfile[] = [
   },
   {
     id: "review",
-    name: "Review agent",
-    description: "Read-only review focused on risks, regressions, and missing tests",
+    name: "审查 Agent",
+    description: "只读审查风险, 回归和缺失测试",
     systemPrompt:
-      "Review the current code for bugs, regressions, unsafe behavior, and missing verification. Lead with concrete findings.",
+      "审查当前代码中的缺陷, 回归, 不安全行为和缺失验证, 优先输出具体问题",
     permissionMode: "auto",
     tools: {
       read: true,
@@ -68,10 +69,10 @@ const defaultProfiles: AgentProfile[] = [
   },
   {
     id: "docs",
-    name: "Docs agent",
-    description: "Documentation and explanation work without command execution",
+    name: "文档 Agent",
+    description: "编写文档和解释, 不运行命令",
     systemPrompt:
-      "Write clear documentation and explanations that match the project's existing language and structure.",
+      "编写清晰文档和解释, 保持项目现有语言和结构",
     permissionMode: "auto",
     tools: {
       read: true,
@@ -86,6 +87,30 @@ const defaultProfiles: AgentProfile[] = [
     updatedAt: defaultProfileTimestamp
   }
 ];
+
+const legacyDefaultProfileText: Record<
+  string,
+  Pick<AgentProfile, "name" | "description" | "systemPrompt">
+> = {
+  build: {
+    name: "Build agent",
+    description: "Full coding work with guarded edits and verification",
+    systemPrompt:
+      "Implement requested code changes with small, reviewable steps. Read the project first, preserve local style, and verify with relevant commands."
+  },
+  review: {
+    name: "Review agent",
+    description: "Read-only review focused on risks, regressions, and missing tests",
+    systemPrompt:
+      "Review the current code for bugs, regressions, unsafe behavior, and missing verification. Lead with concrete findings."
+  },
+  docs: {
+    name: "Docs agent",
+    description: "Documentation and explanation work without command execution",
+    systemPrompt:
+      "Write clear documentation and explanations that match the project's existing language and structure."
+  }
+};
 
 export function createDefaultAgentProfiles(): AgentProfile[] {
   return defaultProfiles.map((profile) => ({ ...profile, tools: { ...profile.tools } }));
@@ -105,7 +130,10 @@ export function loadAgentProfiles(storage: Storage): AgentProfile[] {
       return createDefaultAgentProfiles();
     }
 
-    const persistedProfiles = value.filter(isPersistedAgentProfile).map(normalizeAgentProfile);
+    const persistedProfiles = value
+      .filter(isPersistedAgentProfile)
+      .map(migrateBuiltInProfileText)
+      .map(normalizeAgentProfile);
 
     return ensureActiveProfile(persistedProfiles.length > 0 ? persistedProfiles : createDefaultAgentProfiles());
   } catch {
@@ -196,6 +224,29 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
     permissionMode: profile.permissionMode === "full" ? "full" : "auto",
     tools: normalizeTools(profile.tools),
     contextBudget
+  };
+}
+
+function migrateBuiltInProfileText(profile: AgentProfile): AgentProfile {
+  const defaultProfile = defaultProfiles.find((candidate) => candidate.id === profile.id);
+  const legacyProfileText = legacyDefaultProfileText[profile.id];
+
+  if (!profile.builtIn || !defaultProfile || !legacyProfileText) {
+    return profile;
+  }
+
+  // 内置 Agent 迁移只覆盖旧默认文案, 避免覆盖用户手动修改
+  return {
+    ...profile,
+    name: profile.name === legacyProfileText.name ? defaultProfile.name : profile.name,
+    description:
+      profile.description === legacyProfileText.description
+        ? defaultProfile.description
+        : profile.description,
+    systemPrompt:
+      profile.systemPrompt === legacyProfileText.systemPrompt
+        ? defaultProfile.systemPrompt
+        : profile.systemPrompt
   };
 }
 
