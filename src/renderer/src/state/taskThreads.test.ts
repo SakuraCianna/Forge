@@ -17,6 +17,7 @@ import {
   archiveProjectThreads,
   archiveThread,
   completeNextPendingAgentAction,
+  createCommandApprovalEvent,
   createThreadFromSettings,
   cancelThread,
   restoreThread,
@@ -243,6 +244,29 @@ describe("taskThreads", () => {
     expect(threads[0].events[0].commandRun?.stdout).toBeUndefined();
     expect(withStderr[0].events[0].commandRun?.stdout).toBe("first line\n");
     expect(withStderr[0].events[0].commandRun?.stderr).toBe("warning line\n");
+  });
+
+  it("creates a structured command approval audit event", () => {
+    const event = createCommandApprovalEvent({
+      threadId: "thread-1",
+      actionId: "action-1",
+      command: "npm install",
+      reason: "command may change dependencies or project state",
+      createdAt: "2026-05-27T13:05:00.000Z"
+    });
+
+    expect(event).toEqual({
+      id: "thread-1-command-approved-action-1-2026-05-27T13:05:00.000Z",
+      kind: "command",
+      message:
+        "Command approved: npm install (command may change dependencies or project state)",
+      createdAt: "2026-05-27T13:05:00.000Z",
+      commandApproval: {
+        command: "npm install",
+        reason: "command may change dependencies or project state",
+        approvedAt: "2026-05-27T13:05:00.000Z"
+      }
+    });
   });
 
   it("streams assistant answer deltas into one markdown result event", () => {

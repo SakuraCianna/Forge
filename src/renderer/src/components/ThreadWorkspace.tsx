@@ -442,6 +442,7 @@ export function ThreadWorkspace({
 
     const result = event.commandResult;
     const runningCommand = event.commandRun;
+    const approvedCommand = event.commandApproval;
     const failed = Boolean(result && !result.cancelled && (result.timedOut || result.exitCode !== 0));
     const passed = Boolean(result && result.exitCode === 0 && !result.timedOut);
     const label = getCompactEventLabel(event, language);
@@ -452,14 +453,14 @@ export function ThreadWorkspace({
           className={`mt-1 flex h-5 w-5 items-center justify-center rounded-full ${
             failed
               ? "bg-[#fff7ed] text-[#b45309]"
-              : passed || event.kind === "result"
+              : passed || approvedCommand || event.kind === "result"
                 ? "bg-[#effaf6] text-[#087443]"
                 : "bg-[#f7f7f8] text-[#565869]"
           }`}
         >
           {failed ? (
             <Circle className="h-3.5 w-3.5" />
-          ) : passed || event.kind === "result" ? (
+          ) : passed || approvedCommand || event.kind === "result" ? (
             <CheckCircle2 className="h-3.5 w-3.5" />
           ) : runningCommand ? (
             <Activity className="h-3.5 w-3.5" />
@@ -1295,6 +1296,28 @@ export function ThreadWorkspace({
       const isLast = index === timelineEvents.length - 1;
       const isActive = isLast && selectedThread?.status === "running";
 
+      if (event.commandApproval) {
+        return (
+          <article key={event.id} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+            <div className="flex flex-col items-center">
+              <CheckCircle2 className="h-5 w-5 text-[#087443]" />
+              {!isLast ? <span className="mt-2 h-full w-px bg-[#ececf1]" /> : null}
+            </div>
+            <div className="min-w-0 pb-4">
+              <div className="text-sm font-semibold leading-5 text-[#087443]">
+                {language === "zh-CN" ? "命令已批准" : "Command approved"}
+              </div>
+              <p className="mt-1 break-words font-mono text-[12px] leading-5 text-[#202123]">
+                {event.commandApproval.command}
+              </p>
+              <p className="mt-1 text-[12px] leading-5 text-[#6e6e80]">
+                {event.commandApproval.reason}
+              </p>
+            </div>
+          </article>
+        );
+      }
+
       if (event.commandRun) {
         return (
           <article key={event.id} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
@@ -1930,6 +1953,17 @@ export function ThreadWorkspace({
     const commandRunningCopy = language === "zh-CN" ? "运行中" : "running";
     const commandEvents = selectedThread?.events ?? [];
     const commandHistory = getCommandHistoryEntries(commandEvents);
+    const commandApprovals = commandEvents.filter((event) => event.commandApproval);
+    const commandApprovalCopy =
+      language === "zh-CN"
+        ? {
+            title: "命令审批记录",
+            reason: "原因"
+          }
+        : {
+            title: "Command approvals",
+            reason: "Reason"
+          };
 
     return (
       <div className="space-y-4">
@@ -1957,6 +1991,48 @@ export function ThreadWorkspace({
             </div>
           </label>
         </section>
+        {commandApprovals.length > 0 ? (
+          <section
+            aria-label={commandApprovalCopy.title}
+            className="rounded-[18px] border border-[#ececf1] bg-white p-4"
+          >
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#202123]">
+              <CheckCircle2 className="h-4 w-4 text-[#087443]" />
+              {commandApprovalCopy.title}
+            </h2>
+            <div className="space-y-3">
+              {commandApprovals.map((event) => {
+                const approval = event.commandApproval;
+
+                if (!approval) {
+                  return null;
+                }
+
+                return (
+                  <article
+                    key={event.id}
+                    className="rounded-[16px] border border-[#c3eadc] bg-[#effaf6] p-3"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="min-w-0 break-words font-mono text-sm font-semibold text-[#202123]">
+                        {approval.command}
+                      </p>
+                      <span className="shrink-0 text-[11px] text-[#087443]">
+                        {formatEventTimestamp(approval.approvedAt)}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[12px] leading-5 text-[#565869]">
+                      <span className="font-semibold text-[#202123]">
+                        {commandApprovalCopy.reason}:{" "}
+                      </span>
+                      {approval.reason}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
         <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#202123]">
             <Terminal className="h-4 w-4 text-[#565869]" />
@@ -2203,6 +2279,10 @@ function getThreadActivitySummary(
 
 // 把事件类型压成短标签, 避免对话区出现内部术语
 function getCompactEventLabel(event: TaskThreadEvent, language: Language): string {
+  if (event.commandApproval) {
+    return language === "zh-CN" ? "命令已批准" : "Command approved";
+  }
+
   if (event.commandRun) {
     return language === "zh-CN" ? "正在运行命令" : "Running command";
   }

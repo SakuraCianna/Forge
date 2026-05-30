@@ -777,6 +777,53 @@ describe("ThreadWorkspace", () => {
     expect(onRunAgentAction).not.toHaveBeenCalled();
   });
 
+  it("shows command approval audit records in the command history", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Audit command approval",
+            events: [
+              {
+                id: "event-command-approved",
+                kind: "command",
+                message:
+                  "Command approved: npm install (command may change dependencies or project state)",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandApproval: {
+                  command: "npm install",
+                  reason: "command may change dependencies or project state",
+                  approvedAt: "2026-05-27T13:05:00.000Z"
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    const approvals = screen.getByRole("region", { name: "Command approvals" });
+    expect(within(approvals).getByText("Command approvals")).toBeInTheDocument();
+    expect(within(approvals).getByText("npm install")).toBeInTheDocument();
+    expect(
+      within(approvals).getByText("command may change dependencies or project state")
+    ).toBeInTheDocument();
+    expect(within(approvals).getByText(/2026-05-27/)).toBeInTheDocument();
+  });
+
   it("shows details for the selected agent action", async () => {
     const user = userEvent.setup();
 

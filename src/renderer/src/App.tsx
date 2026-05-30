@@ -72,6 +72,7 @@ import {
   archiveThread,
   cancelThread,
   completeNextPendingAgentAction,
+  createCommandApprovalEvent,
   createThreadFromSettings,
   restoreThread,
   toggleThreadPinned,
@@ -1659,6 +1660,32 @@ export function App(): ReactElement {
 
   // 只批准当前这一次命令动作, 不改变全局完全访问权限
   async function approveAgentCommandAction(threadId: string, action: AgentAction): Promise<void> {
+    if (action.kind === "run-command" && action.command) {
+      const command = action.command;
+      const commandRisk = resolveAgentCommandRisk(command);
+
+      if (commandRisk.level === "ask") {
+        const createdAt = new Date().toISOString();
+
+        setThreads((current) =>
+          appendThreadEvents(
+            current,
+            threadId,
+            [
+              createCommandApprovalEvent({
+                threadId,
+                actionId: action.id,
+                command,
+                reason: commandRisk.reason,
+                createdAt
+              })
+            ],
+            "running"
+          )
+        );
+      }
+    }
+
     await runAgentAction(threadId, action, { approvedCommand: true });
   }
 

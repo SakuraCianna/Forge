@@ -28,6 +28,12 @@ export type CommandRunState = {
   stderr?: string;
 };
 
+export type CommandApprovalRecord = {
+  command: string;
+  reason: string;
+  approvedAt: string;
+};
+
 export type TaskThreadEvent = {
   id: string;
   kind: TaskThreadEventKind;
@@ -36,6 +42,7 @@ export type TaskThreadEvent = {
   completedAt?: string;
   commandRun?: CommandRunState;
   commandResult?: CommandRunResult;
+  commandApproval?: CommandApprovalRecord;
 };
 
 export type TaskThread = {
@@ -274,6 +281,33 @@ export function appendCommandRunOutput(
 
     return changed ? { ...thread, events } : thread;
   });
+}
+
+// 记录用户批准的单次命令, 让时间线和命令页都能追溯
+export function createCommandApprovalEvent({
+  threadId,
+  actionId,
+  command,
+  reason,
+  createdAt
+}: {
+  threadId: string;
+  actionId: string;
+  command: string;
+  reason: string;
+  createdAt: string;
+}): TaskThreadEvent {
+  return {
+    id: `${threadId}-command-approved-${actionId}-${createdAt}`,
+    kind: "command",
+    message: `Command approved: ${command} (${reason})`,
+    createdAt,
+    commandApproval: {
+      command,
+      reason,
+      approvedAt: createdAt
+    }
+  };
 }
 
 // 保存模型规划出的 Agent 动作队列, 后续执行器按这个快照推进
