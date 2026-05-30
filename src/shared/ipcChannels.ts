@@ -13,6 +13,7 @@ export const agentChannels = {
   generateFileChange: "forge:agent:generate-file-change",
   generateAsk: "forge:agent:generate-ask",
   generateAskStream: "forge:agent:generate-ask-stream",
+  cancelAskStream: "forge:agent:cancel-ask-stream",
   askStreamChunk: "forge:agent:ask-stream-chunk"
 } as const;
 

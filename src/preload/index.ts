@@ -70,6 +70,8 @@ contextBridge.exposeInMainWorld("forge", {
       request: GenerateAgentAskRequest
     ): Promise<AgentAskResult> =>
       ipcRenderer.invoke(agentChannels.generateAskStream, requestId, request),
+    cancelAskStream: (requestId: string): Promise<{ ok: boolean; requestId: string }> =>
+      ipcRenderer.invoke(agentChannels.cancelAskStream, requestId),
     onAskStreamChunk: (listener: (chunk: AgentAskStreamChunk) => void) => {
       const handler = (_event: IpcRendererEvent, chunk: AgentAskStreamChunk) => listener(chunk);
       ipcRenderer.on(agentChannels.askStreamChunk, handler);

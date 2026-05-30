@@ -45,6 +45,7 @@ type GenerateAgentAskOptions = {
 
 type GenerateAgentAskStreamOptions = GenerateAgentAskOptions & {
   onDelta: (delta: string) => void;
+  signal?: AbortSignal;
 };
 
 type StreamReadResult = {
@@ -207,7 +208,8 @@ export async function generateAgentAskStream({
   keyVault,
   fetcher = fetch,
   now = () => new Date().toISOString(),
-  onDelta
+  onDelta,
+  signal
 }: GenerateAgentAskStreamOptions): Promise<AgentAskResult> {
   const provider = hydrateProviderFromCatalog(request.provider);
   const apiKey = await keyVault.readProviderKey(provider.id);
@@ -228,7 +230,10 @@ export async function generateAgentAskStream({
       speed: request.speed
     })
   );
-  const response = await fetcher(generationRequest.url, generationRequest.init);
+  const response = await fetcher(generationRequest.url, {
+    ...generationRequest.init,
+    signal
+  });
 
   if (!response.ok) {
     throw new Error(
@@ -276,7 +281,10 @@ export async function generateAgentAskStream({
         speed: request.speed
       })
     );
-    const continuationResponse = await fetcher(continuationRequest.url, continuationRequest.init);
+    const continuationResponse = await fetcher(continuationRequest.url, {
+      ...continuationRequest.init,
+      signal
+    });
 
     if (!continuationResponse.ok) {
       throw new Error(

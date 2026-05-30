@@ -49,6 +49,7 @@ declare global {
           requestId: string,
           request: GenerateAgentAskRequest
         ) => Promise<AgentAskResult>;
+        cancelAskStream: (requestId: string) => Promise<{ ok: boolean; requestId: string }>;
         onAskStreamChunk: (listener: (chunk: AgentAskStreamChunk) => void) => () => void;
       };
       projects: {

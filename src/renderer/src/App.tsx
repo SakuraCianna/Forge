@@ -260,6 +260,7 @@ export function App(): ReactElement {
   const [heroPromptIndex, setHeroPromptIndex] = useState(0);
   const { t } = useI18n(settings.language);
   const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
+  const activeAskStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
   const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
@@ -1334,6 +1335,7 @@ export function App(): ReactElement {
 
     try {
       let receivedDelta = false;
+      activeAskStreamRequestIdsRef.current.set(threadId, streamEventId);
       unsubscribeStream = window.forge.agent.onAskStreamChunk((chunk) => {
         if (chunk.requestId !== streamEventId || chunk.type !== "delta") {
           return;
@@ -1396,6 +1398,8 @@ export function App(): ReactElement {
         threadId,
         `回答失败: ${formatRemoteModelError(settings.language, error)}`
       );
+    } finally {
+      activeAskStreamRequestIdsRef.current.delete(threadId);
     }
   }
 
@@ -1405,6 +1409,12 @@ export function App(): ReactElement {
     }
 
     const createdAt = new Date().toISOString();
+    const activeAskStreamRequestId = activeAskStreamRequestIdsRef.current.get(selectedThreadId);
+
+    if (activeAskStreamRequestId) {
+      void window.forge.agent.cancelAskStream(activeAskStreamRequestId);
+    }
+
     cancelledThreadIdsRef.current.add(selectedThreadId);
     setThreads((current) =>
       cancelThread(current, selectedThreadId, {

@@ -19,7 +19,8 @@ type AgentAskGenerator = (request: GenerateAgentAskRequest) => Promise<AgentAskR
 
 type AgentAskStreamer = (
   request: GenerateAgentAskRequest,
-  onDelta: (delta: string) => void
+  onDelta: (delta: string) => void,
+  signal?: AbortSignal
 ) => Promise<AgentAskResult>;
 
 type IpcHandler = (_event: unknown, ...args: unknown[]) => Promise<unknown>;
@@ -46,9 +47,14 @@ export function registerAgentHandlers(
   );
 
   if (generateAskStream) {
+    const activeAskStreams = new Map<string, AbortController>();
+
     registerHandler(agentChannels.generateAskStream, async (event, requestId, request) => {
       const normalizedRequestId = assertRequestId(requestId);
       const normalizedRequest = assertGenerateAgentAskRequest(request);
+      const controller = new AbortController();
+
+      activeAskStreams.set(normalizedRequestId, controller);
 
       try {
         const result = await generateAskStream(normalizedRequest, (delta) => {
@@ -57,7 +63,7 @@ export function registerAgentHandlers(
             type: "delta",
             delta
           });
-        });
+        }, controller.signal);
 
         sendAskStreamChunk(event, {
           requestId: normalizedRequestId,
@@ -73,7 +79,22 @@ export function registerAgentHandlers(
           message: error instanceof Error ? error.message : String(error)
         });
         throw error;
+      } finally {
+        activeAskStreams.delete(normalizedRequestId);
       }
+    });
+
+    registerHandler(agentChannels.cancelAskStream, async (_event, requestId) => {
+      const normalizedRequestId = assertRequestId(requestId);
+      const controller = activeAskStreams.get(normalizedRequestId);
+
+      if (!controller) {
+        return { ok: false, requestId: normalizedRequestId };
+      }
+
+      controller.abort(new Error("Agent ask stream cancelled"));
+
+      return { ok: true, requestId: normalizedRequestId };
     });
   }
 }

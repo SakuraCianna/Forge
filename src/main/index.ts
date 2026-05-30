@@ -130,7 +130,7 @@ void app.whenReady().then(() => {
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     },
-    (request, onDelta) => generateAgentAskStream({ request, keyVault, onDelta })
+    (request, onDelta, signal) => generateAgentAskStream({ request, keyVault, onDelta, signal })
   );
 
   registerProjectHandlers(

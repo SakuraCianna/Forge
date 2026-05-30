@@ -393,6 +393,44 @@ describe("agentPlanService", () => {
     expect(result.text).toBe("**项目概览**");
   });
 
+  it("passes the abort signal to streaming model fetches", async () => {
+    const controller = new AbortController();
+    const compatibleProvider: ForgeProvider = {
+      ...provider,
+      id: "deepseek",
+      kind: "openai-compatible",
+      baseUrl: "https://api.deepseek.com",
+      label: "DeepSeek"
+    };
+    const compatibleRequest: GenerateAgentAskRequest = {
+      ...askRequest,
+      provider: compatibleProvider,
+      model: {
+        ...model,
+        providerId: "deepseek",
+        id: "deepseek:deepseek-v4-flash",
+        modelName: "deepseek-v4-flash"
+      }
+    };
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          ['data: {"choices":[{"delta":{"content":"ok"}}]}', "", "data: [DONE]", ""].join("\n"),
+          { headers: { "content-type": "text/event-stream" } }
+        )
+    );
+
+    await generateAgentAskStream({
+      request: compatibleRequest,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher,
+      signal: controller.signal,
+      onDelta: vi.fn()
+    });
+
+    expect(fetcher.mock.calls[0][1].signal).toBe(controller.signal);
+  });
+
   it("continues an OpenAI-compatible stream when the provider stops at the token limit", async () => {
     const compatibleProvider: ForgeProvider = {
       ...provider,
