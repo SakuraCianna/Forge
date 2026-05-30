@@ -135,7 +135,7 @@ export function TaskComposer({
             aria-label={copy.addProject}
             title={copy.addProject}
             onClick={onPickProject}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-[#565869] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
           >
             <Plus className="h-4 w-4" />
           </button>
@@ -154,7 +154,7 @@ export function TaskComposer({
           />
           <button
             type="button"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#202123] text-white outline-none transition hover:bg-black active:scale-[0.97] focus:outline-none focus-visible:outline-none"
             aria-label={busy ? copy.stopResponse : t("composer.send")}
             title={busy ? copy.stopResponse : t("composer.send")}
             onClick={handlePrimaryAction}
@@ -191,7 +191,7 @@ export function TaskComposer({
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className={`inline-flex h-7 min-w-0 max-w-[190px] items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium transition hover:bg-[#f7f7f8] active:scale-[0.99] ${
+            className={`inline-flex h-7 min-w-0 max-w-[190px] items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none ${
               permissionMode === "full" ? "text-[#f05a1a]" : "text-[#565869]"
             }`}
             aria-label={permissionOption.label}

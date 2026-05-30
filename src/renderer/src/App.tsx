@@ -62,6 +62,7 @@ import {
 import {
   attachThreadAgentActions,
   appendThreadEvents,
+  appendThreadFollowUpPrompt,
   appendCommandRunOutput,
   appendThreadResultDelta,
   archiveAllThreads,
@@ -891,10 +892,11 @@ export function App(): ReactElement {
   }
 
   function submitTask(prompt: string): void {
+    const activeThread = selectedThreadId
+      ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
+      : null;
+
     if (isDirectAnswerPrompt(prompt)) {
-      const activeThread = selectedThreadId
-        ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
-        : null;
       const result = createThreadFromSettings(settings, prompt);
 
       if (!result.ok) {
@@ -914,18 +916,14 @@ export function App(): ReactElement {
         setTaskNotice(null);
         cancelledThreadIdsRef.current.delete(activeThread.id);
         setThreads((current) =>
-          appendThreadEvents(
+          appendThreadFollowUpPrompt(
             current,
             activeThread.id,
-            [
-              {
-                id: `${activeThread.id}-user-${createdAt}`,
-                kind: "user",
-                message: prompt,
-                createdAt
-              }
-            ],
-            "running"
+            {
+              id: `${activeThread.id}-user-${createdAt}`,
+              message: prompt,
+              createdAt
+            }
           )
         );
 
@@ -939,7 +937,7 @@ export function App(): ReactElement {
           prompt,
           model: selectedModel,
           provider: selectedProvider,
-          projectScan: activeThread.projectPath || currentProject ? projectScanResult : null,
+          projectScan: getProjectScanForThread(activeThread),
           conversation: createThreadConversation(activeThread)
         });
         return;
@@ -987,12 +985,60 @@ export function App(): ReactElement {
       return;
     }
 
+    const activeProjectThread =
+      activeThread && activeThread.status !== "running" && activeThread.projectPath === currentProject.path
+        ? activeThread
+        : null;
+
     const result = createThreadFromSettings(settings, prompt);
 
     if (!result.ok) {
       setTaskNotice(
         result.reason === "empty-prompt" ? t("composer.emptyPrompt") : t("composer.missingModel")
       );
+      return;
+    }
+
+    if (activeProjectThread) {
+      const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
+      const selectedProvider = selectedModel
+        ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
+        : null;
+      const createdAt = new Date().toISOString();
+      const planEvents = createInitialPlanEvents({
+        threadId: activeProjectThread.id,
+        prompt,
+        speed: settings.speed,
+        projectScan: projectScanResult
+      });
+
+      setTaskNotice(null);
+      cancelledThreadIdsRef.current.delete(activeProjectThread.id);
+      setThreads((current) =>
+        appendThreadEvents(
+          appendThreadFollowUpPrompt(current, activeProjectThread.id, {
+            id: `${activeProjectThread.id}-user-${createdAt}`,
+            message: prompt,
+            createdAt
+          }),
+          activeProjectThread.id,
+          planEvents,
+          "running"
+        )
+      );
+
+      if (!selectedModel || !selectedProvider) {
+        appendThreadError(activeProjectThread.id, "未找到当前模型或提供商配置");
+        return;
+      }
+
+      void generateThreadPlan({
+        threadId: activeProjectThread.id,
+        taskPrompt: prompt,
+        model: selectedModel,
+        provider: selectedProvider,
+        projectScan: projectScanResult
+      });
       return;
     }
 
@@ -1082,9 +1128,12 @@ export function App(): ReactElement {
       const agentActions = createAgentActionsFromPlanSteps(plan.steps ?? []);
       setThreads((current) =>
         attachThreadAgentActions(
-          appendThreadEvents(current, threadId, [
-            ...createAgentPlanResultEvents(threadId, plan.text, plan.steps, plan.createdAt)
-          ]),
+          appendThreadEvents(
+            current,
+            threadId,
+            [...createAgentPlanResultEvents(threadId, plan.text, plan.steps, plan.createdAt)],
+            agentActions.length > 0 ? "planned" : "completed"
+          ),
           threadId,
           agentActions
         )
@@ -1186,6 +1235,18 @@ export function App(): ReactElement {
     };
 
     await generateFailureFixPlan(threadId, action, result);
+  }
+
+  function getProjectScanForThread(thread: TaskThread): ProjectScanResult | null {
+    if (!currentProject || !projectScanResult) {
+      return null;
+    }
+
+    if (!thread.projectPath || thread.projectPath === currentProject.path) {
+      return projectScanResult;
+    }
+
+    return null;
   }
 
   async function generateAskResponse({

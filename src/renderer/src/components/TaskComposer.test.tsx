@@ -144,6 +144,26 @@ describe("TaskComposer", () => {
     expect(screen.getByRole("button", { name: "Configure model" })).not.toHaveClass("border");
   });
 
+  it("removes browser focus outlines from the composer controls", () => {
+    const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
+
+    render(
+      <TaskComposer
+        settings={settings}
+        generalPreferences={{ ...createDefaultGeneralPreferences(), autoReview: true }}
+        onUpdateGeneralPreferences={vi.fn()}
+        onSelectIntelligence={vi.fn()}
+        onSelectModel={vi.fn()}
+        onSelectSpeed={vi.fn()}
+        onSubmitTask={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Add project" })).toHaveClass("outline-none");
+    expect(screen.getByRole("button", { name: "Auto review" })).toHaveClass("outline-none");
+    expect(screen.getByRole("button", { name: "Start" })).toHaveClass("outline-none");
+  });
+
   it("uses a shorter dock input and exposes a stop button while generating", async () => {
     const user = userEvent.setup();
     const onCancelTask = vi.fn();

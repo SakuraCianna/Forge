@@ -25,6 +25,16 @@ select {
   font: inherit;
 }
 
+button:focus,
+button:focus-visible,
+[role="button"]:focus,
+[role="button"]:focus-visible,
+[role="menuitem"]:focus,
+[role="menuitem"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 ::selection {
   background: rgba(16, 163, 127, 0.22);
 }

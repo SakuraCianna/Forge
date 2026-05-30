@@ -8,6 +8,7 @@ import {
 import {
   attachThreadAgentActions,
   appendCommandRunOutput,
+  appendThreadFollowUpPrompt,
   appendThreadResultDelta,
   appendThreadEvents,
   archiveAllThreads,
@@ -110,6 +111,42 @@ describe("taskThreads", () => {
       "任务已创建, 等待 Forge 生成执行计划",
       "初始计划"
     ]);
+  });
+
+  it("continues a conversation by appending the next user prompt to the same thread", () => {
+    const thread: TaskThread = {
+      id: "thread-1",
+      title: "Project question",
+      prompt: "What does this project do?",
+      status: "completed",
+      modelId: "openai:gpt-5.5",
+      intelligence: "high",
+      speed: "balanced",
+      createdAt: "2026-05-27T13:00:00.000Z",
+      projectPath: "E:\\CodeHome\\Forge",
+      events: [
+        {
+          id: "thread-1-answer",
+          kind: "result",
+          message: "It is a local coding agent.",
+          createdAt: "2026-05-27T13:01:00.000Z"
+        }
+      ]
+    };
+
+    const threads = appendThreadFollowUpPrompt([thread], "thread-1", {
+      id: "thread-1-user-2",
+      message: "Now add cancellation support",
+      createdAt: "2026-05-27T13:02:00.000Z"
+    });
+
+    expect(threads[0].status).toBe("running");
+    expect(threads[0].events.at(-1)).toMatchObject({
+      id: "thread-1-user-2",
+      kind: "user",
+      message: "Now add cancellation support"
+    });
+    expect(threads[0].title).toBe("Project question");
   });
 
   it("marks a running thread as cancelled with a visible event", () => {

@@ -64,7 +64,7 @@ export function ModelSelector({
       <button
         type="button"
         onClick={onOpenSettings}
-        className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+        className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
         aria-label={triggerLabel}
         title={triggerLabel}
       >
@@ -78,7 +78,7 @@ export function ModelSelector({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+          className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-white px-2 text-[12px] font-medium text-[#202123] outline-none transition hover:bg-[#f7f7f8] active:scale-[0.99] focus:outline-none focus-visible:outline-none"
           aria-label={triggerLabel}
           title={triggerLabel}
         >

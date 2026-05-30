@@ -127,6 +127,26 @@ export function appendThreadEvents(
   );
 }
 
+export function appendThreadFollowUpPrompt(
+  threads: TaskThread[],
+  threadId: string,
+  event: { id: string; message: string; createdAt: string }
+): TaskThread[] {
+  return appendThreadEvents(
+    threads,
+    threadId,
+    [
+      {
+        id: event.id,
+        kind: "user",
+        message: event.message,
+        createdAt: event.createdAt
+      }
+    ],
+    "running"
+  );
+}
+
 export function cancelThread(
   threads: TaskThread[],
   threadId: string,
