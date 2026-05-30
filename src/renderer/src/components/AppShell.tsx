@@ -186,7 +186,7 @@ export function AppShell({
           <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#ececf1] bg-white text-[#202123] shadow-sm">
             <Hammer className="h-4 w-4" />
           </div>
-          <span className="text-[10px] font-semibold tracking-normal text-[#202123]">Forge</span>
+          <span className="text-[12px] font-semibold tracking-normal text-[#202123]">Forge</span>
         </div>
 
         <div className="drag-region h-12" aria-hidden="true" />

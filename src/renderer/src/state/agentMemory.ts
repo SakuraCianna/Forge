@@ -73,9 +73,11 @@ export function saveAgentMemories(storage: Storage, memories: AgentMemoryEntry[]
 export function selectRelevantAgentMemories(
   memories: AgentMemoryEntry[],
   projectPath: string | null | undefined,
-  limit = 8
+  limit = 8,
+  query = ""
 ): AgentMemoryEntry[] {
   const normalizedProjectPath = normalizeProjectPath(projectPath);
+  const queryTokens = tokenizeMemoryText(query);
 
   return memories
     .filter(
@@ -86,7 +88,16 @@ export function selectRelevantAgentMemories(
           normalizeProjectPathForCompare(memory.projectPath) ===
             normalizeProjectPathForCompare(normalizedProjectPath))
     )
-    .sort((left, right) => compareMemoryFreshness(right, left))
+    .sort((left, right) => {
+      const scoreDifference =
+        scoreMemoryForQuery(right, queryTokens) - scoreMemoryForQuery(left, queryTokens);
+
+      if (scoreDifference !== 0) {
+        return scoreDifference;
+      }
+
+      return compareMemoryFreshness(right, left);
+    })
     .slice(0, limit);
 }
 
@@ -178,6 +189,32 @@ function normalizeProjectPathForCompare(value: string | null | undefined): strin
 
 function normalizeForDuplicate(value: string): string {
   return normalizeMemoryContent(value).toLowerCase();
+}
+
+function tokenizeMemoryText(value: string): Set<string> {
+  const normalized = normalizeMemoryContent(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ");
+
+  return new Set(normalized.split(/\s+/).filter((token) => token.length >= 3));
+}
+
+function scoreMemoryForQuery(memory: AgentMemoryEntry, queryTokens: Set<string>): number {
+  if (queryTokens.size === 0) {
+    return 0;
+  }
+
+  const contentTokens = tokenizeMemoryText(memory.content);
+  let score = 0;
+
+  // 记忆排序优先贴合当前任务, 再回退到更新时间
+  for (const token of queryTokens) {
+    if (contentTokens.has(token)) {
+      score += 1;
+    }
+  }
+
+  return score;
 }
 
 function compareMemoryFreshness(left: AgentMemoryEntry, right: AgentMemoryEntry): number {

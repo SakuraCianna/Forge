@@ -55,6 +55,7 @@ function closeSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvoke
 }
 
 function createWindow(): void {
+  // Windows 使用隐藏标题栏, 自定义顶部工作台区域保持和原生窗口按钮对齐
   const titleBarOptions: Electron.BrowserWindowConstructorOptions =
     process.platform === "darwin"
       ? { titleBarStyle: "hiddenInset" }
@@ -98,6 +99,7 @@ function createWindow(): void {
 void app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
 
+  // 主进程集中持有密钥和系统能力, 渲染进程只通过受控 IPC 调用
   const keyVault = createKeyVault({
     directory: join(app.getPath("userData"), "secrets"),
     codec: {
@@ -123,6 +125,7 @@ void app.whenReady().then(() => {
     }
   );
 
+  // Agent 调用统一经过主进程, 避免把 provider key 暴露给前端页面
   registerAgentHandlers(
     (request) => generateAgentPlan({ request, keyVault }),
     (request) => generateAgentFileChange({ request, keyVault }),
@@ -166,6 +169,7 @@ void app.whenReady().then(() => {
     }
   );
 
+  // 同时注册 invoke 和 send, 兼容不同前端调用方式
   ipcMain.handle(windowChannels.minimize, (event) => minimizeSenderWindow(event));
   ipcMain.handle(windowChannels.toggleMaximize, (event) => toggleSenderWindowMaximize(event));
   ipcMain.handle(windowChannels.close, (event) => closeSenderWindow(event));

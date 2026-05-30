@@ -78,6 +78,23 @@ describe("agentMemory", () => {
     ]);
   });
 
+  it("prioritizes memories that match the current task query before freshness", () => {
+    const memories: AgentMemoryEntry[] = [
+      createMemory("project", "E:\\CodeHome\\Forge", "Use Playwright for browser checks", "2026-05-30T09:00:00.000Z"),
+      createMemory("project", "E:\\CodeHome\\Forge", "Prefer concise UI copy", "2026-05-30T10:30:00.000Z"),
+      createMemory("global", null, "Use PowerShell-safe commands", "2026-05-30T10:20:00.000Z")
+    ];
+
+    expect(
+      selectRelevantAgentMemories(
+        memories,
+        "E:\\CodeHome\\Forge",
+        2,
+        "Run Playwright from PowerShell after changing browser layout"
+      ).map((memory) => memory.content)
+    ).toEqual(["Use Playwright for browser checks", "Use PowerShell-safe commands"]);
+  });
+
   it("extracts explicit remember requests and upserts duplicates", () => {
     const candidate = extractAgentMemoryCandidate(
       "请记住: 这个项目的默认终端是 PowerShell",

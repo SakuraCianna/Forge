@@ -21,6 +21,7 @@ describe("AppShell", () => {
     expect(screen.getByRole("main", { name: "Forge workbench" })).toHaveTextContent(
       "Workbench"
     );
+    expect(screen.getAllByText("Forge")[0]).toHaveClass("text-[12px]");
     expect(screen.queryByRole("button", { name: "Threads" })).not.toBeInTheDocument();
   });
 
