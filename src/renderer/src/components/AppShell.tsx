@@ -295,7 +295,7 @@ export function AppShell({
           <span className="text-[10px] text-[#8e8ea0]">{t("nav.projects")}</span>
           <span className="flex items-center gap-1">
             <DropdownMenu.Root>
-              <Tooltip label={copy.projectOptions}>
+              <Tooltip align="end" label={copy.projectOptions}>
                 <DropdownMenu.Trigger asChild>
                   <button
                     type="button"
@@ -313,7 +313,7 @@ export function AppShell({
                 </MenuItem>
               </MenuContent>
             </DropdownMenu.Root>
-            <Tooltip label={copy.addProject}>
+            <Tooltip align="end" label={copy.addProject}>
               <button
                 type="button"
                 aria-label={copy.addProject}
@@ -338,7 +338,7 @@ export function AppShell({
                 className="space-y-0.5"
               >
                 <div
-                  className={`group grid h-8 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 rounded-[10px] pr-0.5 transition ${
+                  className={`group grid h-8 min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-1 overflow-hidden rounded-[10px] pr-0.5 transition ${
                     selected ? "bg-[#ececf1]" : "hover:bg-[#ececf1]"
                   }`}
                 >
@@ -346,16 +346,16 @@ export function AppShell({
                   type="button"
                   data-testid={`sidebar-project-row-${project.path}`}
                   onClick={() => onSelectProject?.(project.path)}
-                  className="flex h-8 min-w-0 items-center gap-2 rounded-[10px] px-2 text-left text-[12px] text-[#565869]"
+                  className="flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-[10px] px-2 text-left text-[12px] text-[#565869]"
                 >
                   <FolderOpen className="h-4 w-4 shrink-0" />
-                  <span className="flex min-w-0 items-center gap-1.5 text-[#202123]">
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-[#202123]">
                     {project.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
-                    <span className="truncate">{displayName}</span>
+                    <span className="min-w-0 flex-1 truncate">{displayName}</span>
                   </span>
                 </button>
 
-                <Tooltip label={copy.newProjectChat(displayName)}>
+                <Tooltip align="end" label={copy.newProjectChat(displayName)}>
                   <button
                     type="button"
                     aria-label={copy.newProjectChat(displayName)}
@@ -367,7 +367,7 @@ export function AppShell({
                 </Tooltip>
 
                 <DropdownMenu.Root>
-                  <Tooltip label={`${copy.projectOptions} ${displayName}`}>
+                  <Tooltip align="end" label={`${copy.projectOptions} ${displayName}`}>
                     <DropdownMenu.Trigger asChild>
                       <button
                         type="button"
@@ -417,7 +417,7 @@ export function AppShell({
                   <div
                     role="group"
                     aria-label={`${displayName} conversations`}
-                    className="ml-6 space-y-0.5 border-l border-[#ececf1] pl-1.5"
+                    className="ml-6 min-w-0 space-y-0.5 overflow-hidden border-l border-[#ececf1] pl-1.5"
                   >
                     {projectThreads.map((thread) => (
                       <button
@@ -425,10 +425,10 @@ export function AppShell({
                         type="button"
                         data-testid={`sidebar-thread-row-${thread.id}`}
                         onClick={() => onSelectThread?.(thread.id)}
-                        className="flex h-7 min-w-0 items-center gap-2 rounded-[9px] px-2 text-left text-[12px] text-[#565869] transition hover:bg-[#ececf1]"
+                        className="flex h-7 w-full min-w-0 items-center gap-2 overflow-hidden rounded-[9px] px-2 text-left text-[12px] text-[#565869] transition hover:bg-[#ececf1]"
                       >
                         <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate text-[#202123]">{thread.title}</span>
+                        <span className="min-w-0 flex-1 truncate text-[#202123]">{thread.title}</span>
                         {thread.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
                       </button>
                     ))}
@@ -473,20 +473,20 @@ export function AppShell({
           {globalThreads.map((thread) => (
             <div
               key={thread.id}
-              className="group grid h-7 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-[9px] pr-0.5 transition hover:bg-[#ececf1]"
+              className="group grid h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden rounded-[9px] pr-0.5 transition hover:bg-[#ececf1]"
             >
               <button
                 type="button"
                 data-testid={`sidebar-thread-row-${thread.id}`}
                 onClick={() => onSelectThread?.(thread.id)}
-                className="flex h-7 min-w-0 items-center gap-2 rounded-[9px] px-2 text-left text-[12px] text-[#565869]"
+                className="flex h-7 w-full min-w-0 items-center gap-2 overflow-hidden rounded-[9px] px-2 text-left text-[12px] text-[#565869]"
               >
                 <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate text-[#202123]">{thread.title}</span>
+                <span className="min-w-0 flex-1 truncate text-[#202123]">{thread.title}</span>
                 {thread.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
               </button>
               <DropdownMenu.Root>
-                <Tooltip label={copy.threadOptions(thread.title)}>
+                <Tooltip align="end" label={copy.threadOptions(thread.title)}>
                   <DropdownMenu.Trigger asChild>
                     <button
                       type="button"

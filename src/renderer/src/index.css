@@ -120,10 +120,28 @@ button:focus-visible,
   text-wrap: pretty;
 }
 
+.forge-tooltip-shell > .forge-tooltip-align-start {
+  left: 0;
+  transform: translate3d(0, 4px, 0);
+}
+
+.forge-tooltip-shell > .forge-tooltip-align-end {
+  left: auto;
+  right: 0;
+  transform: translate3d(0, 4px, 0);
+}
+
 .forge-tooltip-shell:hover > .forge-tooltip,
 .forge-tooltip-shell:focus-within > .forge-tooltip {
   opacity: 1;
   transform: translate3d(-50%, 0, 0);
+}
+
+.forge-tooltip-shell:hover > .forge-tooltip-align-start,
+.forge-tooltip-shell:focus-within > .forge-tooltip-align-start,
+.forge-tooltip-shell:hover > .forge-tooltip-align-end,
+.forge-tooltip-shell:focus-within > .forge-tooltip-align-end {
+  transform: translate3d(0, 0, 0);
 }
 
 .forge-provider-panel {

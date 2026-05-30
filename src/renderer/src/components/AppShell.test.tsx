@@ -113,7 +113,13 @@ describe("AppShell", () => {
     expect(onPickProject).toHaveBeenCalled();
     expect(container.querySelector("button[title]")).toBeNull();
     expect(screen.getByRole("tooltip", { name: "Add project" })).toHaveClass("forge-tooltip");
+    expect(screen.getByRole("tooltip", { name: "Add project" })).toHaveClass(
+      "forge-tooltip-align-end"
+    );
     expect(screen.getByRole("tooltip", { name: "Project options" })).toHaveClass("forge-tooltip");
+    expect(screen.getByRole("tooltip", { name: "Project options" })).toHaveClass(
+      "forge-tooltip-align-end"
+    );
 
     await user.click(screen.getByRole("button", { name: "Project options" }));
     const archiveAllItem = screen.getByRole("menuitem", { name: "Archive all chats" });
@@ -219,5 +225,52 @@ describe("AppShell", () => {
 
     expect(screen.getByTestId("sidebar-project-row-E:\\CodeHome\\Forge")).toHaveClass("h-8");
     expect(screen.getByTestId("sidebar-thread-row-project-thread")).toHaveClass("h-7");
+  });
+
+  it("keeps long project and conversation names inside the sidebar bounds", () => {
+    const longProjectName = "Werewolf with a very long product name that should never cross the divider";
+    const longThreadTitle = "你写一份项目说明书.md 告诉我这个项目怎么用以及后续还需要怎么继续打磨";
+
+    render(
+      <AppShell
+        language="zh-CN"
+        activeView="workspace"
+        currentProjectPath="E:\\CodeHome\\Werewolf"
+        projects={[
+          {
+            name: longProjectName,
+            path: "E:\\CodeHome\\Werewolf",
+            openedAt: "2026-05-30T13:00:00.000Z"
+          }
+        ]}
+        threads={[
+          {
+            id: "long-project-thread",
+            title: longThreadTitle,
+            prompt: longThreadTitle,
+            status: "planned",
+            modelId: "deepseek:deepseek-v4-flash",
+            intelligence: "low",
+            speed: "balanced",
+            createdAt: "2026-05-30T13:00:00.000Z",
+            projectPath: "E:\\CodeHome\\Werewolf",
+            events: []
+          }
+        ]}
+        onNavigate={() => undefined}
+      >
+        <section>Workbench</section>
+      </AppShell>
+    );
+
+    const projectRow = screen.getByTestId("sidebar-project-row-E:\\CodeHome\\Werewolf");
+    const projectName = screen.getByText(longProjectName);
+    const threadRow = screen.getByTestId("sidebar-thread-row-long-project-thread");
+    const threadTitle = screen.getByText(longThreadTitle);
+
+    expect(projectRow).toHaveClass("w-full", "overflow-hidden");
+    expect(projectName).toHaveClass("min-w-0", "flex-1", "truncate");
+    expect(threadRow).toHaveClass("w-full", "overflow-hidden");
+    expect(threadTitle).toHaveClass("min-w-0", "flex-1", "truncate");
   });
 });

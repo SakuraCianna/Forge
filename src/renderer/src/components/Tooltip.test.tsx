@@ -13,7 +13,18 @@ describe("Tooltip", () => {
 
     expect(screen.getByRole("tooltip")).toHaveClass(
       "forge-tooltip",
-      "forge-tooltip-readable"
+      "forge-tooltip-readable",
+      "forge-tooltip-align-center"
     );
+  });
+
+  it("can align long labels to the trigger edge", () => {
+    render(
+      <Tooltip align="end" label="项目更多选项 Werewolf 这个名字很长也不能撑出侧边栏">
+        <button type="button">更多</button>
+      </Tooltip>
+    );
+
+    expect(screen.getByRole("tooltip")).toHaveClass("forge-tooltip-align-end");
   });
 });
