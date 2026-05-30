@@ -40,7 +40,8 @@ describe("generalPreferences", () => {
       defaultPermission: true,
       telemetry: false,
       backgroundImageDataUrl: null,
-      backgroundOpacity: 0.18
+      backgroundOpacity: 0.18,
+      commandSafetyRules: []
     });
   });
 
@@ -80,6 +81,76 @@ describe("generalPreferences", () => {
       autoReview: true,
       fullAccess: false
     });
+  });
+
+  it("persists and normalizes command safety rules", () => {
+    const storage = createMemoryStorage(
+      JSON.stringify({
+        commandSafetyRules: [
+          {
+            id: " local-e2e ",
+            pattern: " npm run e2e * ",
+            level: "allow",
+            reason: " local verification "
+          },
+          {
+            id: "missing-pattern",
+            pattern: "",
+            level: "deny",
+            reason: "no pattern"
+          },
+          {
+            id: "bad-level",
+            pattern: "npm run publish-*",
+            level: "block",
+            reason: "invalid level"
+          },
+          {
+            id: "preview-publish",
+            pattern: "npm run publish-*",
+            level: "ask",
+            reason: ""
+          }
+        ]
+      })
+    );
+
+    expect(loadGeneralPreferences(storage).commandSafetyRules).toEqual([
+      {
+        id: "local-e2e",
+        pattern: "npm run e2e *",
+        level: "allow",
+        reason: "local verification"
+      },
+      {
+        id: "preview-publish",
+        pattern: "npm run publish-*",
+        level: "ask",
+        reason: "matched configured command policy"
+      }
+    ]);
+  });
+
+  it("keeps command safety rules when updating general preferences", () => {
+    expect(
+      updateGeneralPreferences(createDefaultGeneralPreferences(), {
+        commandSafetyRules: [
+          {
+            id: "preview-publish",
+            pattern: "npm run publish-*",
+            level: "ask",
+            reason: "publishes preview"
+          }
+        ]
+      }).commandSafetyRules
+    ).toEqual([
+      {
+        id: "preview-publish",
+        pattern: "npm run publish-*",
+        level: "ask",
+        reason: "publishes preview"
+      }
+    ]);
   });
 
   it("falls back when persisted data is invalid", () => {

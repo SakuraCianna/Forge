@@ -1601,7 +1601,9 @@ export function App(): ReactElement {
         continueBatch: status !== "completed"
       };
     } else if (execution.kind === "run-command") {
-      const commandRisk = resolveAgentCommandRisk(execution.command);
+      const commandRisk = resolveAgentCommandRisk(execution.command, {
+        rules: generalPreferences.commandSafetyRules
+      });
 
       if (commandRisk.level === "deny") {
         return blockAgentCommandAction(
@@ -1662,7 +1664,9 @@ export function App(): ReactElement {
   async function approveAgentCommandAction(threadId: string, action: AgentAction): Promise<void> {
     if (action.kind === "run-command" && action.command) {
       const command = action.command;
-      const commandRisk = resolveAgentCommandRisk(command);
+      const commandRisk = resolveAgentCommandRisk(command, {
+        rules: generalPreferences.commandSafetyRules
+      });
 
       if (commandRisk.level === "ask") {
         const createdAt = new Date().toISOString();
@@ -1956,6 +1960,7 @@ export function App(): ReactElement {
         hasProject={Boolean(currentProject) || Boolean(selectedThread)}
         selectedThreadId={selectedThreadId}
         threads={visibleWorkspaceThreads}
+        commandSafetyRules={generalPreferences.commandSafetyRules}
         projectScan={projectScanResult}
         previewFile={previewFile}
         changePreview={

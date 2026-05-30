@@ -1,6 +1,7 @@
 // 本文件说明: 判断 Agent 动作是否可执行并按队列推进动作
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { AgentProfileContext } from "@shared/agentTypes";
+import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "@/state/generalPreferences";
 
 type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }
@@ -18,6 +19,10 @@ export type AgentActionPermissionResult =
 export type AgentCommandRisk =
   | { level: "allow" }
   | { level: "ask" | "deny"; reason: string };
+
+export type AgentCommandSafetyPolicy = {
+  rules?: CommandSafetyRule[];
+};
 
 const dependencyChangeReason = "command may change dependencies or project state";
 const gitMutationReason = "command may change Git history or remote state";
@@ -68,12 +73,15 @@ export function resolveAgentActionPermission(
 }
 
 // 将命令分成自动允许, 需要确认和直接拒绝, 复合命令按最高风险处理
-export function resolveAgentCommandRisk(command: string): AgentCommandRisk {
+export function resolveAgentCommandRisk(
+  command: string,
+  policy: AgentCommandSafetyPolicy = {}
+): AgentCommandRisk {
   const segments = splitShellCommandSegments(command);
   let strongestRisk: AgentCommandRisk = { level: "allow" };
 
   for (const segment of segments) {
-    const risk = resolveSingleCommandRisk(segment);
+    const risk = resolveSingleCommandRisk(segment, policy);
 
     if (risk.level === "deny") {
       return risk;
@@ -93,7 +101,10 @@ export function findNextPendingAgentAction(actions: AgentAction[]): AgentAction 
 }
 
 // 从队列开头收集可自动执行动作, 遇到人工步骤就停下
-export function getRunnablePendingAgentActions(actions: AgentAction[]): AgentAction[] {
+export function getRunnablePendingAgentActions(
+  actions: AgentAction[],
+  policy: AgentCommandSafetyPolicy = {}
+): AgentAction[] {
   const runnableActions: AgentAction[] = [];
 
   for (const action of actions) {
@@ -101,7 +112,7 @@ export function getRunnablePendingAgentActions(actions: AgentAction[]): AgentAct
       continue;
     }
 
-    if (action.status !== "pending" || !isRunnableAgentAction(action)) {
+    if (action.status !== "pending" || !isRunnableAgentAction(action, policy)) {
       break;
     }
 
@@ -190,13 +201,16 @@ function normalizeAgentActionRunOutcome(outcome: AgentActionRunOutcome): {
 }
 
 // 判断动作是否适合自动执行, manual 和 commit 必须留给用户确认
-export function isRunnableAgentAction(action: AgentAction): boolean {
+export function isRunnableAgentAction(
+  action: AgentAction,
+  policy: AgentCommandSafetyPolicy = {}
+): boolean {
   if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
     return true;
   }
 
   if (action.kind === "run-command" && action.command) {
-    return resolveAgentCommandRisk(action.command).level === "allow";
+    return resolveAgentCommandRisk(action.command, policy).level === "allow";
   }
 
   return false;
@@ -232,7 +246,10 @@ function splitShellCommandSegments(command: string): string[] {
 }
 
 // 判断单条命令风险, 默认未知命令走人工确认而不是直接执行
-function resolveSingleCommandRisk(command: string): AgentCommandRisk {
+function resolveSingleCommandRisk(
+  command: string,
+  policy: AgentCommandSafetyPolicy
+): AgentCommandRisk {
   const normalized = command.trim().replace(/\s+/g, " ").toLowerCase();
 
   if (!normalized) {
@@ -243,19 +260,85 @@ function resolveSingleCommandRisk(command: string): AgentCommandRisk {
     return { level: "deny", reason: destructiveCommandReason };
   }
 
+  const configuredRisk = resolveConfiguredCommandRisk(normalized, policy.rules);
+
+  if (configuredRisk?.level === "deny" || configuredRisk?.level === "ask") {
+    return configuredRisk;
+  }
+
   if (isDependencyChangingCommand(normalized)) {
-    return { level: "ask", reason: dependencyChangeReason };
+    return configuredRisk ?? { level: "ask", reason: dependencyChangeReason };
   }
 
   if (isGitMutatingCommand(normalized)) {
-    return { level: "ask", reason: gitMutationReason };
+    return configuredRisk ?? { level: "ask", reason: gitMutationReason };
   }
 
-  if (isAllowedCommand(normalized)) {
+  if (configuredRisk?.level === "allow" || isAllowedCommand(normalized)) {
     return { level: "allow" };
   }
 
   return { level: "ask", reason: unknownCommandReason };
+}
+
+// 匹配自定义命令规则, deny 和 ask 始终强于 allow
+function resolveConfiguredCommandRisk(
+  command: string,
+  rules: CommandSafetyRule[] | undefined
+): AgentCommandRisk | null {
+  let strongestRisk: AgentCommandRisk | null = null;
+
+  for (const rule of rules ?? []) {
+    if (!doesCommandRuleMatch(command, rule)) {
+      continue;
+    }
+
+    if (rule.level === "deny") {
+      return {
+        level: "deny",
+        reason: rule.reason.trim() || defaultCommandSafetyRuleReason
+      };
+    }
+
+    if (rule.level === "ask") {
+      strongestRisk = {
+        level: "ask",
+        reason: rule.reason.trim() || defaultCommandSafetyRuleReason
+      };
+      continue;
+    }
+
+    if (!strongestRisk) {
+      strongestRisk = { level: "allow" };
+    }
+  }
+
+  return strongestRisk;
+}
+
+// 判断单条规则模式是否命中命令, 星号作为简单通配符
+function doesCommandRuleMatch(command: string, rule: CommandSafetyRule): boolean {
+  const pattern = normalizeCommandPattern(rule.pattern);
+
+  if (!pattern) {
+    return false;
+  }
+
+  if (!pattern.includes("*")) {
+    return command === pattern;
+  }
+
+  return new RegExp(`^${pattern.split("*").map(escapeRegExp).join(".*")}$`, "u").test(command);
+}
+
+// 归一化命令规则模式, 让大小写和连续空白不影响匹配
+function normalizeCommandPattern(pattern: string): string {
+  return pattern.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+// 转义正则元字符, 只保留星号通配语义
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 // 识别会删除文件或重写历史的命令

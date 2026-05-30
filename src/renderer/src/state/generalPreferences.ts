@@ -1,10 +1,20 @@
-// 本文件说明: 持久化通用偏好, 包括权限模式和软件背景
+// 本文件说明: 持久化通用偏好和命令安全规则
 const generalPreferencesStorageKey = "forge.generalPreferences";
 
 export type WorkMode = "code" | "daily";
 export type DefaultOpenTarget = "recent-project" | "blank";
 export type AgentRuntime = "windows-native" | "wsl";
 export type TerminalShell = "powershell" | "cmd" | "git-bash";
+export type CommandSafetyRuleLevel = "allow" | "ask" | "deny";
+
+export type CommandSafetyRule = {
+  id: string;
+  pattern: string;
+  level: CommandSafetyRuleLevel;
+  reason: string;
+};
+
+export const defaultCommandSafetyRuleReason = "matched configured command policy";
 
 export type GeneralPreferences = {
   workMode: WorkMode;
@@ -15,11 +25,12 @@ export type GeneralPreferences = {
   defaultPermission: boolean;
   backgroundImageDataUrl: string | null;
   backgroundOpacity: number;
+  commandSafetyRules: CommandSafetyRule[];
   fullAccess: boolean;
   telemetry: boolean;
 };
 
-// 创建通用偏好的默认值, 首次启动和损坏数据都回退到这里
+// 创建通用偏好的默认值, 首次启动和坏数据回退都使用这里
 export function createDefaultGeneralPreferences(): GeneralPreferences {
   return {
     workMode: "code",
@@ -30,12 +41,13 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     defaultPermission: true,
     backgroundImageDataUrl: null,
     backgroundOpacity: 0.18,
+    commandSafetyRules: [],
     fullAccess: false,
     telemetry: false
   };
 }
 
-// 用局部补丁更新偏好, 背景和权限都共享这个入口
+// 用局部补丁更新偏好, 同时收敛权限和命令规则字段
 export function updateGeneralPreferences(
   preferences: GeneralPreferences,
   patch: Partial<GeneralPreferences>
@@ -64,22 +76,23 @@ export function loadGeneralPreferences(storage: Storage): GeneralPreferences {
   }
 }
 
-// 兼容旧版权限字段, 目前只保留自动审查和完全访问权限
+// 兼容旧版权限字段, 并保持命令安全规则可用
 function normalizePermissionPreferences(preferences: GeneralPreferences): GeneralPreferences {
   return {
     ...preferences,
     defaultPermission: true,
     autoReview: true,
-    fullAccess: preferences.fullAccess
+    fullAccess: preferences.fullAccess,
+    commandSafetyRules: normalizeCommandSafetyRules(preferences.commandSafetyRules)
   };
 }
 
-// 保存通用偏好, 让设置页刷新后保持用户选择
+// 保存通用偏好, 刷新后保持用户选择
 export function saveGeneralPreferences(storage: Storage, preferences: GeneralPreferences): void {
-  storage.setItem(generalPreferencesStorageKey, JSON.stringify(preferences));
+  storage.setItem(generalPreferencesStorageKey, JSON.stringify(normalizePermissionPreferences(preferences)));
 }
 
-// 校验持久化偏好对象, 坏数据不会进入运行态
+// 校验持久化偏好对象, 坏数据不会进入运行状态
 function isPersistedGeneralPreferences(value: unknown): value is Partial<GeneralPreferences> {
   if (!isRecord(value)) {
     return false;
@@ -108,12 +121,54 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
         Number.isFinite(value.backgroundOpacity) &&
         value.backgroundOpacity >= 0 &&
         value.backgroundOpacity <= 0.6)) &&
+    (!("commandSafetyRules" in value) || Array.isArray(value.commandSafetyRules)) &&
     (!("fullAccess" in value) || typeof value.fullAccess === "boolean") &&
     (!("telemetry" in value) || typeof value.telemetry === "boolean")
   );
 }
 
-// 将 unknown 缩窄成普通对象, 方便做字段校验
+// 归一化命令安全规则列表, 丢弃空模式和无效级别
+function normalizeCommandSafetyRules(rules: CommandSafetyRule[]): CommandSafetyRule[] {
+  if (!Array.isArray(rules)) {
+    return [];
+  }
+
+  return rules
+    .slice(0, 50)
+    .map((rule, index) => normalizeCommandSafetyRule(rule, index))
+    .filter((rule): rule is CommandSafetyRule => Boolean(rule));
+}
+
+// 归一化单条命令安全规则, 保证运行时只处理干净字段
+function normalizeCommandSafetyRule(rule: unknown, index: number): CommandSafetyRule | null {
+  if (!isRecord(rule)) {
+    return null;
+  }
+
+  if (rule.level !== "allow" && rule.level !== "ask" && rule.level !== "deny") {
+    return null;
+  }
+
+  const pattern = normalizeTextField(rule.pattern, 160);
+
+  if (!pattern) {
+    return null;
+  }
+
+  return {
+    id: normalizeTextField(rule.id, 80) || `command-rule-${index + 1}`,
+    pattern,
+    level: rule.level,
+    reason: normalizeTextField(rule.reason, 220) || defaultCommandSafetyRuleReason
+  };
+}
+
+// 收敛文本字段长度和空白, 避免坏数据撑开设置页
+function normalizeTextField(value: unknown, maxLength: number): string {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+// 将 unknown 缩窄成普通对象, 方便字段校验
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

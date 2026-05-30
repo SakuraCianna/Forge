@@ -28,9 +28,11 @@ import {
   findNextPendingAgentAction,
   getRunnablePendingAgentActions,
   isRunnableAgentAction,
-  resolveAgentCommandRisk
+  resolveAgentCommandRisk,
+  type AgentCommandSafetyPolicy
 } from "@/agent/agentActionExecutor";
 import { useI18n } from "@/i18n/useI18n";
+import type { CommandSafetyRule } from "@/state/generalPreferences";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
 import { MarkdownPreview } from "./FilePreviewRenderer";
 import { Tooltip } from "./Tooltip";
@@ -41,6 +43,7 @@ type ThreadWorkspaceProps = {
   hasProject?: boolean;
   selectedThreadId: string | null;
   threads: TaskThread[];
+  commandSafetyRules?: CommandSafetyRule[];
   projectScan?: ProjectScanResult | null;
   previewFile?: ProjectTextFile | null;
   changePreview?: ProjectFileChangePreview | null;
@@ -90,6 +93,7 @@ export function ThreadWorkspace({
   hasProject = true,
   selectedThreadId,
   threads,
+  commandSafetyRules = [],
   projectScan = null,
   previewFile = null,
   changePreview = null,
@@ -121,6 +125,10 @@ export function ThreadWorkspace({
   const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("plan");
   const [selectedAgentActionId, setSelectedAgentActionId] = useState<string | null>(null);
+  const commandSafetyPolicy = useMemo<AgentCommandSafetyPolicy>(
+    () => ({ rules: commandSafetyRules }),
+    [commandSafetyRules]
+  );
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
   const allChangePreviews = changePreviews ?? (changePreview ? [changePreview] : []);
@@ -885,18 +893,24 @@ export function ThreadWorkspace({
     const queueStats = getQueueStats(agentActions);
     const pendingChangeCount = allChangePreviews.length;
     const hasPendingFileChanges = pendingChangeCount > 0;
-    const queueBlockerAction = getQueueBlockerAction(agentActions);
+    const queueBlockerAction = getQueueBlockerAction(agentActions, commandSafetyPolicy);
     const queueBlocked =
       hasPendingFileChanges ||
       queueBlockerAction?.status === "failed" ||
       queueBlockerAction?.status === "running";
     const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(agentActions);
-    const runnablePendingActions = queueBlocked ? [] : getRunnablePendingAgentActions(agentActions);
+    const runnablePendingActions = queueBlocked
+      ? []
+      : getRunnablePendingAgentActions(agentActions, commandSafetyPolicy);
     const nextRunnableAction =
-      nextPendingAction && isRunnableAgentAction(nextPendingAction) ? nextPendingAction : null;
+      nextPendingAction && isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
+        ? nextPendingAction
+        : null;
     const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
     const activeGateAction =
-      nextPendingAction && !isRunnableAgentAction(nextPendingAction) ? nextPendingAction : nextGateAction;
+      nextPendingAction && !isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
+        ? nextPendingAction
+        : nextGateAction;
     const queueComplete = queueStats.total > 0 && queueStats.completed === queueStats.total;
     const agentRunStatus =
       queueBlockerAction?.status === "running"
@@ -931,7 +945,7 @@ export function ThreadWorkspace({
     // 读取命令动作的风险等级, 非命令动作不参与审批判断
     function getCommandRiskForAction(action: AgentAction): ReturnType<typeof resolveAgentCommandRisk> | null {
       return action.kind === "run-command" && action.command
-        ? resolveAgentCommandRisk(action.command)
+        ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
         : null;
     }
 
@@ -951,7 +965,7 @@ export function ThreadWorkspace({
         return actionQueueCopy.reviewGate;
       }
 
-      if (action.status === "pending" && isRunnableAgentAction(action)) {
+      if (action.status === "pending" && isRunnableAgentAction(action, commandSafetyPolicy)) {
         return actionQueueCopy.ready;
       }
 
@@ -1005,7 +1019,7 @@ export function ThreadWorkspace({
 
       if (action.kind === "run-command" && action.command && selectedThread) {
         const commandToRun = action.command;
-        const commandRisk = resolveAgentCommandRisk(commandToRun);
+        const commandRisk = resolveAgentCommandRisk(commandToRun, commandSafetyPolicy);
 
         if (commandRisk.level === "ask" && onApproveAgentCommand) {
           return (
@@ -1078,7 +1092,7 @@ export function ThreadWorkspace({
         return actionDetailsCopy.commandBlocked;
       }
 
-      if (isRunnableAgentAction(action)) {
+      if (isRunnableAgentAction(action, commandSafetyPolicy)) {
         return actionDetailsCopy.ready;
       }
 
@@ -2213,7 +2227,10 @@ function getQueueStats(actions: AgentAction[]): {
 }
 
 // 找到第一个失败或待人工处理动作, 用于恢复提示
-function getQueueBlockerAction(actions: AgentAction[]): AgentAction | null {
+function getQueueBlockerAction(
+  actions: AgentAction[],
+  policy: AgentCommandSafetyPolicy = {}
+): AgentAction | null {
   for (const action of actions) {
     if (action.status === "completed" || action.status === "skipped") {
       continue;
@@ -2223,7 +2240,7 @@ function getQueueBlockerAction(actions: AgentAction[]): AgentAction | null {
       return action;
     }
 
-    if (action.status === "pending" && !isRunnableAgentAction(action)) {
+    if (action.status === "pending" && !isRunnableAgentAction(action, policy)) {
       return action;
     }
 

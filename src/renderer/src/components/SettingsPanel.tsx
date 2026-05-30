@@ -31,7 +31,12 @@ import type { PersonalizationSettings } from "@/state/personalization";
 import type { TaskThread } from "@/state/taskThreads";
 import type { AgentMemoryEntry } from "@/state/agentMemory";
 import type { AgentProfile, AgentProfilePatch, AgentProfileTool } from "@/state/agentProfiles";
-import type { GeneralPreferences } from "@/state/generalPreferences";
+import {
+  defaultCommandSafetyRuleReason,
+  type CommandSafetyRule,
+  type CommandSafetyRuleLevel,
+  type GeneralPreferences
+} from "@/state/generalPreferences";
 import { getModelsForDisplay } from "@/state/modelSettings";
 import {
   summarizeUsage,
@@ -290,7 +295,42 @@ export function SettingsPanel({
     reader.readAsDataURL(file);
   }
 
-  // 渲染通用设置, 包含工作模式, 语言和软件背景
+  // 新增一条命令安全规则, 默认使用本地验证命令作为可编辑模板
+  function addCommandSafetyRule(): void {
+    updateCommandSafetyRules([
+      ...generalPreferences.commandSafetyRules,
+      {
+        id: createCommandSafetyRuleId(),
+        pattern: "npm run e2e *",
+        level: "ask",
+        reason: defaultCommandSafetyRuleReason
+      }
+    ]);
+  }
+
+  // 更新单条命令安全规则, 保留其他规则的顺序
+  function updateCommandSafetyRule(ruleId: string, patch: Partial<CommandSafetyRule>): void {
+    updateCommandSafetyRules(
+      generalPreferences.commandSafetyRules.map((rule) =>
+        rule.id === ruleId ? { ...rule, ...patch } : rule
+      )
+    );
+  }
+
+  // 删除单条命令安全规则, 不影响其他权限开关
+  function deleteCommandSafetyRule(ruleId: string): void {
+    updateCommandSafetyRules(generalPreferences.commandSafetyRules.filter((rule) => rule.id !== ruleId));
+  }
+
+  // 写回命令安全规则列表, 交给通用偏好统一持久化
+  function updateCommandSafetyRules(commandSafetyRules: CommandSafetyRule[]): void {
+    onUpdateGeneralPreferences({
+      ...generalPreferences,
+      commandSafetyRules
+    });
+  }
+
+  // 渲染通用设置, 包含工作模式, 语言和命令安全规则
   function renderGeneralSection(): ReactElement {
     const copy = getGeneralSettingsCopy(settings.language);
 
@@ -525,6 +565,103 @@ export function SettingsPanel({
                   })
                 }
               />
+              <div className="border-t border-[#ececf1] px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-[#202123]">
+                      {copy.commandRulesTitle}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
+                      {copy.commandRulesDescription}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={copy.addCommandRule}
+                    onClick={addCommandSafetyRule}
+                    className="inline-flex h-9 items-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] transition hover:bg-[#f7f7f8]"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {copy.addCommandRule}
+                  </button>
+                </div>
+
+                {generalPreferences.commandSafetyRules.length === 0 ? (
+                  <p className="mt-3 text-xs leading-5 text-[#8e8ea0]">{copy.commandRulesEmpty}</p>
+                ) : (
+                  <div className="mt-3 divide-y divide-[#ececf1]">
+                    {generalPreferences.commandSafetyRules.map((rule) => (
+                      <div key={rule.id} className="grid gap-3 py-3 first:pt-0 last:pb-0">
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_128px]">
+                          <label className="grid gap-1.5">
+                            <span className="text-xs font-medium text-[#565869]">
+                              {copy.commandRulePattern}
+                            </span>
+                            <input
+                              type="text"
+                              aria-label={copy.commandRulePattern}
+                              value={rule.pattern}
+                              onChange={(event) =>
+                                updateCommandSafetyRule(rule.id, {
+                                  pattern: event.currentTarget.value
+                                })
+                              }
+                              className="h-9 min-w-0 rounded-[12px] border border-[#d9d9e3] bg-white px-3 font-mono text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                            />
+                          </label>
+                          <label className="grid gap-1.5">
+                            <span className="text-xs font-medium text-[#565869]">
+                              {copy.commandRuleLevelLabel}
+                            </span>
+                            <InlineSelectMenu<CommandSafetyRuleLevel>
+                              ariaLabel={copy.commandRuleLevel}
+                              value={rule.level}
+                              options={[
+                                { value: "allow", label: copy.commandRuleAllow },
+                                { value: "ask", label: copy.commandRuleAsk },
+                                { value: "deny", label: copy.commandRuleDeny }
+                              ]}
+                              onChange={(value) =>
+                                updateCommandSafetyRule(rule.id, {
+                                  level: value
+                                })
+                              }
+                              triggerClassName="w-full min-w-0"
+                            />
+                          </label>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                          <label className="grid gap-1.5">
+                            <span className="text-xs font-medium text-[#565869]">
+                              {copy.commandRuleReason}
+                            </span>
+                            <input
+                              type="text"
+                              aria-label={copy.commandRuleReason}
+                              value={rule.reason}
+                              onChange={(event) =>
+                                updateCommandSafetyRule(rule.id, {
+                                  reason: event.currentTarget.value
+                                })
+                              }
+                              className="h-9 min-w-0 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            aria-label={copy.deleteCommandRule}
+                            onClick={() => deleteCommandSafetyRule(rule.id)}
+                            className="inline-flex h-9 items-center justify-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#8a1f11] transition hover:bg-[#fff7ed]"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {copy.deleteCommandRule}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1931,6 +2068,18 @@ function getGeneralSettingsCopy(language: Language): {
   codeMode: string;
   codeModeDescription: string;
   clearBackground: string;
+  addCommandRule: string;
+  commandRuleAllow: string;
+  commandRuleAsk: string;
+  commandRuleDeny: string;
+  commandRuleLevel: string;
+  commandRuleLevelLabel: string;
+  commandRulePattern: string;
+  commandRuleReason: string;
+  commandRulesDescription: string;
+  commandRulesEmpty: string;
+  commandRulesTitle: string;
+  deleteCommandRule: string;
   dailyMode: string;
   dailyModeDescription: string;
   defaultOpenTarget: string;
@@ -1954,6 +2103,18 @@ function getGeneralSettingsCopy(language: Language): {
 } {
   if (language === "zh-CN") {
     return {
+      addCommandRule: "添加命令规则",
+      commandRuleAllow: "允许",
+      commandRuleAsk: "询问",
+      commandRuleDeny: "拒绝",
+      commandRuleLevel: "命令规则级别",
+      commandRuleLevelLabel: "级别",
+      commandRulePattern: "命令规则模式",
+      commandRuleReason: "命令规则原因",
+      commandRulesDescription: "按模式覆盖非破坏性命令的允许, 询问或拒绝策略",
+      commandRulesEmpty: "还没有自定义命令规则",
+      commandRulesTitle: "命令规则",
+      deleteCommandRule: "删除命令规则",
       agentRuntime: "智能体环境",
       agentRuntimeDescription: "选择智能体在 Windows 上的运行位置",
       appBackground: "软件背景",
@@ -1990,6 +2151,18 @@ function getGeneralSettingsCopy(language: Language): {
   }
 
   return {
+    addCommandRule: "Add command rule",
+    commandRuleAllow: "Allow",
+    commandRuleAsk: "Ask",
+    commandRuleDeny: "Deny",
+    commandRuleLevel: "Command rule level",
+    commandRuleLevelLabel: "Level",
+    commandRulePattern: "Command rule pattern",
+    commandRuleReason: "Command rule reason",
+    commandRulesDescription: "Override allow, ask, or deny behavior for matching non-destructive commands",
+    commandRulesEmpty: "No custom command rules yet",
+    commandRulesTitle: "Command rules",
+    deleteCommandRule: "Delete command rule",
     agentRuntime: "Agent runtime",
     agentRuntimeDescription: "Choose where the agent runs on Windows",
     appBackground: "App background",
@@ -2024,6 +2197,11 @@ function getGeneralSettingsCopy(language: Language): {
     workModeDescription: "Choose how much technical detail Forge shows by default",
     workModeTitle: "Work mode"
   };
+}
+
+// 生成命令安全规则 id, 避免新增行之间互相覆盖
+function createCommandSafetyRuleId(): string {
+  return `command-rule-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // 格式化整数并提供中文环境下的分组展示

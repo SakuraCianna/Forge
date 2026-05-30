@@ -95,6 +95,90 @@ describe("SettingsPanel", () => {
     );
   });
 
+  it("edits command safety rules from general preferences", async () => {
+    const user = userEvent.setup();
+    const onUpdateGeneralPreferences = vi.fn();
+    const settings = setLanguage(createDefaultModelSettings(), "en-US");
+    const preferences = {
+      ...createDefaultGeneralPreferences(),
+      commandSafetyRules: [
+        {
+          id: "preview-publish",
+          pattern: "npm run publish-*",
+          level: "ask" as const,
+          reason: "publishes preview"
+        }
+      ]
+    };
+
+    renderSettingsPanel({ settings, generalPreferences: preferences, onUpdateGeneralPreferences });
+
+    await user.click(screen.getByRole("button", { name: /General/ }));
+
+    expect(screen.getByText("Command rules")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Command rule pattern"), {
+      target: { value: "npm run e2e *" }
+    });
+
+    expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        commandSafetyRules: [
+          expect.objectContaining({
+            id: "preview-publish",
+            pattern: "npm run e2e *",
+            level: "ask",
+            reason: "publishes preview"
+          })
+        ]
+      })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Command rule level" }));
+    await user.click(screen.getByRole("menuitem", { name: "Allow" }));
+
+    expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        commandSafetyRules: [
+          expect.objectContaining({
+            id: "preview-publish",
+            pattern: "npm run publish-*",
+            level: "allow",
+            reason: "publishes preview"
+          })
+        ]
+      })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete command rule" }));
+
+    expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
+      expect.objectContaining({ commandSafetyRules: [] })
+    );
+  });
+
+  it("adds a default command safety rule from general preferences", async () => {
+    const user = userEvent.setup();
+    const onUpdateGeneralPreferences = vi.fn();
+
+    renderSettingsPanel({ onUpdateGeneralPreferences });
+
+    await user.click(screen.getByRole("button", { name: /General/ }));
+    await user.click(screen.getByRole("button", { name: "Add command rule" }));
+
+    expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        commandSafetyRules: [
+          expect.objectContaining({
+            pattern: "npm run e2e *",
+            level: "ask",
+            reason: "matched configured command policy"
+          })
+        ]
+      })
+    );
+  });
+
   it("shows wallpaper controls in general preferences", async () => {
     const user = userEvent.setup();
     const settings = setLanguage(createDefaultModelSettings(), "en-US");

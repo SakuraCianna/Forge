@@ -270,6 +270,37 @@ describe("agentActionExecutor", () => {
     expect(resolveAgentCommandRisk("npm run typecheck")).toEqual({ level: "allow" });
   });
 
+  it("uses configured command rules for non-destructive commands", () => {
+    expect(
+      resolveAgentCommandRisk("npm run e2e -- --ui", {
+        rules: [
+          {
+            id: "local-e2e",
+            pattern: "npm run e2e *",
+            level: "allow",
+            reason: "local e2e is approved"
+          }
+        ]
+      })
+    ).toEqual({ level: "allow" });
+
+    expect(
+      resolveAgentCommandRisk("npm run publish-preview", {
+        rules: [
+          {
+            id: "preview-publish",
+            pattern: "npm run publish-*",
+            level: "ask",
+            reason: "publishes preview"
+          }
+        ]
+      })
+    ).toEqual({
+      level: "ask",
+      reason: "publishes preview"
+    });
+  });
+
   it("requires approval for mutating package and Git commands", () => {
     expect(resolveAgentCommandRisk("npm install")).toEqual({
       level: "ask",
@@ -290,6 +321,59 @@ describe("agentActionExecutor", () => {
       level: "deny",
       reason: "command can delete files or rewrite history"
     });
+  });
+
+  it("keeps destructive built-in denies stronger than configured allow rules", () => {
+    expect(
+      resolveAgentCommandRisk("Remove-Item -Recurse src", {
+        rules: [
+          {
+            id: "allow-all",
+            pattern: "*",
+            level: "allow",
+            reason: "trusted local command"
+          }
+        ]
+      })
+    ).toEqual({
+      level: "deny",
+      reason: "command can delete files or rewrite history"
+    });
+  });
+
+  it("applies configured command rules to safe batch gating", () => {
+    const inspect = createAction({
+      id: "action-1",
+      status: "completed",
+      kind: "inspect-file",
+      target: "src/App.tsx"
+    });
+    const e2e = createAction({
+      id: "action-2",
+      status: "pending",
+      kind: "run-command",
+      command: "npm run e2e -- --ui"
+    });
+    const build = createAction({
+      id: "action-3",
+      status: "pending",
+      kind: "run-command",
+      command: "npm run build"
+    });
+
+    expect(getRunnablePendingAgentActions([inspect, e2e, build]).map((action) => action.id)).toEqual([]);
+    expect(
+      getRunnablePendingAgentActions([inspect, e2e, build], {
+        rules: [
+          {
+            id: "local-e2e",
+            pattern: "npm run e2e *",
+            level: "allow",
+            reason: "local e2e is approved"
+          }
+        ]
+      }).map((action) => action.id)
+    ).toEqual(["action-2", "action-3"]);
   });
 });
 
