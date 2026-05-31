@@ -82,6 +82,30 @@ describe("agentExecutionPlan", () => {
     ]);
   });
 
+  it("turns non-file inspect targets into project search actions", () => {
+    const steps: AgentPlanStep[] = [
+      {
+        id: "step-1",
+        title: "Find usage",
+        description: "Search for provider setup before editing.",
+        kind: "inspect",
+        status: "pending",
+        target: "provider setup"
+      }
+    ];
+
+    expect(createAgentActionsFromPlanSteps(steps)).toEqual([
+      {
+        id: "action-1",
+        stepId: "step-1",
+        kind: "search-project",
+        label: "Search provider setup",
+        status: "pending",
+        target: "provider setup"
+      }
+    ]);
+  });
+
   it("does not let non-actionable planning notes block later file creation", () => {
     const steps: AgentPlanStep[] = [
       {

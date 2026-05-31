@@ -1,6 +1,11 @@
 // 本文件说明: 注册项目文件 IPC, 读取和写入都经过路径边界检查
 import { fileChannels } from "../shared/ipcChannels.js";
-import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
+import type {
+  ProjectFileChangePreview,
+  ProjectTextFile,
+  ProjectTextSearchRequest,
+  ProjectTextSearchResult
+} from "../shared/fileTypes.js";
 
 type ReadProjectTextFileRequest = {
   projectRoot: string;
@@ -13,6 +18,10 @@ type UpdateProjectTextFileRequest = ReadProjectTextFileRequest & {
 };
 
 type ReadProjectTextFile = (request: ReadProjectTextFileRequest) => Promise<ProjectTextFile>;
+
+type SearchProjectTextFiles = (
+  request: ProjectTextSearchRequest
+) => Promise<ProjectTextSearchResult>;
 
 type PreviewProjectTextFileUpdate = (
   request: UpdateProjectTextFileRequest
@@ -31,10 +40,15 @@ export function registerProjectFileHandlers(
   readProjectTextFile: ReadProjectTextFile,
   previewProjectTextFileUpdate: PreviewProjectTextFileUpdate,
   writeProjectTextFile: WriteProjectTextFile,
+  searchProjectTextFiles: SearchProjectTextFiles,
   registerHandler: RegisterHandler
 ): void {
   registerHandler(fileChannels.readText, async (_event, request) =>
     readProjectTextFile(assertReadRequest(request))
+  );
+
+  registerHandler(fileChannels.searchText, async (_event, request) =>
+    searchProjectTextFiles(assertSearchRequest(request))
   );
 
   registerHandler(fileChannels.previewTextUpdate, async (_event, request) =>
@@ -44,6 +58,24 @@ export function registerProjectFileHandlers(
   registerHandler(fileChannels.writeText, async (_event, request) =>
     writeProjectTextFile(assertUpdateRequest(request))
   );
+}
+
+// 校验项目搜索请求, 只允许明确的项目根目录和搜索关键词
+function assertSearchRequest(value: unknown): ProjectTextSearchRequest {
+  if (
+    !isRecord(value) ||
+    typeof value.projectRoot !== "string" ||
+    typeof value.query !== "string"
+  ) {
+    throw new Error("无效的文件搜索请求。");
+  }
+
+  return {
+    projectRoot: value.projectRoot,
+    query: value.query,
+    limit: typeof value.limit === "number" ? value.limit : undefined,
+    maxFileBytes: typeof value.maxFileBytes === "number" ? value.maxFileBytes : undefined
+  };
 }
 
 // 校验文件读取请求, 项目根路径和相对路径都必须明确

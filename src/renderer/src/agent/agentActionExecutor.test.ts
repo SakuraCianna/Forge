@@ -40,6 +40,15 @@ describe("agentActionExecutor", () => {
     });
   });
 
+  it("runs project searches for search actions", () => {
+    expect(
+      resolveAgentActionExecution(createAction({ kind: "search-project", target: "handleSubmit" }))
+    ).toEqual({
+      kind: "search-project",
+      query: "handleSubmit"
+    });
+  });
+
   it("keeps manual and commit actions behind an explicit review gate", () => {
     expect(resolveAgentActionExecution(createAction({ kind: "manual" }))).toEqual({
       kind: "manual-gate",
@@ -99,6 +108,26 @@ describe("agentActionExecutor", () => {
         (action) => action.id
       )
     ).toEqual(["action-2", "action-3"]);
+  });
+
+  it("includes project search actions in safe read batches", () => {
+    const search = createAction({
+      id: "action-1",
+      status: "pending",
+      kind: "search-project",
+      target: "handleSubmit"
+    });
+    const inspect = createAction({
+      id: "action-2",
+      status: "pending",
+      kind: "inspect-file",
+      target: "src/App.tsx"
+    });
+
+    expect(getRunnablePendingAgentActions([search, inspect]).map((action) => action.id)).toEqual([
+      "action-1",
+      "action-2"
+    ]);
   });
 
   it("continues through verification commands when no edit preview is in the current batch", () => {
@@ -337,6 +366,26 @@ describe("agentActionExecutor", () => {
       tool: "edit",
       message: "Agent profile Review does not allow edit actions"
     });
+  });
+
+  it("treats project search as a read tool permission", () => {
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "search-project", target: "handleSubmit" }),
+        createProfile({ enabledTools: [] })
+      )
+    ).toEqual({
+      ok: false,
+      tool: "read",
+      message: "Agent profile Review does not allow read actions"
+    });
+
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "search-project", target: "handleSubmit" }),
+        createProfile({ enabledTools: ["read"] })
+      )
+    ).toEqual({ ok: true });
   });
 
   it("allows command actions only when the active agent profile exposes command access", () => {

@@ -5,6 +5,7 @@ import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "@/state/
 
 type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }
+  | { kind: "search-project"; query: string }
   | { kind: "generate-file-change"; relativePath: string }
   | { kind: "run-command"; command: string }
   | { kind: "manual-gate"; reason: "review" | "commit" }
@@ -39,6 +40,10 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
 
   if (action.kind === "inspect-file" && action.target) {
     return { kind: "open-file", relativePath: action.target };
+  }
+
+  if (action.kind === "search-project" && action.target) {
+    return { kind: "search-project", query: action.target };
   }
 
   if (action.kind === "edit-file" && action.target) {
@@ -248,7 +253,12 @@ export function isRunnableAgentAction(
   action: AgentAction,
   policy: AgentCommandSafetyPolicy = {}
 ): boolean {
-  if ((action.kind === "inspect-file" || action.kind === "edit-file") && action.target) {
+  if (
+    (action.kind === "inspect-file" ||
+      action.kind === "search-project" ||
+      action.kind === "edit-file") &&
+    action.target
+  ) {
     return true;
   }
 
@@ -263,7 +273,7 @@ export function isRunnableAgentAction(
 
 // 将队列动作映射到 Agent 配置中的工具名
 function getRequiredToolForAction(action: AgentAction): AgentToolPermission | null {
-  if (action.kind === "inspect-file") {
+  if (action.kind === "inspect-file" || action.kind === "search-project") {
     return "read";
   }
 

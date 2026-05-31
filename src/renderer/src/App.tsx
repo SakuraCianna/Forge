@@ -1,7 +1,11 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
-import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
+import type {
+  ProjectFileChangePreview,
+  ProjectTextFile,
+  ProjectTextSearchResult
+} from "@shared/fileTypes";
 import type { AgentProfileContext } from "@shared/agentTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
@@ -1842,6 +1846,8 @@ export function App(): ReactElement {
 
     if (execution.kind === "open-file") {
       return await openAgentFileAction(threadId, action, execution.relativePath);
+    } else if (execution.kind === "search-project") {
+      return await searchAgentProjectAction(threadId, action, execution.query);
     } else if (execution.kind === "generate-file-change") {
       return await generateAgentFileChangeAction(threadId, action, execution.relativePath);
     } else if (execution.kind === "run-command") {
@@ -1949,6 +1955,52 @@ export function App(): ReactElement {
   // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
     await runAgentActionBatch(actions, (action) => runAgentAction(threadId, action));
+  }
+
+  // 执行受控项目搜索动作, 不通过 shell 暴露额外能力
+  async function searchAgentProjectAction(
+    threadId: string,
+    action: AgentAction,
+    query: string
+  ): Promise<AgentAction["status"]> {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      updateAgentActionStatus(threadId, action.id, "failed");
+      return "failed";
+    }
+
+    try {
+      const result = await window.forge.files.searchText({
+        projectRoot: currentProject.path,
+        query,
+        limit: 40
+      });
+      const createdAt = new Date().toISOString();
+
+      updateAgentActionStatus(threadId, action.id, "completed");
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-agent-search-${action.id}-${createdAt}`,
+            kind: "file",
+            message: formatProjectSearchResultMessage(settings.language, result),
+            createdAt
+          }
+        ])
+      );
+      return "completed";
+    } catch (error) {
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "file",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+      return "failed";
+    }
   }
 
   // 执行文件修改动作时先生成预览, 用户审查后才写入磁盘
@@ -2906,6 +2958,34 @@ function formatPreviewStatus(
   }
 
   return language === "zh-CN" ? "原始内容" : "Raw content";
+}
+
+// 将项目搜索结果压缩成线程时间线里的可读摘要
+function formatProjectSearchResultMessage(
+  language: Language,
+  result: ProjectTextSearchResult
+): string {
+  const header =
+    language === "zh-CN"
+      ? `项目搜索完成: ${result.query} (${result.matches.length} 个结果${result.truncated ? ", 已截断" : ""})`
+      : `Project search complete: ${result.query} (${result.matches.length} ${result.matches.length === 1 ? "result" : "results"}${result.truncated ? ", truncated" : ""})`;
+
+  if (result.matches.length === 0) {
+    return `${header}\n${language === "zh-CN" ? "未找到匹配项。" : "No matches found."}`;
+  }
+
+  const lines = result.matches.slice(0, 12).map((match) => {
+    const location = `${match.relativePath}:${match.lineNumber}`;
+
+    return `- ${location} ${match.preview}`;
+  });
+  const remaining = result.matches.length - lines.length;
+
+  if (remaining > 0) {
+    lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个结果未显示` : `- ${remaining} more not shown`);
+  }
+
+  return [header, ...lines].join("\n");
 }
 
 // 将全局权限模式叠加到当前 Agent 配置, 只读模式必须在运行时硬拦截写操作

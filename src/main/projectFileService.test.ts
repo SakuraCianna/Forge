@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   previewProjectTextFileUpdate,
   readProjectTextFile,
+  searchProjectTextFiles,
   writeProjectTextFile
 } from "./projectFileService";
 
@@ -81,6 +82,43 @@ describe("projectFileService", () => {
 
     expect(result.relativePath).toBe(".env.example");
     expect(result.content).toBe("OPENAI_API_KEY=\n");
+  });
+
+  it("searches project text files without exposing sensitive files", async () => {
+    await mkdir(join(testRoot, "src"), { recursive: true });
+    await writeFile(join(testRoot, "src", "App.tsx"), "const target = true;\n", "utf8");
+    await writeFile(join(testRoot, ".env.local"), "TARGET_SECRET=secret\n", "utf8");
+
+    const result = await searchProjectTextFiles({
+      projectRoot: testRoot,
+      query: "target"
+    });
+
+    expect(result).toEqual({
+      query: "target",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          lineNumber: 1,
+          preview: "const target = true;"
+        }
+      ],
+      truncated: false
+    });
+  });
+
+  it("truncates project text search results at the configured limit", async () => {
+    await mkdir(testRoot, { recursive: true });
+    await writeFile(join(testRoot, "notes.txt"), "target one\ntarget two\n", "utf8");
+
+    const result = await searchProjectTextFiles({
+      projectRoot: testRoot,
+      query: "target",
+      limit: 1
+    });
+
+    expect(result.matches).toHaveLength(1);
+    expect(result.truncated).toBe(true);
   });
 
   it("rejects files over the configured size limit", async () => {

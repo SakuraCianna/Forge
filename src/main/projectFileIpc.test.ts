@@ -23,6 +23,11 @@ describe("projectFileIpc", () => {
         content: request.nextContent,
         size: request.nextContent.length
       }),
+      async (request) => ({
+        query: request.query,
+        matches: [],
+        truncated: false
+      }),
       (channel, handler) => handlers.set(channel, handler)
     );
 
@@ -50,6 +55,7 @@ describe("projectFileIpc", () => {
         diff: []
       }),
       async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 3 }),
+      async (request) => ({ query: request.query, matches: [], truncated: false }),
       (channel, handler) => handlers.set(channel, handler)
     );
 
@@ -68,5 +74,49 @@ describe("projectFileIpc", () => {
         nextContent: "new"
       })
     ).resolves.toMatchObject({ content: "new" });
+  });
+
+  it("registers a project text search handler", async () => {
+    const handlers = new Map<string, (_event: unknown, ...args: unknown[]) => Promise<unknown>>();
+
+    registerProjectFileHandlers(
+      async (request) => ({ relativePath: request.relativePath, content: "", size: 0 }),
+      async (request) => ({
+        relativePath: request.relativePath,
+        currentContent: "",
+        nextContent: request.nextContent,
+        diff: []
+      }),
+      async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 0 }),
+      async (request) => ({
+        query: request.query,
+        matches: [
+          {
+            relativePath: "src/App.tsx",
+            lineNumber: 7,
+            preview: "const target = true;"
+          }
+        ],
+        truncated: false
+      }),
+      (channel, handler) => handlers.set(channel, handler)
+    );
+
+    await expect(
+      handlers.get(fileChannels.searchText)?.(null, {
+        projectRoot: "E:\\CodeHome\\Forge",
+        query: "target"
+      })
+    ).resolves.toEqual({
+      query: "target",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          lineNumber: 7,
+          preview: "const target = true;"
+        }
+      ],
+      truncated: false
+    });
   });
 });
