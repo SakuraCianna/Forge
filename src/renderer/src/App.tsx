@@ -2748,6 +2748,7 @@ export function App(): ReactElement {
         cwd: currentProject.path,
         command,
         timeoutMs: generalPreferences.commandTimeoutSeconds * 1000,
+        runtime: generalPreferences.agentRuntime,
         shell: generalPreferences.terminalShell
       });
 

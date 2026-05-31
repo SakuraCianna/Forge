@@ -72,6 +72,7 @@ declare global {
           cwd: string;
           command: string;
           timeoutMs?: number;
+          runtime?: "windows-native" | "wsl";
           shell?: "powershell" | "cmd" | "git-bash";
           shellExecutable?: string;
         }) => Promise<{
