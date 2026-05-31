@@ -13,6 +13,7 @@ import type {
 } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type {
+  ProjectDirectoryListResult,
   ProjectFileChangePreview,
   ProjectFileGlobResult,
   ProjectTextFile,
@@ -97,6 +98,11 @@ declare global {
           relativePath: string;
           maxBytes?: number;
         }) => Promise<ProjectTextFile>;
+        listDirectory: (request: {
+          projectRoot: string;
+          relativePath?: string;
+          limit?: number;
+        }) => Promise<ProjectDirectoryListResult>;
         globFiles: (request: {
           projectRoot: string;
           pattern: string;

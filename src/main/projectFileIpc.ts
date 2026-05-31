@@ -1,6 +1,8 @@
 // 本文件说明: 注册项目文件 IPC, 读取和写入都经过路径边界检查
 import { fileChannels } from "../shared/ipcChannels.js";
 import type {
+  ProjectDirectoryListRequest,
+  ProjectDirectoryListResult,
   ProjectFileChangePreview,
   ProjectFileGlobRequest,
   ProjectFileGlobResult,
@@ -20,6 +22,10 @@ type UpdateProjectTextFileRequest = ReadProjectTextFileRequest & {
 };
 
 type ReadProjectTextFile = (request: ReadProjectTextFileRequest) => Promise<ProjectTextFile>;
+
+type ListProjectDirectory = (
+  request: ProjectDirectoryListRequest
+) => Promise<ProjectDirectoryListResult>;
 
 type GlobProjectFiles = (
   request: ProjectFileGlobRequest
@@ -46,12 +52,17 @@ export function registerProjectFileHandlers(
   readProjectTextFile: ReadProjectTextFile,
   previewProjectTextFileUpdate: PreviewProjectTextFileUpdate,
   writeProjectTextFile: WriteProjectTextFile,
+  listProjectDirectory: ListProjectDirectory,
   globProjectFiles: GlobProjectFiles,
   searchProjectTextFiles: SearchProjectTextFiles,
   registerHandler: RegisterHandler
 ): void {
   registerHandler(fileChannels.readText, async (_event, request) =>
     readProjectTextFile(assertReadRequest(request))
+  );
+
+  registerHandler(fileChannels.listDirectory, async (_event, request) =>
+    listProjectDirectory(assertListDirectoryRequest(request))
   );
 
   registerHandler(fileChannels.globFiles, async (_event, request) =>
@@ -69,6 +80,19 @@ export function registerProjectFileHandlers(
   registerHandler(fileChannels.writeText, async (_event, request) =>
     writeProjectTextFile(assertUpdateRequest(request))
   );
+}
+
+// 校验项目目录列表请求, 路径可省略但必须由服务层归一化
+function assertListDirectoryRequest(value: unknown): ProjectDirectoryListRequest {
+  if (!isRecord(value) || typeof value.projectRoot !== "string") {
+    throw new Error("无效的目录列表请求。");
+  }
+
+  return {
+    projectRoot: value.projectRoot,
+    relativePath: typeof value.relativePath === "string" ? value.relativePath : undefined,
+    limit: typeof value.limit === "number" ? value.limit : undefined
+  };
 }
 
 // 校验项目 glob 请求, 只允许明确的项目根目录和匹配模式

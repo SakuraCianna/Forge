@@ -22,6 +22,15 @@ describe("agentActionExecutor", () => {
     });
   });
 
+  it("lists directories for directory inspect actions", () => {
+    expect(
+      resolveAgentActionExecution(createAction({ kind: "list-directory", target: "src" }))
+    ).toEqual({
+      kind: "list-directory",
+      relativePath: "src"
+    });
+  });
+
   it("generates AI change previews for edit actions", () => {
     expect(
       resolveAgentActionExecution(createAction({ kind: "edit-file", target: "src/App.tsx" }))
@@ -160,6 +169,26 @@ describe("agentActionExecutor", () => {
     });
 
     expect(getRunnablePendingAgentActions([glob, search]).map((action) => action.id)).toEqual([
+      "action-1",
+      "action-2"
+    ]);
+  });
+
+  it("includes directory list actions in safe read batches", () => {
+    const listDirectory = createAction({
+      id: "action-1",
+      status: "pending",
+      kind: "list-directory",
+      target: "src"
+    });
+    const inspect = createAction({
+      id: "action-2",
+      status: "pending",
+      kind: "inspect-file",
+      target: "src/App.tsx"
+    });
+
+    expect(getRunnablePendingAgentActions([listDirectory, inspect]).map((action) => action.id)).toEqual([
       "action-1",
       "action-2"
     ]);
@@ -457,6 +486,26 @@ describe("agentActionExecutor", () => {
     expect(
       resolveAgentActionPermission(
         createAction({ kind: "glob-project", target: "src/**/*.tsx" }),
+        createProfile({ enabledTools: ["read"] })
+      )
+    ).toEqual({ ok: true });
+  });
+
+  it("treats directory list as a read tool permission", () => {
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "list-directory", target: "src" }),
+        createProfile({ enabledTools: [] })
+      )
+    ).toEqual({
+      ok: false,
+      tool: "read",
+      message: "Agent profile Review does not allow read actions"
+    });
+
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "list-directory", target: "src" }),
         createProfile({ enabledTools: ["read"] })
       )
     ).toEqual({ ok: true });

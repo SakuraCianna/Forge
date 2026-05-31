@@ -24,6 +24,11 @@ describe("projectFileIpc", () => {
         size: request.nextContent.length
       }),
       async (request) => ({
+        relativePath: request.relativePath ?? ".",
+        entries: [],
+        truncated: false
+      }),
+      async (request) => ({
         pattern: request.pattern,
         matches: [],
         truncated: false
@@ -60,6 +65,7 @@ describe("projectFileIpc", () => {
         diff: []
       }),
       async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 3 }),
+      async (request) => ({ relativePath: request.relativePath ?? ".", entries: [], truncated: false }),
       async (request) => ({ pattern: request.pattern, matches: [], truncated: false }),
       async (request) => ({ query: request.query, matches: [], truncated: false }),
       (channel, handler) => handlers.set(channel, handler)
@@ -94,6 +100,7 @@ describe("projectFileIpc", () => {
         diff: []
       }),
       async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 0 }),
+      async (request) => ({ relativePath: request.relativePath ?? ".", entries: [], truncated: false }),
       async (request) => ({ pattern: request.pattern, matches: [], truncated: false }),
       async (request) => ({
         query: request.query,
@@ -139,6 +146,7 @@ describe("projectFileIpc", () => {
         diff: []
       }),
       async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 0 }),
+      async (request) => ({ relativePath: request.relativePath ?? ".", entries: [], truncated: false }),
       async (request) => ({
         pattern: request.pattern,
         matches: [
@@ -163,6 +171,54 @@ describe("projectFileIpc", () => {
       matches: [
         {
           relativePath: "src/App.tsx",
+          size: 128
+        }
+      ],
+      truncated: false
+    });
+  });
+
+  it("registers a project directory list handler", async () => {
+    const handlers = new Map<string, (_event: unknown, ...args: unknown[]) => Promise<unknown>>();
+
+    registerProjectFileHandlers(
+      async (request) => ({ relativePath: request.relativePath, content: "", size: 0 }),
+      async (request) => ({
+        relativePath: request.relativePath,
+        currentContent: "",
+        nextContent: request.nextContent,
+        diff: []
+      }),
+      async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 0 }),
+      async (request) => ({
+        relativePath: request.relativePath ?? ".",
+        entries: [
+          {
+            name: "App.tsx",
+            relativePath: "src/App.tsx",
+            kind: "file",
+            size: 128
+          }
+        ],
+        truncated: false
+      }),
+      async (request) => ({ pattern: request.pattern, matches: [], truncated: false }),
+      async (request) => ({ query: request.query, matches: [], truncated: false }),
+      (channel, handler) => handlers.set(channel, handler)
+    );
+
+    await expect(
+      handlers.get(fileChannels.listDirectory)?.(null, {
+        projectRoot: "E:\\CodeHome\\Forge",
+        relativePath: "src"
+      })
+    ).resolves.toEqual({
+      relativePath: "src",
+      entries: [
+        {
+          name: "App.tsx",
+          relativePath: "src/App.tsx",
+          kind: "file",
           size: 128
         }
       ],

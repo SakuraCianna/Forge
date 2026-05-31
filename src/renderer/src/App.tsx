@@ -2,6 +2,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 import type {
+  ProjectDirectoryListResult,
   ProjectFileChangePreview,
   ProjectFileGlobResult,
   ProjectTextFile,
@@ -1847,6 +1848,8 @@ export function App(): ReactElement {
 
     if (execution.kind === "open-file") {
       return await openAgentFileAction(threadId, action, execution.relativePath);
+    } else if (execution.kind === "list-directory") {
+      return await listAgentProjectDirectoryAction(threadId, action, execution.relativePath);
     } else if (execution.kind === "glob-project") {
       return await globAgentProjectAction(threadId, action, execution.pattern);
     } else if (execution.kind === "search-project") {
@@ -1960,6 +1963,52 @@ export function App(): ReactElement {
   // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
     await runAgentActionBatch(actions, (action) => runAgentAction(threadId, action));
+  }
+
+  // 执行受控目录列表动作, 只返回一层目录条目和文件大小
+  async function listAgentProjectDirectoryAction(
+    threadId: string,
+    action: AgentAction,
+    relativePath: string
+  ): Promise<AgentAction["status"]> {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      updateAgentActionStatus(threadId, action.id, "failed");
+      return "failed";
+    }
+
+    try {
+      const result = await window.forge.files.listDirectory({
+        projectRoot: currentProject.path,
+        relativePath,
+        limit: 80
+      });
+      const createdAt = new Date().toISOString();
+
+      updateAgentActionStatus(threadId, action.id, "completed");
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-agent-list-directory-${action.id}-${createdAt}`,
+            kind: "file",
+            message: formatProjectDirectoryListResultMessage(settings.language, result),
+            createdAt
+          }
+        ])
+      );
+      return "completed";
+    } catch (error) {
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "file",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+      return "failed";
+    }
   }
 
   // 执行受控 Git 状态动作, 复用主进程 Git IPC 而不是让 Agent 拼 shell
@@ -3077,6 +3126,34 @@ function formatProjectSearchResultMessage(
 
   if (remaining > 0) {
     lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个结果未显示` : `- ${remaining} more not shown`);
+  }
+
+  return [header, ...lines].join("\n");
+}
+
+// 将目录列表结果压缩成线程时间线里的可读摘要
+function formatProjectDirectoryListResultMessage(
+  language: Language,
+  result: ProjectDirectoryListResult
+): string {
+  const header =
+    language === "zh-CN"
+      ? `目录列表完成: ${result.relativePath} (${result.entries.length} 个条目${result.truncated ? ", 已截断" : ""})`
+      : `Directory list complete: ${result.relativePath} (${result.entries.length} ${result.entries.length === 1 ? "entry" : "entries"}${result.truncated ? ", truncated" : ""})`;
+
+  if (result.entries.length === 0) {
+    return `${header}\n${language === "zh-CN" ? "目录为空。" : "Directory is empty."}`;
+  }
+
+  const lines = result.entries.slice(0, 24).map((entry) => {
+    const label = entry.kind === "directory" ? "/" : ` ${entry.size ?? 0} bytes`;
+
+    return `- ${entry.relativePath}${label}`;
+  });
+  const remaining = result.entries.length - lines.length;
+
+  if (remaining > 0) {
+    lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个条目未显示` : `- ${remaining} more not shown`);
   }
 
   return [header, ...lines].join("\n");

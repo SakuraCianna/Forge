@@ -3,6 +3,7 @@ import type { AgentPlanStep } from "./agentTypes.js";
 
 type AgentActionKind =
   | "inspect-file"
+  | "list-directory"
   | "glob-project"
   | "search-project"
   | "git-status"
@@ -62,6 +63,16 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
       stepId: step.id,
       kind: "glob-project",
       label: `Find ${normalizedTarget}`,
+      status: "pending",
+      target: normalizedTarget
+    };
+  }
+
+  if (step.kind === "inspect" && normalizedTarget && isLikelyDirectoryPath(normalizedTarget)) {
+    return {
+      stepId: step.id,
+      kind: "list-directory",
+      label: `List ${normalizedTarget}`,
       status: "pending",
       target: normalizedTarget
     };
@@ -141,6 +152,18 @@ function isLikelyGlobPattern(target: string): boolean {
 // 常见 Git 只读检查走受控 Git IPC, 不通过 shell 执行命令
 function isGitStatusTarget(target: string): boolean {
   return /^git\s+(?:status|diff)(?:\s|$)/iu.test(target.trim().replace(/\s+/g, " "));
+}
+
+// 目录目标走 LS 类工具, 避免把文件夹当成文本文件读取
+function isLikelyDirectoryPath(target: string): boolean {
+  const normalizedTarget = target.trim().replace(/\\/g, "/");
+  const lastSegment = normalizedTarget.split("/").filter(Boolean).at(-1) ?? normalizedTarget;
+
+  return (
+    /\/$/u.test(normalizedTarget) ||
+    (/[/\\]/u.test(target) && !/\.[a-z0-9]+$/iu.test(lastSegment)) ||
+    /^(src|docs?|test|tests|packages|apps|components|lib|server|client)$/iu.test(normalizedTarget)
+  );
 }
 
 // 用轻量规则判断目标是否像文件路径, 避免误把普通说明当文件

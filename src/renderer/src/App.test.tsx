@@ -284,6 +284,83 @@ describe("App agent execution", () => {
     expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
   });
 
+  it("runs project directory list actions without invoking the shell command runner", async () => {
+    const user = userEvent.setup();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "List source directory",
+      createdAt: "2026-05-31T01:28:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "List source directory",
+          description: "List src before editing.",
+          kind: "inspect",
+          status: "pending",
+          target: "src"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "",
+      nextContent: "",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "",
+        size: 0
+      }
+    });
+
+    vi.mocked(forge.files.listDirectory).mockResolvedValueOnce({
+      relativePath: "src",
+      entries: [
+        {
+          name: "App.tsx",
+          relativePath: "src/App.tsx",
+          kind: "file",
+          size: 128
+        },
+        {
+          name: "components",
+          relativePath: "src/components",
+          kind: "directory"
+        }
+      ],
+      truncated: false
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "List src before editing");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(forge.files.listDirectory).toHaveBeenCalledWith({
+        projectRoot,
+        relativePath: "src",
+        limit: 80
+      })
+    );
+    expect(forge.commands.run).not.toHaveBeenCalled();
+    expect(await screen.findByText(/目录列表完成: src/)).toBeInTheDocument();
+    expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
+    expect(screen.getByText(/src\/components\//)).toBeInTheDocument();
+  });
+
   it("runs controlled Git status actions without invoking the shell command runner", async () => {
     const user = userEvent.setup();
     const plan: AgentPlanResult = {
@@ -434,6 +511,11 @@ function createForgeMock({
       readText: vi.fn(async () => {
         throw new Error("ENOENT: no such file or directory");
       }),
+      listDirectory: vi.fn(async () => ({
+        relativePath: ".",
+        entries: [],
+        truncated: false
+      })),
       globFiles: vi.fn(async () => ({
         pattern: "",
         matches: [],

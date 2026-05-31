@@ -3,6 +3,9 @@ import type { Dirent } from "node:fs";
 import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import type {
+  ProjectDirectoryEntry,
+  ProjectDirectoryListRequest,
+  ProjectDirectoryListResult,
   ProjectFileGlobMatch,
   ProjectFileGlobRequest,
   ProjectFileGlobResult,
@@ -86,6 +89,88 @@ export async function previewProjectTextFileUpdate({
     currentContent: currentFile.content,
     nextContent,
     diff: createLineDiff(currentFile.content, nextContent)
+  };
+}
+
+// 列出项目内单个目录, 供 Agent inspect 目录时使用, 不读取文件内容
+export async function listProjectDirectory({
+  projectRoot,
+  relativePath = ".",
+  limit = 120
+}: ProjectDirectoryListRequest): Promise<ProjectDirectoryListResult> {
+  const resolvedProjectRoot = await realpath(projectRoot);
+  const normalizedRelativePath = normalizeDirectoryRelativePath(relativePath);
+  const resultLimit = Math.min(300, Math.max(1, Math.round(limit)));
+
+  if (normalizedRelativePath !== ".") {
+    assertProjectPathNotSensitive(normalizedRelativePath);
+  }
+
+  const absoluteDirectoryPath = resolve(
+    resolvedProjectRoot,
+    normalizedRelativePath === "." ? "." : normalizedRelativePath
+  );
+
+  if (!isPathInside(absoluteDirectoryPath, resolvedProjectRoot)) {
+    throw new Error("目录路径必须位于当前项目内。");
+  }
+
+  const resolvedDirectoryPath = await realpath(absoluteDirectoryPath);
+
+  if (!isPathInside(resolvedDirectoryPath, resolvedProjectRoot)) {
+    throw new Error("目录路径必须位于当前项目内。");
+  }
+
+  const directoryStat = await stat(resolvedDirectoryPath);
+
+  if (!directoryStat.isDirectory()) {
+    throw new Error("目录路径必须指向文件夹。");
+  }
+
+  const entries: ProjectDirectoryEntry[] = [];
+  let truncated = false;
+
+  for (const entry of await readSortedDirectoryEntries(resolvedDirectoryPath)) {
+    const absolutePath = `${resolvedDirectoryPath}${sep}${entry.name}`;
+    const entryRelativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
+
+    if (isSensitiveProjectPath(entryRelativePath)) {
+      continue;
+    }
+
+    if (entry.isDirectory() && searchIgnoredDirectoryNames.has(entry.name)) {
+      continue;
+    }
+
+    if (!entry.isDirectory() && !entry.isFile()) {
+      continue;
+    }
+
+    if (entries.length >= resultLimit) {
+      truncated = true;
+      break;
+    }
+
+    entries.push(
+      entry.isDirectory()
+        ? {
+            name: entry.name,
+            relativePath: entryRelativePath,
+            kind: "directory"
+          }
+        : {
+            name: entry.name,
+            relativePath: entryRelativePath,
+            kind: "file",
+            size: (await stat(absolutePath)).size
+          }
+    );
+  }
+
+  return {
+    relativePath: normalizedRelativePath,
+    entries,
+    truncated
   };
 }
 
@@ -297,6 +382,24 @@ async function readSortedDirectoryEntries(directoryPath: string): Promise<Dirent
   return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) =>
     left.name.localeCompare(right.name)
   );
+}
+
+// 目录检查只接受项目内相对目录, 根目录统一记作点号
+function normalizeDirectoryRelativePath(relativePath: string): string {
+  const normalized = normalizeRelativePath(relativePath.trim())
+    .replace(/^\.\//u, "")
+    .replace(/\/+$/u, "")
+    .slice(0, 220);
+
+  if (!normalized || normalized === ".") {
+    return ".";
+  }
+
+  if (normalized.split("/").includes("..")) {
+    throw new Error("目录路径不能包含上级目录。");
+  }
+
+  return normalized;
 }
 
 // 归一化 glob 模式, 避免用上级目录表达绕过项目边界

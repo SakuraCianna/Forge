@@ -37,6 +37,7 @@ export const gitChannels = {
 
 export const fileChannels = {
   readText: "forge:file:read-text",
+  listDirectory: "forge:file:list-directory",
   globFiles: "forge:file:glob-files",
   searchText: "forge:file:search-text",
   previewTextUpdate: "forge:file:preview-text-update",
