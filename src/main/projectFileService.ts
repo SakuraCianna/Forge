@@ -1,7 +1,11 @@
 // 本文件说明: 在项目根目录内安全读取, 预览和写入文本文件
+import type { Dirent } from "node:fs";
 import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import type {
+  ProjectFileGlobMatch,
+  ProjectFileGlobRequest,
+  ProjectFileGlobResult,
   ProjectFileChangePreview,
   ProjectTextFile,
   ProjectTextSearchMatch,
@@ -105,7 +109,7 @@ export async function searchProjectTextFiles({
       return;
     }
 
-    const entries = await readdir(directoryPath, { withFileTypes: true });
+    const entries = await readSortedDirectoryEntries(directoryPath);
 
     for (const entry of entries) {
       if (matches.length >= resultLimit) {
@@ -152,6 +156,68 @@ export async function searchProjectTextFiles({
 
   return {
     query: normalizedQuery,
+    matches,
+    truncated
+  };
+}
+
+// 在项目内执行受控 glob 匹配, 用于 Agent 快速定位候选文件
+export async function globProjectFiles({
+  projectRoot,
+  pattern,
+  limit = 120
+}: ProjectFileGlobRequest): Promise<ProjectFileGlobResult> {
+  const normalizedPattern = normalizeGlobPattern(pattern);
+  const resultLimit = Math.min(500, Math.max(1, Math.round(limit)));
+  const patternMatcher = createGlobMatcher(normalizedPattern);
+  const resolvedProjectRoot = await realpath(projectRoot);
+  const matches: ProjectFileGlobMatch[] = [];
+  let truncated = false;
+
+  // glob 工具只返回路径和大小, 不读取文件内容
+  async function walk(directoryPath: string): Promise<void> {
+    if (matches.length >= resultLimit) {
+      truncated = true;
+      return;
+    }
+
+    const entries = await readSortedDirectoryEntries(directoryPath);
+
+    for (const entry of entries) {
+      if (matches.length >= resultLimit) {
+        truncated = true;
+        return;
+      }
+
+      const absolutePath = `${directoryPath}${sep}${entry.name}`;
+      const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
+
+      if (entry.isDirectory()) {
+        if (searchIgnoredDirectoryNames.has(entry.name) || isSensitiveProjectPath(relativePath)) {
+          continue;
+        }
+
+        await walk(absolutePath);
+        continue;
+      }
+
+      if (!entry.isFile() || isSensitiveProjectPath(relativePath) || !patternMatcher(relativePath)) {
+        continue;
+      }
+
+      const fileStat = await stat(absolutePath);
+
+      matches.push({
+        relativePath,
+        size: fileStat.size
+      });
+    }
+  }
+
+  await walk(resolvedProjectRoot);
+
+  return {
+    pattern: normalizedPattern,
     matches,
     truncated
   };
@@ -226,6 +292,71 @@ async function readProjectTextFileOrEmpty({
   }
 }
 
+// 读取目录并按名称排序, 让搜索和 glob 结果稳定可测
+async function readSortedDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
+  return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
+}
+
+// 归一化 glob 模式, 避免用上级目录表达绕过项目边界
+function normalizeGlobPattern(pattern: string): string {
+  const normalized = normalizeRelativePath(pattern.trim())
+    .replace(/^\.\//u, "")
+    .slice(0, 220);
+
+  if (!normalized) {
+    throw new Error("文件匹配模式不能为空。");
+  }
+
+  if (normalized.split("/").includes("..")) {
+    throw new Error("文件匹配模式不能包含上级目录。");
+  }
+
+  return normalized.includes("/") ? normalized : `**/${normalized}`;
+}
+
+// 将轻量 glob 模式编译为路径匹配函数, 支持 *, ** 和 ?
+function createGlobMatcher(pattern: string): (relativePath: string) => boolean {
+  const regex = new RegExp(`^${globPatternToRegexSource(pattern)}$`, "iu");
+
+  return (relativePath) => regex.test(relativePath);
+}
+
+// 把 glob 字符转换成正则片段, 只保留路径匹配所需的最小语义
+function globPatternToRegexSource(pattern: string): string {
+  let source = "";
+  let index = 0;
+
+  while (index < pattern.length) {
+    if (pattern.slice(index, index + 3) === "**/") {
+      source += "(?:.*/)?";
+      index += 3;
+      continue;
+    }
+
+    if (pattern.slice(index, index + 2) === "**") {
+      source += ".*";
+      index += 2;
+      continue;
+    }
+
+    const char = pattern[index];
+
+    if (char === "*") {
+      source += "[^/]*";
+    } else if (char === "?") {
+      source += "[^/]";
+    } else {
+      source += escapeRegExp(char);
+    }
+
+    index += 1;
+  }
+
+  return source;
+}
+
 // 把搜索关键词收敛成非空短文本, 防止意外全仓库匹配
 function normalizeSearchQuery(query: string): string {
   const normalized = query.trim().slice(0, 160);
@@ -265,6 +396,11 @@ function collectSearchMatches(
   }
 
   return false;
+}
+
+// 转义正则字符, 供 glob 编译保留普通路径字符语义
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 // 读取已存在文件的真实路径, 新文件保持 null 继续走创建流程

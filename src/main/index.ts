@@ -17,6 +17,7 @@ import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
 import {
+  globProjectFiles,
   previewProjectTextFileUpdate,
   readProjectTextFile,
   searchProjectTextFiles,
@@ -172,6 +173,7 @@ void app.whenReady().then(() => {
     (request) => readProjectTextFile(request),
     (request) => previewProjectTextFileUpdate(request),
     (request) => writeProjectTextFile(request),
+    (request) => globProjectFiles(request),
     (request) => searchProjectTextFiles(request),
     (channel, handler) => {
       ipcMain.handle(channel, handler);

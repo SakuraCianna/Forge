@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 import type {
   ProjectFileChangePreview,
+  ProjectFileGlobResult,
   ProjectTextFile,
   ProjectTextSearchResult
 } from "@shared/fileTypes";
@@ -1846,6 +1847,8 @@ export function App(): ReactElement {
 
     if (execution.kind === "open-file") {
       return await openAgentFileAction(threadId, action, execution.relativePath);
+    } else if (execution.kind === "glob-project") {
+      return await globAgentProjectAction(threadId, action, execution.pattern);
     } else if (execution.kind === "search-project") {
       return await searchAgentProjectAction(threadId, action, execution.query);
     } else if (execution.kind === "generate-file-change") {
@@ -1955,6 +1958,52 @@ export function App(): ReactElement {
   // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
     await runAgentActionBatch(actions, (action) => runAgentAction(threadId, action));
+  }
+
+  // 执行受控项目 glob 动作, 只返回候选文件路径和大小
+  async function globAgentProjectAction(
+    threadId: string,
+    action: AgentAction,
+    pattern: string
+  ): Promise<AgentAction["status"]> {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      updateAgentActionStatus(threadId, action.id, "failed");
+      return "failed";
+    }
+
+    try {
+      const result = await window.forge.files.globFiles({
+        projectRoot: currentProject.path,
+        pattern,
+        limit: 80
+      });
+      const createdAt = new Date().toISOString();
+
+      updateAgentActionStatus(threadId, action.id, "completed");
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-agent-glob-${action.id}-${createdAt}`,
+            kind: "file",
+            message: formatProjectGlobResultMessage(settings.language, result),
+            createdAt
+          }
+        ])
+      );
+      return "completed";
+    } catch (error) {
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "file",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+      return "failed";
+    }
   }
 
   // 执行受控项目搜索动作, 不通过 shell 暴露额外能力
@@ -2983,6 +3032,30 @@ function formatProjectSearchResultMessage(
 
   if (remaining > 0) {
     lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个结果未显示` : `- ${remaining} more not shown`);
+  }
+
+  return [header, ...lines].join("\n");
+}
+
+// 将 glob 文件匹配结果压缩成线程时间线里的可读摘要
+function formatProjectGlobResultMessage(
+  language: Language,
+  result: ProjectFileGlobResult
+): string {
+  const header =
+    language === "zh-CN"
+      ? `文件匹配完成: ${result.pattern} (${result.matches.length} 个文件${result.truncated ? ", 已截断" : ""})`
+      : `File glob complete: ${result.pattern} (${result.matches.length} ${result.matches.length === 1 ? "file" : "files"}${result.truncated ? ", truncated" : ""})`;
+
+  if (result.matches.length === 0) {
+    return `${header}\n${language === "zh-CN" ? "未找到匹配文件。" : "No matching files found."}`;
+  }
+
+  const lines = result.matches.slice(0, 20).map((match) => `- ${match.relativePath} (${match.size} bytes)`);
+  const remaining = result.matches.length - lines.length;
+
+  if (remaining > 0) {
+    lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个文件未显示` : `- ${remaining} more not shown`);
   }
 
   return [header, ...lines].join("\n");

@@ -14,6 +14,7 @@ import type {
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type {
   ProjectFileChangePreview,
+  ProjectFileGlobResult,
   ProjectTextFile,
   ProjectTextSearchResult
 } from "@shared/fileTypes";
@@ -96,6 +97,11 @@ declare global {
           relativePath: string;
           maxBytes?: number;
         }) => Promise<ProjectTextFile>;
+        globFiles: (request: {
+          projectRoot: string;
+          pattern: string;
+          limit?: number;
+        }) => Promise<ProjectFileGlobResult>;
         searchText: (request: {
           projectRoot: string;
           query: string;

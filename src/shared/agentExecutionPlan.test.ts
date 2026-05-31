@@ -106,6 +106,30 @@ describe("agentExecutionPlan", () => {
     ]);
   });
 
+  it("turns glob inspect targets into project file matching actions", () => {
+    const steps: AgentPlanStep[] = [
+      {
+        id: "step-1",
+        title: "Find TSX files",
+        description: "Find React component files.",
+        kind: "inspect",
+        status: "pending",
+        target: "src/**/*.tsx"
+      }
+    ];
+
+    expect(createAgentActionsFromPlanSteps(steps)).toEqual([
+      {
+        id: "action-1",
+        stepId: "step-1",
+        kind: "glob-project",
+        label: "Find src/**/*.tsx",
+        status: "pending",
+        target: "src/**/*.tsx"
+      }
+    ]);
+  });
+
   it("does not let non-actionable planning notes block later file creation", () => {
     const steps: AgentPlanStep[] = [
       {

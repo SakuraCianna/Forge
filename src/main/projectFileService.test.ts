@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  globProjectFiles,
   previewProjectTextFileUpdate,
   readProjectTextFile,
   searchProjectTextFiles,
@@ -105,6 +106,62 @@ describe("projectFileService", () => {
       ],
       truncated: false
     });
+  });
+
+  it("matches project files with glob patterns without reading content", async () => {
+    await mkdir(join(testRoot, "src", "nested"), { recursive: true });
+    await writeFile(join(testRoot, "src", "App.tsx"), "export const app = true;", "utf8");
+    await writeFile(join(testRoot, "src", "nested", "Panel.tsx"), "export const panel = true;", "utf8");
+    await writeFile(join(testRoot, "src", "state.ts"), "export const state = true;", "utf8");
+    await writeFile(join(testRoot, ".env.local"), "SECRET=true", "utf8");
+
+    const result = await globProjectFiles({
+      projectRoot: testRoot,
+      pattern: "src/**/*.tsx"
+    });
+
+    expect(result).toEqual({
+      pattern: "src/**/*.tsx",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          size: 24
+        },
+        {
+          relativePath: "src/nested/Panel.tsx",
+          size: 26
+        }
+      ],
+      truncated: false
+    });
+  });
+
+  it("normalizes bare glob patterns to search the whole project", async () => {
+    await mkdir(join(testRoot, "src"), { recursive: true });
+    await writeFile(join(testRoot, "src", "App.test.ts"), "test", "utf8");
+
+    const result = await globProjectFiles({
+      projectRoot: testRoot,
+      pattern: "*.test.ts"
+    });
+
+    expect(result.matches.map((match) => match.relativePath)).toEqual(["src/App.test.ts"]);
+    expect(result.pattern).toBe("**/*.test.ts");
+  });
+
+  it("truncates project glob results at the configured limit", async () => {
+    await mkdir(testRoot, { recursive: true });
+    await writeFile(join(testRoot, "a.ts"), "", "utf8");
+    await writeFile(join(testRoot, "b.ts"), "", "utf8");
+
+    const result = await globProjectFiles({
+      projectRoot: testRoot,
+      pattern: "*.ts",
+      limit: 1
+    });
+
+    expect(result.matches).toHaveLength(1);
+    expect(result.truncated).toBe(true);
   });
 
   it("truncates project text search results at the configured limit", async () => {
