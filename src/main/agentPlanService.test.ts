@@ -275,6 +275,72 @@ describe("agentPlanService", () => {
     ]);
   });
 
+  it("parses nested and aliased structured plan step arrays", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              metadata: {
+                files: ["src/renderer/src/App.tsx"]
+              },
+              plan: {
+                steps: [
+                  {
+                    kind: "read",
+                    description: "Inspect composer state",
+                    path: "src/renderer/src/App.tsx"
+                  }
+                ]
+              }
+            })
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              notes: ["run the narrowest useful check"],
+              actions: [
+                {
+                  type: "run-command",
+                  description: "Run focused tests",
+                  command: "npm test -- src/main/agentPlanService.test.ts"
+                }
+              ]
+            })
+          })
+        )
+      );
+
+    const nestedResult = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+    const aliasedResult = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(nestedResult.steps).toEqual([
+      expect.objectContaining({
+        kind: "inspect",
+        description: "Inspect composer state",
+        target: "src/renderer/src/App.tsx"
+      })
+    ]);
+    expect(aliasedResult.steps).toEqual([
+      expect.objectContaining({
+        kind: "verify",
+        description: "Run focused tests",
+        target: "npm test -- src/main/agentPlanService.test.ts"
+      })
+    ]);
+  });
+
   it("extracts unquoted local commands from verification plan steps", async () => {
     const fetcher = vi.fn(
       async () =>
