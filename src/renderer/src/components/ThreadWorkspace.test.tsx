@@ -1286,6 +1286,50 @@ describe("ThreadWorkspace", () => {
     expect(details).not.toHaveTextContent("src/other.ts:9 unrelated action");
   });
 
+  it("lets users complete a manual gate from the selected action details", async () => {
+    const user = userEvent.setup();
+    const onCompleteAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Review manual gate",
+            status: "blocked",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "manual",
+                label: "Review generated diff",
+                status: "pending"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onCompleteAgentAction={onCompleteAgentAction}
+      />
+    );
+
+    const details = screen.getByRole("region", { name: "Action details" });
+
+    await user.click(within(details).getByRole("button", { name: "Mark review complete" }));
+
+    expect(onCompleteAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", kind: "manual" })
+    );
+  });
+
   it("shows the latest output for a matching command action", () => {
     render(
       <ThreadWorkspace
@@ -1799,7 +1843,10 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Mark review complete" }));
+    const queue = screen.getByText("Steps").closest("section");
+    expect(queue).not.toBeNull();
+
+    await user.click(within(queue!).getByRole("button", { name: "Mark review complete" }));
 
     expect(onCompleteAgentAction).toHaveBeenCalledWith(
       "thread-1",
@@ -1848,7 +1895,10 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Open source control" }));
+    const queue = screen.getByText("Steps").closest("section");
+    expect(queue).not.toBeNull();
+
+    await user.click(within(queue!).getByRole("button", { name: "Open source control" }));
 
     expect(onOpenSourceControl).toHaveBeenCalledOnce();
   });
@@ -1950,13 +2000,16 @@ describe("ThreadWorkspace", () => {
     expect(screen.queryByText("Agent action queue")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Plan" }));
-    await user.click(screen.getByRole("button", { name: "Retry failed action" }));
+    const queue = screen.getByText("Steps").closest("section");
+    expect(queue).not.toBeNull();
+
+    await user.click(within(queue!).getByRole("button", { name: "Retry failed action" }));
     expect(onRunAgentAction).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({ id: "action-1" })
     );
 
-    await user.click(screen.getByRole("button", { name: "Generate fix plan" }));
+    await user.click(within(queue!).getByRole("button", { name: "Generate fix plan" }));
     expect(onGenerateFailureFix).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({ id: "action-1" })
