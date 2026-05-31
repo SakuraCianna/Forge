@@ -84,6 +84,19 @@ function translateKnownEnglishError(message: string): string | null {
     return `${providerLabel} ${requestLabel} 请求失败：${status} ${statusText}`;
   }
 
+  const commandShellStart = message.match(
+    /^Command shell (.+?) \((.+?)\) could not be started\. (.+?) Details: (.+)$/u
+  );
+  if (commandShellStart) {
+    const [, shellLabel, executable, hint, detail] = commandShellStart;
+
+    return [
+      `无法启动命令 Shell ${shellLabel} (${executable})。`,
+      translateShellRecoveryHint(hint),
+      `底层错误：${detail}`
+    ].join(" ");
+  }
+
   const emptyResponse = message.match(/^(.+) returned an empty response\.?$/u);
   if (emptyResponse) {
     return `${emptyResponse[1]} 返回了空响应。`;
@@ -138,4 +151,17 @@ function translateKnownEnglishError(message: string): string | null {
   };
 
   return exactMessages[message] ?? null;
+}
+
+function translateShellRecoveryHint(hint: string): string {
+  const hints: Record<string, string> = {
+    "Choose PowerShell in Settings if Command Prompt is unavailable.":
+      "如果 Command Prompt 不可用, 请在设置里改用 PowerShell。",
+    "Install Git for Windows or add bash.exe to PATH, then retry the command.":
+      "请安装 Git for Windows 或把 bash.exe 加入 PATH, 然后重试命令。",
+    "Choose CMD in Settings if PowerShell is unavailable.":
+      "如果 PowerShell 不可用, 请在设置里改用 CMD。"
+  };
+
+  return hints[hint] ?? hint;
 }
