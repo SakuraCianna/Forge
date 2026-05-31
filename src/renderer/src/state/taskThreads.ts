@@ -3,6 +3,7 @@ import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelT
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { AgentMemoryContext } from "@shared/agentTypes";
 import type { CommandOutputChunk } from "@shared/commandTypes";
+import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import { getEnabledModels } from "./modelSettings";
 
 export type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
@@ -355,6 +356,24 @@ export function completeNextPendingAgentAction(
 
     return action ? updateThreadActionStatus(thread, action.id, "completed") : thread;
   });
+}
+
+// 根据文件变更预览记录的来源更新对应 Agent action, 避免多文件审查时误完成队列中的其他 edit
+export function updateThreadAgentActionFromFileChange(
+  threads: TaskThread[],
+  preview: ProjectFileChangePreview,
+  status: AgentAction["status"]
+): TaskThread[] {
+  if (!preview.source) {
+    return threads;
+  }
+
+  return updateThreadAgentActionStatus(
+    threads,
+    preview.source.threadId,
+    preview.source.actionId,
+    status
+  );
 }
 
 // 更新单个动作并保留其他动作顺序, 线程状态由动作集合推导

@@ -22,6 +22,7 @@ import {
   cancelThread,
   restoreThread,
   toggleThreadPinned,
+  updateThreadAgentActionFromFileChange,
   updateThreadAgentActionStatus,
   type TaskThread
 } from "./taskThreads";
@@ -661,6 +662,81 @@ describe("taskThreads", () => {
       "completed"
     ]);
     expect(threads[0].status).toBe("completed");
+  });
+
+  it("updates the exact agent action that produced a reviewed file change", () => {
+    const threads = updateThreadAgentActionFromFileChange(
+      [
+        {
+          id: "thread-1",
+          title: "Agent task",
+          prompt: "Agent task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "edit-file",
+              label: "Edit src/App.tsx",
+              status: "pending",
+              target: "src/App.tsx"
+            },
+            {
+              id: "action-2",
+              stepId: "step-2",
+              kind: "edit-file",
+              label: "Edit src/Other.tsx",
+              status: "pending",
+              target: "src/Other.tsx"
+            }
+          ]
+        }
+      ],
+      {
+        relativePath: "src/Other.tsx",
+        currentContent: "old",
+        nextContent: "new",
+        diff: [],
+        source: {
+          threadId: "thread-1",
+          actionId: "action-2",
+          actionLabel: "Edit src/Other.tsx"
+        }
+      },
+      "completed"
+    );
+
+    expect(threads[0].agentActions?.map((action) => action.status)).toEqual([
+      "pending",
+      "completed"
+    ]);
+
+    const failedThreads = updateThreadAgentActionFromFileChange(
+      threads,
+      {
+        relativePath: "src/App.tsx",
+        currentContent: "old",
+        nextContent: "new",
+        diff: [],
+        source: {
+          threadId: "thread-1",
+          actionId: "action-1",
+          actionLabel: "Edit src/App.tsx"
+        }
+      },
+      "failed"
+    );
+
+    expect(failedThreads[0].agentActions?.map((action) => action.status)).toEqual([
+      "failed",
+      "completed"
+    ]);
+    expect(failedThreads[0].status).toBe("blocked");
   });
 });
 

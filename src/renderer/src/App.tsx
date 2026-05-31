@@ -862,7 +862,7 @@ export function App(): ReactElement {
       return;
     }
 
-    const source = findFileChangePreviewSource(changePreviews, relativePath);
+    const reviewedPreview = changePreviews.find((preview) => preview.relativePath === relativePath);
     const file = await window.forge.files.writeText({
       projectRoot: currentProject.path,
       relativePath,
@@ -872,8 +872,8 @@ export function App(): ReactElement {
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
     void refreshProjectGitStatus();
 
-    if (source) {
-      markFileChangeSourceApplied(source, file.relativePath);
+    if (reviewedPreview?.source) {
+      markFileChangeSourceApplied(reviewedPreview.source, file.relativePath);
       return;
     }
 
@@ -896,13 +896,37 @@ export function App(): ReactElement {
 
   // 丢弃单个待审查变更, 不触碰真实项目文件
   function discardProjectFileChange(relativePath: string): void {
-    const source = findFileChangePreviewSource(changePreviews, relativePath);
-
+    const reviewedPreview = changePreviews.find((preview) => preview.relativePath === relativePath);
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
 
-    if (source) {
-      markFileChangeSourceDiscarded(source, relativePath);
+    if (!reviewedPreview) {
+      return;
     }
+
+    if (reviewedPreview.source) {
+      markFileChangeSourceDiscarded(reviewedPreview.source, relativePath);
+      return;
+    }
+
+    if (!selectedThreadId) {
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+
+    setThreads((current) =>
+      appendThreadEvents(current, selectedThreadId, [
+        {
+          id: `${selectedThreadId}-file-discard-${createdAt}`,
+          kind: "file",
+          message:
+            settings.language === "zh-CN"
+              ? `已丢弃文件修改 ${relativePath}`
+              : `Discarded file change ${relativePath}`,
+          createdAt
+        }
+      ])
+    );
   }
 
   // 按顺序应用全部变更, 任一失败都停下并提示用户
@@ -1922,7 +1946,7 @@ export function App(): ReactElement {
     threadId: string,
     action: AgentAction,
     relativePath: string
-  ): Promise<AgentAction["status"]> {
+  ): Promise<AgentActionRunOutcome> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
       updateAgentActionStatus(threadId, action.id, "failed");
@@ -1957,9 +1981,19 @@ export function App(): ReactElement {
           actionLabel: action.label
         }
       });
-      const status = generated ? (fullAccessMode ? "completed" : "running") : "failed";
-      updateAgentActionStatus(threadId, action.id, status);
-      return status;
+
+      if (!generated) {
+        updateAgentActionStatus(threadId, action.id, "failed");
+        return "failed";
+      }
+
+      if (fullAccessMode) {
+        updateAgentActionStatus(threadId, action.id, "completed");
+        return "completed";
+      }
+
+      updateAgentActionStatus(threadId, action.id, "running");
+      return { status: "running", continueBatch: false };
     } catch (error) {
       updateAgentActionStatus(threadId, action.id, "failed");
       appendThreadError(
