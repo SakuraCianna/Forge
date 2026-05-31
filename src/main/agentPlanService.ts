@@ -5,6 +5,7 @@ import type {
   AgentPlanStep,
   AgentPlanStepKind,
   AgentPlanResult,
+  AgentRuntime,
   AgentWorkMode,
   GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
@@ -697,6 +698,7 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`,
     formatWorkModeContext(request.workMode),
+    formatAgentRuntimeContext(request.agentRuntime),
     profileContext,
     memoryContext,
     instructionContext,
@@ -717,6 +719,7 @@ function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): st
     `Task:\n${request.taskPrompt}`,
     `Speed mode:\n${request.speed}`,
     formatWorkModeContext(request.workMode),
+    formatAgentRuntimeContext(request.agentRuntime),
     profileContext,
     memoryContext,
     instructionContext,
@@ -736,7 +739,8 @@ function createAskInput(request: GenerateAgentAskRequest): string {
     `User message:\n${request.prompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`,
-    formatWorkModeContext(request.workMode)
+    formatWorkModeContext(request.workMode),
+    formatAgentRuntimeContext(request.agentRuntime)
   ];
 
   if (profileContext) {
@@ -814,6 +818,20 @@ function formatWorkModeContext(workMode: AgentWorkMode = "code"): string {
   return [
     "Work mode:",
     "code - include concrete engineering details, relevant files, commands, and verification context when useful."
+  ].join("\n");
+}
+
+function formatAgentRuntimeContext(agentRuntime: AgentRuntime = "windows-native"): string {
+  if (agentRuntime === "wsl") {
+    return [
+      "Agent runtime:",
+      "wsl - prefer Linux shell semantics and WSL-friendly commands when proposing command steps."
+    ].join("\n");
+  }
+
+  return [
+    "Agent runtime:",
+    "windows-native - prefer Windows-compatible commands and PowerShell-safe examples unless the user asks otherwise."
   ].join("\n");
 }
 
