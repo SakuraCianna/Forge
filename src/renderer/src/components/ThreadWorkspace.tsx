@@ -2662,5 +2662,9 @@ function formatCommandOutputSnippet(value: string): string {
     return trimmed;
   }
 
-  return `${trimmed.slice(0, maxLength)}\n... output truncated`;
+  const omittedMarker = "\n... output truncated, middle omitted ...\n";
+  const headLength = 360;
+  const tailLength = maxLength - omittedMarker.length - headLength;
+
+  return `${trimmed.slice(0, headLength)}${omittedMarker}${trimmed.slice(-tailLength)}`;
 }
