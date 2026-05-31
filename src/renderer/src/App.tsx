@@ -817,7 +817,13 @@ export function App(): ReactElement {
       return;
     }
 
-    if (!message.trim()) {
+    const normalizedMessage = message.trim();
+    const selectedThread = selectedThreadId
+      ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
+      : null;
+    const pendingCommitAction = findPendingAgentCommitAction(selectedThread);
+
+    if (!normalizedMessage) {
       setGitNotice(t("projects.commitMessageRequired"));
       return;
     }
@@ -825,13 +831,31 @@ export function App(): ReactElement {
     try {
       const result = await window.forge.git.commit({
         projectRoot: currentProject.path,
-        message
+        message: normalizedMessage
       });
       setGitStatus(result.status);
       setCommitMessage("");
       setGitNotice(t("projects.commitDone"));
-      if (selectedThreadId) {
-        setThreads((current) => completeNextPendingAgentAction(current, selectedThreadId, "commit"));
+      if (selectedThreadId && pendingCommitAction) {
+        const createdAt = new Date().toISOString();
+
+        setThreads((current) =>
+          completeNextPendingAgentAction(
+            appendThreadEvents(current, selectedThreadId, [
+              {
+                id: `${selectedThreadId}-agent-commit-${pendingCommitAction.id}-${createdAt}`,
+                kind: "plan",
+                message:
+                  settings.language === "zh-CN"
+                    ? `已完成 Agent 提交动作: ${normalizedMessage}`
+                    : `Completed agent commit action: ${normalizedMessage}`,
+                createdAt
+              }
+            ]),
+            selectedThreadId,
+            "commit"
+          )
+        );
       }
     } catch (error) {
       setGitNotice(formatRuntimeError(settings.language, error));
@@ -2714,6 +2738,23 @@ export function App(): ReactElement {
     const changes = gitStatus?.changes ?? [];
     const selectedChange =
       changes.find((change) => change.path === selectedGitPath) ?? changes[0] ?? null;
+    const selectedThread = selectedThreadId
+      ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
+      : null;
+    const pendingCommitAction = findPendingAgentCommitAction(selectedThread);
+    const agentCommitSuggestion = formatAgentCommitMessageSuggestion(pendingCommitAction);
+    const agentCommitCopy =
+      settings.language === "zh-CN"
+        ? {
+            title: "Agent 提交建议",
+            body: "来自当前任务线程的 commit 步骤",
+            use: "使用 Agent 提交建议"
+          }
+        : {
+            title: "Agent commit suggestion",
+            body: "From the current task thread commit step",
+            use: "Use agent commit suggestion"
+          };
 
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -2771,6 +2812,27 @@ export function App(): ReactElement {
                 )}
               </div>
               <div className="border-t border-[#ececf1] p-2.5">
+                {agentCommitSuggestion ? (
+                  <div className="mb-3 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-2">
+                    <div className="text-[11px] font-semibold text-[#202123]">
+                      {agentCommitCopy.title}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-4 text-[#6e6e80]">
+                      {agentCommitCopy.body}
+                    </p>
+                    <p className="mt-2 break-words font-mono text-[12px] leading-5 text-[#202123]">
+                      {agentCommitSuggestion}
+                    </p>
+                    <button
+                      type="button"
+                      aria-label={agentCommitCopy.use}
+                      onClick={() => setCommitMessage(agentCommitSuggestion)}
+                      className="mt-2 h-8 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                    >
+                      {agentCommitCopy.use}
+                    </button>
+                  </div>
+                ) : null}
                 <label className="grid gap-2 text-sm text-[#6e6e80]">
                   {t("projects.commitMessage")}
                   <input
@@ -2981,6 +3043,36 @@ function createThreadConversation(
   }
 
   return turns;
+}
+
+// 找到当前线程中等待用户处理的提交门禁动作
+function findPendingAgentCommitAction(thread: TaskThread | null): AgentAction | null {
+  return thread?.agentActions?.find((action) => action.kind === "commit" && action.status === "pending") ?? null;
+}
+
+// 从提交动作目标里提取可直接使用的 Git 提交信息
+function formatAgentCommitMessageSuggestion(action: AgentAction | null): string | null {
+  const target = action?.target?.trim();
+
+  if (!target) {
+    return null;
+  }
+
+  return parseGitCommitMessage(target) ?? target;
+}
+
+// 支持模型输出 git commit -m "..." 或 --message ... 时提取真实 message
+function parseGitCommitMessage(value: string): string | null {
+  const normalized = value.trim();
+  const quoted = normalized.match(/(?:^|\s)(?:-m|--message)\s+(["'])(.*?)\1/u)?.[2]?.trim();
+
+  if (quoted) {
+    return quoted;
+  }
+
+  const unquoted = normalized.match(/(?:^|\s)(?:-m|--message)\s+(.+)$/u)?.[1]?.trim();
+
+  return unquoted || null;
 }
 
 // 把运行时错误收敛成一行中文提示, 隐藏 HTML 响应噪音
