@@ -224,7 +224,7 @@ describe("App agent execution", () => {
         })
       )
     );
-    await screen.findByText("Allowed exact command for future agent runs: npm install");
+    expect(screen.queryByText("Allowed exact command for future agent runs: npm install")).not.toBeInTheDocument();
     expect(loadGeneralPreferences(window.localStorage).commandSafetyRules).toEqual([
       {
         id: expect.stringMatching(/^agent-allow-/u),
@@ -301,8 +301,8 @@ describe("App agent execution", () => {
       })
     );
     expect(forge.commands.run).not.toHaveBeenCalled();
-    expect(await screen.findByText(/项目搜索完成: handleSubmit/)).toBeInTheDocument();
-    expect(screen.getByText(/src\/App\.tsx:42/)).toBeInTheDocument();
+    expect(screen.queryByText(/项目搜索完成: handleSubmit/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/src\/App\.tsx:42/)).not.toBeInTheDocument();
   });
 
   it("passes controlled tool results into the following file edit prompt", async () => {
@@ -522,8 +522,8 @@ describe("App agent execution", () => {
       })
     );
     expect(forge.commands.run).not.toHaveBeenCalled();
-    expect(await screen.findByText(/文件匹配完成: src\/\*\*\/\*\.tsx/)).toBeInTheDocument();
-    expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
+    expect(screen.queryByText(/文件匹配完成: src\/\*\*\/\*\.tsx/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/src\/App\.tsx/)).not.toBeInTheDocument();
   });
 
   it("runs project directory list actions without invoking the shell command runner", async () => {
@@ -598,9 +598,9 @@ describe("App agent execution", () => {
       })
     );
     expect(forge.commands.run).not.toHaveBeenCalled();
-    expect(await screen.findByText(/目录列表完成: src/)).toBeInTheDocument();
-    expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
-    expect(screen.getByText(/src\/components\//)).toBeInTheDocument();
+    expect(screen.queryByText(/目录列表完成: src/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/src\/App\.tsx/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/src\/components\//)).not.toBeInTheDocument();
   });
 
   it("runs controlled Git status actions without invoking the shell command runner", async () => {
@@ -664,9 +664,9 @@ describe("App agent execution", () => {
 
     await waitFor(() => expect(forge.git.status).toHaveBeenCalledWith({ projectRoot }));
     expect(forge.commands.run).not.toHaveBeenCalled();
-    expect(await screen.findByText(/Git 状态完成: 1 个文件有改动/)).toBeInTheDocument();
-    expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
-    expect(screen.getByText(/Diff 摘要/)).toBeInTheDocument();
+    expect(screen.queryByText(/Git 状态完成: 1 个文件有改动/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/src\/App\.tsx/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Diff 摘要/)).not.toBeInTheDocument();
   });
 
   it("skips a blocked agent command and continues with the next safe action", async () => {
@@ -738,7 +738,7 @@ describe("App agent execution", () => {
       })
     );
     expect(forge.commands.run).not.toHaveBeenCalled();
-    expect(await screen.findByText(/已跳过 Agent 动作: Run Remove-Item -Recurse src/)).toBeInTheDocument();
+    expect(screen.queryByText(/已跳过 Agent 动作: Run Remove-Item -Recurse src/)).not.toBeInTheDocument();
   });
 
   it("uses a pending agent commit suggestion from source control and records the commit action", async () => {
@@ -831,7 +831,7 @@ describe("App agent execution", () => {
     expect(threadRow).not.toBeNull();
     await user.click(threadRow!);
 
-    expect(await screen.findByText(/已完成 Agent 提交动作: 完善 Agent 提交门禁/)).toBeInTheDocument();
+    expect(screen.queryByText(/已完成 Agent 提交动作: 完善 Agent 提交门禁/)).not.toBeInTheDocument();
   });
 
   it("pauses an active agent batch and resumes remaining safe actions", async () => {
@@ -926,7 +926,7 @@ describe("App agent execution", () => {
         relativePath: "package.json"
       })
     );
-    expect(await screen.findByText("已恢复 Agent 执行")).toBeInTheDocument();
+    expect(screen.queryByText("已恢复 Agent 执行")).not.toBeInTheDocument();
   });
 
   it("generates a continuation plan from completed agent context and runs the next safe action", async () => {
@@ -1011,9 +1011,6 @@ describe("App agent execution", () => {
         relativePath: "README.md"
       })
     );
-    expect(await screen.findByText("Started agent action: Inspect README.md")).toBeInTheDocument();
-    expect(await screen.findByText(/Completed agent action: Inspect README\.md/)).toBeInTheDocument();
-
     await user.click(await screen.findByRole("button", { name: "Generate next plan" }));
 
     await waitFor(() => expect(forge.agent.generatePlan).toHaveBeenCalledTimes(2));
@@ -1031,9 +1028,7 @@ describe("App agent execution", () => {
         relativePath: "package.json"
       })
     );
-    expect(
-      await screen.findByText("Generating a continuation plan from current thread state")
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Generating a continuation plan from current thread state")).not.toBeInTheDocument();
   });
 });
 

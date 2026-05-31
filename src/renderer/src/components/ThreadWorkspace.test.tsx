@@ -28,6 +28,39 @@ describe("ThreadWorkspace", () => {
             ...thread,
             events: [
               {
+                id: "agent-started",
+                kind: "plan",
+                message: "Started agent action: List src",
+                createdAt: "2026-05-27T13:00:01.000Z",
+                agentActionRun: {
+                  actionId: "action-1",
+                  label: "List src",
+                  status: "started",
+                  startedAt: "2026-05-27T13:00:01.000Z"
+                }
+              },
+              {
+                id: "file-result",
+                kind: "file",
+                message: "Directory list complete: src (12 items)",
+                createdAt: "2026-05-27T13:00:02.000Z"
+              },
+              {
+                id: "command-result",
+                kind: "result",
+                message: "Command finished, exitCode=0",
+                createdAt: "2026-05-27T13:00:03.000Z",
+                commandResult: {
+                  actionId: "action-2",
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 0,
+                  stdout: "passed",
+                  stderr: "",
+                  timedOut: false
+                }
+              },
+              {
                 id: "answer",
                 kind: "result",
                 message: "A concise answer for the user.",
@@ -46,6 +79,9 @@ describe("ThreadWorkspace", () => {
     const userPrompt = screen.getByText(thread.prompt).closest("article");
 
     expect(transcript).toHaveTextContent("A concise answer for the user.");
+    expect(transcript).not.toHaveTextContent("Started agent action: List src");
+    expect(transcript).not.toHaveTextContent("Directory list complete: src");
+    expect(transcript).not.toHaveTextContent("Command finished, exitCode=0");
     expect(transcript).toHaveClass("grid", "gap-5");
     expect(userPrompt).toHaveClass("ml-auto", "max-w-[68%]");
     expect(transcript.firstElementChild).toHaveClass("grid", "grid-cols-[20px_minmax(0,1fr)]");
@@ -264,7 +300,7 @@ describe("ThreadWorkspace", () => {
     );
   });
 
-  it("shows compact continuation planning controls after the queue has no pending actions", async () => {
+  it("hides compact completed queue details after the queue has no pending actions", async () => {
     const user = userEvent.setup();
     const onGenerateContinuationPlan = vi.fn();
 
@@ -277,6 +313,34 @@ describe("ThreadWorkspace", () => {
           {
             ...thread,
             status: "completed",
+            events: [
+              {
+                id: "agent-completed",
+                kind: "plan",
+                message: "Completed agent action: Inspect README.md",
+                createdAt: "2026-05-27T13:00:03.000Z",
+                agentActionRun: {
+                  actionId: "action-1",
+                  label: "Inspect README.md",
+                  status: "completed",
+                  startedAt: "2026-05-27T13:00:01.000Z",
+                  completedAt: "2026-05-27T13:00:03.000Z",
+                  durationMs: 2000
+                }
+              },
+              {
+                id: "file-result",
+                kind: "file",
+                message: "File read complete: README.md",
+                createdAt: "2026-05-27T13:00:03.000Z"
+              },
+              {
+                id: "answer",
+                kind: "result",
+                message: "Done.",
+                createdAt: "2026-05-27T13:00:04.000Z"
+              }
+            ],
             agentActions: [
               {
                 id: "action-1",
@@ -294,11 +358,14 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    const controls = screen.getByRole("region", { name: "Agent action confirmation" });
+    const transcript = screen.getByRole("region", { name: "Conversation transcript" });
 
-    expect(within(controls).getAllByText("Generate next plan").length).toBeGreaterThan(0);
+    expect(transcript).toHaveTextContent("Done.");
+    expect(screen.queryByRole("region", { name: "Agent action confirmation" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Completed agent action: Inspect README.md")).not.toBeInTheDocument();
+    expect(screen.queryByText("File read complete: README.md")).not.toBeInTheDocument();
 
-    await user.click(within(controls).getByRole("button", { name: "Generate next plan" }));
+    await user.click(screen.getByRole("button", { name: "Generate next plan" }));
 
     expect(onGenerateContinuationPlan).toHaveBeenCalledWith("thread-1");
   });
