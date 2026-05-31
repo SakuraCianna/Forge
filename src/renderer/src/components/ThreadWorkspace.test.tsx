@@ -138,6 +138,46 @@ describe("ThreadWorkspace", () => {
     );
   });
 
+  it("shows compact skip controls for blocked command gates", async () => {
+    const user = userEvent.setup();
+    const onSkipAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "blocked",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Delete src",
+                status: "pending",
+                command: "Remove-Item -Recurse src"
+              }
+            ]
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onSkipAgentAction={onSkipAgentAction}
+      />
+    );
+
+    expect(screen.getAllByText("Command blocked by safety policy").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Skip action Delete src" }));
+
+    expect(onSkipAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", command: "Remove-Item -Recurse src" })
+    );
+  });
+
   it("opens pending compact file changes in the files view", async () => {
     const user = userEvent.setup();
     const onPreviewFile = vi.fn();

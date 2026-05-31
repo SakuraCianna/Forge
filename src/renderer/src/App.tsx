@@ -1792,6 +1792,50 @@ export function App(): ReactElement {
     setThreads((current) => updateThreadAgentActionStatus(current, threadId, actionId, status));
   }
 
+  // 用户确认或跳过门禁时写入时间线, 让队列推进有可审计记录
+  function setAgentActionDecisionStatus(
+    threadId: string,
+    action: AgentAction,
+    status: Extract<AgentAction["status"], "completed" | "skipped">
+  ): void {
+    const createdAt = new Date().toISOString();
+    const skipped = status === "skipped";
+    const message =
+      settings.language === "zh-CN"
+        ? skipped
+          ? `已跳过 Agent 动作: ${action.label}`
+          : `已确认 Agent 动作: ${action.label}`
+        : skipped
+          ? `Skipped agent action: ${action.label}`
+          : `Confirmed agent action: ${action.label}`;
+
+    setThreads((current) =>
+      updateThreadAgentActionStatus(
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-agent-action-${status}-${action.id}-${createdAt}`,
+            kind: "plan",
+            message,
+            createdAt
+          }
+        ]),
+        threadId,
+        action.id,
+        status
+      )
+    );
+  }
+
+  // 将人工门禁标记为完成, 后续安全动作会由自动执行器继续推进
+  function completeAgentAction(threadId: string, action: AgentAction): void {
+    setAgentActionDecisionStatus(threadId, action, "completed");
+  }
+
+  // 跳过用户明确放弃的动作, 用于越过被阻止或已过时的队列步骤
+  function skipAgentAction(threadId: string, action: AgentAction): void {
+    setAgentActionDecisionStatus(threadId, action, "skipped");
+  }
+
   // 同批自动执行时 React 状态尚未刷新, 这里缓存刚完成的读类工具结果
   function rememberAgentToolResult(threadId: string, message: string): void {
     const currentMessages = recentAgentToolResultsRef.current.get(threadId) ?? [];
@@ -2542,9 +2586,8 @@ export function App(): ReactElement {
         onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
         onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
         onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
-        onCompleteAgentAction={(threadId, action) =>
-          updateAgentActionStatus(threadId, action.id, "completed")
-        }
+        onCompleteAgentAction={completeAgentAction}
+        onSkipAgentAction={skipAgentAction}
         onOpenSourceControl={() => setActiveView("source")}
         onOpenFiles={() => setActiveView("files")}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}

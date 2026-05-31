@@ -14,6 +14,7 @@ import {
   ListChecks,
   Play,
   RotateCcw,
+  SkipForward,
   Terminal,
   ThumbsDown,
   ThumbsUp,
@@ -64,6 +65,7 @@ type ThreadWorkspaceProps = {
   onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
+  onSkipAgentAction?: (threadId: string, action: AgentAction) => void;
   onOpenSourceControl?: () => void;
   onOpenFiles?: () => void;
   onRunCommand?: (threadId: string, command: string) => void;
@@ -116,6 +118,7 @@ export function ThreadWorkspace({
   onGenerateFailureFix,
   onGenerateCommandFix,
   onCompleteAgentAction,
+  onSkipAgentAction,
   onOpenSourceControl,
   onOpenFiles,
   onRunCommand = () => undefined,
@@ -760,6 +763,17 @@ export function ThreadWorkspace({
                   {copy.generateFixPlan}
                 </button>
               ) : null}
+              {onSkipAgentAction && canSkipAgentAction(blockedAction) ? (
+                <button
+                  type="button"
+                  aria-label={`${copy.skipAction} ${blockedAction.label}`}
+                  onClick={() => onSkipAgentAction(selectedThread.id, blockedAction)}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+                >
+                  <SkipForward className="h-3.5 w-3.5" />
+                  {copy.skipAction}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -857,6 +871,18 @@ export function ThreadWorkspace({
       action.kind === "run-command" && action.command
         ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
         : null;
+    const skipButton =
+      onSkipAgentAction && canSkipAgentAction(action) ? (
+        <button
+          type="button"
+          aria-label={`${copy.skipAction} ${action.label}`}
+          onClick={() => onSkipAgentAction(selectedThread.id, action)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+        >
+          <SkipForward className="h-3.5 w-3.5" />
+          {copy.skipAction}
+        </button>
+      ) : null;
 
     if (
       action.kind === "run-command" &&
@@ -866,45 +892,54 @@ export function ThreadWorkspace({
       onApproveAgentCommand
     ) {
       return (
-        <button
-          type="button"
-          aria-label={`Approve command ${action.command}`}
-          onClick={() => onApproveAgentCommand(selectedThread.id, action)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          {copy.approveCommand}
-        </button>
+        <>
+          <button
+            type="button"
+            aria-label={`Approve command ${action.command}`}
+            onClick={() => onApproveAgentCommand(selectedThread.id, action)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            {copy.approveCommand}
+          </button>
+          {skipButton}
+        </>
       );
     }
 
     if (action.kind === "commit" && onOpenSourceControl) {
       return (
-        <button
-          type="button"
-          onClick={onOpenSourceControl}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-        >
-          <Terminal className="h-3.5 w-3.5" />
-          {copy.openSourceControl}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={onOpenSourceControl}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            <Terminal className="h-3.5 w-3.5" />
+            {copy.openSourceControl}
+          </button>
+          {skipButton}
+        </>
       );
     }
 
     if (action.kind === "manual" && onCompleteAgentAction) {
       return (
-        <button
-          type="button"
-          onClick={() => onCompleteAgentAction(selectedThread.id, action)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          {copy.markReviewComplete}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => onCompleteAgentAction(selectedThread.id, action)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            {copy.markReviewComplete}
+          </button>
+          {skipButton}
+        </>
       );
     }
 
-    return null;
+    return skipButton;
   }
 
   // 展示正在运行的命令和可终止操作, 避免命令信息散落在正文
@@ -1066,6 +1101,7 @@ export function ThreadWorkspace({
             commandNeedsApproval: "命令需要批准",
             commandBlocked: "命令已被安全策略阻止",
             markReviewComplete: "完成审查",
+            skipAction: "跳过动作",
             openSourceControl: "打开源代码管理",
             ready: "就绪",
             progress: (completed: number, total: number) => `已完成 ${completed} / ${total} 个动作`,
@@ -1091,6 +1127,7 @@ export function ThreadWorkspace({
             commandNeedsApproval: "Command needs approval",
             commandBlocked: "Command blocked by policy",
             markReviewComplete: "Mark review complete",
+            skipAction: "Skip action",
             openSourceControl: "Open source control",
             ready: "Ready",
             progress: (completed: number, total: number) =>
@@ -1923,6 +1960,16 @@ export function ThreadWorkspace({
                       {recoveryActionCopy.generateFixPlan}
                     </button>
                   ) : null}
+                  {selectedThread && onSkipAgentAction && canSkipAgentAction(queueBlockerAction) ? (
+                    <button
+                      type="button"
+                      aria-label={`${actionQueueCopy.skipAction} ${queueBlockerAction.label}`}
+                      onClick={() => onSkipAgentAction(selectedThread.id, queueBlockerAction)}
+                      className="h-7 rounded-[10px] border border-[#f4c7ab] bg-white px-2 text-[11px] font-medium text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+                    >
+                      {actionQueueCopy.skipAction}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -1992,6 +2039,16 @@ export function ThreadWorkspace({
                     className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
                   >
                     {actionQueueCopy.markReviewComplete}
+                  </button>
+                ) : null}
+                {selectedThread && onSkipAgentAction && canSkipAgentAction(activeGateAction) ? (
+                  <button
+                    type="button"
+                    aria-label={`${actionQueueCopy.skipAction} ${activeGateAction.label}`}
+                    onClick={() => onSkipAgentAction(selectedThread.id, activeGateAction)}
+                    className="mt-2 h-7 rounded-[10px] border border-[#f4c7ab] bg-white px-2 text-[11px] font-medium text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+                  >
+                    {actionQueueCopy.skipAction}
                   </button>
                 ) : null}
               </div>
@@ -2686,6 +2743,7 @@ function getCompactAgentControlCopy(language: Language) {
       commandBlocked: "命令已被安全策略阻止",
       openSourceControl: "打开源代码管理",
       markReviewComplete: "确认已完成审查",
+      skipAction: "跳过动作",
       failedTitle: "动作失败, 队列已暂停",
       retryAction: "重试动作",
       generateFixPlan: "生成修复计划",
@@ -2725,6 +2783,7 @@ function getCompactAgentControlCopy(language: Language) {
     commandBlocked: "Command blocked by safety policy",
     openSourceControl: "Open source control",
     markReviewComplete: "Mark review complete",
+    skipAction: "Skip action",
     failedTitle: "Action failed, queue paused",
     retryAction: "Retry action",
     generateFixPlan: "Generate fix plan",
@@ -2818,6 +2877,11 @@ function getCompactActionStatusLabel(
   }
 
   return action.status;
+}
+
+// 用户可以显式跳过未完成动作, 但不能跳过正在运行或已经终态的动作
+function canSkipAgentAction(action: AgentAction): boolean {
+  return action.status === "pending" || action.status === "failed";
 }
 
 // 找到当前阻塞队列推进的动作, 用于提示用户下一步

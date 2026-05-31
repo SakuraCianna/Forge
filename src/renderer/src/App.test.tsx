@@ -578,6 +578,78 @@ describe("App agent execution", () => {
     expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
     expect(screen.getByText(/Diff 摘要/)).toBeInTheDocument();
   });
+
+  it("skips a blocked agent command and continues with the next safe action", async () => {
+    const user = userEvent.setup();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Skip unsafe command and inspect README",
+      createdAt: "2026-05-31T01:35:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Unsafe command",
+          description: "Try a destructive command.",
+          kind: "verify",
+          status: "pending",
+          target: "Remove-Item -Recurse src"
+        },
+        {
+          id: "step-2",
+          title: "Inspect README",
+          description: "Inspect README.md after skipping the unsafe command.",
+          kind: "inspect",
+          status: "pending",
+          target: "README.md"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "",
+      nextContent: "",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "# Forge",
+        size: 7
+      }
+    });
+
+    vi.mocked(forge.files.readText).mockResolvedValueOnce({
+      relativePath: "README.md",
+      content: "# Forge",
+      size: 7
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Skip the unsafe command and inspect README");
+    await user.keyboard("{Enter}");
+
+    await user.click(await screen.findByRole("button", { name: /跳过动作 Run Remove-Item -Recurse src/ }));
+
+    await waitFor(() =>
+      expect(forge.files.readText).toHaveBeenCalledWith({
+        projectRoot,
+        relativePath: "README.md"
+      })
+    );
+    expect(forge.commands.run).not.toHaveBeenCalled();
+    expect(await screen.findByText(/已跳过 Agent 动作: Run Remove-Item -Recurse src/)).toBeInTheDocument();
+  });
 });
 
 // 准备一个已打开项目和可用模型, 让 App 启动后直接进入项目工作区
