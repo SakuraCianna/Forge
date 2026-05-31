@@ -76,6 +76,8 @@ const maxFilesBySpeed = {
 } as const;
 
 const maxStreamContinuations = 1;
+const structuredStepArrayKeys = ["steps", "actions", "tasks"] as const;
+const structuredPlanObjectKeys = ["plan", "executionPlan", "execution_plan"] as const;
 
 // 生成可执行计划并解析成步骤, 这里只请求模型不直接改文件
 export async function generateAgentPlan({
@@ -927,14 +929,30 @@ function readJsonPlanCandidates(text: string): string[] {
   return [...new Set(candidates)];
 }
 
-// 兼容 { steps: [...] } 和直接返回数组两种结构化计划
+// 兼容 { steps: [...] }, { plan: { steps: [...] } } 和直接返回数组等结构化计划
 function readStructuredStepsArray(value: unknown): unknown[] {
   if (Array.isArray(value)) {
     return value;
   }
 
-  if (isRecord(value) && Array.isArray(value.steps)) {
-    return value.steps;
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  for (const key of structuredStepArrayKeys) {
+    const steps = value[key];
+
+    if (Array.isArray(steps)) {
+      return steps;
+    }
+  }
+
+  for (const key of structuredPlanObjectKeys) {
+    const steps = readStructuredStepsArray(value[key]);
+
+    if (steps.length > 0) {
+      return steps;
+    }
   }
 
   return [];
