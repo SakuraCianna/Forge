@@ -156,21 +156,33 @@ export function getRunnablePendingAgentActions(
 // 新建文件计划常见顺序是先 inspect 再 edit; inspect 发现文件不存在时不应阻断后续创建
 export function shouldTreatMissingInspectAsNewFile(
   action: AgentAction,
-  actions: AgentAction[]
+  actions: AgentAction[],
+  taskPrompt = ""
 ): boolean {
+  return Boolean(resolveMissingInspectFileFallback(action, actions, taskPrompt));
+}
+
+export type MissingInspectFileFallback = "continue-existing-edit" | "generate-file-change";
+
+// 缺失的 inspect 目标有两种安全兜底: 后面已有 edit 就继续队列; 用户明确要写/创建该文件时直接生成
+export function resolveMissingInspectFileFallback(
+  action: AgentAction,
+  actions: AgentAction[],
+  taskPrompt = ""
+): MissingInspectFileFallback | null {
   const target = normalizeComparableActionTarget(action.target);
 
   if (action.kind !== "inspect-file" || !target) {
-    return false;
+    return null;
   }
 
   const actionIndex = actions.findIndex((candidate) => candidate.id === action.id);
 
   if (actionIndex < 0) {
-    return false;
+    return null;
   }
 
-  return actions.slice(actionIndex + 1).some((candidate) => {
+  const hasLaterEdit = actions.slice(actionIndex + 1).some((candidate) => {
     const candidateTarget = normalizeComparableActionTarget(candidate.target);
 
     return (
@@ -180,6 +192,16 @@ export function shouldTreatMissingInspectAsNewFile(
       candidateTarget === target
     );
   });
+
+  if (hasLaterEdit) {
+    return "continue-existing-edit";
+  }
+
+  if (hasCreateFileIntent(taskPrompt, action.target)) {
+    return "generate-file-change";
+  }
+
+  return null;
 }
 
 type AgentActionBatchResult = {
@@ -261,6 +283,26 @@ function normalizeComparableActionTarget(target: string | undefined): string | n
   const normalized = target?.trim().replace(/\\/g, "/").toLocaleLowerCase();
 
   return normalized || null;
+}
+
+function hasCreateFileIntent(taskPrompt: string, target: string | undefined): boolean {
+  if (!taskPrompt || !target || !/\.[a-z0-9]+$/iu.test(target.trim())) {
+    return false;
+  }
+
+  const normalizedPrompt = taskPrompt.replace(/\\/g, "/").toLocaleLowerCase();
+  const normalizedTarget = target.replace(/\\/g, "/").toLocaleLowerCase();
+  const fileName = normalizedTarget.split("/").filter(Boolean).at(-1) ?? normalizedTarget;
+  const mentionsTarget =
+    normalizedPrompt.includes(normalizedTarget) || normalizedPrompt.includes(fileName);
+
+  if (!mentionsTarget) {
+    return false;
+  }
+
+  return /写|撰写|创建|新建|生成|新增|帮我做|帮我写|create|write|generate|draft|make|add/iu.test(
+    normalizedPrompt
+  );
 }
 
 // 判断动作是否适合自动执行, manual 和 commit 必须留给用户确认
