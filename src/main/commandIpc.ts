@@ -59,7 +59,9 @@ function assertRunCommandRequest(value: unknown): RunProjectCommandOptions {
     cwd: value.cwd,
     command: value.command,
     runId: typeof value.runId === "string" ? value.runId : undefined,
-    timeoutMs: typeof value.timeoutMs === "number" ? value.timeoutMs : undefined
+    timeoutMs: typeof value.timeoutMs === "number" ? value.timeoutMs : undefined,
+    shell: isCommandShell(value.shell) ? value.shell : undefined,
+    shellExecutable: typeof value.shellExecutable === "string" ? value.shellExecutable : undefined
   };
 }
 
@@ -75,4 +77,8 @@ function assertCancelCommandRequest(value: unknown): CancelProjectCommandOptions
 // 将 IPC 入参缩窄为普通对象, 后续字段校验才有类型保证
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isCommandShell(value: unknown): value is RunProjectCommandOptions["shell"] {
+  return value === "powershell" || value === "cmd" || value === "git-bash";
 }

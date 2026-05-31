@@ -2723,7 +2723,8 @@ export function App(): ReactElement {
         projectRoot: currentProject.path,
         cwd: currentProject.path,
         command,
-        timeoutMs: generalPreferences.commandTimeoutSeconds * 1000
+        timeoutMs: generalPreferences.commandTimeoutSeconds * 1000,
+        shell: generalPreferences.terminalShell
       });
 
       const status =
