@@ -4,12 +4,15 @@ import { realpath } from "node:fs/promises";
 import { sep } from "node:path";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
 
+export type CommandShell = "powershell" | "cmd" | "git-bash";
+
 export type RunProjectCommandOptions = {
   projectRoot: string;
   cwd: string;
   command: string;
   runId?: string;
   timeoutMs?: number;
+  shell?: CommandShell;
   shellExecutable?: string;
   onOutput?: (chunk: CommandOutputChunk) => void;
 };
@@ -85,7 +88,8 @@ async function runProjectCommandWithRegistry(
     command,
     runId,
     timeoutMs = 120000,
-    shellExecutable = "powershell.exe",
+    shell = "powershell",
+    shellExecutable,
     onOutput
   }: RunProjectCommandOptions,
   runningCommands: Map<string, RunningCommand>,
@@ -103,19 +107,16 @@ async function runProjectCommandWithRegistry(
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      shellExecutable,
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
-      {
-        cwd: resolvedCwd,
-        windowsHide: true,
-        env: {
-          ...process.env,
-          FORCE_COLOR: "0",
-          NO_COLOR: "1"
-        }
+    const shellInvocation = createShellInvocation(command, shell, shellExecutable);
+    const child = spawn(shellInvocation.executable, shellInvocation.args, {
+      cwd: resolvedCwd,
+      windowsHide: true,
+      env: {
+        ...process.env,
+        FORCE_COLOR: "0",
+        NO_COLOR: "1"
       }
-    );
+    });
 
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
@@ -189,6 +190,32 @@ async function runProjectCommandWithRegistry(
       reject(new Error(`启动命令 Shell 失败：${error.message}`));
     });
   });
+}
+
+// 根据用户选择构造真实 shell 调用参数, 让设置页的 Shell 选择不只是显示项
+function createShellInvocation(
+  command: string,
+  shell: CommandShell,
+  shellExecutable?: string
+): { executable: string; args: string[] } {
+  if (shell === "cmd") {
+    return {
+      executable: shellExecutable ?? "cmd.exe",
+      args: ["/d", "/s", "/c", command]
+    };
+  }
+
+  if (shell === "git-bash") {
+    return {
+      executable: shellExecutable ?? "bash.exe",
+      args: ["-lc", command]
+    };
+  }
+
+  return {
+    executable: shellExecutable ?? "powershell.exe",
+    args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command]
+  };
 }
 
 // 优先杀掉整棵进程树, 失败时回退到子进程自身

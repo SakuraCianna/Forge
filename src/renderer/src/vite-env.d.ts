@@ -72,6 +72,8 @@ declare global {
           cwd: string;
           command: string;
           timeoutMs?: number;
+          shell?: "powershell" | "cmd" | "git-bash";
+          shellExecutable?: string;
         }) => Promise<{
           runId?: string;
           command: string;
