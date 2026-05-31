@@ -1963,6 +1963,69 @@ describe("ThreadWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("summarizes current and upcoming gates in a visible confirmation queue", async () => {
+    const user = userEvent.setup();
+    const onCompleteAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Review before commit",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "manual",
+                label: "Review diff",
+                status: "pending"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "commit",
+                label: "Commit changes",
+                status: "pending"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onCompleteAgentAction={onCompleteAgentAction}
+      />
+    );
+
+    const confirmationQueue = screen.getByRole("region", { name: "Confirmation queue" });
+
+    expect(within(confirmationQueue).getByText("2 items")).toBeInTheDocument();
+    expect(within(confirmationQueue).getByText("Manual confirmation")).toBeInTheDocument();
+    expect(within(confirmationQueue).getByText("Commit gate")).toBeInTheDocument();
+    expect(within(confirmationQueue).getByText("Current")).toBeInTheDocument();
+    expect(within(confirmationQueue).getByText("Upcoming")).toBeInTheDocument();
+    expect(
+      within(confirmationQueue).getByText(
+        "This is an upcoming stop. Forge will expose its approval controls when the queue reaches it."
+      )
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(confirmationQueue).getByRole("button", { name: "Confirm queued action Review diff" })
+    );
+
+    expect(onCompleteAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", kind: "manual" })
+    );
+  });
+
   it("marks a manual review gate complete so the queue can continue", async () => {
     const user = userEvent.setup();
     const onCompleteAgentAction = vi.fn();
