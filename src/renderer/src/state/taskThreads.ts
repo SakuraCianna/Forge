@@ -3,14 +3,16 @@ import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelT
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { AgentMemoryContext } from "@shared/agentTypes";
 import type { CommandOutputChunk } from "@shared/commandTypes";
+import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import { getEnabledModels } from "./modelSettings";
 
-export type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
+type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
 
-export type TaskThreadEventKind = "user" | "plan" | "command" | "file" | "error" | "result";
+type TaskThreadEventKind = "user" | "plan" | "command" | "file" | "error" | "result";
 
 export type CommandRunResult = {
   runId?: string;
+  actionId?: string;
   command: string;
   cwd: string;
   exitCode: number | null;
@@ -20,15 +22,16 @@ export type CommandRunResult = {
   cancelled?: boolean;
 };
 
-export type CommandRunState = {
+type CommandRunState = {
   runId?: string;
+  actionId?: string;
   command: string;
   status: "running";
   stdout?: string;
   stderr?: string;
 };
 
-export type CommandApprovalRecord = {
+type CommandApprovalRecord = {
   command: string;
   reason: string;
   approvedAt: string;
@@ -73,7 +76,7 @@ type ThreadMemorySource = AgentMemoryContext & {
   sourceThreadId?: string;
 };
 
-export type CreateThreadResult =
+type CreateThreadResult =
   | { ok: true; thread: TaskThread }
   | { ok: false; reason: "empty-prompt" | "missing-model" };
 
@@ -300,7 +303,7 @@ export function createCommandApprovalEvent({
   return {
     id: `${threadId}-command-approved-${actionId}-${createdAt}`,
     kind: "command",
-    message: `Command approved: ${command} (${reason})`,
+    message: `命令已批准: ${command} (${reason})`,
     createdAt,
     commandApproval: {
       command,
@@ -355,6 +358,24 @@ export function completeNextPendingAgentAction(
 
     return action ? updateThreadActionStatus(thread, action.id, "completed") : thread;
   });
+}
+
+// 根据文件变更预览来源更新对应 Agent 动作, 避免切换会话后写错线程
+export function updateThreadAgentActionFromFileChangePreview(
+  threads: TaskThread[],
+  preview: ProjectFileChangePreview | null | undefined,
+  status: AgentAction["status"]
+): TaskThread[] {
+  if (!preview?.source?.threadId || !preview.source.actionId) {
+    return threads;
+  }
+
+  return updateThreadAgentActionStatus(
+    threads,
+    preview.source.threadId,
+    preview.source.actionId,
+    status
+  );
 }
 
 // 更新单个动作并保留其他动作顺序, 线程状态由动作集合推导
@@ -443,6 +464,8 @@ export function archiveProjectThreads(threads: TaskThread[], projectPath: string
 }
 
 const maxLiveCommandOutputLength = 12000;
+const liveCommandOutputTruncationNotice =
+  "[Forge output truncated; showing latest command output]\n";
 
 // 优先用 runId 匹配命令输出, 旧事件没有 runId 时回退到命令文本
 function commandRunMatchesOutput(
@@ -462,5 +485,7 @@ function limitLiveCommandOutput(value: string): string {
     return value;
   }
 
-  return value.slice(value.length - maxLiveCommandOutputLength);
+  const tailLength = maxLiveCommandOutputLength - liveCommandOutputTruncationNotice.length;
+
+  return `${liveCommandOutputTruncationNotice}${value.slice(-tailLength)}`;
 }

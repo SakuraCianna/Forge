@@ -90,7 +90,9 @@ describe("agentPlanService", () => {
     });
 
     const [_url, init] = fetcher.mock.calls[0];
-    expect(JSON.parse(String(init.body)).input).toContain("src/renderer/src/App.tsx");
+    const body = JSON.parse(String(init.body));
+    expect(body.instructions).toContain('"files"');
+    expect(body.input).toContain("src/renderer/src/App.tsx");
     expect(result).toMatchObject({
       providerId: "openai",
       modelId: "openai:gpt-5.5",
@@ -222,6 +224,120 @@ describe("agentPlanService", () => {
         status: "pending",
         target: "npm test -- --reporter=dot"
       }
+    ]);
+  });
+
+  it("expands structured multi-file edit steps into executable file targets", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              steps: [
+                {
+                  title: "Update workspace UI files",
+                  type: "edit",
+                  files: ["src/renderer/src/App.tsx", "src/renderer/src/components/AppShell.tsx"]
+                },
+                {
+                  title: "Run tests",
+                  type: "verify",
+                  command: "npm test -- --reporter=dot"
+                }
+              ]
+            })
+          })
+        )
+    );
+
+    const result = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(result.steps).toEqual([
+      expect.objectContaining({
+        title: "Update workspace UI files",
+        kind: "edit",
+        target: "src/renderer/src/App.tsx"
+      }),
+      expect.objectContaining({
+        title: "Update workspace UI files",
+        kind: "edit",
+        target: "src/renderer/src/components/AppShell.tsx"
+      }),
+      expect.objectContaining({
+        title: "Run tests",
+        kind: "verify",
+        target: "npm test -- --reporter=dot"
+      })
+    ]);
+  });
+
+  it("parses nested and aliased structured plan step arrays", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              metadata: {
+                files: ["src/renderer/src/App.tsx"]
+              },
+              plan: {
+                steps: [
+                  {
+                    kind: "read",
+                    description: "Inspect composer state",
+                    path: "src/renderer/src/App.tsx"
+                  }
+                ]
+              }
+            })
+          })
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              notes: ["run the narrowest useful check"],
+              actions: [
+                {
+                  type: "run-command",
+                  description: "Run focused tests",
+                  command: "npm test -- src/main/agentPlanService.test.ts"
+                }
+              ]
+            })
+          })
+        )
+      );
+
+    const nestedResult = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+    const aliasedResult = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(nestedResult.steps).toEqual([
+      expect.objectContaining({
+        kind: "inspect",
+        description: "Inspect composer state",
+        target: "src/renderer/src/App.tsx"
+      })
+    ]);
+    expect(aliasedResult.steps).toEqual([
+      expect.objectContaining({
+        kind: "verify",
+        description: "Run focused tests",
+        target: "npm test -- src/main/agentPlanService.test.ts"
+      })
     ]);
   });
 

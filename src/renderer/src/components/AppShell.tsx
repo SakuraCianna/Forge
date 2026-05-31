@@ -12,7 +12,9 @@ import {
   GitBranch,
   Hammer,
   Home,
+  Maximize2,
   MessageSquare,
+  Minimize2,
   Pin,
   Plus,
   Play,
@@ -43,10 +45,12 @@ type AppShellProps = {
   onNewProjectChat?: (projectPath: string) => void;
   onPickProject?: () => void;
   onRun?: () => void;
+  onMinimizeWindow?: () => void;
   onRemoveProject?: (projectPath: string) => void;
   onRenameProject?: (projectPath: string) => void;
   onSelectProject?: (projectPath: string) => void;
   onSelectThread?: (threadId: string) => void;
+  onToggleMaximizeWindow?: () => void;
   onTogglePinProject?: (projectPath: string) => void;
   onTogglePinThread?: (threadId: string) => void;
   backgroundImageDataUrl?: string | null;
@@ -75,6 +79,7 @@ type ShellCopy = {
   filesView: string;
   helpMenu: string;
   helpCenter: string;
+  minimizeWindow: string;
   newChat: string;
   openProject: string;
   conversations: string;
@@ -95,6 +100,7 @@ type ShellCopy = {
   renameProject: string;
   threadOptions: (title: string) => string;
   titleBarMenus: string;
+  toggleMaximizeWindow: string;
   unpinProject: string;
   viewMenu: string;
   windowMenu: string;
@@ -117,11 +123,13 @@ export function AppShell({
   onNewTask,
   onNewProjectChat,
   onRun,
+  onMinimizeWindow,
   onPickProject,
   onRemoveProject,
   onRenameProject,
   onSelectProject,
   onSelectThread,
+  onToggleMaximizeWindow,
   onTogglePinProject,
   onTogglePinThread,
   backgroundImageDataUrl,
@@ -216,7 +224,7 @@ export function AppShell({
       ) : null}
       <div className="relative z-10 grid h-full min-h-0 grid-rows-[48px_minmax(0,1fr)] overflow-hidden">
       <header
-        className={`grid h-12 grid-cols-[var(--forge-sidebar-width)_minmax(0,1fr)_138px] border-b border-[#ececf1] ${
+        className={`grid h-12 grid-cols-[auto_minmax(0,1fr)_138px] border-b border-[#ececf1] ${
           hasWallpaper ? "bg-white/58" : "bg-white/90 backdrop-blur"
         }`}
       >
@@ -318,7 +326,7 @@ export function AppShell({
     return (
       <nav
         aria-label={copy.titleBarMenus}
-        className="no-drag ml-2 hidden min-w-0 items-center gap-5 md:flex"
+        className="no-drag ml-3 hidden min-w-0 items-center gap-7 md:flex"
       >
         <TitleBarMenu label={copy.fileMenu}>
           <MenuItem onSelect={onNewTask}>
@@ -384,13 +392,13 @@ export function AppShell({
         </TitleBarMenu>
 
         <TitleBarMenu label={copy.windowMenu}>
-          <MenuItem onSelect={() => onNavigate("workspace")}>
-            <Home className="h-4 w-4" />
-            {copy.workspaceView}
+          <MenuItem onSelect={onMinimizeWindow}>
+            <Minimize2 className="h-4 w-4" />
+            {copy.minimizeWindow}
           </MenuItem>
-          <MenuItem onSelect={() => onNavigate("files")}>
-            <FileCode2 className="h-4 w-4" />
-            {copy.filesView}
+          <MenuItem onSelect={onToggleMaximizeWindow}>
+            <Maximize2 className="h-4 w-4" />
+            {copy.toggleMaximizeWindow}
           </MenuItem>
           <MenuItem onSelect={resetSidebarWidth}>
             <FolderOpen className="h-4 w-4" />
@@ -770,6 +778,7 @@ function getShellCopy(language: Language): ShellCopy {
       filesView: "文件",
       helpMenu: "帮助",
       helpCenter: "回到 Forge 工作区",
+      minimizeWindow: "最小化窗口",
       newChat: "新对话",
       newProjectChat: (name) => `在 ${name} 开启新对话`,
       openProject: "打开项目",
@@ -788,6 +797,7 @@ function getShellCopy(language: Language): ShellCopy {
       sourceView: "源代码管理",
       threadOptions: (title) => `对话更多选项 ${title}`,
       titleBarMenus: "Forge 标题栏菜单",
+      toggleMaximizeWindow: "最大化或还原窗口",
       unpinProject: "取消置顶项目",
       viewMenu: "查看",
       windowMenu: "窗口",
@@ -810,6 +820,7 @@ function getShellCopy(language: Language): ShellCopy {
     filesView: "Files",
     helpMenu: "Help",
     helpCenter: "Return to Forge workspace",
+    minimizeWindow: "Minimize window",
     newChat: "New chat",
     newProjectChat: (name) => `New chat in ${name}`,
     openProject: "Open project",
@@ -828,6 +839,7 @@ function getShellCopy(language: Language): ShellCopy {
     sourceView: "Source control",
     threadOptions: (title) => `Conversation options ${title}`,
     titleBarMenus: "Forge title bar menus",
+    toggleMaximizeWindow: "Toggle maximize",
     unpinProject: "Unpin project",
     viewMenu: "View",
     windowMenu: "Window",

@@ -76,6 +76,8 @@ const maxFilesBySpeed = {
 } as const;
 
 const maxStreamContinuations = 1;
+const structuredStepArrayKeys = ["steps", "actions", "tasks"] as const;
+const structuredPlanObjectKeys = ["plan", "executionPlan", "execution_plan"] as const;
 
 // 生成可执行计划并解析成步骤, 这里只请求模型不直接改文件
 export async function generateAgentPlan({
@@ -352,6 +354,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
     'Prefer a JSON object with a "steps" array. Each step must include "kind", "description", and optional "target".',
+    'For one step that edits multiple files, use a "files" string array so Forge can expand it into separate file actions.',
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
     "If you cannot produce JSON, use a numbered list of concrete steps and mention target files or commands in backticks when known.",
     "If the user asks to create, write, or save a named file, include an edit step targeting that exact file path in backticks.",
@@ -878,7 +881,7 @@ function parseStructuredAgentPlanSteps(text: string): ParsedPlanStepDraft[] {
     try {
       const value = JSON.parse(candidate) as unknown;
       const steps = readStructuredStepsArray(value)
-        .map(normalizeStructuredPlanStep)
+        .flatMap(normalizeStructuredPlanStep)
         .filter((step): step is ParsedPlanStepDraft => Boolean(step));
 
       if (steps.length > 0) {
@@ -927,23 +930,39 @@ function readJsonPlanCandidates(text: string): string[] {
   return [...new Set(candidates)];
 }
 
-// 兼容 { steps: [...] } 和直接返回数组两种结构化计划
+// 兼容 { steps: [...] }, { plan: { steps: [...] } } 和直接返回数组等结构化计划
 function readStructuredStepsArray(value: unknown): unknown[] {
   if (Array.isArray(value)) {
     return value;
   }
 
-  if (isRecord(value) && Array.isArray(value.steps)) {
-    return value.steps;
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  for (const key of structuredStepArrayKeys) {
+    const steps = value[key];
+
+    if (Array.isArray(steps)) {
+      return steps;
+    }
+  }
+
+  for (const key of structuredPlanObjectKeys) {
+    const steps = readStructuredStepsArray(value[key]);
+
+    if (steps.length > 0) {
+      return steps;
+    }
   }
 
   return [];
 }
 
 // 把结构化 step 的别名字段归一化成 Forge 内部计划步骤草稿
-function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft | null {
+function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft[] {
   if (!isRecord(value)) {
-    return null;
+    return [];
   }
 
   const title = readStringField(value, ["title", "label", "name"]);
@@ -952,16 +971,26 @@ function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft | null
   const rawTarget = readStringField(value, ["target", "file", "path", "command"]);
   const rawKind = readStringField(value, ["kind", "type"]);
   const kind = normalizePlanStepKind(rawKind, `${description} ${rawTarget ?? ""}`);
+  const structuredTargets =
+    kind === "verify" ? [] : readStringArrayField(value, ["targets", "files", "paths"]);
   const fallbackTarget = readStepTarget(description, kind);
-  const target = rawTarget?.trim() || fallbackTarget;
+  const target = rawTarget?.trim() || structuredTargets[0] || fallbackTarget;
   const finalDescription = description.trim() || target || "Review this plan step";
-
-  return {
+  const targets = structuredTargets.length > 0 ? structuredTargets : target ? [target] : [];
+  const baseStep = {
     description: finalDescription,
     kind,
-    ...(target ? { target } : {}),
     ...(title ? { title } : {})
   };
+
+  if (targets.length === 0) {
+    return [baseStep];
+  }
+
+  return targets.map((target) => ({
+    ...baseStep,
+    target
+  }));
 }
 
 // 读取结构化计划里的字符串字段, 忽略数组和对象等不安全类型
@@ -975,6 +1004,33 @@ function readStringField(value: Record<string, unknown>, keys: string[]): string
   }
 
   return undefined;
+}
+
+// 兼容编码 Agent 常见的 files/targets/paths 数组输出, 让一个结构化 step 能展开成多个文件动作
+function readStringArrayField(value: Record<string, unknown>, keys: string[]): string[] {
+  const targets: string[] = [];
+
+  for (const key of keys) {
+    const fieldValue = value[key];
+
+    if (!Array.isArray(fieldValue)) {
+      continue;
+    }
+
+    for (const item of fieldValue) {
+      if (typeof item !== "string") {
+        continue;
+      }
+
+      const normalized = item.trim();
+
+      if (normalized) {
+        targets.push(normalized);
+      }
+    }
+  }
+
+  return [...new Set(targets)];
 }
 
 // 支持模型常见 kind 别名, 没有可信 kind 时回退到文本推断

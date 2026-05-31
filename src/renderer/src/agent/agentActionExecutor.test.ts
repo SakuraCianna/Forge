@@ -8,7 +8,8 @@ import {
   resolveAgentCommandRisk,
   resolveAgentActionPermission,
   resolveAgentActionExecution,
-  runAgentActionBatch
+  runAgentActionBatch,
+  shouldTreatMissingInspectAsNewFile
 } from "./agentActionExecutor";
 
 describe("agentActionExecutor", () => {
@@ -234,6 +235,33 @@ describe("agentActionExecutor", () => {
     ).toEqual([]);
   });
 
+  it("allows a missing inspect step to hand off to a later create-file edit", () => {
+    const inspectNewFile = createAction({
+      id: "action-1",
+      kind: "inspect-file",
+      target: "项目说明书.md"
+    });
+    const createNewFile = createAction({
+      id: "action-2",
+      kind: "edit-file",
+      target: "项目说明书.md"
+    });
+
+    expect(
+      shouldTreatMissingInspectAsNewFile(inspectNewFile, [inspectNewFile, createNewFile])
+    ).toBe(true);
+    expect(
+      shouldTreatMissingInspectAsNewFile(inspectNewFile, [
+        inspectNewFile,
+        createAction({
+          id: "action-3",
+          kind: "edit-file",
+          target: "README.md"
+        })
+      ])
+    ).toBe(false);
+  });
+
   it("runs safe action batches in order and stops after the first non-completed action", async () => {
     const first = createAction({ id: "action-1", kind: "inspect-file", target: "src/App.tsx" });
     const second = createAction({ id: "action-2", kind: "run-command", command: "npm test" });
@@ -335,6 +363,29 @@ describe("agentActionExecutor", () => {
     expect(resolveAgentCommandRisk("git status --short")).toEqual({ level: "allow" });
     expect(resolveAgentCommandRisk("npm test -- --reporter=dot")).toEqual({ level: "allow" });
     expect(resolveAgentCommandRisk("npm run typecheck")).toEqual({ level: "allow" });
+  });
+
+  it("allows read-only PowerShell pipeline helper commands", () => {
+    expect(resolveAgentCommandRisk("Get-ChildItem -Recurse src | Select-Object -First 20")).toEqual({
+      level: "allow"
+    });
+    expect(resolveAgentCommandRisk("Get-ChildItem src | Where-Object Name -Like *.ts | Sort-Object Name")).toEqual({
+      level: "allow"
+    });
+  });
+
+  it("requires approval for PowerShell pipeline helpers with script blocks", () => {
+    expect(resolveAgentCommandRisk("rg TODO src | Where-Object { $_ -match 'TODO' }")).toEqual({
+      level: "ask",
+      reason: "command is not in the safe allowlist"
+    });
+  });
+
+  it("requires approval for allowlisted commands that redirect output", () => {
+    expect(resolveAgentCommandRisk("rg TODO src > result.txt")).toEqual({
+      level: "ask",
+      reason: "命令可能通过 shell 重定向写入文件"
+    });
   });
 
   it("uses configured command rules for non-destructive commands", () => {

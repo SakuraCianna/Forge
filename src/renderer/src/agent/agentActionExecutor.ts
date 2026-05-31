@@ -16,7 +16,7 @@ export type AgentActionPermissionResult =
   | { ok: true }
   | { ok: false; tool: AgentToolPermission; message: string };
 
-export type AgentCommandRisk =
+type AgentCommandRisk =
   | { level: "allow" }
   | { level: "ask" | "deny"; reason: string };
 
@@ -29,6 +29,7 @@ const dependencyChangeReason = "command may change dependencies or project state
 const gitMutationReason = "command may change Git history or remote state";
 const destructiveCommandReason = "command can delete files or rewrite history";
 const unknownCommandReason = "command is not in the safe allowlist";
+const shellOutputRedirectionReason = "命令可能通过 shell 重定向写入文件";
 
 // 根据动作类型决定执行方式, 不能自动执行的动作返回阻塞原因
 export function resolveAgentActionExecution(action: AgentAction): AgentActionExecution {
@@ -132,6 +133,35 @@ export function getRunnablePendingAgentActions(
   return runnableActions;
 }
 
+// 新建文件计划常见顺序是先 inspect 再 edit; inspect 发现文件不存在时不应阻断后续创建
+export function shouldTreatMissingInspectAsNewFile(
+  action: AgentAction,
+  actions: AgentAction[]
+): boolean {
+  const target = normalizeComparableActionTarget(action.target);
+
+  if (action.kind !== "inspect-file" || !target) {
+    return false;
+  }
+
+  const actionIndex = actions.findIndex((candidate) => candidate.id === action.id);
+
+  if (actionIndex < 0) {
+    return false;
+  }
+
+  return actions.slice(actionIndex + 1).some((candidate) => {
+    const candidateTarget = normalizeComparableActionTarget(candidate.target);
+
+    return (
+      candidate.kind === "edit-file" &&
+      candidate.status === "pending" &&
+      Boolean(candidateTarget) &&
+      candidateTarget === target
+    );
+  });
+}
+
 type AgentActionBatchResult = {
   completed: number;
   stoppedAt: AgentAction | null;
@@ -206,6 +236,13 @@ function normalizeAgentActionRunOutcome(outcome: AgentActionRunOutcome): {
   };
 }
 
+// 归一化动作目标, 让 Windows 反斜杠和大小写差异不影响同文件判断
+function normalizeComparableActionTarget(target: string | undefined): string | null {
+  const normalized = target?.trim().replace(/\\/g, "/").toLocaleLowerCase();
+
+  return normalized || null;
+}
+
 // 判断动作是否适合自动执行, manual 和 commit 必须留给用户确认
 export function isRunnableAgentAction(
   action: AgentAction,
@@ -272,6 +309,10 @@ function resolveSingleCommandRisk(
 
   if (configuredRisk?.level === "deny" || configuredRisk?.level === "ask") {
     return configuredRisk;
+  }
+
+  if (hasShellOutputRedirection(normalized)) {
+    return configuredRisk ?? { level: "ask", reason: shellOutputRedirectionReason };
   }
 
   if (isDependencyChangingCommand(normalized)) {
@@ -362,6 +403,11 @@ function isDependencyChangingCommand(command: string): boolean {
   return /^(npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall|update|upgrade)\b/u.test(command);
 }
 
+// 识别会把命令输出写入文件的 shell 重定向, 让 Agent 停下来等用户确认
+function hasShellOutputRedirection(command: string): boolean {
+  return /(?:^|\s)(?:\d?>>?|\*>>?|>>?)\s*\S/u.test(command);
+}
+
 // 识别需要用户明确确认的 Git 写操作
 function isGitMutatingCommand(command: string): boolean {
   return /^git\s+(?:add|commit|push|pull|merge|rebase|checkout|switch|restore|tag|stash)\b/u.test(command);
@@ -376,6 +422,17 @@ function isAllowedCommand(command: string): boolean {
     /^yarn\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
     /^bun\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
     /^(npx\s+)?(?:vitest|tsc|eslint)(?:\s|$)/u.test(command) ||
-    /^(rg|git\s+grep|get-childitem|dir|ls)(?:\s|$)/u.test(command)
+    /^(rg|git\s+grep|get-childitem|dir|ls)(?:\s|$)/u.test(command) ||
+    isAllowedPowerShellPipelineHelperCommand(command)
+  );
+}
+
+// 只允许无脚本块的 PowerShell 管道整理命令, 避免自动执行任意脚本块
+function isAllowedPowerShellPipelineHelperCommand(command: string): boolean {
+  return (
+    !/[{}]/u.test(command) &&
+    /^(select-object|where-object|sort-object|measure-object|format-table|format-list|out-string)(?:\s|$)/u.test(
+      command
+    )
   );
 }

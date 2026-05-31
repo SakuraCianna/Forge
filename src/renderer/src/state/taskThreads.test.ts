@@ -22,6 +22,7 @@ import {
   cancelThread,
   restoreThread,
   toggleThreadPinned,
+  updateThreadAgentActionFromFileChangePreview,
   updateThreadAgentActionStatus,
   type TaskThread
 } from "./taskThreads";
@@ -246,6 +247,46 @@ describe("taskThreads", () => {
     expect(withStderr[0].events[0].commandRun?.stderr).toBe("warning line\n");
   });
 
+  it("marks long live command output as truncated while keeping the latest lines", () => {
+    const threads: TaskThread[] = [
+      {
+        id: "thread-1",
+        title: "Run tests",
+        prompt: "Run tests",
+        status: "running",
+        modelId: "openai:gpt-5.5",
+        intelligence: "high",
+        speed: "balanced",
+        createdAt: "2026-05-27T13:00:00.000Z",
+        events: [
+          {
+            id: "event-command-started",
+            kind: "command",
+            message: "Started command",
+            createdAt: "2026-05-27T13:05:00.000Z",
+            commandRun: {
+              command: "npm test",
+              runId: "run-1",
+              status: "running"
+            }
+          }
+        ]
+      }
+    ];
+
+    const updated = appendCommandRunOutput(threads, {
+      runId: "run-1",
+      command: "npm test",
+      stream: "stdout",
+      chunk: `start\n${"x".repeat(13000)}\nFINAL ERROR: failed assertion`
+    });
+    const stdout = updated[0].events[0].commandRun?.stdout ?? "";
+
+    expect(stdout).toContain("[Forge output truncated");
+    expect(stdout).not.toContain("start");
+    expect(stdout).toContain("FINAL ERROR: failed assertion");
+  });
+
   it("creates a structured command approval audit event", () => {
     const event = createCommandApprovalEvent({
       threadId: "thread-1",
@@ -258,8 +299,7 @@ describe("taskThreads", () => {
     expect(event).toEqual({
       id: "thread-1-command-approved-action-1-2026-05-27T13:05:00.000Z",
       kind: "command",
-      message:
-        "Command approved: npm install (command may change dependencies or project state)",
+      message: "命令已批准: npm install (command may change dependencies or project state)",
       createdAt: "2026-05-27T13:05:00.000Z",
       commandApproval: {
         command: "npm install",
@@ -661,6 +701,145 @@ describe("taskThreads", () => {
       "completed"
     ]);
     expect(threads[0].status).toBe("completed");
+  });
+
+  it("updates the exact agent action that produced a reviewed file change", () => {
+    const threads = updateThreadAgentActionFromFileChangePreview(
+      [
+        {
+          id: "thread-1",
+          title: "Agent task",
+          prompt: "Agent task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "edit-file",
+              label: "Edit src/App.tsx",
+              status: "pending",
+              target: "src/App.tsx"
+            },
+            {
+              id: "action-2",
+              stepId: "step-2",
+              kind: "edit-file",
+              label: "Edit src/Other.tsx",
+              status: "pending",
+              target: "src/Other.tsx"
+            }
+          ]
+        }
+      ],
+      {
+        relativePath: "src/Other.tsx",
+        currentContent: "old",
+        nextContent: "new",
+        diff: [],
+        source: {
+          threadId: "thread-1",
+          actionId: "action-2",
+          actionLabel: "Edit src/Other.tsx"
+        }
+      },
+      "completed"
+    );
+
+    expect(threads[0].agentActions?.map((action) => action.status)).toEqual([
+      "pending",
+      "completed"
+    ]);
+
+    const failedThreads = updateThreadAgentActionFromFileChangePreview(
+      threads,
+      {
+        relativePath: "src/App.tsx",
+        currentContent: "old",
+        nextContent: "new",
+        diff: [],
+        source: {
+          threadId: "thread-1",
+          actionId: "action-1",
+          actionLabel: "Edit src/App.tsx"
+        }
+      },
+      "failed"
+    );
+
+    expect(failedThreads[0].agentActions?.map((action) => action.status)).toEqual([
+      "failed",
+      "completed"
+    ]);
+    expect(failedThreads[0].status).toBe("blocked");
+  });
+
+  it("keeps other threads untouched when applying a sourced file change", () => {
+    const threads = updateThreadAgentActionFromFileChangePreview(
+      [
+        {
+          id: "thread-1",
+          title: "Agent task",
+          prompt: "Agent task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "edit-file",
+              label: "Edit src/App.tsx",
+              status: "pending",
+              target: "src/App.tsx"
+            }
+          ]
+        },
+        {
+          id: "thread-2",
+          title: "Other task",
+          prompt: "Other task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "edit-file",
+              label: "Edit src/Other.tsx",
+              status: "pending",
+              target: "src/Other.tsx"
+            }
+          ]
+        }
+      ],
+      {
+        relativePath: "src/App.tsx",
+        currentContent: "old",
+        nextContent: "new",
+        diff: [],
+        source: {
+          threadId: "thread-1",
+          actionId: "action-1"
+        }
+      },
+      "completed"
+    );
+
+    expect(threads[0].agentActions?.[0].status).toBe("completed");
+    expect(threads[0].status).toBe("completed");
+    expect(threads[1].agentActions?.[0].status).toBe("pending");
   });
 });
 

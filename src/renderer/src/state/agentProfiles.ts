@@ -3,10 +3,10 @@ import type { AgentProfileContext } from "@shared/agentTypes";
 
 const agentProfileStorageKey = "forge.agentProfiles";
 
-export type AgentProfilePermissionMode = "auto" | "full";
+type AgentProfilePermissionMode = "auto" | "full";
 export type AgentProfileTool = "read" | "edit" | "command" | "git";
 
-export type AgentProfileTools = Record<AgentProfileTool, boolean>;
+type AgentProfileTools = Record<AgentProfileTool, boolean>;
 
 export type AgentProfile = {
   id: string;

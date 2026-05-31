@@ -265,6 +265,63 @@ describe("modelSettings", () => {
     expect(loaded.currentModelId).toBeNull();
   });
 
+  it("persists provider API capability metadata for fetched models", () => {
+    const storage = createMemoryStorage();
+    let settings = createDefaultModelSettings();
+
+    settings = addCustomProvider(settings, "Cherry Gateway", "https://gateway.example/v1");
+    settings = mergeFetchedModels(settings, [
+      {
+        id: "custom-cherry-gateway:vision-coder",
+        providerId: "custom-cherry-gateway",
+        label: "Vision Coder",
+        modelName: "vision-coder",
+        enabled: false,
+        capabilities: {
+          reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] },
+          toolCalling: true,
+          streaming: true,
+          vision: true,
+          contextWindow: 128000,
+          speedModes: ["balanced", "fast"]
+        },
+        pricing: {
+          inputPerMillion: 1.25,
+          outputPerMillion: 4.5
+        },
+        capabilitySource: "provider-api"
+      }
+    ]);
+    settings = updateModelEnabled(settings, "custom-cherry-gateway:vision-coder", true);
+    settings = setCurrentModel(settings, "custom-cherry-gateway:vision-coder");
+    settings = setSpeed(settings, "fast");
+
+    saveModelSettings(storage, settings);
+
+    const loaded = loadModelSettings(storage);
+    const model = loaded.models.find(
+      (candidate) => candidate.id === "custom-cherry-gateway:vision-coder"
+    );
+
+    expect(loaded.speed).toBe("fast");
+    expect(model).toMatchObject({
+      enabled: true,
+      capabilitySource: "provider-api",
+      capabilities: {
+        reasoning: { type: "effort", values: ["low", "medium", "high", "xhigh"] },
+        toolCalling: true,
+        streaming: true,
+        vision: true,
+        contextWindow: 128000,
+        speedModes: ["balanced", "fast"]
+      },
+      pricing: {
+        inputPerMillion: 1.25,
+        outputPerMillion: 4.5
+      }
+    });
+  });
+
   it("persists manually added custom provider models", () => {
     const storage = createMemoryStorage();
     let settings = createDefaultModelSettings();

@@ -49,6 +49,27 @@ describe("failureFixPrompt", () => {
     expect(prompt).toContain('Return a JSON object with a "steps" array');
   });
 
+  it("keeps the tail of long command output so the model sees the final error", () => {
+    const commandResult: CommandRunResult = {
+      command: "npm test",
+      cwd: "E:\\CodeHome\\Forge",
+      exitCode: 1,
+      stdout: "",
+      stderr: [
+        "setup started",
+        "x".repeat(2200),
+        "FINAL ERROR: expected settings page route to be reachable"
+      ].join("\n"),
+      timedOut: false
+    };
+
+    const prompt = createFailureFixTaskPrompt(thread, action, commandResult);
+
+    expect(prompt).toContain("setup started");
+    expect(prompt).toContain("FINAL ERROR: expected settings page route to be reachable");
+    expect(prompt).toContain("output truncated, middle omitted");
+  });
+
   it("adds action queue and recent execution context for recovery planning", () => {
     const failedAction: AgentAction = {
       id: "action-2",
@@ -106,5 +127,48 @@ describe("failureFixPrompt", () => {
     expect(prompt).toContain("file at 2026-05-27T13:01:00.000Z");
     expect(prompt).toContain("error at 2026-05-27T13:02:00.000Z");
     expect(prompt).toContain("Reuse completed work");
+  });
+
+  it("keeps final errors from recent command context when the failed action is not a command", () => {
+    const failedAction: AgentAction = {
+      id: "action-2",
+      stepId: "step-2",
+      kind: "edit-file",
+      label: "Edit src/settings.ts",
+      status: "failed",
+      target: "src/settings.ts"
+    };
+    const prompt = createFailureFixTaskPrompt(
+      {
+        ...thread,
+        events: [
+          {
+            id: "event-1",
+            kind: "command",
+            message: "Command failed: npm run build",
+            createdAt: "2026-05-27T13:03:00.000Z",
+            commandResult: {
+              command: "npm run build",
+              cwd: "E:\\CodeHome\\Forge",
+              exitCode: 1,
+              stdout: "",
+              stderr: [
+                "build started",
+                "y".repeat(900),
+                "FINAL BUILD ERROR: Cannot find module './settings'"
+              ].join("\n"),
+              timedOut: false
+            }
+          }
+        ],
+        agentActions: [failedAction]
+      },
+      failedAction
+    );
+
+    expect(prompt).toContain("Recent execution context:");
+    expect(prompt).toContain("build started");
+    expect(prompt).toContain("FINAL BUILD ERROR: Cannot find module './settings'");
+    expect(prompt).toContain("output truncated, middle omitted");
   });
 });

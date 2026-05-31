@@ -18,7 +18,7 @@ const thread: TaskThread = {
 };
 
 describe("ThreadWorkspace", () => {
-  it("uses a compact Codex-style transcript without nested task panels", () => {
+  it("renders compact user prompt and assistant answer in the transcript", () => {
     render(
       <ThreadWorkspace
         compact
@@ -43,11 +43,149 @@ describe("ThreadWorkspace", () => {
     );
 
     const transcript = screen.getByRole("region", { name: "Conversation transcript" });
+    const userPrompt = screen.getByText(thread.prompt).closest("article");
+
     expect(transcript).toHaveTextContent("A concise answer for the user.");
-    expect(screen.queryByText("Task threads")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Plan" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Steps")).not.toBeInTheDocument();
-    expect(screen.queryByText("Validation")).not.toBeInTheDocument();
+    expect(transcript).toHaveClass("grid", "gap-5");
+    expect(userPrompt).toHaveClass("ml-auto", "max-w-[68%]");
+    expect(transcript.firstElementChild).toHaveClass("grid", "grid-cols-[20px_minmax(0,1fr)]");
+  });
+
+  it("shows compact manual gate confirmation controls", async () => {
+    const user = userEvent.setup();
+    const onCompleteAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "blocked",
+            events: [
+              {
+                id: "plan-ready",
+                kind: "plan",
+                message: "Execution plan created, but the next step needs your review.",
+                createdAt: "2026-05-27T13:00:04.000Z"
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "manual",
+                label: "Review diff",
+                status: "pending"
+              }
+            ]
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onCompleteAgentAction={onCompleteAgentAction}
+      />
+    );
+
+    const controls = screen.getByRole("region", { name: "Agent action confirmation" });
+
+    expect(within(controls).getAllByText("Waiting for manual confirmation").length).toBeGreaterThan(0);
+
+    await user.click(within(controls).getByRole("button", { name: "Mark review complete" }));
+
+    expect(onCompleteAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", kind: "manual" })
+    );
+  });
+
+  it("shows compact command approval controls", async () => {
+    const user = userEvent.setup();
+    const onApproveAgentCommand = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "blocked",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Install dependencies",
+                status: "pending",
+                command: "npm install"
+              }
+            ]
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onApproveAgentCommand={onApproveAgentCommand}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Approve command npm install" }));
+
+    expect(onApproveAgentCommand).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", command: "npm install" })
+    );
+  });
+
+  it("opens pending compact file changes in the files view", async () => {
+    const user = userEvent.setup();
+    const onPreviewFile = vi.fn();
+    const onOpenFiles = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "running",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "edit-file",
+                label: "Edit src/App.tsx",
+                status: "running",
+                target: "src/App.tsx"
+              }
+            ]
+          }
+        ]}
+        changePreviews={[
+          {
+            relativePath: "src/App.tsx",
+            currentContent: "old",
+            nextContent: "new",
+            diff: [],
+            source: {
+              threadId: "thread-1",
+              actionId: "action-1"
+            }
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onPreviewFile={onPreviewFile}
+        onOpenFiles={onOpenFiles}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Review changes src/App.tsx" }));
+
+    expect(onPreviewFile).toHaveBeenCalledWith("src/App.tsx");
+    expect(onOpenFiles).toHaveBeenCalled();
   });
 
   it("renders compact assistant output as markdown", () => {
@@ -77,6 +215,41 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByText("欢迎回来")).toBeInTheDocument();
   });
 
+  it("renders compact assistant markdown tables as real tables", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        threads={[
+          {
+            ...thread,
+            events: [
+              {
+                id: "answer",
+                kind: "result",
+                message: [
+                  "**Generated files**",
+                  "",
+                  "| File | Status |",
+                  "| --- | --- |",
+                  "| README.md | created |"
+                ].join("\n"),
+                createdAt: "2026-05-27T13:01:00.000Z"
+              }
+            ]
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    expect(screen.getByText("Generated files").tagName).toBe("STRONG");
+    const table = screen.getByRole("table");
+    expect(within(table).getByRole("columnheader", { name: "File" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "created" })).toBeInTheDocument();
+  });
+
   it("keeps compact user prompts minimal and formats assistant timing", () => {
     render(
       <ThreadWorkspace
@@ -102,11 +275,13 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("What did this project do?")).toBeInTheDocument();
-    expect(screen.queryByText("Request")).not.toBeInTheDocument();
+    const userPrompt = screen.getByText("What did this project do?").closest("article");
+    const transcript = screen.getByRole("region", { name: "Conversation transcript" });
+
+    expect(userPrompt).toHaveClass("ml-auto", "max-w-[68%]");
+    expect(transcript.firstElementChild).toHaveClass("grid", "grid-cols-[20px_minmax(0,1fr)]");
     expect(screen.getByText(/2026-05-27 \d{2}:01:09/)).toBeInTheDocument();
     expect(screen.getByText(/LLM 8s/)).toBeInTheDocument();
-    expect(screen.queryByText(/T13:01/)).not.toBeInTheDocument();
   });
 
   it("uses tighter compact user bubbles", () => {
@@ -907,6 +1082,9 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    expect(screen.getByText("命令会修改依赖或项目状态")).toBeInTheDocument();
+    expect(screen.queryByText("command may change dependencies or project state")).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "命令" }));
 
     const approvals = screen.getByRole("region", { name: "命令审批记录" });
@@ -1023,6 +1201,86 @@ describe("ThreadWorkspace", () => {
     expect(within(details).getByText("1")).toBeInTheDocument();
     expect(within(details).getByText("stderr")).toBeInTheDocument();
     expect(within(details).getByText("failed tests")).toBeInTheDocument();
+  });
+
+  it("shows command output for the selected agent action when commands repeat", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Repeated command output",
+            events: [
+              {
+                id: "event-command-action-1",
+                kind: "result",
+                message: "Unit test command finished",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  actionId: "action-1",
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 0,
+                  stdout: "unit suite passed",
+                  stderr: "",
+                  timedOut: false
+                }
+              },
+              {
+                id: "event-command-action-2",
+                kind: "error",
+                message: "Integration test command failed",
+                createdAt: "2026-05-27T13:06:00.000Z",
+                commandResult: {
+                  actionId: "action-2",
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "integration suite failed",
+                  stderr: "database unavailable",
+                  timedOut: false
+                }
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Run unit tests",
+                status: "completed",
+                command: "npm test"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run integration tests",
+                status: "failed",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select action Run unit tests" }));
+
+    const details = screen.getByRole("region", { name: "Action details" });
+    expect(within(details).getByText("unit suite passed")).toBeInTheDocument();
+    expect(within(details).queryByText("integration suite failed")).not.toBeInTheDocument();
+    expect(within(details).queryByText("database unavailable")).not.toBeInTheDocument();
   });
 
   it("runs the next pending agent action from the queue", async () => {
@@ -1260,6 +1518,59 @@ describe("ThreadWorkspace", () => {
 
     expect(screen.getByText("Pending changes")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pending change src/App.tsx" })).toBeInTheDocument();
+  });
+
+  it("shows review state when a running edit action has generated pending changes", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Review running edit",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "edit-file",
+                label: "Edit src/App.tsx",
+                status: "running",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        changePreviews={[
+          {
+            relativePath: "src/App.tsx",
+            currentContent: "old",
+            nextContent: "new",
+            diff: [{ kind: "add", newLineNumber: 1, text: "new" }]
+          }
+        ]}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentActions={vi.fn()}
+      />
+    );
+
+    const status = screen.getByRole("region", { name: "Agent run" });
+    expect(within(status).getByText("Review generated changes")).toBeInTheDocument();
+    expect(within(status).getByText("1 pending change")).toBeInTheDocument();
+    expect(within(status).queryByText("Running")).not.toBeInTheDocument();
   });
 
   it("shows manual gates as review requirements instead of runnable steps", () => {
@@ -2082,6 +2393,50 @@ describe("ThreadWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "Retry command" }));
 
     expect(onRunCommand).toHaveBeenCalledWith("thread-1", "npm test");
+  });
+
+  it("keeps the final error visible when command history output is long", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Long command output",
+            events: [
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: `start\n${"x".repeat(1200)}\nFINAL ERROR: failed assertion`,
+                  stderr: "",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    expect(screen.getByText(/output truncated/)).toBeInTheDocument();
+    expect(screen.getByText(/FINAL ERROR: failed assertion/)).toBeInTheDocument();
   });
 
   it("shows scanned project files and previews selected content", async () => {

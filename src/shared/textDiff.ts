@@ -4,7 +4,7 @@ export type LineDiffEntry =
   | { kind: "remove"; oldLineNumber: number; text: string }
   | { kind: "add"; newLineNumber: number; text: string };
 
-export type AnnotatedLineDiffEntry = LineDiffEntry & {
+type AnnotatedLineDiffEntry = LineDiffEntry & {
   hunkIndex: number | null;
   hunkStart: boolean;
 };

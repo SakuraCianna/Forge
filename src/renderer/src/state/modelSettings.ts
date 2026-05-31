@@ -8,6 +8,7 @@ import type {
   Language,
   ModelPricing,
   ModelSettings,
+  ReasoningControl,
   SpeedMode
 } from "@shared/modelTypes";
 
@@ -41,11 +42,22 @@ type PersistedDetectedModel = {
   modelName: string;
   label: string;
   enabled?: boolean;
+  capabilities?: PersistedModelCapabilities;
+  capabilitySource?: "provider-api" | "probe";
   contextWindow?: number;
   pricing?: ModelPricing;
   selectionCount?: number;
   lastSelectedAt?: string;
 };
+
+type PersistedModelCapabilities = Partial<{
+  reasoning: ReasoningControl;
+  toolCalling: boolean | "unknown";
+  streaming: boolean | "unknown";
+  vision: boolean | "unknown";
+  contextWindow: number;
+  speedModes: SpeedMode[];
+}>;
 
 // 创建模型设置默认值, 首次启动不默认启用任何远端模型
 export function createDefaultModelSettings(): ModelSettings {
@@ -381,6 +393,8 @@ export function saveModelSettings(storage: Storage, settings: ModelSettings): vo
         modelName: model.modelName,
         label: model.label,
         enabled: model.enabled,
+        capabilities: serializeModelCapabilities(model.capabilities),
+        capabilitySource: model.capabilitySource === "probe" ? "probe" : "provider-api",
         contextWindow: model.capabilities.contextWindow,
         pricing: model.pricing,
         selectionCount: model.selectionCount,
@@ -445,13 +459,24 @@ function mergePersistedSettings(persisted: PersistedModelSettings): ModelSetting
         model.label || model.modelName
       );
       const persistedContextWindow = readPersistedContextWindow(model.contextWindow);
+      const persistedCapabilities = readPersistedModelCapabilities(
+        model.capabilities,
+        model.contextWindow
+      );
 
       return {
         ...detectedModel,
         enabled: model.enabled === true,
+        capabilitySource:
+          readPersistedDetectedCapabilitySource(model.capabilitySource) ??
+          detectedModel.capabilitySource,
         capabilities: {
           ...detectedModel.capabilities,
-          contextWindow: persistedContextWindow ?? detectedModel.capabilities.contextWindow
+          ...persistedCapabilities,
+          contextWindow:
+            persistedCapabilities.contextWindow ??
+            persistedContextWindow ??
+            detectedModel.capabilities.contextWindow
         },
         pricing: isModelPricing(model.pricing) ? model.pricing : detectedModel.pricing,
         selectionCount:
@@ -552,11 +577,156 @@ function normalizeSpeed(value: unknown, fallback: SpeedMode): SpeedMode {
   return value === "fast" || value === "balanced" ? value : fallback;
 }
 
+// 保存供应商能力探测结果, 让重启后模型选择和 Agent 请求仍能读取真实能力
+function serializeModelCapabilities(
+  capabilities: ForgeModel["capabilities"]
+): PersistedModelCapabilities {
+  return {
+    reasoning: capabilities.reasoning,
+    toolCalling: capabilities.toolCalling,
+    streaming: capabilities.streaming,
+    vision: capabilities.vision,
+    contextWindow: capabilities.contextWindow,
+    speedModes: capabilities.speedModes
+  };
+}
+
+// 从持久化数据中安全恢复能力字段, 坏数据只丢弃对应字段而不重置整个设置
+function readPersistedModelCapabilities(
+  value: unknown,
+  legacyContextWindow?: unknown
+): PersistedModelCapabilities {
+  const capabilities: PersistedModelCapabilities = {};
+
+  if (isRecord(value)) {
+    const reasoning = readPersistedReasoningControl(value.reasoning);
+    const toolCalling = readTriStateCapability(value.toolCalling);
+    const streaming = readTriStateCapability(value.streaming);
+    const vision = readTriStateCapability(value.vision);
+    const speedModes = readPersistedSpeedModes(value.speedModes);
+    const contextWindow = readPersistedContextWindow(value.contextWindow);
+
+    if (reasoning) {
+      capabilities.reasoning = reasoning;
+    }
+
+    if (toolCalling !== undefined) {
+      capabilities.toolCalling = toolCalling;
+    }
+
+    if (streaming !== undefined) {
+      capabilities.streaming = streaming;
+    }
+
+    if (vision !== undefined) {
+      capabilities.vision = vision;
+    }
+
+    if (speedModes) {
+      capabilities.speedModes = speedModes;
+    }
+
+    if (contextWindow) {
+      capabilities.contextWindow = contextWindow;
+    }
+  }
+
+  capabilities.contextWindow ??= readPersistedContextWindow(legacyContextWindow);
+
+  return capabilities;
+}
+
+// 恢复 provider-api/probe 来源标签, 避免坏数据伪装成内置或手动模型
+function readPersistedDetectedCapabilitySource(
+  value: unknown
+): PersistedDetectedModel["capabilitySource"] | undefined {
+  return value === "provider-api" || value === "probe" ? value : undefined;
+}
+
+// 恢复推理控制方式, 同时限制 effort 档位和 budget 数字范围
+function readPersistedReasoningControl(value: unknown): ReasoningControl | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (value.type === "none") {
+    return { type: "none" };
+  }
+
+  if (value.type === "effort") {
+    const values = readPersistedIntelligenceLevels(value.values);
+
+    return values.length > 0 ? { type: "effort", values } : undefined;
+  }
+
+  if (value.type === "budget") {
+    const min = readFiniteNumber(value.min);
+    const max = readFiniteNumber(value.max);
+
+    if (min === undefined || max === undefined || min < 0 || max < min) {
+      return undefined;
+    }
+
+    return { type: "budget", min: Math.round(min), max: Math.round(max) };
+  }
+
+  return undefined;
+}
+
+// 恢复布尔或 unknown 能力, 其他值视为损坏字段
+function readTriStateCapability(value: unknown): boolean | "unknown" | undefined {
+  return value === true || value === false || value === "unknown" ? value : undefined;
+}
+
+// 恢复速度模式并去重, 防止持久化数组夹带未知值
+function readPersistedSpeedModes(value: unknown): SpeedMode[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const speedModes = value
+    .filter(isSpeedMode)
+    .filter((mode, index, modes) => modes.indexOf(mode) === index);
+
+  return speedModes.length > 0 ? speedModes : undefined;
+}
+
+// 恢复 intelligence 档位并去重, 供应商返回的顺序保持不变
+function readPersistedIntelligenceLevels(value: unknown): IntelligenceLevel[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isIntelligenceLevel)
+    .filter((level, index, levels) => levels.indexOf(level) === index);
+}
+
 // 读取持久化上下文窗口, 非正数直接忽略
 function readPersistedContextWindow(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.round(value)
     : undefined;
+}
+
+// 收窄普通对象类型, 供持久化字段校验复用
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+// 判断是否是 Forge 支持的速度档位
+function isSpeedMode(value: unknown): value is SpeedMode {
+  return value === "fast" || value === "balanced";
+}
+
+// 判断是否是 Forge 支持的智能档位
+function isIntelligenceLevel(value: unknown): value is IntelligenceLevel {
+  return value === "low" || value === "medium" || value === "high" || value === "xhigh";
+}
+
+// 读取有限数字, 其他类型不进入能力配置
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 // 校验模型价格对象, 输入和输出价格可以单独存在

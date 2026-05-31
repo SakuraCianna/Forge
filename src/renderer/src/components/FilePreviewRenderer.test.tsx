@@ -1,5 +1,5 @@
 // 本文件说明: 验证代码预览和 Markdown 预览的渲染结果
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FilePreviewRenderer } from "./FilePreviewRenderer";
 
@@ -34,10 +34,33 @@ describe("FilePreviewRenderer", () => {
       />
     );
 
-    expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "变量" })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "AI 提供商" })).toBeInTheDocument();
-    expect(screen.queryByText("| ---- | ---- | ---- |")).not.toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    expect(within(table).getByRole("columnheader", { name: "变量" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "AI 提供商" })).toBeInTheDocument();
+  });
+
+  it("keeps parsed markdown table structure accessible", () => {
+    render(
+      <FilePreviewRenderer
+        content={[
+          "`.env` main config:",
+          "",
+          "| Variable | Description | Example |",
+          "| --- | --- | --- |",
+          "| `LLM_PROVIDER` | AI provider | `openai` |",
+          "| `OPENAI_API_KEY` | OpenAI API Key | `sk-xxx` |"
+        ].join("\n")}
+        mode="rendered"
+        path="README.md"
+      />
+    );
+
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    expect(within(table).getByRole("columnheader", { name: "Variable" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "AI provider" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "openai" })).toBeInTheDocument();
   });
 
   it("highlights code tokens for source previews", () => {
