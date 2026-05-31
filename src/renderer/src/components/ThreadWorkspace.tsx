@@ -127,6 +127,37 @@ type AgentConfirmationItem = {
   riskReason?: string;
 };
 
+// 紧凑主屏只保留人能直接阅读的消息, 详细执行流水留在 Agent 详情视图里
+function shouldShowCompactTranscriptEvent(event: TaskThreadEvent): boolean {
+  if (event.agentActionRun || event.commandRun?.actionId || event.commandResult?.actionId) {
+    return false;
+  }
+
+  return event.kind === "user" || event.kind === "result" || event.kind === "error";
+}
+
+// 队列完成后的继续规划只给一个轻量入口, 不再把完成清单和状态模板铺到主屏
+function canShowCompactContinuationPlan(
+  selectedThread: TaskThread,
+  pendingChangeCount: number,
+  commandSafetyPolicy: AgentCommandSafetyPolicy,
+  agentPaused: boolean,
+  hasContinuationHandler: boolean
+): boolean {
+  const agentActions = selectedThread.agentActions ?? [];
+  const controlState = getAgentControlState(agentActions, pendingChangeCount, commandSafetyPolicy);
+
+  return (
+    hasContinuationHandler &&
+    agentActions.length > 0 &&
+    !agentPaused &&
+    pendingChangeCount === 0 &&
+    !controlState.queueBlockerAction &&
+    controlState.runnablePendingActions.length === 0 &&
+    !controlState.activeGateAction
+  );
+}
+
 // 把线程状态拆成简洁对话视图, 复杂执行细节只在需要的标签里展示
 export function ThreadWorkspace({
   compact = false,
@@ -195,9 +226,10 @@ export function ThreadWorkspace({
     [selectedThread]
   );
   const visibleCompactEvents = useMemo(
-    () => selectedThread?.events ?? [],
+    () => selectedThread?.events.filter(shouldShowCompactTranscriptEvent) ?? [],
     [selectedThread]
   );
+  const hasCompactSourceEvents = (selectedThread?.events.length ?? 0) > 0;
   const duration = useMemo(() => {
     if (!selectedThread) {
       return "0m";
@@ -615,12 +647,14 @@ export function ThreadWorkspace({
           >
             {visibleCompactEvents.length > 0 ? (
               visibleCompactEvents.map((event) => renderCompactEvent(event))
-            ) : (
+            ) : !hasCompactSourceEvents ? (
               <div className="text-sm text-[#8e8ea0]">
                 {language === "zh-CN" ? "等待 Forge 开始执行" : "Waiting for Forge to start"}
               </div>
-            )}
+            ) : null}
           </section>
+
+          {renderCompactContinuationShortcut()}
         </div>
       </section>
     );
@@ -959,21 +993,12 @@ export function ThreadWorkspace({
     const agentActions = selectedThread.agentActions ?? [];
     const pendingChangeCount = allChangePreviews.length;
     const controlState = getAgentControlState(agentActions, pendingChangeCount, commandSafetyPolicy);
-    const canGenerateContinuationPlan =
-      Boolean(onGenerateContinuationPlan) &&
-      agentActions.length > 0 &&
-      !agentPaused &&
-      pendingChangeCount === 0 &&
-      !controlState.queueBlockerAction &&
-      controlState.runnablePendingActions.length === 0 &&
-      !controlState.activeGateAction;
     const hasActionableState =
       agentPaused ||
       pendingChangeCount > 0 ||
       controlState.runnablePendingActions.length > 0 ||
       Boolean(controlState.activeGateAction) ||
-      Boolean(controlState.queueBlockerAction) ||
-      canGenerateContinuationPlan;
+      Boolean(controlState.queueBlockerAction);
 
     if (!hasActionableState) {
       return null;
@@ -1206,26 +1231,6 @@ export function ThreadWorkspace({
           </div>
         ) : null}
 
-        {canGenerateContinuationPlan ? (
-          <div className="mt-4 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-3">
-            <p className="text-sm font-semibold leading-5 text-[#202123]">
-              {copy.generateNextPlan}
-            </p>
-            <p className="mt-1 text-[12px] leading-5 text-[#565869]">
-              {copy.generateNextPlanBody}
-            </p>
-            <button
-              type="button"
-              aria-label={copy.generateNextPlan}
-              onClick={() => onGenerateContinuationPlan?.(selectedThread.id)}
-              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2.5 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
-            >
-              <Brain className="h-3.5 w-3.5" />
-              {copy.generateNextPlan}
-            </button>
-          </div>
-        ) : null}
-
         {!agentPaused && controlState.runnablePendingActions.length === 0 && activeGateAction ? (
           <div className="mt-4 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-3">
             <p className="text-sm font-semibold leading-5 text-[#9a3412]">
@@ -1239,36 +1244,39 @@ export function ThreadWorkspace({
             </div>
           </div>
         ) : null}
-
-        <div className="mt-4 grid gap-2">
-          {agentActions.slice(0, 5).map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              onClick={() => setSelectedAgentActionId(action.id)}
-              className={`grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-[12px] border px-3 py-2 text-left transition hover:bg-[#fafafa] active:scale-[0.99] ${
-                selectedAgentActionId === action.id
-                  ? "border-[#202123] bg-white"
-                  : action.kind === "manual" || action.kind === "commit"
-                    ? "border-[#f4c7ab] bg-[#fffaf5]"
-                    : "border-[#ececf1] bg-white"
-              }`}
-            >
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-[#202123]">
-                  {action.label}
-                </span>
-                <span className="mt-0.5 block text-[11px] uppercase tracking-[0.08em] text-[#8e8ea0]">
-                  {action.kind}
-                </span>
-              </span>
-              <span className="rounded-full border border-[#d9d9e3] bg-white px-2 py-0.5 text-[11px] text-[#565869]">
-                {getCompactActionStatusLabel(action, commandSafetyPolicy, fullAccess, language)}
-              </span>
-            </button>
-          ))}
-        </div>
       </section>
+    );
+  }
+
+  // 完成态只保留一个图标按钮作为后续规划入口, 避免主屏再次出现大块模板面板
+  function renderCompactContinuationShortcut(): ReactElement | null {
+    const canGenerateContinuationPlan = canShowCompactContinuationPlan(
+      selectedThread,
+      allChangePreviews.length,
+      commandSafetyPolicy,
+      agentPaused,
+      Boolean(onGenerateContinuationPlan)
+    );
+
+    if (!canGenerateContinuationPlan) {
+      return null;
+    }
+
+    const copy = getCompactAgentControlCopy(language);
+
+    return (
+      <div className="mx-auto flex w-full max-w-[680px] justify-start">
+        <Tooltip label={copy.generateNextPlan}>
+          <button
+            type="button"
+            aria-label={copy.generateNextPlan}
+            onClick={() => onGenerateContinuationPlan?.(selectedThread.id)}
+            className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
+          >
+            <Brain className="h-4 w-4" />
+          </button>
+        </Tooltip>
+      </div>
     );
   }
 
@@ -3871,42 +3879,6 @@ function getCompactGateBody(
   }
 
   return copy.manualGateBody(action.label);
-}
-
-// 把动作状态转换成 compact 队列里的简短标签
-function getCompactActionStatusLabel(
-  action: AgentAction,
-  commandSafetyPolicy: AgentCommandSafetyPolicy,
-  fullAccess: boolean,
-  language: Language
-): string {
-  const copy = getCompactAgentControlCopy(language);
-  const commandRisk =
-    action.kind === "run-command" && action.command
-      ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
-      : null;
-
-  if (action.status === "pending" && commandRisk?.level === "ask" && !fullAccess) {
-    return copy.commandNeedsApproval;
-  }
-
-  if (action.status === "pending" && commandRisk?.level === "deny") {
-    return copy.commandBlocked;
-  }
-
-  if (action.status === "pending" && (action.kind === "manual" || action.kind === "commit")) {
-    return copy.reviewGate;
-  }
-
-  if (action.status === "pending" && isRunnableAgentAction(action, commandSafetyPolicy)) {
-    return copy.readyStatus;
-  }
-
-  if (action.status === "pending") {
-    return copy.pendingStatus;
-  }
-
-  return action.status;
 }
 
 // 用户可以显式跳过未完成动作, 但不能跳过正在运行或已经终态的动作
