@@ -1239,6 +1239,7 @@ export function ThreadWorkspace({
             noTarget: "无目标",
             selectAction: (label: string) => `选择动作 ${label}`,
             commandOutput: "最近命令输出",
+            toolResult: "工具结果",
             exitCode: "退出码",
             cwd: "目录",
             stdout: "stdout",
@@ -1263,6 +1264,7 @@ export function ThreadWorkspace({
             noTarget: "No target",
             selectAction: (label: string) => `Select action ${label}`,
             commandOutput: "Last command output",
+            toolResult: "Tool result",
             exitCode: "Exit code",
             cwd: "cwd",
             stdout: "stdout",
@@ -1331,6 +1333,9 @@ export function ThreadWorkspace({
       null;
     const selectedCommandResult = selectedAgentAction?.command
       ? findLatestCommandResult(selectedThread?.events ?? [], selectedAgentAction)
+      : null;
+    const selectedToolResult = selectedAgentAction
+      ? findLatestToolResultEvent(selectedThread?.events ?? [], selectedAgentAction)
       : null;
 
     // 读取命令动作的风险等级, 非命令动作不参与审批判断
@@ -1552,7 +1557,8 @@ export function ThreadWorkspace({
     // 展示单个动作的输入, 输出和恢复入口
     function renderAgentActionDetails(
       action: AgentAction,
-      commandResult: CommandRunResult | null
+      commandResult: CommandRunResult | null,
+      toolResult: TaskThreadEvent | null
     ): ReactElement {
       const detailRows = [
         { label: actionDetailsCopy.kind, value: action.kind },
@@ -1633,6 +1639,16 @@ export function ThreadWorkspace({
                   </pre>
                 </div>
               ) : null}
+            </div>
+          ) : null}
+          {toolResult ? (
+            <div className="mt-3 border-t border-[#ececf1] pt-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+                {actionDetailsCopy.toolResult}
+              </h3>
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#f7f7f8] p-2 font-mono text-[11px] leading-4 text-[#202123]">
+                {formatCommandOutputSnippet(toolResult.message)}
+              </pre>
             </div>
           ) : null}
         </section>
@@ -2158,7 +2174,9 @@ export function ThreadWorkspace({
               <p className="text-sm leading-6 text-[#6e6e80]">{actionQueueCopy.empty}</p>
             )}
           </section>
-          {selectedAgentAction ? renderAgentActionDetails(selectedAgentAction, selectedCommandResult) : null}
+          {selectedAgentAction
+            ? renderAgentActionDetails(selectedAgentAction, selectedCommandResult, selectedToolResult)
+            : null}
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold text-[#202123]">{planCopy.verification}</h2>
             {latestVerificationResult ? (
@@ -3158,6 +3176,48 @@ function findLatestCommandResult(
   }
 
   return null;
+}
+
+// 把受控读类工具的线程事件重新关联回队列动作, 方便用户查看每一步真实观察结果
+function findLatestToolResultEvent(
+  events: TaskThreadEvent[],
+  action: AgentAction
+): TaskThreadEvent | null {
+  if (!isControlledToolResultAction(action)) {
+    return null;
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+
+    if (
+      event?.kind === "file" &&
+      event.id.includes(`-${action.id}-`) &&
+      isControlledToolResultMessage(event.message)
+    ) {
+      return event;
+    }
+  }
+
+  return null;
+}
+
+// 判断当前动作是否会生成可回看的受控工具输出
+function isControlledToolResultAction(action: AgentAction): boolean {
+  return (
+    action.kind === "inspect-file" ||
+    action.kind === "list-directory" ||
+    action.kind === "glob-project" ||
+    action.kind === "search-project" ||
+    action.kind === "git-status"
+  );
+}
+
+// 只接收 Agent 读类工具写入的结果事件, 避免把普通文件日志误显示成工具观察
+function isControlledToolResultMessage(message: string): boolean {
+  return /^(文件读取完成|File read complete|目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|Git 状态完成|Git status complete):/u.test(
+    message.trim()
+  );
 }
 
 // 在命令历史里按 runId 找结果, 支持实时输出和最终结果对齐
