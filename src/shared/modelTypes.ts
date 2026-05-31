@@ -12,9 +12,14 @@ export type ReasoningControl =
   | { type: "effort"; values: IntelligenceLevel[] }
   | { type: "budget"; min: number; max: number };
 
+export type ModelPricingSource = "provider-api" | "openrouter-reference" | "manual";
+
 export type ModelPricing = {
   inputPerMillion: number;
   outputPerMillion: number;
+  cacheReadPerMillion?: number;
+  cacheWritePerMillion?: number;
+  source?: ModelPricingSource;
 };
 
 export type ForgeProvider = {

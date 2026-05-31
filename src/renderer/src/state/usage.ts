@@ -1,14 +1,11 @@
 // 本文件说明: 记录模型调用用量并按模型和供应商汇总成本
 import type { TokenUsage, UsageEvent, UsageEventKind } from "@shared/usageTypes";
-import type { ForgeModel } from "@shared/modelTypes";
+import type { ForgeModel, ModelPricing } from "@shared/modelTypes";
 
 const usageEventsStorageKey = "forge.usageEvents";
 const usageRatesStorageKey = "forge.usageRates";
 
-export type UsageRate = {
-  inputPerMillion: number;
-  outputPerMillion: number;
-};
+export type UsageRate = ModelPricing;
 
 // 费率可以按提供商 ID 或精确模型 ID 配置, 模型级费率优先
 export type UsageRateMap = Record<string, UsageRate>;
@@ -67,12 +64,7 @@ export function summarizeUsage(events: UsageEvent[], rates: UsageRateMap): Usage
         reasoningTokens: summary.reasoningTokens + (event.reasoningTokens ?? 0),
         cacheReadTokens: summary.cacheReadTokens + (event.cacheReadTokens ?? 0),
         cacheWriteTokens: summary.cacheWriteTokens + (event.cacheWriteTokens ?? 0),
-        estimatedCost:
-          summary.estimatedCost +
-          (rate
-            ? (event.inputTokens / 1_000_000) * rate.inputPerMillion +
-              (event.outputTokens / 1_000_000) * rate.outputPerMillion
-            : 0)
+        estimatedCost: summary.estimatedCost + estimateUsageEventCost(event, rate)
       };
     },
     {
@@ -132,7 +124,7 @@ export function mergeModelPricingRates(
   let nextRates = rates;
 
   for (const model of models) {
-    if (!model.pricing || rates[model.id]) {
+    if (!model.pricing) {
       continue;
     }
 
@@ -140,7 +132,7 @@ export function mergeModelPricingRates(
       nextRates = { ...rates };
     }
 
-    nextRates[model.id] = model.pricing;
+    nextRates[model.id] = mergeUsageRate(nextRates[model.id], model.pricing);
   }
 
   return nextRates;
@@ -191,6 +183,55 @@ function getUsageRateForEvent(event: UsageEvent, rates: UsageRateMap): UsageRate
   return rates[event.modelId] ?? rates[event.providerId];
 }
 
+function estimateUsageEventCost(event: UsageEvent, rate: UsageRate | undefined): number {
+  if (!rate) {
+    return 0;
+  }
+
+  const cacheReadTokens = event.cacheReadTokens ?? 0;
+  const cacheWriteTokens = event.cacheWriteTokens ?? 0;
+  const billableInputTokens = Math.max(
+    0,
+    event.inputTokens - cacheReadTokens - cacheWriteTokens
+  );
+  const cacheReadRate = rate.cacheReadPerMillion ?? rate.inputPerMillion;
+  const cacheWriteRate = rate.cacheWritePerMillion ?? rate.inputPerMillion;
+
+  return (
+    (billableInputTokens / 1_000_000) * rate.inputPerMillion +
+    (cacheReadTokens / 1_000_000) * cacheReadRate +
+    (cacheWriteTokens / 1_000_000) * cacheWriteRate +
+    (event.outputTokens / 1_000_000) * rate.outputPerMillion
+  );
+}
+
+function mergeUsageRate(
+  existingRate: UsageRate | undefined,
+  incomingRate: UsageRate
+): UsageRate {
+  if (!existingRate) {
+    return incomingRate;
+  }
+
+  if (
+    existingRate.source !== "manual" &&
+    (existingRate.source !== undefined ||
+      (existingRate.inputPerMillion === 0 && existingRate.outputPerMillion === 0))
+  ) {
+    return incomingRate;
+  }
+
+  return {
+    inputPerMillion: existingRate.inputPerMillion,
+    outputPerMillion: existingRate.outputPerMillion,
+    cacheReadPerMillion:
+      existingRate.cacheReadPerMillion ?? incomingRate.cacheReadPerMillion,
+    cacheWritePerMillion:
+      existingRate.cacheWritePerMillion ?? incomingRate.cacheWritePerMillion,
+    source: existingRate.source ?? incomingRate.source
+  };
+}
+
 // 安全解析 JSON 数组, 非数组直接回退空数组
 function parseJsonArray<T>(rawValue: string | null, guard: (value: unknown) => value is T): T[] {
   if (!rawValue) {
@@ -225,7 +266,11 @@ function isUsageRate(value: unknown): value is UsageRate {
   return (
     isRecord(value) &&
     typeof value.inputPerMillion === "number" &&
-    typeof value.outputPerMillion === "number"
+    typeof value.outputPerMillion === "number" &&
+    (value.cacheReadPerMillion === undefined ||
+      typeof value.cacheReadPerMillion === "number") &&
+    (value.cacheWritePerMillion === undefined ||
+      typeof value.cacheWritePerMillion === "number")
   );
 }
 

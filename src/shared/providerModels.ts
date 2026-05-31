@@ -3,6 +3,7 @@ import type {
   ForgeModel,
   ForgeProvider,
   ModelPricing,
+  ModelPricingSource,
   ReasoningControl,
   SpeedMode
 } from "./modelTypes.js";
@@ -17,14 +18,16 @@ type ModelListRequest = {
   headers: Record<string, string>;
 };
 
-type FetchedModel = {
+export type FetchedModel = {
   id: string;
   label: string;
+  description?: string;
   contextWindow?: number;
   inputModalities?: string[];
   outputModalities?: string[];
   pricing?: ModelPricing;
   supportedParameters?: string[];
+  streaming?: boolean;
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -70,9 +73,13 @@ export function parseProviderModelList(provider: ForgeProvider, response: unknow
   // 先保留适合编码的模型, 避免下拉框塞入语音图片模型
   const filterCodingModels = (models: FetchedModel[]): FetchedModel[] =>
     models.filter((model) => isUsableCodingModel(provider, model.id, model));
+  const pricingSource: ModelPricingSource =
+    provider.id === "openrouter" ? "openrouter-reference" : "provider-api";
 
   if (Array.isArray(response)) {
-    return filterCodingModels(parseModelItems(response, provider.kind === "anthropic"));
+    return filterCodingModels(
+      parseModelItems(response, provider.kind === "anthropic", pricingSource)
+    );
   }
 
   if (!isRecord(response)) {
@@ -83,7 +90,9 @@ export function parseProviderModelList(provider: ForgeProvider, response: unknow
     return filterCodingModels(parseGeminiModels(response));
   }
 
-  return filterCodingModels(parseOpenAICompatibleModels(response, provider.kind === "anthropic"));
+  return filterCodingModels(
+    parseOpenAICompatibleModels(response, provider.kind === "anthropic", pricingSource)
+  );
 }
 
 // 把远端模型条目转换成 Forge 内部模型结构
@@ -135,7 +144,7 @@ export function assertHeaderValue(headerName: string, value: string): string {
 function inferFetchedModelCapabilities(
   provider: ForgeProvider,
   modelName: string,
-  metadata?: Pick<FetchedModel, "inputModalities" | "supportedParameters">
+  metadata?: Pick<FetchedModel, "inputModalities" | "outputModalities" | "supportedParameters" | "streaming">
 ): {
   reasoning: ReasoningControl;
   speedModes?: SpeedMode[];
@@ -146,7 +155,7 @@ function inferFetchedModelCapabilities(
   const normalizedModelName = modelName.toLowerCase();
   const speedModes = inferSpeedModes(provider, normalizedModelName, metadata);
   const toolCalling = inferToolCalling(metadata);
-  const streaming = inferStreaming(metadata);
+  const streaming = inferStreaming(provider, metadata);
   const vision = inferVision(metadata);
 
   if (provider.reasoningStyle === "mimo-thinking" && isMimoThinkingModel(normalizedModelName)) {
@@ -186,9 +195,19 @@ function inferFetchedModelCapabilities(
 export function isUsableCodingModel(
   provider: ForgeProvider,
   modelName: string,
-  metadata?: Pick<FetchedModel, "outputModalities">
+  metadata?: Pick<
+    FetchedModel,
+    "label" | "description" | "outputModalities" | "supportedParameters"
+  >
 ): boolean {
   const normalizedModelName = modelName.toLowerCase();
+  const normalizedSearchText = [
+    modelName,
+    metadata?.label ?? "",
+    metadata?.description ?? ""
+  ]
+    .join(" ")
+    .toLowerCase();
 
   if (
     metadata?.outputModalities?.length &&
@@ -198,6 +217,14 @@ export function isUsableCodingModel(
   }
 
   if (provider.reasoningStyle === "mimo-thinking" && normalizedModelName.includes("tts")) {
+    return false;
+  }
+
+  if (
+    provider.id === "openrouter" &&
+    !hasToolCallingSupport(metadata) &&
+    !hasCodingFriendlyModelSignal(normalizedSearchText)
+  ) {
     return false;
   }
 
@@ -220,13 +247,32 @@ function inferToolCalling(
 
 // 从供应商参数列表判断是否声明流式输出能力
 function inferStreaming(
-  metadata?: Pick<FetchedModel, "supportedParameters">
+  provider: ForgeProvider,
+  metadata?: Pick<FetchedModel, "outputModalities" | "supportedParameters" | "streaming">
 ): boolean | "unknown" {
-  if (!metadata?.supportedParameters) {
-    return "unknown";
+  if (typeof metadata?.streaming === "boolean") {
+    return metadata.streaming;
   }
 
-  return metadata.supportedParameters.some((parameter) => parameter.toLowerCase() === "stream");
+  if (
+    metadata?.supportedParameters?.some((parameter) => parameter.toLowerCase() === "stream")
+  ) {
+    return true;
+  }
+
+  if (
+    provider.kind === "openai" ||
+    provider.kind === "anthropic" ||
+    provider.kind === "gemini" ||
+    provider.kind === "openai-compatible"
+  ) {
+    return metadata?.outputModalities?.some((modality) => modality.toLowerCase() === "text") ===
+      false
+      ? "unknown"
+      : true;
+  }
+
+  return "unknown";
 }
 
 // 从输入模态判断视觉输入能力, 未暴露模态时不做猜测
@@ -305,20 +351,28 @@ function validateHeaders(headers: Record<string, string>): Record<string, string
 }
 
 // 解析 OpenAI compatible 的模型列表格式
-function parseOpenAICompatibleModels(response: UnknownRecord, preferDisplayName: boolean): FetchedModel[] {
+function parseOpenAICompatibleModels(
+  response: UnknownRecord,
+  preferDisplayName: boolean,
+  pricingSource: ModelPricingSource
+): FetchedModel[] {
   if (Array.isArray(response.data)) {
-    return parseModelItems(response.data, preferDisplayName);
+    return parseModelItems(response.data, preferDisplayName, pricingSource);
   }
 
   if (Array.isArray(response.models)) {
-    return parseModelItems(response.models, preferDisplayName);
+    return parseModelItems(response.models, preferDisplayName, pricingSource);
   }
 
   return [];
 }
 
 // 兼容数组和 data.items 结构, 提取可能的模型条目
-function parseModelItems(items: unknown[], preferDisplayName: boolean): FetchedModel[] {
+function parseModelItems(
+  items: unknown[],
+  preferDisplayName: boolean,
+  pricingSource: ModelPricingSource
+): FetchedModel[] {
   return items.flatMap((item) => {
     if (!isRecord(item)) {
       return [];
@@ -335,24 +389,28 @@ function parseModelItems(items: unknown[], preferDisplayName: boolean): FetchedM
       (typeof item.displayName === "string" ? item.displayName : undefined) ??
       (typeof item.name === "string" && item.name !== id ? item.name : undefined) ??
       id;
+    const description = typeof item.description === "string" ? item.description : undefined;
     const architecture = isRecord(item.architecture) ? item.architecture : undefined;
     const inputModalities =
       readStringArray(item.input_modalities) ?? readStringArray(architecture?.input_modalities);
     const outputModalities =
       readStringArray(item.output_modalities) ?? readStringArray(architecture?.output_modalities);
-    const pricing = readPricing(item);
+    const pricing = readPricing(item, pricingSource);
     const supportedParameters = readStringArray(item.supported_parameters);
     const contextWindow = readContextWindow(item);
+    const streaming = readBoolean(item.streaming) ?? readBoolean(item.supports_streaming);
 
     return [
       {
         id,
         label,
+        ...(description ? { description } : {}),
         ...(contextWindow ? { contextWindow } : {}),
         ...(inputModalities ? { inputModalities } : {}),
         ...(outputModalities ? { outputModalities } : {}),
         ...(pricing ? { pricing } : {}),
-        ...(supportedParameters ? { supportedParameters } : {})
+        ...(supportedParameters ? { supportedParameters } : {}),
+        ...(typeof streaming === "boolean" ? { streaming } : {})
       }
     ];
   });
@@ -411,7 +469,10 @@ function parseGeminiModels(response: UnknownRecord): FetchedModel[] {
 }
 
 // 读取模型价格字段, 不存在时保持 undefined
-function readPricing(item: UnknownRecord): ModelPricing | undefined {
+function readPricing(
+  item: UnknownRecord,
+  source: ModelPricingSource = "provider-api"
+): ModelPricing | undefined {
   const pricing = isRecord(item.pricing) ? item.pricing : item;
   const inputPerMillion =
     readNumber(pricing.inputPerMillion) ??
@@ -425,6 +486,16 @@ function readPricing(item: UnknownRecord): ModelPricing | undefined {
     readNumber(pricing.completion_per_million) ??
     readPerTokenPricePerMillion(pricing.completion) ??
     readPerTokenPricePerMillion(pricing.output);
+  const cacheReadPerMillion =
+    readNumber(pricing.cacheReadPerMillion) ??
+    readNumber(pricing.cache_read_per_million) ??
+    readPerTokenPricePerMillion(pricing.input_cache_read) ??
+    readPerTokenPricePerMillion(pricing.cache_read);
+  const cacheWritePerMillion =
+    readNumber(pricing.cacheWritePerMillion) ??
+    readNumber(pricing.cache_write_per_million) ??
+    readPerTokenPricePerMillion(pricing.input_cache_write) ??
+    readPerTokenPricePerMillion(pricing.cache_write);
 
   if (inputPerMillion === undefined || outputPerMillion === undefined) {
     return undefined;
@@ -432,7 +503,10 @@ function readPricing(item: UnknownRecord): ModelPricing | undefined {
 
   return {
     inputPerMillion,
-    outputPerMillion
+    outputPerMillion,
+    ...(cacheReadPerMillion !== undefined ? { cacheReadPerMillion } : {}),
+    ...(cacheWritePerMillion !== undefined ? { cacheWritePerMillion } : {}),
+    source
   };
 }
 
@@ -479,6 +553,26 @@ function readNumber(value: unknown): number | undefined {
         : Number.NaN;
 
   return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function hasToolCallingSupport(
+  metadata?: Pick<FetchedModel, "supportedParameters">
+): boolean {
+  return (
+    metadata?.supportedParameters?.some((parameter) =>
+      ["tools", "tool_choice", "functions", "function_call"].includes(parameter.toLowerCase())
+    ) ?? false
+  );
+}
+
+function hasCodingFriendlyModelSignal(value: string): boolean {
+  return /code|coder|coding|agent|devstral|codestral|reason|think|instruct|chat|assistant|gpt|claude|gemini|deepseek|qwen|glm|z-ai|zai|grok|x-ai|mistral|mixtral|llama|kimi|moonshot|command|nova|jamba|phi|yi|step|hunyuan|doubao|ernie|minimax|mimo|sonnet|haiku|opus|r1/iu.test(
+    value
+  );
 }
 
 // 安全缩窄普通对象
