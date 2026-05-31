@@ -104,6 +104,11 @@ describe("ThreadWorkspace", () => {
     const user = userEvent.setup();
     const onApproveAgentCommand = vi.fn();
     const onAllowAgentCommand = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
 
     render(
       <ThreadWorkspace
@@ -126,10 +131,44 @@ describe("ThreadWorkspace", () => {
             ]
           }
         ]}
+        projectScan={{
+          rootPath: "E:\\CodeHome\\Forge",
+          files: [],
+          truncated: false
+        }}
         onSelectThread={() => undefined}
         onApproveAgentCommand={onApproveAgentCommand}
         onAllowAgentCommand={onAllowAgentCommand}
       />
+    );
+
+    const controls = screen.getByRole("region", { name: "Agent action confirmation" });
+    expect(within(controls).getByText("Command")).toBeInTheDocument();
+    expect(within(controls).getAllByText("npm install").length).toBeGreaterThan(0);
+    expect(within(controls).getByText("cwd")).toBeInTheDocument();
+    expect(within(controls).getByText("E:\\CodeHome\\Forge")).toBeInTheDocument();
+    expect(within(controls).getByText("Risk")).toBeInTheDocument();
+    expect(
+      within(controls).getAllByText("command may change dependencies or project state").length
+    ).toBeGreaterThan(0);
+    expect(within(controls).getByText("After approval")).toBeInTheDocument();
+    expect(within(controls).getByText("No later queued action")).toBeInTheDocument();
+
+    await user.click(
+      within(controls).getByRole("button", { name: "Copy approval summary Install dependencies" })
+    );
+
+    expect(writeText).toHaveBeenCalledWith(
+      [
+        "Confirmation queue: Install dependencies",
+        "Type: Command approval",
+        "Status: Current",
+        "Context: npm install: command may change dependencies or project state",
+        "Command: npm install",
+        "cwd: E:\\CodeHome\\Forge",
+        "Risk: command may change dependencies or project state",
+        "After approval: No later queued action"
+      ].join("\n")
     );
 
     await user.click(screen.getByRole("button", { name: "Approve command npm install" }));

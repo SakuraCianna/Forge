@@ -119,8 +119,12 @@ type AgentConfirmationItem = {
   label: string;
   active: boolean;
   action?: AgentAction;
+  afterApprovalActionLabel?: string;
+  command?: string;
+  cwd?: string | null;
   pendingChangeCount?: number;
   previewPath?: string;
+  riskReason?: string;
 };
 
 // 把线程状态拆成简洁对话视图, 复杂执行细节只在需要的标签里展示
@@ -295,8 +299,32 @@ export function ThreadWorkspace({
         <p className="mt-1 break-words text-[12px] leading-5 text-[#565869]">
           {getAgentConfirmationBody(item, copy, commandSafetyPolicy, fullAccess, language)}
         </p>
+        {renderAgentConfirmationMetadata(item, copy)}
         {renderAgentConfirmationControls(item, copy)}
       </article>
+    );
+  }
+
+  // 审批上下文把风险原因和队列影响直接放在确认按钮旁边
+  function renderAgentConfirmationMetadata(
+    item: AgentConfirmationItem,
+    copy: ReturnType<typeof getCompactAgentControlCopy>
+  ): ReactElement | null {
+    const rows = getAgentConfirmationMetadataRows(item, copy, language);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return (
+      <dl className="mt-3 grid gap-1.5 rounded-[10px] bg-[#fafafa] px-2.5 py-2 text-[11px]">
+        {rows.map((row) => (
+          <div key={row.label} className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+            <dt className="text-[#8e8ea0]">{row.label}</dt>
+            <dd className="min-w-0 break-words font-medium text-[#202123]">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
     );
   }
 
@@ -310,6 +338,23 @@ export function ThreadWorkspace({
     }
 
     const controls: ReactElement[] = [];
+
+    controls.push(
+      <button
+        key="copy-approval-summary"
+        type="button"
+        aria-label={`${copy.copyApprovalSummary} ${item.label}`}
+        onClick={() =>
+          void navigator.clipboard?.writeText(
+            formatAgentConfirmationSummary(item, copy, commandSafetyPolicy, fullAccess, language)
+          )
+        }
+        className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+      >
+        <Copy className="h-3.5 w-3.5" />
+        {copy.copyApprovalSummary}
+      </button>
+    );
 
     if (item.action) {
       controls.push(
@@ -966,6 +1011,7 @@ export function ThreadWorkspace({
       commandSafetyPolicy,
       fullAccess,
       activeGateAction: controlState.activeGateAction,
+      projectPath: selectedThread.projectPath ?? projectScan?.rootPath ?? null,
       queueBlockerAction: controlState.queueBlockerAction
     });
 
@@ -1666,6 +1712,7 @@ export function ThreadWorkspace({
       commandSafetyPolicy,
       fullAccess,
       activeGateAction,
+      projectPath: selectedThread?.projectPath ?? projectScan?.rootPath ?? null,
       queueBlockerAction
     });
     const agentRunStatus =
@@ -3355,6 +3402,7 @@ function getAgentConfirmationItems({
   commandSafetyPolicy,
   fullAccess,
   activeGateAction,
+  projectPath,
   queueBlockerAction
 }: {
   actions: AgentAction[];
@@ -3362,6 +3410,7 @@ function getAgentConfirmationItems({
   commandSafetyPolicy: AgentCommandSafetyPolicy;
   fullAccess: boolean;
   activeGateAction: AgentAction | null;
+  projectPath: string | null;
   queueBlockerAction: AgentAction | null;
 }): AgentConfirmationItem[] {
   const items: AgentConfirmationItem[] = [];
@@ -3383,12 +3432,25 @@ function getAgentConfirmationItems({
     if (!kind) {
       continue;
     }
+    const actionIndex = actions.findIndex((candidate) => candidate.id === action.id);
+    const nextAction = findNextIncompleteActionAfterIndex(actions, actionIndex);
+    const commandRisk =
+      action.kind === "run-command" && action.command
+        ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
+        : null;
 
     items.push({
       id: `action-${action.id}`,
       kind,
       label: action.label,
       action,
+      afterApprovalActionLabel: nextAction?.label,
+      command: action.command,
+      cwd: action.kind === "run-command" ? projectPath : null,
+      riskReason:
+        commandRisk?.level === "ask" || commandRisk?.level === "deny"
+          ? commandRisk.reason
+          : undefined,
       active:
         changePreviews.length === 0 &&
         (activeGateAction?.id === action.id || queueBlockerAction?.id === action.id)
@@ -3515,6 +3577,83 @@ function getAgentConfirmationBody(
   return copy.manualGateBody(action.label);
 }
 
+// 找出批准当前项后队列会遇到的下一项, 用于说明审批影响
+function findNextIncompleteActionAfterIndex(
+  actions: AgentAction[],
+  actionIndex: number
+): AgentAction | null {
+  if (actionIndex < 0) {
+    return null;
+  }
+
+  return (
+    actions
+      .slice(actionIndex + 1)
+      .find((action) => action.status !== "completed" && action.status !== "skipped") ?? null
+  );
+}
+
+// 为确认项生成结构化上下文行, 保持 UI 和复制摘要使用同一份信息
+function getAgentConfirmationMetadataRows(
+  item: AgentConfirmationItem,
+  copy: ReturnType<typeof getCompactAgentControlCopy>,
+  language: Language
+): Array<{ label: string; value: string }> {
+  const rows: Array<{ label: string; value: string }> = [];
+
+  if (item.command) {
+    rows.push({ label: copy.commandLabel, value: item.command });
+  }
+
+  if (item.cwd) {
+    rows.push({ label: copy.cwdLabel, value: item.cwd });
+  }
+
+  if (item.riskReason) {
+    rows.push({
+      label: copy.riskLabel,
+      value: formatAgentCommandRiskReason(language, item.riskReason)
+    });
+  }
+
+  if (item.active) {
+    rows.push({
+      label: copy.afterApprovalLabel,
+      value: item.afterApprovalActionLabel ?? copy.noNextQueuedAction
+    });
+  }
+
+  return rows;
+}
+
+// 生成可复制的审批摘要, 方便用户把批准依据贴给模型或留作审计记录
+function formatAgentConfirmationSummary(
+  item: AgentConfirmationItem,
+  copy: ReturnType<typeof getCompactAgentControlCopy>,
+  commandSafetyPolicy: AgentCommandSafetyPolicy,
+  fullAccess: boolean,
+  language: Language
+): string {
+  const lines = [
+    `${copy.confirmationQueue}: ${getAgentConfirmationTitle(item, copy)}`,
+    `${copy.confirmationType}: ${getAgentConfirmationKindLabel(item.kind, copy)}`,
+    `${copy.confirmationStatus}: ${item.active ? copy.currentApproval : copy.upcomingApproval}`,
+    `${copy.confirmationContext}: ${getAgentConfirmationBody(
+      item,
+      copy,
+      commandSafetyPolicy,
+      fullAccess,
+      language
+    )}`
+  ];
+
+  for (const row of getAgentConfirmationMetadataRows(item, copy, language)) {
+    lines.push(`${row.label}: ${row.value}`);
+  }
+
+  return lines.join("\n");
+}
+
 // 提供 compact/full 确认面板共享的中英文文案
 function getCompactAgentControlCopy(language: Language) {
   if (language === "zh-CN") {
@@ -3523,9 +3662,13 @@ function getCompactAgentControlCopy(language: Language) {
       title: "Agent 下一步",
       confirmationQueue: "确认队列",
       confirmationCount: (count: number) => `${count} 项`,
+      confirmationContext: "上下文",
+      confirmationStatus: "状态",
+      confirmationType: "类型",
       currentApproval: "当前等待",
       upcomingApproval: "稍后停止",
       viewAction: "查看动作",
+      copyApprovalSummary: "复制审批摘要",
       pendingChangesTitle: "待审查修改",
       pendingChangesBody: (count: number, path: string) =>
         count > 1 ? `先处理 ${path} 等 ${count} 个修改, Forge 才会继续` : `先处理 ${path}, Forge 才会继续`,
@@ -3536,6 +3679,11 @@ function getCompactAgentControlCopy(language: Language) {
       commandBlockedTitle: "命令被阻止",
       commitGateTitle: "提交门禁",
       queuedGateBody: "这是后续停止点, 当前队列推进到这里后才会开放确认按钮",
+      commandLabel: "命令",
+      cwdLabel: "目录",
+      riskLabel: "风险",
+      afterApprovalLabel: "批准后",
+      noNextQueuedAction: "没有后续队列动作",
       reviewQueuedChanges: "审查队列修改",
       applyQueuedChanges: "应用队列修改",
       discardQueuedChanges: "丢弃队列修改",
@@ -3595,9 +3743,13 @@ function getCompactAgentControlCopy(language: Language) {
     title: "Agent next step",
     confirmationQueue: "Confirmation queue",
     confirmationCount: (count: number) => `${count} ${count === 1 ? "item" : "items"}`,
+    confirmationContext: "Context",
+    confirmationStatus: "Status",
+    confirmationType: "Type",
     currentApproval: "Current",
     upcomingApproval: "Upcoming",
     viewAction: "View action",
+    copyApprovalSummary: "Copy approval summary",
     pendingChangesTitle: "Pending file review",
     pendingChangesBody: (count: number, path: string) =>
       count > 1
@@ -3610,6 +3762,11 @@ function getCompactAgentControlCopy(language: Language) {
     commandBlockedTitle: "Blocked command",
     commitGateTitle: "Commit gate",
     queuedGateBody: "This is an upcoming stop. Forge will expose its approval controls when the queue reaches it.",
+    commandLabel: "Command",
+    cwdLabel: "cwd",
+    riskLabel: "Risk",
+    afterApprovalLabel: "After approval",
+    noNextQueuedAction: "No later queued action",
     reviewQueuedChanges: "Review queued changes",
     applyQueuedChanges: "Apply queued changes",
     discardQueuedChanges: "Discard queued changes",
