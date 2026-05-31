@@ -60,6 +60,7 @@ function assertRunCommandRequest(value: unknown): RunProjectCommandOptions {
     command: value.command,
     runId: typeof value.runId === "string" ? value.runId : undefined,
     timeoutMs: typeof value.timeoutMs === "number" ? value.timeoutMs : undefined,
+    runtime: isAgentRuntime(value.runtime) ? value.runtime : undefined,
     shell: isCommandShell(value.shell) ? value.shell : undefined,
     shellExecutable: typeof value.shellExecutable === "string" ? value.shellExecutable : undefined
   };
@@ -81,4 +82,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isCommandShell(value: unknown): value is RunProjectCommandOptions["shell"] {
   return value === "powershell" || value === "cmd" || value === "git-bash";
+}
+
+function isAgentRuntime(value: unknown): value is RunProjectCommandOptions["runtime"] {
+  return value === "windows-native" || value === "wsl";
 }

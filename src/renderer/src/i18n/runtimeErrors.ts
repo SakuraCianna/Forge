@@ -160,7 +160,9 @@ function translateShellRecoveryHint(hint: string): string {
     "Install Git for Windows or add bash.exe to PATH, then retry the command.":
       "请安装 Git for Windows 或把 bash.exe 加入 PATH, 然后重试命令。",
     "Choose CMD in Settings if PowerShell is unavailable.":
-      "如果 PowerShell 不可用, 请在设置里改用 CMD。"
+      "如果 PowerShell 不可用, 请在设置里改用 CMD。",
+    "Install WSL and a Linux distribution, or choose Windows native in Settings.":
+      "请安装 WSL 和 Linux 发行版, 或在设置里改回 Windows 原生。"
   };
 
   return hints[hint] ?? hint;

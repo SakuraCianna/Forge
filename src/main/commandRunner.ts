@@ -2,6 +2,7 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { sep } from "node:path";
+import type { AgentRuntime } from "../shared/agentTypes.js";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
 
 export type CommandShell = "powershell" | "cmd" | "git-bash";
@@ -12,6 +13,7 @@ export type RunProjectCommandOptions = {
   command: string;
   runId?: string;
   timeoutMs?: number;
+  runtime?: AgentRuntime;
   shell?: CommandShell;
   shellExecutable?: string;
   onOutput?: (chunk: CommandOutputChunk) => void;
@@ -88,6 +90,7 @@ async function runProjectCommandWithRegistry(
     command,
     runId,
     timeoutMs = 120000,
+    runtime = "windows-native",
     shell = "powershell",
     shellExecutable,
     onOutput
@@ -107,7 +110,7 @@ async function runProjectCommandWithRegistry(
   }
 
   return new Promise((resolve, reject) => {
-    const shellInvocation = createShellInvocation(command, shell, shellExecutable);
+    const shellInvocation = createShellInvocation(command, resolvedCwd, runtime, shell, shellExecutable);
     const child = spawn(shellInvocation.executable, shellInvocation.args, {
       cwd: resolvedCwd,
       windowsHide: true,
@@ -195,9 +198,20 @@ async function runProjectCommandWithRegistry(
 // 根据用户选择构造真实 shell 调用参数, 让设置页的 Shell 选择不只是显示项
 function createShellInvocation(
   command: string,
+  resolvedCwd: string,
+  runtime: AgentRuntime,
   shell: CommandShell,
   shellExecutable?: string
 ): { executable: string; args: string[]; label: string; recoveryHint: string } {
+  if (runtime === "wsl") {
+    return {
+      executable: "wsl.exe",
+      args: ["--cd", convertWindowsPathToWslPath(resolvedCwd), "--", "bash", "-lc", command],
+      label: "WSL",
+      recoveryHint: "Install WSL and a Linux distribution, or choose Windows native in Settings."
+    };
+  }
+
   if (shell === "cmd") {
     return {
       executable: shellExecutable ?? "cmd.exe",
@@ -222,6 +236,20 @@ function createShellInvocation(
     label: "PowerShell",
     recoveryHint: "Choose CMD in Settings if PowerShell is unavailable."
   };
+}
+
+function convertWindowsPathToWslPath(windowsPath: string): string {
+  const match = windowsPath.match(/^([A-Za-z]):[\\/]*(.*)$/u);
+
+  if (!match) {
+    throw new Error(`WSL command cwd must be on a local Windows drive: ${windowsPath}`);
+  }
+
+  const [, driveLetter, rest] = match;
+  const normalizedRest = rest.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const mountRoot = `/mnt/${driveLetter.toLowerCase()}`;
+
+  return normalizedRest ? `${mountRoot}/${normalizedRest}` : mountRoot;
 }
 
 // Shell 启动失败时保留可修复信息, 不让用户只看到底层 spawn ENOENT
