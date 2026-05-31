@@ -221,6 +221,19 @@ const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
 const maxAutoFailureFixesPerThread = 2;
 
+function selectInitialProjectFromPreferences(
+  projects: ForgeProject[],
+  storage: Storage | null
+): ForgeProject | null {
+  if (!storage) {
+    return projects[0] ?? null;
+  }
+
+  const preferences = loadGeneralPreferences(storage);
+
+  return preferences.defaultOpenTarget === "blank" ? null : (projects[0] ?? null);
+}
+
 // 根组件集中持有持久化状态和跨视图动作, 子组件只接收明确回调
 export function App(): ReactElement {
   const [settings, setSettings] = useState(() => {
@@ -238,8 +251,11 @@ export function App(): ReactElement {
 
     return loadRecentProjects(window.localStorage);
   });
-  const [currentProject, setCurrentProject] = useState<ForgeProject | null>(
-    () => recentProjects[0] ?? null
+  const [currentProject, setCurrentProject] = useState<ForgeProject | null>(() =>
+    selectInitialProjectFromPreferences(
+      recentProjects,
+      typeof window === "undefined" ? null : window.localStorage
+    )
   );
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
