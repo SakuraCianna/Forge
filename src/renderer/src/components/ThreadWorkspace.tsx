@@ -52,6 +52,7 @@ type ThreadWorkspaceProps = {
   threads: TaskThread[];
   commandSafetyRules?: CommandSafetyRule[];
   fullAccess?: boolean;
+  agentPaused?: boolean;
   projectScan?: ProjectScanResult | null;
   previewFile?: ProjectTextFile | null;
   changePreview?: ProjectFileChangePreview | null;
@@ -66,6 +67,7 @@ type ThreadWorkspaceProps = {
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
   onSkipAgentAction?: (threadId: string, action: AgentAction) => void;
+  onResumeAgent?: (threadId: string) => void;
   onOpenSourceControl?: () => void;
   onOpenFiles?: () => void;
   onRunCommand?: (threadId: string, command: string) => void;
@@ -105,6 +107,7 @@ export function ThreadWorkspace({
   threads,
   commandSafetyRules = [],
   fullAccess = false,
+  agentPaused = false,
   projectScan = null,
   previewFile = null,
   changePreview = null,
@@ -119,6 +122,7 @@ export function ThreadWorkspace({
   onGenerateCommandFix,
   onCompleteAgentAction,
   onSkipAgentAction,
+  onResumeAgent,
   onOpenSourceControl,
   onOpenFiles,
   onRunCommand = () => undefined,
@@ -615,6 +619,7 @@ export function ThreadWorkspace({
     const pendingChangeCount = allChangePreviews.length;
     const controlState = getAgentControlState(agentActions, pendingChangeCount, commandSafetyPolicy);
     const hasActionableState =
+      agentPaused ||
       pendingChangeCount > 0 ||
       controlState.runnablePendingActions.length > 0 ||
       Boolean(controlState.activeGateAction) ||
@@ -635,7 +640,9 @@ export function ThreadWorkspace({
       activeGateAction?.label ??
       copy.noCurrent;
     const statusLabel =
-      pendingChangeCount > 0
+      agentPaused
+        ? copy.paused
+        : pendingChangeCount > 0
         ? copy.reviewChangesTitle
         : blockedAction?.status === "running"
           ? copy.running
@@ -678,7 +685,9 @@ export function ThreadWorkspace({
             <div className="rounded-[12px] bg-[#f7f7f8] px-3 py-2">
               <div className="text-[11px] font-medium text-[#8e8ea0]">{copy.nextGate}</div>
               <div className="mt-0.5 font-semibold text-[#202123]">
-                {pendingChangeCount > 0
+                {agentPaused
+                  ? copy.paused
+                  : pendingChangeCount > 0
                   ? copy.pendingChanges(pendingChangeCount)
                   : controlState.nextGateAction
                     ? copy.stopsBefore(controlState.nextGateAction.label)
@@ -690,7 +699,27 @@ export function ThreadWorkspace({
           </div>
         </div>
 
-        {pendingChangeCount > 0 ? (
+        {agentPaused ? (
+          <div className="mt-4 rounded-[14px] border border-[#bfdbfe] bg-[#eff6ff] px-3 py-3">
+            <p className="text-sm font-semibold leading-5 text-[#1d4ed8]">
+              {copy.pausedTitle}
+            </p>
+            <p className="mt-1 text-[12px] leading-5 text-[#1d4ed8]">{copy.pausedBody}</p>
+            {onResumeAgent ? (
+              <button
+                type="button"
+                aria-label={copy.resumeAgent}
+                onClick={() => onResumeAgent(selectedThread.id)}
+                className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#1d4ed8] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#1e40af] active:scale-[0.99]"
+              >
+                <Play className="h-3.5 w-3.5" />
+                {copy.resumeAgent}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!agentPaused && pendingChangeCount > 0 ? (
           <div className="mt-4 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-3">
             <p className="text-sm font-semibold leading-5 text-[#9a3412]">
               {copy.reviewChangesTitle}
@@ -736,7 +765,7 @@ export function ThreadWorkspace({
           </div>
         ) : null}
 
-        {blockedAction?.status === "failed" ? (
+        {!agentPaused && blockedAction?.status === "failed" ? (
           <div className="mt-4 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-3">
             <p className="text-sm font-semibold leading-5 text-[#9a3412]">
               {copy.failedTitle}
@@ -778,7 +807,7 @@ export function ThreadWorkspace({
           </div>
         ) : null}
 
-        {controlState.runnablePendingActions.length > 0 ? (
+        {!agentPaused && controlState.runnablePendingActions.length > 0 ? (
           <div className="mt-4 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-3">
             <p className="text-sm font-semibold leading-5 text-[#202123]">
               {copy.safeReady(controlState.runnablePendingActions.length)}
@@ -816,7 +845,7 @@ export function ThreadWorkspace({
           </div>
         ) : null}
 
-        {controlState.runnablePendingActions.length === 0 && activeGateAction ? (
+        {!agentPaused && controlState.runnablePendingActions.length === 0 && activeGateAction ? (
           <div className="mt-4 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-3">
             <p className="text-sm font-semibold leading-5 text-[#9a3412]">
               {getCompactGateTitle(activeGateAction, commandSafetyPolicy, fullAccess, language)}
@@ -1092,6 +1121,9 @@ export function ThreadWorkspace({
             run: "运行",
             runNext: "运行下一步",
             continueSafe: "继续安全动作",
+            paused: "Agent 已暂停",
+            resumeAgent: "恢复 Agent",
+            pausedBody: "恢复后 Forge 会继续执行后续安全动作, 仍会在审查和命令门禁前停止",
             safeReady: (count: number) => `可连续执行 ${count} 个安全动作`,
             stopsBefore: (label: string) => `将在 ${label} 前停止`,
             manualGate: "需要人工审查",
@@ -1117,6 +1149,10 @@ export function ThreadWorkspace({
             run: "Run",
             runNext: "Run next action",
             continueSafe: "Continue safe agent actions",
+            paused: "Agent paused",
+            resumeAgent: "Resume agent",
+            pausedBody:
+              "Resume to continue later safe actions. Forge will still stop at review and command gates.",
             safeReady: (count: number) => `${count} safe actions ready`,
             stopsBefore: (label: string) => `Stops before ${label}`,
             manualGate: "Manual review required",
@@ -1246,6 +1282,7 @@ export function ThreadWorkspace({
     const hasPendingFileChanges = pendingChangeCount > 0;
     const queueBlockerAction = getQueueBlockerAction(agentActions, commandSafetyPolicy);
     const queueBlocked =
+      agentPaused ||
       hasPendingFileChanges ||
       queueBlockerAction?.status === "failed" ||
       queueBlockerAction?.status === "running";
@@ -1266,6 +1303,8 @@ export function ThreadWorkspace({
     const agentRunStatus =
       hasPendingFileChanges
         ? agentRunCopy.reviewGeneratedChanges
+        : agentPaused
+          ? actionQueueCopy.paused
         : queueBlockerAction?.status === "running"
           ? agentRunCopy.running
           : queueBlockerAction?.status === "failed"
@@ -1279,6 +1318,7 @@ export function ThreadWorkspace({
                   : agentRunCopy.waiting;
     const agentRunFocus =
       (hasPendingFileChanges ? agentRunCopy.pendingChanges(pendingChangeCount) : null) ??
+      (agentPaused ? actionQueueCopy.paused : null) ??
       queueBlockerAction?.label ??
       nextPendingAction?.label ??
       activeGateAction?.label ??
@@ -1929,7 +1969,27 @@ export function ThreadWorkspace({
                 ) : null}
               </div>
             ) : null}
-            {queueBlockerAction?.status === "failed" ? (
+            {agentPaused ? (
+              <div className="mb-3 rounded-[14px] border border-[#bfdbfe] bg-[#eff6ff] px-3 py-2">
+                <p className="text-sm font-medium leading-5 text-[#1d4ed8]">
+                  {actionQueueCopy.paused}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-4 text-[#1d4ed8]">
+                  {actionQueueCopy.pausedBody}
+                </p>
+                {selectedThread && onResumeAgent ? (
+                  <button
+                    type="button"
+                    aria-label={actionQueueCopy.resumeAgent}
+                    onClick={() => onResumeAgent(selectedThread.id)}
+                    className="mt-2 h-7 rounded-[10px] bg-[#1d4ed8] px-2 text-[11px] font-semibold text-white transition hover:bg-[#1e40af] active:scale-[0.99]"
+                  >
+                    {actionQueueCopy.resumeAgent}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {!agentPaused && queueBlockerAction?.status === "failed" ? (
               <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2">
                 <p className="text-sm font-medium leading-5 text-[#9a3412]">
                   {actionQueueCopy.queueStoppedAt(queueBlockerAction.label)}
@@ -1973,7 +2033,7 @@ export function ThreadWorkspace({
                 </div>
               </div>
             ) : null}
-            {hasPendingFileChanges ? (
+            {!agentPaused && hasPendingFileChanges ? (
               <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2">
                 <p className="text-sm font-medium leading-5 text-[#9a3412]">
                   {agentRunCopy.reviewGeneratedChanges}
@@ -1990,7 +2050,7 @@ export function ThreadWorkspace({
                 </button>
               </div>
             ) : null}
-            {runnablePendingActions.length > 0 ? (
+            {!agentPaused && runnablePendingActions.length > 0 ? (
               <div className="mb-3 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-2">
                 <p className="text-sm font-medium leading-5 text-[#202123]">
                   {actionQueueCopy.safeReady(runnablePendingActions.length)}
@@ -2002,7 +2062,7 @@ export function ThreadWorkspace({
                 ) : null}
               </div>
             ) : null}
-            {runnablePendingActions.length === 0 && activeGateAction ? (
+            {!agentPaused && runnablePendingActions.length === 0 && activeGateAction ? (
               <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2">
                 <p className="text-sm font-medium leading-5 text-[#9a3412]">
                   {getGateTitle(activeGateAction)}
@@ -2724,6 +2784,7 @@ function getCompactAgentControlCopy(language: Language) {
       waiting: "等待下一步",
       running: "正在运行",
       ready: "可继续执行",
+      paused: "Agent 已暂停",
       complete: "动作队列已完成",
       manualGate: "等待人工确认",
       manualGateBody: (label: string) => `请确认已处理 ${label}, Forge 才会继续执行队列`,
@@ -2744,6 +2805,9 @@ function getCompactAgentControlCopy(language: Language) {
       openSourceControl: "打开源代码管理",
       markReviewComplete: "确认已完成审查",
       skipAction: "跳过动作",
+      resumeAgent: "恢复 Agent",
+      pausedTitle: "Agent 队列已暂停",
+      pausedBody: "恢复后 Forge 会继续执行后续安全动作, 仍会在审查和命令门禁前停止",
       failedTitle: "动作失败, 队列已暂停",
       retryAction: "重试动作",
       generateFixPlan: "生成修复计划",
@@ -2764,6 +2828,7 @@ function getCompactAgentControlCopy(language: Language) {
     waiting: "Waiting for next step",
     running: "Running",
     ready: "Ready to continue",
+    paused: "Agent paused",
     complete: "Action queue complete",
     manualGate: "Waiting for manual confirmation",
     manualGateBody: (label: string) => `Confirm ${label} before Forge continues the queue.`,
@@ -2784,6 +2849,9 @@ function getCompactAgentControlCopy(language: Language) {
     openSourceControl: "Open source control",
     markReviewComplete: "Mark review complete",
     skipAction: "Skip action",
+    resumeAgent: "Resume agent",
+    pausedTitle: "Agent queue paused",
+    pausedBody: "Resume to continue later safe actions. Forge will still stop at review and command gates.",
     failedTitle: "Action failed, queue paused",
     retryAction: "Retry action",
     generateFixPlan: "Generate fix plan",

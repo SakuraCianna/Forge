@@ -296,6 +296,7 @@ export function App(): ReactElement {
   const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
   const [heroPromptIndex, setHeroPromptIndex] = useState(0);
+  const [pausedThreadIds, setPausedThreadIds] = useState<Set<string>>(() => new Set());
   const { t } = useI18n(settings.language);
   const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
   const activeAskStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
@@ -311,6 +312,34 @@ export function App(): ReactElement {
   const fullAccessMode =
     !generalPreferences.readOnly &&
     (generalPreferences.fullAccess || activeAgentProfileContext.permissionMode === "full");
+
+  // 同步暂停 ref 和 UI 状态, ref 用于执行器快速判断, state 用于渲染恢复入口
+  function pauseAgentThread(threadId: string): void {
+    cancelledThreadIdsRef.current.add(threadId);
+    setPausedThreadIds((current) => {
+      if (current.has(threadId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.add(threadId);
+      return next;
+    });
+  }
+
+  // 清理暂停标记, 用于新请求, follow-up 和用户显式恢复
+  function clearPausedAgentThread(threadId: string): void {
+    cancelledThreadIdsRef.current.delete(threadId);
+    setPausedThreadIds((current) => {
+      if (!current.has(threadId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.delete(threadId);
+      return next;
+    });
+  }
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -1253,7 +1282,7 @@ export function App(): ReactElement {
         const createdAt = new Date().toISOString();
 
         setTaskNotice(null);
-        cancelledThreadIdsRef.current.delete(activeThread.id);
+        clearPausedAgentThread(activeThread.id);
         setThreads((current) =>
           appendThreadFollowUpPrompt(
             current,
@@ -1299,7 +1328,7 @@ export function App(): ReactElement {
         : null;
 
       setTaskNotice(null);
-      cancelledThreadIdsRef.current.delete(result.thread.id);
+      clearPausedAgentThread(result.thread.id);
       setThreads((current) => [askThread, ...current]);
       setSelectedThreadId(result.thread.id);
       rememberPromptIfNeeded(result.thread.id, prompt, currentProject?.path ?? null);
@@ -1351,7 +1380,7 @@ export function App(): ReactElement {
       const createdAt = new Date().toISOString();
 
       setTaskNotice(null);
-      cancelledThreadIdsRef.current.delete(activeProjectThread.id);
+      clearPausedAgentThread(activeProjectThread.id);
       setThreads((current) =>
         appendThreadFollowUpPrompt(current, activeProjectThread.id, {
           id: `${activeProjectThread.id}-user-${createdAt}`,
@@ -1376,7 +1405,7 @@ export function App(): ReactElement {
     }
 
     setTaskNotice(null);
-    cancelledThreadIdsRef.current.delete(result.thread.id);
+    clearPausedAgentThread(result.thread.id);
     const projectThread: TaskThread = {
       ...result.thread,
       // 项目任务直接等待真实模型输出, 不再插入静态计划模板
@@ -1745,12 +1774,35 @@ export function App(): ReactElement {
       void window.forge.agent.cancelAskStream(activeAskStreamRequestId);
     }
 
-    cancelledThreadIdsRef.current.add(selectedThreadId);
+    pauseAgentThread(selectedThreadId);
     setThreads((current) =>
       cancelThread(current, selectedThreadId, {
         createdAt,
         message: settings.language === "zh-CN" ? "已终止" : "Stopped"
       })
+    );
+  }
+
+  // 恢复被 Stop 暂停的 Agent 队列, 让自动执行器重新接管后续安全动作
+  function resumeAgentThread(threadId: string): void {
+    const createdAt = new Date().toISOString();
+
+    clearPausedAgentThread(threadId);
+    setTaskNotice(null);
+    setThreads((current) =>
+      appendThreadEvents(
+        current,
+        threadId,
+        [
+          {
+            id: `${threadId}-agent-resumed-${createdAt}`,
+            kind: "plan",
+            message: settings.language === "zh-CN" ? "已恢复 Agent 执行" : "Agent execution resumed",
+            createdAt
+          }
+        ],
+        "planned"
+      )
     );
   }
 
@@ -1892,6 +1944,10 @@ export function App(): ReactElement {
     action: AgentAction,
     options: { approvedCommand?: boolean } = {}
   ): Promise<AgentActionRunOutcome> {
+    if (cancelledThreadIdsRef.current.has(threadId)) {
+      return { status: "pending", continueBatch: false };
+    }
+
     const activeAgentProfile = activeAgentProfileContext;
     const permission = resolveAgentActionPermission(action, activeAgentProfile);
 
@@ -2061,7 +2117,13 @@ export function App(): ReactElement {
 
   // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
-    await runAgentActionBatch(actions, (action) => runAgentAction(threadId, action));
+    await runAgentActionBatch(actions, (action) => {
+      if (cancelledThreadIdsRef.current.has(threadId)) {
+        return { status: "pending", continueBatch: false };
+      }
+
+      return runAgentAction(threadId, action);
+    });
   }
 
   // 执行受控目录列表动作, 只返回一层目录条目和文件大小
@@ -2584,6 +2646,9 @@ export function App(): ReactElement {
         !thread.archived &&
         (workspaceProjectPath ? thread.projectPath === workspaceProjectPath : !thread.projectPath)
     );
+    const agentPaused =
+      Boolean(selectedThread && pausedThreadIds.has(selectedThread.id)) &&
+      hasContinuableAgentActions(selectedThread);
 
     return (
       <ThreadWorkspace
@@ -2594,6 +2659,7 @@ export function App(): ReactElement {
         threads={visibleWorkspaceThreads}
         commandSafetyRules={generalPreferences.commandSafetyRules}
         fullAccess={fullAccessMode}
+        agentPaused={agentPaused}
         projectScan={projectScanResult}
         previewFile={previewFile}
         changePreview={
@@ -2612,6 +2678,7 @@ export function App(): ReactElement {
         onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
         onCompleteAgentAction={completeAgentAction}
         onSkipAgentAction={skipAgentAction}
+        onResumeAgent={resumeAgentThread}
         onOpenSourceControl={() => setActiveView("source")}
         onOpenFiles={() => setActiveView("files")}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
@@ -3048,6 +3115,11 @@ function createThreadConversation(
 // 找到当前线程中等待用户处理的提交门禁动作
 function findPendingAgentCommitAction(thread: TaskThread | null): AgentAction | null {
   return thread?.agentActions?.find((action) => action.kind === "commit" && action.status === "pending") ?? null;
+}
+
+// 判断被暂停线程是否还有可继续推进的 Agent 动作
+function hasContinuableAgentActions(thread: TaskThread | null): boolean {
+  return Boolean(thread?.agentActions?.some((action) => action.status === "pending"));
 }
 
 // 从提交动作目标里提取可直接使用的 Git 提交信息
