@@ -100,20 +100,21 @@ export function TaskComposer({
     }
   }, [submitSignal, submitTask]);
 
-  // Enter 直接发送, Shift Enter 保留换行
+  // 根据设置决定发送快捷键, 另一种 Enter 组合保留原生换行行为
   function handlePromptKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
-    if (
-      event.key !== "Enter" ||
-      event.shiftKey ||
-      event.altKey ||
-      event.ctrlKey ||
-      event.metaKey ||
-      event.nativeEvent.isComposing
-    ) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) {
       return;
     }
 
-    // Enter 直接发送, Shift+Enter 保留换行
+    const shouldSubmit =
+      resolvedGeneralPreferences.composerSubmitShortcut === "ctrl-enter"
+        ? (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey
+        : !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
+
+    if (!shouldSubmit) {
+      return;
+    }
+
     event.preventDefault();
     submitTask();
   }

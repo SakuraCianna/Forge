@@ -32,7 +32,10 @@ import type { TaskThread } from "@/state/taskThreads";
 import type { AgentMemoryEntry } from "@/state/agentMemory";
 import type { AgentProfile, AgentProfilePatch, AgentProfileTool } from "@/state/agentProfiles";
 import {
+  clampCommandTimeoutSeconds,
   defaultCommandSafetyRuleReason,
+  maxCommandTimeoutSeconds,
+  minCommandTimeoutSeconds,
   type CommandSafetyRule,
   type CommandSafetyRuleLevel,
   type GeneralPreferences
@@ -425,6 +428,59 @@ export function SettingsPanel({
                 }
               />
             </SettingRow>
+          </div>
+
+          <div>
+            <div className="mb-3">
+              <h2 className="text-sm font-semibold text-[#202123]">{copy.inputRunTitle}</h2>
+              <p className="mt-1 text-xs leading-5 text-[#6e6e80]">
+                {copy.inputRunDescription}
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+              <SettingRow
+                label={copy.composerSubmitShortcut}
+                description={copy.composerSubmitShortcutDescription}
+              >
+                <InlineSelectMenu
+                  ariaLabel={copy.composerSubmitShortcut}
+                  value={generalPreferences.composerSubmitShortcut}
+                  options={[
+                    { value: "enter", label: copy.submitWithEnter },
+                    { value: "ctrl-enter", label: copy.submitWithCtrlEnter }
+                  ]}
+                  onChange={(value) =>
+                    onUpdateGeneralPreferences({
+                      ...generalPreferences,
+                      composerSubmitShortcut:
+                        value as GeneralPreferences["composerSubmitShortcut"]
+                    })
+                  }
+                />
+              </SettingRow>
+              <SettingRow label={copy.commandTimeout} description={copy.commandTimeoutDescription}>
+                <label className="inline-flex h-9 min-w-32 items-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123]">
+                  <input
+                    type="number"
+                    min={minCommandTimeoutSeconds}
+                    max={maxCommandTimeoutSeconds}
+                    step="15"
+                    aria-label={copy.commandTimeout}
+                    value={generalPreferences.commandTimeoutSeconds}
+                    onChange={(event) =>
+                      onUpdateGeneralPreferences({
+                        ...generalPreferences,
+                        commandTimeoutSeconds: clampCommandTimeoutSeconds(
+                          Number(event.currentTarget.value)
+                        )
+                      })
+                    }
+                    className="w-16 bg-transparent text-right outline-none"
+                  />
+                  <span className="text-xs text-[#6e6e80]">{copy.commandTimeoutUnit}</span>
+                </label>
+              </SettingRow>
+            </div>
           </div>
 
           <div>
@@ -2206,6 +2262,11 @@ function getGeneralSettingsCopy(language: Language): {
   commandRulesDescription: string;
   commandRulesEmpty: string;
   commandRulesTitle: string;
+  commandTimeout: string;
+  commandTimeoutDescription: string;
+  commandTimeoutUnit: string;
+  composerSubmitShortcut: string;
+  composerSubmitShortcutDescription: string;
   deleteCommandRule: string;
   dailyMode: string;
   dailyModeDescription: string;
@@ -2214,6 +2275,8 @@ function getGeneralSettingsCopy(language: Language): {
   fullAccess: string;
   fullAccessDescription: string;
   languageDescription: string;
+  inputRunDescription: string;
+  inputRunTitle: string;
   outputDescription: string;
   outputTitle: string;
   showProcessedSummary: string;
@@ -2229,6 +2292,8 @@ function getGeneralSettingsCopy(language: Language): {
   telemetryDescription: string;
   terminalShell: string;
   terminalShellDescription: string;
+  submitWithCtrlEnter: string;
+  submitWithEnter: string;
   uploadBackground: string;
   wallpaperImage: string;
   wallpaperImageDescription: string;
@@ -2249,6 +2314,11 @@ function getGeneralSettingsCopy(language: Language): {
       commandRulesDescription: "按模式覆盖非破坏性命令的允许, 询问或拒绝策略",
       commandRulesEmpty: "还没有自定义命令规则",
       commandRulesTitle: "命令规则",
+      commandTimeout: "命令超时",
+      commandTimeoutDescription: "运行命令超过这个时间会自动终止, 避免 Agent 看起来卡死",
+      commandTimeoutUnit: "秒",
+      composerSubmitShortcut: "发送快捷键",
+      composerSubmitShortcutDescription: "控制输入框何时提交任务, 另一种按键保留换行",
       deleteCommandRule: "删除命令规则",
       agentRuntime: "智能体环境",
       agentRuntimeDescription: "选择智能体在 Windows 上的运行位置",
@@ -2269,6 +2339,8 @@ function getGeneralSettingsCopy(language: Language): {
       fullAccess: "完全访问权限",
       fullAccessDescription: "允许请求额外文件和联网命令, 生产操作仍需谨慎",
       languageDescription: "应用 UI 语言",
+      inputRunDescription: "调整输入框和命令执行的默认行为",
+      inputRunTitle: "输入与运行",
       outputDescription: "控制主对话区如何呈现 Agent 的内部执行反馈",
       outputTitle: "输出体验",
       showProcessedSummary: "显示“已处理”摘要",
@@ -2284,6 +2356,8 @@ function getGeneralSettingsCopy(language: Language): {
       telemetryDescription: "本地保留基础诊断开关, 默认关闭",
       terminalShell: "集成终端 Shell",
       terminalShellDescription: "选择要在集成终端中打开的 Shell",
+      submitWithCtrlEnter: "Ctrl Enter 发送",
+      submitWithEnter: "Enter 发送",
       uploadBackground: "上传背景图",
       wallpaperImage: "背景图片",
       wallpaperImageDescription: "选择本机图片作为软件背景",
@@ -2305,6 +2379,11 @@ function getGeneralSettingsCopy(language: Language): {
     commandRulesDescription: "Override allow, ask, or deny behavior for matching non-destructive commands",
     commandRulesEmpty: "No custom command rules yet",
     commandRulesTitle: "Command rules",
+    commandTimeout: "Command timeout",
+    commandTimeoutDescription: "Stop commands after this many seconds so the agent cannot appear stuck",
+    commandTimeoutUnit: "sec",
+    composerSubmitShortcut: "Send shortcut",
+    composerSubmitShortcutDescription: "Choose when the composer submits while the other key path keeps newlines",
     deleteCommandRule: "Delete command rule",
     agentRuntime: "Agent runtime",
     agentRuntimeDescription: "Choose where the agent runs on Windows",
@@ -2326,6 +2405,8 @@ function getGeneralSettingsCopy(language: Language): {
     fullAccess: "Full access",
     fullAccessDescription: "Allow extra file access and network commands when needed",
     languageDescription: "Application UI language",
+    inputRunDescription: "Adjust composer and command execution defaults",
+    inputRunTitle: "Input and run",
     outputDescription: "Control how the main conversation presents internal agent activity",
     outputTitle: "Output experience",
     showProcessedSummary: "Show processed summary",
@@ -2342,6 +2423,8 @@ function getGeneralSettingsCopy(language: Language): {
     telemetryDescription: "Keep local diagnostics off by default",
     terminalShell: "Integrated terminal shell",
     terminalShellDescription: "Choose the shell opened in the integrated terminal",
+    submitWithCtrlEnter: "Ctrl Enter sends",
+    submitWithEnter: "Enter sends",
     uploadBackground: "Upload background image",
     wallpaperImage: "Background image",
     wallpaperImageDescription: "Choose a local image to use behind the app",
