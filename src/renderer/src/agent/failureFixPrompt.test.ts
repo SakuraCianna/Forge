@@ -129,6 +129,55 @@ describe("failureFixPrompt", () => {
     expect(prompt).toContain("Reuse completed work");
   });
 
+  it("includes prior controlled tool results when generating a fix prompt", () => {
+    const failedAction: AgentAction = {
+      id: "action-2",
+      stepId: "step-2",
+      kind: "edit-file",
+      label: "Edit docs/usage.md",
+      status: "failed",
+      target: "docs/usage.md"
+    };
+    const prompt = createFailureFixTaskPrompt(
+      {
+        ...thread,
+        events: [
+          {
+            id: "event-1",
+            kind: "file",
+            message: "文件读取完成: package.json (42 bytes)\nContent preview:\n{\"scripts\":{\"test\":\"vitest\"}}",
+            createdAt: "2026-05-27T13:01:00.000Z"
+          },
+          {
+            id: "event-2",
+            kind: "file",
+            message: "项目搜索完成: handleSubmit (1 个结果)\n- src/App.tsx:42 function handleSubmit()",
+            createdAt: "2026-05-27T13:01:30.000Z"
+          },
+          {
+            id: "event-3",
+            kind: "file",
+            message: "已应用文件修改: docs/usage.md",
+            createdAt: "2026-05-27T13:02:00.000Z"
+          }
+        ],
+        agentActions: [failedAction]
+      },
+      failedAction
+    );
+    const controlledContextStart = prompt.indexOf("Prior controlled tool results:");
+    const recentContextStart = prompt.indexOf("Recent execution context:");
+    const controlledContext = prompt.slice(controlledContextStart, recentContextStart);
+
+    expect(prompt).toContain("Prior controlled tool results:");
+    expect(controlledContext).toContain("文件读取完成: package.json");
+    expect(controlledContext).toContain("Content preview:");
+    expect(controlledContext).toContain("{\"scripts\":{\"test\":\"vitest\"}}");
+    expect(controlledContext).toContain("项目搜索完成: handleSubmit");
+    expect(controlledContext).toContain("src/App.tsx:42 function handleSubmit()");
+    expect(controlledContext).not.toContain("已应用文件修改");
+  });
+
   it("keeps final errors from recent command context when the failed action is not a command", () => {
     const failedAction: AgentAction = {
       id: "action-2",

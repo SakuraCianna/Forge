@@ -9,6 +9,7 @@ export function createFailureFixTaskPrompt(
   commandResult: CommandRunResult | null = null
 ): string {
   const actionQueueContext = formatActionQueueContext(thread.agentActions ?? [], action.id);
+  const controlledToolContext = formatControlledToolResultContext(thread.events);
   const recentExecutionContext = formatRecentExecutionContext(thread.events);
   const failureDetails = [
     `Failed action: ${action.label}`,
@@ -24,6 +25,7 @@ export function createFailureFixTaskPrompt(
     "",
     ...failureDetails,
     actionQueueContext ? `Action queue:\n${actionQueueContext}` : null,
+    controlledToolContext ? `Prior controlled tool results:\n${controlledToolContext}` : null,
     recentExecutionContext ? `Recent execution context:\n${recentExecutionContext}` : null,
     "",
     "Generate a recovery execution plan for this failure.",
@@ -35,6 +37,26 @@ export function createFailureFixTaskPrompt(
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+// 提取最近的受控读取工具结果, 让失败恢复计划能复用真实项目上下文
+function formatControlledToolResultContext(events: TaskThreadEvent[]): string | null {
+  const toolResults = events
+    .filter((event) => event.kind === "file" && isControlledToolResultMessage(event.message))
+    .map((event) => event.message.trim())
+    .filter(Boolean)
+    .filter((message, index, current) => current.indexOf(message) === index)
+    .slice(-6)
+    .map((message) => truncateBlock(message));
+
+  return toolResults.length > 0 ? toolResults.map((message) => `- ${message}`).join("\n") : null;
+}
+
+// 只把受控读类工具结果放进恢复上下文, 避免混入文件应用和普通日志
+function isControlledToolResultMessage(message: string): boolean {
+  return /^(文件读取完成|File read complete|目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|Git 状态完成|Git status complete):/u.test(
+    message.trim()
+  );
 }
 
 // 根据动作目标在命令结果里找到最相关的失败记录
@@ -177,6 +199,21 @@ function formatRecentExecutionEvent(event: TaskThreadEvent): string | null {
 // 压缩单行上下文, 避免长路径或错误输出把修复提示词撑得过大
 function truncateInline(value: string, maxLength = 140): string {
   const normalized = value.replace(/\s+/g, " ").trim();
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength)}...`;
+}
+
+// 压缩多行工具输出, 保留足够首部内容给修复计划判断下一步
+function truncateBlock(value: string, maxLength = 1400): string {
+  const normalized = value
+    .split(/\r?\n/u)
+    .slice(0, 24)
+    .join("\n")
+    .trim();
 
   if (normalized.length <= maxLength) {
     return normalized;
