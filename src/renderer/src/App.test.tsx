@@ -4,7 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentPlanResult } from "@shared/agentTypes";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
-import { createDefaultGeneralPreferences, saveGeneralPreferences } from "@/state/generalPreferences";
+import {
+  agentApprovedCommandRuleReason,
+  createDefaultGeneralPreferences,
+  loadGeneralPreferences,
+  saveGeneralPreferences
+} from "@/state/generalPreferences";
 import { addManualModel, createDefaultModelSettings, saveModelSettings } from "@/state/modelSettings";
 import { saveRecentProjects } from "@/state/projects";
 import { App } from "./App";
@@ -143,6 +148,91 @@ describe("App agent execution", () => {
     expect(await screen.findByText(/未允许编辑文件/)).toBeInTheDocument();
     expect(forge.agent.generateFileChange).not.toHaveBeenCalled();
     expect(forge.files.writeText).not.toHaveBeenCalled();
+  });
+
+  it("lets users persist an exact allow rule from a command approval gate", async () => {
+    const user = userEvent.setup();
+    const englishSettings = addManualModel(createDefaultModelSettings(), "openai", "gpt-test");
+    saveModelSettings(window.localStorage, { ...englishSettings, language: "en-US" });
+    saveGeneralPreferences(window.localStorage, {
+      ...createDefaultGeneralPreferences(),
+      fullAccess: false
+    });
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Install dependencies",
+      createdAt: "2026-05-31T01:15:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Install dependencies",
+          description: "Run npm install",
+          kind: "verify",
+          status: "pending",
+          target: "npm install"
+        }
+      ]
+    };
+    const forge = createForgeMock({
+      plan,
+      preview: {
+        relativePath: "README.md",
+        currentContent: "",
+        nextContent: "",
+        diff: []
+      },
+      writtenFile: {
+        relativePath: "README.md",
+        content: "",
+        size: 0
+      }
+    });
+
+    vi.mocked(forge.commands.run).mockResolvedValueOnce({
+      runId: "run-1",
+      command: "npm install",
+      cwd: projectRoot,
+      exitCode: 0,
+      stdout: "installed",
+      stderr: "",
+      timedOut: false
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Install dependencies");
+    await user.keyboard("{Enter}");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Always allow queued command npm install" })
+    );
+
+    await waitFor(() =>
+      expect(forge.commands.run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectRoot,
+          cwd: projectRoot,
+          command: "npm install"
+        })
+      )
+    );
+    await screen.findByText("Allowed exact command for future agent runs: npm install");
+    expect(loadGeneralPreferences(window.localStorage).commandSafetyRules).toEqual([
+      {
+        id: expect.stringMatching(/^agent-allow-/u),
+        pattern: "npm install",
+        level: "allow",
+        reason: agentApprovedCommandRuleReason
+      }
+    ]);
   });
 
   it("runs project search actions without invoking the shell command runner", async () => {
