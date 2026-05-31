@@ -299,8 +299,7 @@ describe("taskThreads", () => {
     expect(event).toEqual({
       id: "thread-1-command-approved-action-1-2026-05-27T13:05:00.000Z",
       kind: "command",
-      message:
-        "Command approved: npm install (command may change dependencies or project state)",
+      message: "命令已批准: npm install (command may change dependencies or project state)",
       createdAt: "2026-05-27T13:05:00.000Z",
       commandApproval: {
         command: "npm install",

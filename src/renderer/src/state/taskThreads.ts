@@ -303,7 +303,7 @@ export function createCommandApprovalEvent({
   return {
     id: `${threadId}-command-approved-${actionId}-${createdAt}`,
     kind: "command",
-    message: `Command approved: ${command} (${reason})`,
+    message: `命令已批准: ${command} (${reason})`,
     createdAt,
     commandApproval: {
       command,
