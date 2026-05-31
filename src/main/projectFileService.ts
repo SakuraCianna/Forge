@@ -2,6 +2,7 @@
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
+import { assertProjectPathNotSensitive } from "../shared/sensitiveProjectFiles.js";
 import { createLineDiff } from "../shared/textDiff.js";
 
 type ReadProjectTextFileOptions = {
@@ -17,6 +18,10 @@ export async function readProjectTextFile({
   maxBytes = 256000
 }: ReadProjectTextFileOptions): Promise<ProjectTextFile> {
   const resolvedProjectRoot = await realpath(projectRoot);
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+
+  assertProjectPathNotSensitive(normalizedRelativePath);
+
   const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
 
   if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
@@ -36,7 +41,7 @@ export async function readProjectTextFile({
   }
 
   return {
-    relativePath: relativePath.replace(/\\/g, "/"),
+    relativePath: normalizedRelativePath,
     content: await readFile(resolvedFilePath, "utf8"),
     size: fileStat.size
   };
@@ -68,6 +73,10 @@ export async function writeProjectTextFile({
   nextContent: string;
 }): Promise<ProjectTextFile> {
   const resolvedProjectRoot = await realpath(projectRoot);
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+
+  assertProjectPathNotSensitive(normalizedRelativePath);
+
   const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
 
   if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
@@ -89,7 +98,7 @@ export async function writeProjectTextFile({
 
   await writeFile(existingResolvedFilePath ?? absoluteFilePath, nextContent, "utf8");
 
-  return readProjectTextFile({ projectRoot, relativePath });
+  return readProjectTextFile({ projectRoot, relativePath: normalizedRelativePath });
 }
 
 // 新文件预览使用空内容作为旧版本, 让 Agent 可以先生成再审查
@@ -98,8 +107,12 @@ async function readProjectTextFileOrEmpty({
   relativePath,
   maxBytes
 }: ReadProjectTextFileOptions): Promise<ProjectTextFile> {
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+
+  assertProjectPathNotSensitive(normalizedRelativePath);
+
   try {
-    return await readProjectTextFile({ projectRoot, relativePath, maxBytes });
+    return await readProjectTextFile({ projectRoot, relativePath: normalizedRelativePath, maxBytes });
   } catch (error) {
     if (!isFileNotFoundError(error)) {
       throw error;
@@ -113,7 +126,7 @@ async function readProjectTextFileOrEmpty({
     }
 
     return {
-      relativePath: relativePath.replace(/\\/g, "/"),
+      relativePath: normalizedRelativePath,
       content: "",
       size: 0
     };
@@ -141,6 +154,11 @@ function isFileNotFoundError(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === "ENOENT"
   );
+}
+
+// 将 Windows 路径分隔符统一成前端展示使用的斜杠
+function normalizeRelativePath(path: string): string {
+  return path.replace(/\\/g, "/");
 }
 
 // 判断目标路径是否仍在项目根目录内

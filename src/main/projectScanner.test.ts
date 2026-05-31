@@ -31,6 +31,22 @@ describe("projectScanner", () => {
     ]);
   });
 
+  it("hides sensitive files from the Agent project index", async () => {
+    await mkdir(join(testRoot, ".ssh"), { recursive: true });
+    await mkdir(join(testRoot, "src"), { recursive: true });
+    await writeFile(join(testRoot, ".env.local"), "OPENAI_API_KEY=secret", "utf8");
+    await writeFile(join(testRoot, ".env.example"), "OPENAI_API_KEY=\n", "utf8");
+    await writeFile(join(testRoot, ".ssh", "id_rsa"), "private key", "utf8");
+    await writeFile(join(testRoot, "src", "App.tsx"), "export {}", "utf8");
+
+    const result = await scanProjectFiles(testRoot);
+
+    expect(result.files.map((file) => file.relativePath).sort()).toEqual([
+      ".env.example",
+      "src/App.tsx"
+    ]);
+  });
+
   it("marks the result as truncated when it reaches the file limit", async () => {
     await mkdir(testRoot, { recursive: true });
     await writeFile(join(testRoot, "a.ts"), "", "utf8");
