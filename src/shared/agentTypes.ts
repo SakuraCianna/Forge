@@ -20,6 +20,8 @@ export type AgentProfileContext = {
   contextBudget: number;
 };
 
+export type AgentWorkMode = "code" | "daily";
+
 export type GenerateAgentPlanRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
@@ -28,6 +30,7 @@ export type GenerateAgentPlanRequest = {
   memories?: AgentMemoryContext[];
   personalization?: string;
   speed: SpeedMode;
+  workMode?: AgentWorkMode;
   taskPrompt: string;
   projectScan: ProjectScanResult;
 };
@@ -41,6 +44,7 @@ export type GenerateAgentFileChangeRequest = {
   personalization?: string;
   projectScan?: ProjectScanResult | null;
   speed: SpeedMode;
+  workMode?: AgentWorkMode;
   taskPrompt: string;
   relativePath: string;
   currentContent: string;
@@ -56,6 +60,7 @@ export type GenerateAgentAskRequest = {
   conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   projectScan?: ProjectScanResult | null;
   speed: SpeedMode;
+  workMode?: AgentWorkMode;
   prompt: string;
 };
 
