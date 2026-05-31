@@ -836,13 +836,14 @@ function parseAgentPlanSteps(text: string): AgentPlanStep[] {
     .filter(Boolean)
     .slice(0, 12)
     .map((description, index) => {
-      const target = readStepTarget(description);
+      const kind = inferStepKind(description);
+      const target = readStepTarget(description, kind);
 
       return {
         id: `step-${index + 1}`,
         title: createStepTitle(description),
         description,
-        kind: inferStepKind(description),
+        kind,
         status: "pending" as const,
         ...(target ? { target } : {})
       };
@@ -881,12 +882,23 @@ function inferStepKind(description: string): AgentPlanStepKind {
   return "other";
 }
 
-// 从步骤文本里提取文件路径或命令目标
-function readStepTarget(description: string): string | undefined {
+// 从步骤文本里提取文件路径或命令目标, verify 步骤优先识别未加反引号的命令
+function readStepTarget(
+  description: string,
+  kind: AgentPlanStepKind = inferStepKind(description)
+): string | undefined {
   const backtickTarget = /`([^`]+)`/.exec(description)?.[1]?.trim();
 
   if (backtickTarget) {
     return backtickTarget;
+  }
+
+  if (kind === "verify") {
+    const commandTarget = readCommandTarget(description);
+
+    if (commandTarget) {
+      return commandTarget;
+    }
   }
 
   const pathTarget = /(?:^|\s)([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)(?:\s|$|[.,;:])/u.exec(
@@ -902,4 +914,34 @@ function readStepTarget(description: string): string | undefined {
   )?.[1];
 
   return fileNameTarget;
+}
+
+// 识别常见本地验证命令, 兼容模型没有用反引号包裹命令的计划文本
+function readCommandTarget(description: string): string | undefined {
+  const colonCommand = /[:：]\s*([^。；;，,\r\n]+)/u.exec(description)?.[1]?.trim();
+  const candidates = [colonCommand, description].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    const match =
+      /\b((?:npm|pnpm|yarn|bun|npx|node|vitest|tsc|eslint|prettier|git|rg|ls|dir|Get-ChildItem|Get-Content)\b[^。；;，,\r\n]*)/iu.exec(
+        candidate
+      );
+    const command = match?.[1] ? normalizeCommandTarget(match[1]) : undefined;
+
+    if (command) {
+      return command;
+    }
+  }
+
+  return undefined;
+}
+
+// 去掉模型附在命令后的自然语言说明, 保留真正要执行的命令文本
+function normalizeCommandTarget(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+(?:to|for)\s+.+$/iu, "")
+    .replace(/\s+(?:验证|检查|确认|测试|构建|运行|执行).+$/u, "")
+    .replace(/[.。；;，,]+$/u, "")
+    .trim();
 }

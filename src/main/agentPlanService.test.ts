@@ -156,6 +156,42 @@ describe("agentPlanService", () => {
     ]);
   });
 
+  it("extracts unquoted local commands from verification plan steps", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: [
+              "1. Run npm test -- --reporter=dot to verify the change.",
+              "2. Verify: npm run typecheck",
+              "3. 运行 npm run build 验证生产构建。"
+            ].join("\n")
+          })
+        )
+    );
+
+    const result = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(result.steps).toEqual([
+      expect.objectContaining({
+        kind: "verify",
+        target: "npm test -- --reporter=dot"
+      }),
+      expect.objectContaining({
+        kind: "verify",
+        target: "npm run typecheck"
+      }),
+      expect.objectContaining({
+        kind: "verify",
+        target: "npm run build"
+      })
+    ]);
+  });
+
   it("treats create or write file plan steps as editable file targets", async () => {
     const fetcher = vi.fn(
       async () =>
