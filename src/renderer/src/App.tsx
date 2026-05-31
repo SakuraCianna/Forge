@@ -2002,7 +2002,7 @@ export function App(): ReactElement {
     usage?: TokenUsage;
     createdAt: string;
   }): void {
-    if (!usage) {
+    if (!generalPreferences.telemetry || !usage) {
       return;
     }
 
