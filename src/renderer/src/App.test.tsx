@@ -215,6 +215,80 @@ describe("App agent execution", () => {
     expect(screen.getByText(/src\/App\.tsx:42/)).toBeInTheDocument();
   });
 
+  it("passes controlled tool results into the following file edit prompt", async () => {
+    const user = userEvent.setup();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Search and edit submit handler",
+      createdAt: "2026-05-31T01:22:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Search submit handler",
+          description: "Search for handleSubmit before editing.",
+          kind: "inspect",
+          status: "pending",
+          target: "handleSubmit"
+        },
+        {
+          id: "step-2",
+          title: "Edit App",
+          description: "Update the submit handler.",
+          kind: "edit",
+          status: "pending",
+          target: "src/App.tsx"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "src/App.tsx",
+      currentContent: "",
+      nextContent: "export const App = () => null;",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "src/App.tsx",
+        content: "export const App = () => null;",
+        size: 30
+      }
+    });
+
+    vi.mocked(forge.files.searchText).mockResolvedValueOnce({
+      query: "handleSubmit",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          lineNumber: 42,
+          preview: "function handleSubmit() {"
+        }
+      ],
+      truncated: false
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Update handleSubmit");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => expect(forge.agent.generateFileChange).toHaveBeenCalled());
+
+    const fileChangeRequest = vi.mocked(forge.agent.generateFileChange).mock.calls[0]?.[0];
+    expect(fileChangeRequest?.taskPrompt).toContain("Prior controlled tool results:");
+    expect(fileChangeRequest?.taskPrompt).toContain("项目搜索完成: handleSubmit");
+    expect(fileChangeRequest?.taskPrompt).toContain("src/App.tsx:42 function handleSubmit()");
+  });
+
   it("runs project glob actions without invoking the shell command runner", async () => {
     const user = userEvent.setup();
     const plan: AgentPlanResult = {

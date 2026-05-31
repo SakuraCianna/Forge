@@ -67,4 +67,36 @@ describe("fileChangeTaskPrompt", () => {
     expect(prompt).not.toContain("Current edit action:");
     expect(prompt).not.toContain("Action queue:");
   });
+
+  it("includes prior controlled tool results for focused edits", () => {
+    const prompt = createFileChangeTaskPrompt(
+      {
+        ...thread,
+        events: [
+          {
+            id: "event-1",
+            kind: "file",
+            message: "项目搜索完成: handleSubmit (1 个结果)\n- src/App.tsx:42 function handleSubmit()",
+            createdAt: "2026-05-27T13:01:00.000Z"
+          },
+          {
+            id: "event-2",
+            kind: "file",
+            message: "已应用文件修改: docs/usage.md",
+            createdAt: "2026-05-27T13:02:00.000Z"
+          }
+        ]
+      },
+      "docs/usage.md",
+      editAction,
+      {
+        toolResults: ["目录列表完成: src (2 个条目)\n- src/App.tsx 128 bytes"]
+      }
+    );
+
+    expect(prompt).toContain("Prior controlled tool results:");
+    expect(prompt).toContain("项目搜索完成: handleSubmit");
+    expect(prompt).toContain("目录列表完成: src");
+    expect(prompt).not.toContain("已应用文件修改");
+  });
 });

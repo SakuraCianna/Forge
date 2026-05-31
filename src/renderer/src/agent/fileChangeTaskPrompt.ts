@@ -6,16 +6,19 @@ import type { TaskThread } from "@/state/taskThreads";
 export function createFileChangeTaskPrompt(
   thread: TaskThread,
   relativePath: string,
-  action?: AgentAction | null
+  action?: AgentAction | null,
+  options: { toolResults?: string[] } = {}
 ): string {
   const actionQueueContext = formatActionQueueContext(thread.agentActions ?? [], action?.id ?? null);
   const currentActionContext = action ? formatCurrentActionContext(action) : null;
+  const toolResultContext = formatControlledToolResultContext(thread, options.toolResults ?? []);
 
   return [
     `Original task:\n${thread.prompt}`,
     `Target file:\n${relativePath}`,
     currentActionContext ? `Current edit action:\n${currentActionContext}` : null,
     actionQueueContext ? `Action queue:\n${actionQueueContext}` : null,
+    toolResultContext ? `Prior controlled tool results:\n${toolResultContext}` : null,
     "File change instructions:",
     "Rewrite only the target file shown above.",
     "Satisfy the current edit action first, then preserve the original task intent.",
@@ -24,6 +27,28 @@ export function createFileChangeTaskPrompt(
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n\n");
+}
+
+// 提取前置受控工具结果, 让后续编辑能利用目录, 搜索, glob 和 Git 检查输出
+function formatControlledToolResultContext(thread: TaskThread, extraToolResults: string[]): string | null {
+  const eventToolResults = thread.events
+    .filter((event) => event.kind === "file" && isControlledToolResultMessage(event.message))
+    .map((event) => event.message);
+  const toolResults = [...eventToolResults, ...extraToolResults]
+    .map((message) => message.trim())
+    .filter(Boolean)
+    .filter((message, index, current) => current.indexOf(message) === index)
+    .slice(-6)
+    .map((message) => truncateBlock(message));
+
+  return toolResults.length > 0 ? toolResults.map((message) => `- ${message}`).join("\n") : null;
+}
+
+// 只把读类工具结果放进编辑上下文, 避免混入文件应用日志
+function isControlledToolResultMessage(message: string): boolean {
+  return /^(目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|Git 状态完成|Git status complete):/u.test(
+    message.trim()
+  );
 }
 
 // 整理当前动作的关键字段, 避免只靠原始用户请求导致多文件步骤混淆
@@ -84,6 +109,21 @@ function formatActionQueueLine(action: AgentAction, currentActionId: string | nu
 // 压缩单行提示词内容, 防止长路径和长命令撑大上下文
 function truncateInline(value: string, maxLength = 160): string {
   const normalized = value.replace(/\s+/g, " ").trim();
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength)}...`;
+}
+
+// 压缩多行工具输出, 保留前几行给模型判断后续编辑范围
+function truncateBlock(value: string, maxLength = 1400): string {
+  const normalized = value
+    .split(/\r?\n/u)
+    .slice(0, 24)
+    .join("\n")
+    .trim();
 
   if (normalized.length <= maxLength) {
     return normalized;
