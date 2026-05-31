@@ -1380,6 +1380,73 @@ describe("ThreadWorkspace", () => {
     );
   });
 
+  it("shows the latest execution record for the selected agent action", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Inspect action run record",
+            events: [
+              {
+                id: "thread-1-agent-action-run-started-action-1-2026-05-27T13:05:00.000Z",
+                kind: "plan",
+                message: "Started agent action: Inspect README.md",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                agentActionRun: {
+                  actionId: "action-1",
+                  label: "Inspect README.md",
+                  status: "started",
+                  startedAt: "2026-05-27T13:05:00.000Z"
+                }
+              },
+              {
+                id: "thread-1-agent-action-run-completed-action-1-2026-05-27T13:05:01.250Z",
+                kind: "plan",
+                message: "Completed agent action: Inspect README.md (1.3 s)",
+                createdAt: "2026-05-27T13:05:01.250Z",
+                agentActionRun: {
+                  actionId: "action-1",
+                  label: "Inspect README.md",
+                  status: "completed",
+                  startedAt: "2026-05-27T13:05:00.000Z",
+                  completedAt: "2026-05-27T13:05:01.250Z",
+                  durationMs: 1250
+                }
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect README.md",
+                status: "completed",
+                target: "README.md"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const details = screen.getByRole("region", { name: "Action details" });
+
+    expect(within(details).getByText("Execution record")).toBeInTheDocument();
+    expect(within(details).getAllByText("Completed").length).toBeGreaterThan(0);
+    expect(within(details).getByText("Duration")).toBeInTheDocument();
+    expect(within(details).getByText("1.3 s")).toBeInTheDocument();
+    expect(within(details).getByText("Completed agent action: Inspect README.md (1.3 s)")).toBeInTheDocument();
+  });
+
   it("lets users complete a manual gate from the selected action details", async () => {
     const user = userEvent.setup();
     const onCompleteAgentAction = vi.fn();

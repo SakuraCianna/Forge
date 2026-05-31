@@ -40,7 +40,12 @@ import {
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
-import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
+import type {
+  AgentActionRunRecord,
+  CommandRunResult,
+  TaskThread,
+  TaskThreadEvent
+} from "@/state/taskThreads";
 import { MarkdownPreview } from "./FilePreviewRenderer";
 import { Tooltip } from "./Tooltip";
 
@@ -1276,6 +1281,10 @@ export function ThreadWorkspace({
             commandOutput: "最近命令输出",
             toolResult: "工具结果",
             copyContext: "复制动作上下文",
+            executionRecord: "执行记录",
+            startedAt: "开始",
+            completedAt: "结束",
+            duration: "耗时",
             exitCode: "退出码",
             cwd: "目录",
             stdout: "stdout",
@@ -1302,6 +1311,10 @@ export function ThreadWorkspace({
             commandOutput: "Last command output",
             toolResult: "Tool result",
             copyContext: "Copy action context",
+            executionRecord: "Execution record",
+            startedAt: "Started",
+            completedAt: "Completed",
+            duration: "Duration",
             exitCode: "Exit code",
             cwd: "cwd",
             stdout: "stdout",
@@ -1381,6 +1394,9 @@ export function ThreadWorkspace({
       : null;
     const selectedToolResult = selectedAgentAction
       ? findLatestToolResultEvent(selectedThread?.events ?? [], selectedAgentAction)
+      : null;
+    const selectedActionRunEvent = selectedAgentAction
+      ? findLatestAgentActionRunEvent(selectedThread?.events ?? [], selectedAgentAction)
       : null;
 
     // 读取命令动作的风险等级, 非命令动作不参与审批判断
@@ -1700,7 +1716,8 @@ export function ThreadWorkspace({
     function renderAgentActionDetails(
       action: AgentAction,
       commandResult: CommandRunResult | null,
-      toolResult: TaskThreadEvent | null
+      toolResult: TaskThreadEvent | null,
+      actionRunEvent: TaskThreadEvent | null
     ): ReactElement {
       const detailRows = [
         { label: actionDetailsCopy.kind, value: action.kind },
@@ -1732,7 +1749,8 @@ export function ThreadWorkspace({
                       actionStatusLabel,
                       nextStep,
                       commandResult,
-                      toolResult
+                      toolResult,
+                      actionRunEvent?.agentActionRun ?? null
                     )
                   )
                 }
@@ -1761,6 +1779,48 @@ export function ThreadWorkspace({
             <p className="mt-1 text-sm leading-5 text-[#202123]">{nextStep}</p>
           </div>
           {renderAgentActionDetailControls(action)}
+          {actionRunEvent?.agentActionRun ? (
+            <div className="mt-3 border-t border-[#ececf1] pt-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+                {actionDetailsCopy.executionRecord}
+              </h3>
+              <dl className="mt-2 grid gap-2 text-xs">
+                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.status}</dt>
+                  <dd className="font-medium text-[#202123]">
+                    {formatAgentActionRunStatus(actionRunEvent.agentActionRun.status, language)}
+                  </dd>
+                </div>
+                {actionRunEvent.agentActionRun.startedAt ? (
+                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.startedAt}</dt>
+                    <dd className="min-w-0 break-words font-medium text-[#202123]">
+                      {formatActionTimestamp(actionRunEvent.agentActionRun.startedAt)}
+                    </dd>
+                  </div>
+                ) : null}
+                {actionRunEvent.agentActionRun.completedAt ? (
+                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.completedAt}</dt>
+                    <dd className="min-w-0 break-words font-medium text-[#202123]">
+                      {formatActionTimestamp(actionRunEvent.agentActionRun.completedAt)}
+                    </dd>
+                  </div>
+                ) : null}
+                {typeof actionRunEvent.agentActionRun.durationMs === "number" ? (
+                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.duration}</dt>
+                    <dd className="font-medium text-[#202123]">
+                      {formatActionDuration(actionRunEvent.agentActionRun.durationMs)}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+              <p className="mt-2 rounded-[12px] bg-[#f7f7f8] px-2.5 py-2 text-xs leading-5 text-[#565869]">
+                {actionRunEvent.message}
+              </p>
+            </div>
+          ) : null}
           {commandResult ? (
             <div className="mt-3 border-t border-[#ececf1] pt-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
@@ -2361,7 +2421,12 @@ export function ThreadWorkspace({
             )}
           </section>
           {selectedAgentAction
-            ? renderAgentActionDetails(selectedAgentAction, selectedCommandResult, selectedToolResult)
+            ? renderAgentActionDetails(
+                selectedAgentAction,
+                selectedCommandResult,
+                selectedToolResult,
+                selectedActionRunEvent
+              )
             : null}
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold text-[#202123]">{planCopy.verification}</h2>
@@ -3393,6 +3458,22 @@ function findLatestToolResultEvent(
   return null;
 }
 
+// 查找指定动作最近一次结构化执行记录, 动作详情据此展示开始, 结束和耗时
+function findLatestAgentActionRunEvent(
+  events: TaskThreadEvent[],
+  action: AgentAction
+): TaskThreadEvent | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+
+    if (event?.agentActionRun?.actionId === action.id) {
+      return event;
+    }
+  }
+
+  return null;
+}
+
 // 判断当前动作是否会生成可回看的受控工具输出
 function isControlledToolResultAction(action: AgentAction): boolean {
   return (
@@ -3578,7 +3659,8 @@ function formatAgentActionContextForClipboard(
   statusLabel: string,
   nextStep: string,
   commandResult: CommandRunResult | null,
-  toolResult: TaskThreadEvent | null
+  toolResult: TaskThreadEvent | null,
+  actionRun: AgentActionRunRecord | null
 ): string {
   const metadata = [
     `Action: ${action.label}`,
@@ -3594,11 +3676,77 @@ function formatAgentActionContextForClipboard(
     sections.push(`Command result:\n${formatCommandResultForClipboard(commandResult)}`);
   }
 
+  if (actionRun) {
+    sections.push(`Execution record:\n${formatAgentActionRunForClipboard(actionRun)}`);
+  }
+
   if (toolResult) {
     sections.push(`Tool result:\n${toolResult.message.trim()}`);
   }
 
   return sections.join("\n");
+}
+
+// 把结构化动作执行记录整理成可粘贴文本, 方便继续排查单步行为
+function formatAgentActionRunForClipboard(actionRun: AgentActionRunRecord): string {
+  return [
+    `Status: ${actionRun.status}`,
+    actionRun.startedAt ? `Started: ${actionRun.startedAt}` : null,
+    actionRun.completedAt ? `Completed: ${actionRun.completedAt}` : null,
+    typeof actionRun.durationMs === "number"
+      ? `Duration: ${formatActionDuration(actionRun.durationMs)}`
+      : null,
+    actionRun.reason ? `Reason: ${actionRun.reason}` : null
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
+}
+
+// 本地化动作执行状态, 避免直接把内部状态枚举暴露给用户
+function formatAgentActionRunStatus(status: AgentActionRunRecord["status"], language: Language): string {
+  if (language === "zh-CN") {
+    return {
+      started: "已开始",
+      completed: "已完成",
+      failed: "失败",
+      waiting: "等待继续",
+      confirmed: "已确认",
+      skipped: "已跳过"
+    }[status];
+  }
+
+  return {
+    started: "Started",
+    completed: "Completed",
+    failed: "Failed",
+    waiting: "Waiting",
+    confirmed: "Confirmed",
+    skipped: "Skipped"
+  }[status];
+}
+
+// 动作详情只需要短时间戳, 避免完整 ISO 时间挤占侧栏
+function formatActionTimestamp(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+// 用短格式展示动作耗时, 与 App 侧时间线文案保持一致
+function formatActionDuration(durationMs: number): string {
+  if (durationMs < 1000) {
+    return `${durationMs} ms`;
+  }
+
+  return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
 // 压缩命令输出片段, 错误恢复提示只需要最后几行

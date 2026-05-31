@@ -97,6 +97,7 @@ import {
   toggleThreadPinned,
   updateThreadAgentActionFromFileChangePreview,
   updateThreadAgentActionStatus,
+  type AgentActionRunRecord,
   type CommandRunResult,
   type TaskThread
 } from "@/state/taskThreads";
@@ -1934,6 +1935,54 @@ export function App(): ReactElement {
     setThreads((current) => updateThreadAgentActionStatus(current, threadId, actionId, status));
   }
 
+  // 写入动作级执行记录, 让线程详情能展示每一步开始, 结束和等待原因
+  function appendAgentActionRunEvent(
+    threadId: string,
+    action: AgentAction,
+    record: Omit<AgentActionRunRecord, "actionId" | "label">
+  ): void {
+    const createdAt = record.completedAt ?? record.startedAt ?? new Date().toISOString();
+    const message = formatAgentActionRunMessage(settings.language, action, record);
+
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        {
+          id: `${threadId}-agent-action-run-${record.status}-${action.id}-${createdAt}`,
+          kind: record.status === "failed" ? "error" : "plan",
+          message,
+          createdAt,
+          agentActionRun: {
+            actionId: action.id,
+            label: action.label,
+            ...record
+          }
+        }
+      ])
+    );
+  }
+
+  // 根据动作执行结果写入完成, 失败或等待记录, 供 UI 和后续计划复用
+  function appendAgentActionOutcomeEvent(
+    threadId: string,
+    action: AgentAction,
+    outcome: AgentActionRunOutcome,
+    startedAt: string
+  ): void {
+    const status = typeof outcome === "string" ? outcome : outcome.status;
+
+    const completedAt = new Date().toISOString();
+    const durationMs = Math.max(0, Date.parse(completedAt) - Date.parse(startedAt));
+    const runStatus: AgentActionRunRecord["status"] =
+      status === "completed" ? "completed" : status === "failed" ? "failed" : "waiting";
+
+    appendAgentActionRunEvent(threadId, action, {
+      status: runStatus,
+      startedAt,
+      completedAt,
+      durationMs
+    });
+  }
+
   // 用户确认或跳过门禁时写入时间线, 让队列推进有可审计记录
   function setAgentActionDecisionStatus(
     threadId: string,
@@ -1958,7 +2007,13 @@ export function App(): ReactElement {
             id: `${threadId}-agent-action-${status}-${action.id}-${createdAt}`,
             kind: "plan",
             message,
-            createdAt
+            createdAt,
+            agentActionRun: {
+              actionId: action.id,
+              label: action.label,
+              status: skipped ? "skipped" : "confirmed",
+              completedAt: createdAt
+            }
           }
         ]),
         threadId,
@@ -2065,20 +2120,24 @@ export function App(): ReactElement {
       return "pending";
     }
 
+    const startedAt = new Date().toISOString();
+    appendAgentActionRunEvent(threadId, action, { status: "started", startedAt });
     updateAgentActionStatus(threadId, action.id, "running");
 
+    let outcome: AgentActionRunOutcome;
+
     if (execution.kind === "open-file") {
-      return await openAgentFileAction(threadId, action, execution.relativePath);
+      outcome = await openAgentFileAction(threadId, action, execution.relativePath);
     } else if (execution.kind === "list-directory") {
-      return await listAgentProjectDirectoryAction(threadId, action, execution.relativePath);
+      outcome = await listAgentProjectDirectoryAction(threadId, action, execution.relativePath);
     } else if (execution.kind === "glob-project") {
-      return await globAgentProjectAction(threadId, action, execution.pattern);
+      outcome = await globAgentProjectAction(threadId, action, execution.pattern);
     } else if (execution.kind === "search-project") {
-      return await searchAgentProjectAction(threadId, action, execution.query);
+      outcome = await searchAgentProjectAction(threadId, action, execution.query);
     } else if (execution.kind === "git-status") {
-      return await inspectAgentGitStatusAction(threadId, action);
+      outcome = await inspectAgentGitStatusAction(threadId, action);
     } else if (execution.kind === "generate-file-change") {
-      return await generateAgentFileChangeAction(threadId, action, execution.relativePath);
+      outcome = await generateAgentFileChangeAction(threadId, action, execution.relativePath);
     } else if (execution.kind === "run-command") {
       const commandRisk = resolveAgentCommandRisk(execution.command, {
         fullAccess: fullAccessMode,
@@ -2086,7 +2145,7 @@ export function App(): ReactElement {
       });
 
       if (commandRisk.level === "deny") {
-        return blockAgentCommandAction(
+        outcome = blockAgentCommandAction(
           threadId,
           action,
           formatAgentCommandDenied(
@@ -2095,10 +2154,8 @@ export function App(): ReactElement {
           ),
           "failed"
         );
-      }
-
-      if (commandRisk.level === "ask" && !fullAccessMode && !options.approvedCommand) {
-        return blockAgentCommandAction(
+      } else if (commandRisk.level === "ask" && !fullAccessMode && !options.approvedCommand) {
+        outcome = blockAgentCommandAction(
           threadId,
           action,
           formatAgentCommandNeedsApproval(
@@ -2108,13 +2165,16 @@ export function App(): ReactElement {
           ),
           "pending"
         );
+      } else {
+        outcome = await runThreadCommand(threadId, execution.command, action.id);
       }
-
-      return await runThreadCommand(threadId, execution.command, action.id);
+    } else {
+      updateAgentActionStatus(threadId, action.id, "completed");
+      outcome = "completed";
     }
 
-    updateAgentActionStatus(threadId, action.id, "completed");
-    return "completed";
+    appendAgentActionOutcomeEvent(threadId, action, outcome, startedAt);
+    return outcome;
   }
 
   // 阻止高风险命令继续执行, 并把原因写入线程时间线
@@ -3269,6 +3329,70 @@ function formatAgentCommandNeedsApproval(
   }
 
   return `Command requires full access confirmation: ${command} (${reason})`;
+}
+
+// 把动作执行记录转成用户可读消息, 同时保留结构化 agentActionRun 字段供 UI 使用
+function formatAgentActionRunMessage(
+  language: Language,
+  action: AgentAction,
+  record: Omit<AgentActionRunRecord, "actionId" | "label">
+): string {
+  const duration = typeof record.durationMs === "number" ? ` (${formatDurationMs(record.durationMs)})` : "";
+
+  if (language === "zh-CN") {
+    if (record.status === "started") {
+      return `开始执行 Agent 动作: ${action.label}`;
+    }
+
+    if (record.status === "completed") {
+      return `已完成 Agent 动作: ${action.label}${duration}`;
+    }
+
+    if (record.status === "failed") {
+      return `Agent 动作执行失败: ${action.label}${duration}`;
+    }
+
+    if (record.status === "waiting") {
+      return `Agent 动作等待继续: ${action.label}${duration}`;
+    }
+
+    if (record.status === "skipped") {
+      return `已跳过 Agent 动作: ${action.label}`;
+    }
+
+    return `已确认 Agent 动作: ${action.label}`;
+  }
+
+  if (record.status === "started") {
+    return `Started agent action: ${action.label}`;
+  }
+
+  if (record.status === "completed") {
+    return `Completed agent action: ${action.label}${duration}`;
+  }
+
+  if (record.status === "failed") {
+    return `Failed agent action: ${action.label}${duration}`;
+  }
+
+  if (record.status === "waiting") {
+    return `Agent action waiting: ${action.label}${duration}`;
+  }
+
+  if (record.status === "skipped") {
+    return `Skipped agent action: ${action.label}`;
+  }
+
+  return `Confirmed agent action: ${action.label}`;
+}
+
+// 用短格式显示动作耗时, 保持详情面板和时间线易扫读
+function formatDurationMs(durationMs: number): string {
+  if (durationMs < 1000) {
+    return `${durationMs} ms`;
+  }
+
+  return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
 // 用时间和随机数生成命令运行 id, 避免并发命令串流

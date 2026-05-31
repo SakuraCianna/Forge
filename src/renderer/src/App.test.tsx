@@ -921,6 +921,8 @@ describe("App agent execution", () => {
         relativePath: "README.md"
       })
     );
+    expect(await screen.findByText("Started agent action: Inspect README.md")).toBeInTheDocument();
+    expect(await screen.findByText(/Completed agent action: Inspect README\.md/)).toBeInTheDocument();
 
     await user.click(await screen.findByRole("button", { name: "Generate next plan" }));
 
