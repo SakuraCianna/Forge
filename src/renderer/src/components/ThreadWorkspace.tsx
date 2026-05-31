@@ -922,12 +922,12 @@ export function ThreadWorkspace({
         : nextGateAction;
     const queueComplete = queueStats.total > 0 && queueStats.completed === queueStats.total;
     const agentRunStatus =
-      queueBlockerAction?.status === "running"
-        ? agentRunCopy.running
-        : queueBlockerAction?.status === "failed"
-          ? agentRunCopy.stopped
-          : hasPendingFileChanges
-            ? agentRunCopy.reviewGeneratedChanges
+      hasPendingFileChanges
+        ? agentRunCopy.reviewGeneratedChanges
+        : queueBlockerAction?.status === "running"
+          ? agentRunCopy.running
+          : queueBlockerAction?.status === "failed"
+            ? agentRunCopy.stopped
             : runnablePendingActions.length > 0
               ? agentRunCopy.ready
               : activeGateAction
@@ -936,8 +936,8 @@ export function ThreadWorkspace({
                   ? agentRunCopy.complete
                   : agentRunCopy.waiting;
     const agentRunFocus =
-      queueBlockerAction?.label ??
       (hasPendingFileChanges ? agentRunCopy.pendingChanges(pendingChangeCount) : null) ??
+      queueBlockerAction?.label ??
       nextPendingAction?.label ??
       activeGateAction?.label ??
       agentRunCopy.noCurrent;
