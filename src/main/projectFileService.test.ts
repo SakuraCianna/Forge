@@ -89,6 +89,7 @@ describe("projectFileService", () => {
   it("lists project directories without reading file content or sensitive entries", async () => {
     await mkdir(join(testRoot, "src", "components"), { recursive: true });
     await mkdir(join(testRoot, "src", "node_modules"), { recursive: true });
+    await writeFile(join(testRoot, ".gitignore"), "node_modules/\n", "utf8");
     await writeFile(join(testRoot, "src", "App.tsx"), "export const App = true;", "utf8");
     await writeFile(join(testRoot, "src", ".env.local"), "SECRET=true", "utf8");
     await writeFile(join(testRoot, "src", "node_modules", "dep.ts"), "dep", "utf8");
@@ -111,6 +112,85 @@ describe("projectFileService", () => {
           name: "components",
           relativePath: "src/components",
           kind: "directory"
+        }
+      ],
+      truncated: false
+    });
+  });
+
+  it("lists all visible entries by default without a fixed cap", async () => {
+    await mkdir(testRoot, { recursive: true });
+
+    for (let index = 0; index < 130; index += 1) {
+      await writeFile(join(testRoot, `file-${index}.ts`), "", "utf8");
+    }
+
+    const result = await listProjectDirectory({
+      projectRoot: testRoot
+    });
+
+    expect(result.entries).toHaveLength(130);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("honors gitignore when listing, searching, and globbing project files", async () => {
+    await mkdir(join(testRoot, "dist"), { recursive: true });
+    await mkdir(join(testRoot, "src"), { recursive: true });
+    await writeFile(join(testRoot, ".gitignore"), "dist/\n*.log\n", "utf8");
+    await writeFile(join(testRoot, "debug.log"), "target hidden", "utf8");
+    await writeFile(join(testRoot, "dist", "hidden.ts"), "const target = false;", "utf8");
+    await writeFile(join(testRoot, "src", "App.tsx"), "const target = true;", "utf8");
+
+    await expect(
+      listProjectDirectory({
+        projectRoot: testRoot
+      })
+    ).resolves.toEqual({
+      relativePath: ".",
+      entries: [
+        {
+          name: ".gitignore",
+          relativePath: ".gitignore",
+          kind: "file",
+          size: 12
+        },
+        {
+          name: "src",
+          relativePath: "src",
+          kind: "directory"
+        }
+      ],
+      truncated: false
+    });
+
+    await expect(
+      searchProjectTextFiles({
+        projectRoot: testRoot,
+        query: "target"
+      })
+    ).resolves.toEqual({
+      query: "target",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          lineNumber: 1,
+          preview: "const target = true;"
+        }
+      ],
+      truncated: false
+    });
+
+    await expect(
+      globProjectFiles({
+        projectRoot: testRoot,
+        pattern: "**/*.ts*"
+      })
+    ).resolves.toEqual({
+      pattern: "**/*.ts*",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          size: 20
         }
       ],
       truncated: false
@@ -219,6 +299,22 @@ describe("projectFileService", () => {
 
     expect(result.matches).toHaveLength(1);
     expect(result.truncated).toBe(true);
+  });
+
+  it("returns all glob matches by default without a fixed cap", async () => {
+    await mkdir(testRoot, { recursive: true });
+
+    for (let index = 0; index < 130; index += 1) {
+      await writeFile(join(testRoot, `file-${index}.ts`), "", "utf8");
+    }
+
+    const result = await globProjectFiles({
+      projectRoot: testRoot,
+      pattern: "*.ts"
+    });
+
+    expect(result.matches).toHaveLength(130);
+    expect(result.truncated).toBe(false);
   });
 
   it("truncates project text search results at the configured limit", async () => {

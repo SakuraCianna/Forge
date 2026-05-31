@@ -178,6 +178,30 @@ describe("agentExecutionPlan", () => {
     ]);
   });
 
+  it("treats file-like verification targets as file edits instead of shell commands", () => {
+    const steps: AgentPlanStep[] = [
+      {
+        id: "step-1",
+        title: "Create guide",
+        description: "Write the project guide.",
+        kind: "verify",
+        status: "pending",
+        target: "项目说明书.md"
+      }
+    ];
+
+    expect(createAgentActionsFromPlanSteps(steps)).toEqual([
+      {
+        id: "action-1",
+        stepId: "step-1",
+        kind: "edit-file",
+        label: "Edit 项目说明书.md",
+        status: "pending",
+        target: "项目说明书.md"
+      }
+    ]);
+  });
+
   it("turns git status verification into a controlled Git action", () => {
     const steps: AgentPlanStep[] = [
       {

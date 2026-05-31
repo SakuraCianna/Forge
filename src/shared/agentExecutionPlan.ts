@@ -108,6 +108,16 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     };
   }
 
+  if (step.kind === "verify" && normalizedTarget && isLikelyFilePath(normalizedTarget)) {
+    return {
+      stepId: step.id,
+      kind: "edit-file",
+      label: `Edit ${normalizedTarget}`,
+      status: "pending",
+      target: normalizedTarget
+    };
+  }
+
   if (step.kind === "verify" && normalizedTarget) {
     return {
       stepId: step.id,

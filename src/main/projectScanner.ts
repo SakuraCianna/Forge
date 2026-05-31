@@ -7,16 +7,7 @@ import type {
   ProjectScanResult
 } from "../shared/projectTypes.js";
 import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
-
-const ignoredDirectoryNames = new Set([
-  ".git",
-  ".vite",
-  "coverage",
-  "dist",
-  "dist-electron",
-  "node_modules",
-  "out"
-]);
+import { createProjectIgnoreMatcher, type ProjectIgnoreMatcher } from "./projectIgnore.js";
 
 type ScanOptions = {
   limit?: number;
@@ -42,7 +33,7 @@ export async function scanProjectFiles(
   rootPath: string,
   options: ScanOptions = {}
 ): Promise<ProjectScanResult> {
-  const limit = options.limit ?? 500;
+  const limit = normalizeOptionalLimit(options.limit);
   const files: ProjectFile[] = [];
   let truncated = false;
   let rootStat: Awaited<ReturnType<typeof stat>>;
@@ -61,11 +52,12 @@ export async function scanProjectFiles(
     throw new Error(`项目路径不是目录：${rootPath}`);
   }
 
-  const instructionFiles = await readProjectInstructionFiles(rootPath);
+  const ignoreMatcher = await createProjectIgnoreMatcher(rootPath);
+  const instructionFiles = await readProjectInstructionFiles(rootPath, ignoreMatcher);
 
   // 递归遍历目录时保留数量和大小限制, 避免扫描拖垮界面
   async function walk(directoryPath: string): Promise<void> {
-    if (files.length >= limit) {
+    if (hasReachedLimit(files.length, limit)) {
       truncated = true;
       return;
     }
@@ -73,7 +65,7 @@ export async function scanProjectFiles(
     const entries = await readdir(directoryPath, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (files.length >= limit) {
+      if (hasReachedLimit(files.length, limit)) {
         truncated = true;
         return;
       }
@@ -81,7 +73,10 @@ export async function scanProjectFiles(
       if (entry.isDirectory()) {
         const relativeDirectoryPath = normalizeRelativePath(relative(rootPath, `${directoryPath}${sep}${entry.name}`));
 
-        if (ignoredDirectoryNames.has(entry.name) || isSensitiveProjectPath(relativeDirectoryPath)) {
+        if (
+          isSensitiveProjectPath(relativeDirectoryPath) ||
+          ignoreMatcher(relativeDirectoryPath, true)
+        ) {
           continue;
         }
 
@@ -96,7 +91,7 @@ export async function scanProjectFiles(
       const filePath = `${directoryPath}${sep}${entry.name}`;
       const relativePath = normalizeRelativePath(relative(rootPath, filePath));
 
-      if (isSensitiveProjectPath(relativePath)) {
+      if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
         continue;
       }
 
@@ -119,7 +114,10 @@ export async function scanProjectFiles(
 }
 
 // 汇总 AGENTS, README 和规则文件内容, 作为模型的项目说明
-async function readProjectInstructionFiles(rootPath: string): Promise<ProjectInstructionFile[]> {
+async function readProjectInstructionFiles(
+  rootPath: string,
+  ignoreMatcher: ProjectIgnoreMatcher
+): Promise<ProjectInstructionFile[]> {
   const candidatePaths = await collectInstructionFilePaths(rootPath);
   const instructionFiles: ProjectInstructionFile[] = [];
 
@@ -129,6 +127,10 @@ async function readProjectInstructionFiles(rootPath: string): Promise<ProjectIns
     }
 
     try {
+      if (ignoreMatcher(relativePath, false)) {
+        continue;
+      }
+
       const filePath = toProjectFilePath(rootPath, relativePath);
       const fileStat = await stat(filePath);
 
@@ -199,6 +201,20 @@ async function readCursorRulePaths(rootPath: string): Promise<string[]> {
 // 压缩说明文件空白并截断长度, 让提示词保持可控
 function normalizeInstructionContent(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
+}
+
+// 只有调用方显式传入 limit 时才截断索引, 默认展示全部未忽略文件
+function normalizeOptionalLimit(limit: number | undefined): number | null {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) {
+    return null;
+  }
+
+  return Math.max(1, Math.round(limit));
+}
+
+// 统一处理可选上限, null 表示没有人为截断
+function hasReachedLimit(count: number, limit: number | null): boolean {
+  return limit !== null && count >= limit;
 }
 
 // 将绝对路径转成统一的项目相对路径

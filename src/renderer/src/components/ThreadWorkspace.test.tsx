@@ -124,11 +124,11 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    const controls = screen.getByRole("region", { name: "Agent action confirmation" });
+    const controls = screen.getByRole("toolbar", { name: "Agent action confirmation" });
 
-    expect(within(controls).getAllByText("Waiting for manual confirmation").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Waiting for manual confirmation")).not.toBeInTheDocument();
 
-    await user.click(within(controls).getByRole("button", { name: "Mark review complete" }));
+    await user.click(within(controls).getByRole("button", { name: "Confirm queued action Review diff" }));
 
     expect(onCompleteAgentAction).toHaveBeenCalledWith(
       "thread-1",
@@ -140,12 +140,6 @@ describe("ThreadWorkspace", () => {
     const user = userEvent.setup();
     const onApproveAgentCommand = vi.fn();
     const onAllowAgentCommand = vi.fn();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText }
-    });
-
     render(
       <ThreadWorkspace
         compact
@@ -178,43 +172,22 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    const controls = screen.getByRole("region", { name: "Agent action confirmation" });
-    expect(within(controls).getByText("Command")).toBeInTheDocument();
-    expect(within(controls).getAllByText("npm install").length).toBeGreaterThan(0);
-    expect(within(controls).getByText("cwd")).toBeInTheDocument();
-    expect(within(controls).getByText("E:\\CodeHome\\Forge")).toBeInTheDocument();
-    expect(within(controls).getByText("Risk")).toBeInTheDocument();
-    expect(
-      within(controls).getAllByText("command may change dependencies or project state").length
-    ).toBeGreaterThan(0);
-    expect(within(controls).getByText("After approval")).toBeInTheDocument();
-    expect(within(controls).getByText("No later queued action")).toBeInTheDocument();
+    const controls = screen.getByRole("toolbar", { name: "Agent action confirmation" });
+    expect(screen.queryByText("Command")).not.toBeInTheDocument();
+    expect(screen.queryByText("cwd")).not.toBeInTheDocument();
+    expect(screen.queryByText("Risk")).not.toBeInTheDocument();
+    expect(screen.queryByText("command may change dependencies or project state")).not.toBeInTheDocument();
 
-    await user.click(
-      within(controls).getByRole("button", { name: "Copy approval summary Install dependencies" })
-    );
-
-    expect(writeText).toHaveBeenCalledWith(
-      [
-        "Confirmation queue: Install dependencies",
-        "Type: Command approval",
-        "Status: Current",
-        "Context: npm install: command may change dependencies or project state",
-        "Command: npm install",
-        "cwd: E:\\CodeHome\\Forge",
-        "Risk: command may change dependencies or project state",
-        "After approval: No later queued action"
-      ].join("\n")
-    );
-
-    await user.click(screen.getByRole("button", { name: "Approve command npm install" }));
+    await user.click(within(controls).getByRole("button", { name: "Approve queued command npm install" }));
 
     expect(onApproveAgentCommand).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({ id: "action-1", command: "npm install" })
     );
 
-    await user.click(screen.getByRole("button", { name: "Always allow queued command npm install" }));
+    await user.click(
+      within(controls).getByRole("button", { name: "Always allow queued command npm install" })
+    );
 
     expect(onAllowAgentCommand).toHaveBeenCalledWith(
       "thread-1",
@@ -253,9 +226,10 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("Agent queue paused")).toBeInTheDocument();
+    const controls = screen.getByRole("toolbar", { name: "Agent action confirmation" });
+    expect(screen.queryByText("Agent queue paused")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Resume agent" }));
+    await user.click(within(controls).getByRole("button", { name: "Resume agent" }));
 
     expect(onResumeAgent).toHaveBeenCalledWith("thread-1");
   });
@@ -290,13 +264,64 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getAllByText("Command blocked by safety policy").length).toBeGreaterThan(0);
+    const controls = screen.getByRole("toolbar", { name: "Agent action confirmation" });
+    expect(screen.queryByText("Command blocked by safety policy")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Skip action Delete src" }));
+    await user.click(within(controls).getByRole("button", { name: "Skip queued action Delete src" }));
 
     expect(onSkipAgentAction).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({ id: "action-1", command: "Remove-Item -Recurse src" })
+    );
+  });
+
+  it("keeps compact failed action recovery as icon controls only", async () => {
+    const user = userEvent.setup();
+    const onRunAgentAction = vi.fn();
+    const onGenerateFailureFix = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "blocked",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Run tests",
+                status: "failed",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onRunAgentAction={onRunAgentAction}
+        onGenerateFailureFix={onGenerateFailureFix}
+      />
+    );
+
+    const controls = screen.getByRole("toolbar", { name: "Agent action confirmation" });
+    expect(screen.queryByText("Action failed, queue paused")).not.toBeInTheDocument();
+
+    await user.click(within(controls).getByRole("button", { name: "Retry queued action Run tests" }));
+    await user.click(
+      within(controls).getByRole("button", { name: "Generate queued fix plan Run tests" })
+    );
+
+    expect(onRunAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", status: "failed" })
+    );
+    expect(onGenerateFailureFix).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", status: "failed" })
     );
   });
 
@@ -361,7 +386,7 @@ describe("ThreadWorkspace", () => {
     const transcript = screen.getByRole("region", { name: "Conversation transcript" });
 
     expect(transcript).toHaveTextContent("Done.");
-    expect(screen.queryByRole("region", { name: "Agent action confirmation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("toolbar", { name: "Agent action confirmation" })).not.toBeInTheDocument();
     expect(screen.queryByText("Completed agent action: Inspect README.md")).not.toBeInTheDocument();
     expect(screen.queryByText("File read complete: README.md")).not.toBeInTheDocument();
 

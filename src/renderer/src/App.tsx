@@ -2307,8 +2307,7 @@ export function App(): ReactElement {
     try {
       const result = await window.forge.files.listDirectory({
         projectRoot: currentProject.path,
-        relativePath,
-        limit: 80
+        relativePath
       });
       const createdAt = new Date().toISOString();
       const message = formatProjectDirectoryListResultMessage(settings.language, result);
@@ -2400,8 +2399,7 @@ export function App(): ReactElement {
     try {
       const result = await window.forge.files.globFiles({
         projectRoot: currentProject.path,
-        pattern,
-        limit: 80
+        pattern
       });
       const createdAt = new Date().toISOString();
       const message = formatProjectGlobResultMessage(settings.language, result);
@@ -2902,7 +2900,7 @@ export function App(): ReactElement {
         ) : (
           <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
             <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
-              {(projectScanResult?.files ?? []).slice(0, 80).map((file) => (
+              {(projectScanResult?.files ?? []).map((file) => (
                 <button
                   key={file.relativePath}
                   type="button"
