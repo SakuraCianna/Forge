@@ -69,6 +69,7 @@ type NavItem = {
 type ShellCopy = {
   addProject: string;
   aboutForge: string;
+  aboutDescription: string;
   archiveAllChats: string;
   archiveCurrentProjectChats: string;
   archiveConversation: string;
@@ -79,6 +80,7 @@ type ShellCopy = {
   filesView: string;
   helpMenu: string;
   helpCenter: string;
+  authorLine: string;
   minimizeWindow: string;
   newChat: string;
   openProject: string;
@@ -411,6 +413,11 @@ export function AppShell({
         </TitleBarMenu>
 
         <TitleBarMenu label={copy.helpMenu}>
+          <MenuNote
+            title={copy.aboutForge}
+            description={copy.aboutDescription}
+            meta={copy.authorLine}
+          />
           <MenuItem onSelect={() => onNavigate("settings")}>
             <Hammer className="h-4 w-4" />
             {copy.aboutForge}
@@ -730,6 +737,25 @@ function MenuItem({
   );
 }
 
+// 渲染不可点击的菜单说明, 用于帮助菜单中的产品和作者信息
+function MenuNote({
+  description,
+  meta,
+  title
+}: {
+  description: string;
+  meta: string;
+  title: string;
+}): ReactElement {
+  return (
+    <DropdownMenu.Label className="mb-1 grid gap-1 rounded-[10px] bg-[#f7f7f8] px-2.5 py-2">
+      <span className="text-[12px] font-semibold text-[#202123]">{title}</span>
+      <span className="text-[11px] leading-4 text-[#6e6e80]">{description}</span>
+      <span className="text-[11px] font-medium text-[#565869]">{meta}</span>
+    </DropdownMenu.Label>
+  );
+}
+
 // 读取初始侧边栏宽度, 无存储值时使用默认宽度
 function getInitialSidebarWidth(): number {
   return getSidebarMaxWidth();
@@ -766,6 +792,7 @@ function getShellCopy(language: Language): ShellCopy {
     return {
       addProject: "新增项目",
       aboutForge: "关于 Forge",
+      aboutDescription: "本地 AI 编程 Agent 工作台",
       archiveAllChats: "归档所有聊天",
       archiveCurrentProjectChats: "归档当前项目对话",
       archiveConversation: "归档对话",
@@ -778,6 +805,7 @@ function getShellCopy(language: Language): ShellCopy {
       filesView: "文件",
       helpMenu: "帮助",
       helpCenter: "回到 Forge 工作区",
+      authorLine: "作者：Sakura_Cianna",
       minimizeWindow: "最小化窗口",
       newChat: "新对话",
       newProjectChat: (name) => `在 ${name} 开启新对话`,
@@ -808,6 +836,7 @@ function getShellCopy(language: Language): ShellCopy {
   return {
     addProject: "Add project",
     aboutForge: "About Forge",
+    aboutDescription: "Local AI coding agent workbench",
     archiveAllChats: "Archive all chats",
     archiveCurrentProjectChats: "Archive current project chats",
     archiveConversation: "Archive conversation",
@@ -820,6 +849,7 @@ function getShellCopy(language: Language): ShellCopy {
     filesView: "Files",
     helpMenu: "Help",
     helpCenter: "Return to Forge workspace",
+    authorLine: "Author: Sakura_Cianna",
     minimizeWindow: "Minimize window",
     newChat: "New chat",
     newProjectChat: (name) => `New chat in ${name}`,
