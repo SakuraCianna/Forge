@@ -1244,6 +1244,7 @@ export function App(): ReactElement {
         personalization: createPersonalizationPrompt(personalization),
         projectScan: projectScanResult,
         speed: selectedThread.speed,
+        workMode: generalPreferences.workMode,
         taskPrompt: createFileChangeTaskPrompt(selectedThread, relativePath, options.action, {
           toolResults: getRecentAgentToolResults(selectedThread.id)
         }),
@@ -1531,6 +1532,7 @@ export function App(): ReactElement {
         memories,
         personalization: createPersonalizationPrompt(personalization),
         speed: settings.speed,
+        workMode: generalPreferences.workMode,
         taskPrompt,
         projectScan
       });
@@ -1823,6 +1825,7 @@ export function App(): ReactElement {
       conversation,
       projectScan,
       speed: settings.speed,
+      workMode: generalPreferences.workMode,
       prompt
     };
     const streamStartedAt = new Date().toISOString();

@@ -5,6 +5,7 @@ import type {
   AgentPlanStep,
   AgentPlanStepKind,
   AgentPlanResult,
+  AgentWorkMode,
   GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
@@ -204,7 +205,7 @@ export async function generateAgentAsk({
     provider,
     model: request.model,
     apiKey: apiKey ?? "",
-    instructions: createAskInstructions(request.personalization),
+    instructions: createAskInstructions(request.personalization, request.workMode),
     input: createAskInput(request),
     intelligence: request.intelligence,
     speed: request.speed
@@ -256,7 +257,7 @@ export async function generateAgentAskStream({
       provider,
       model: request.model,
       apiKey: apiKey ?? "",
-      instructions: createAskInstructions(request.personalization),
+      instructions: createAskInstructions(request.personalization, request.workMode),
       input: createAskInput(request),
       intelligence: request.intelligence,
       speed: request.speed
@@ -307,7 +308,7 @@ export async function generateAgentAskStream({
         provider,
         model: request.model,
         apiKey: apiKey ?? "",
-        instructions: createAskInstructions(request.personalization),
+        instructions: createAskInstructions(request.personalization, request.workMode),
         input: createAskContinuationInput(request, text),
         intelligence: request.intelligence,
         speed: request.speed
@@ -388,18 +389,32 @@ function createAgentFileChangeInstructions(personalization?: string): string {
 }
 
 // 构造普通问答提示, 保持简洁并允许 Markdown
-function createAskInstructions(personalization?: string): string {
+function createAskInstructions(personalization?: string, workMode: AgentWorkMode = "code"): string {
   return appendPersonalization([
     "You are Forge in direct answer mode inside a coding workbench.",
     "Answer the user's question directly and concisely.",
     "If project context is provided, use it to answer project questions without turning the answer into an execution plan.",
     "Do not claim you edited files, ran commands, or inspected the workspace.",
     "Do not output scaffolding labels such as plan, steps, validation, or logs unless the user asks for them.",
+    ...getWorkModeInstructionLines(workMode),
     "Prefer Chinese when the user writes Chinese. Keep answers concise and useful."
   ], personalization);
 }
 
 // 把用户个性化提示拼到系统提示末尾, 空值直接跳过
+function getWorkModeInstructionLines(workMode: AgentWorkMode): string[] {
+  if (workMode === "daily") {
+    return [
+      "Daily work mode is enabled: keep technical power available, but avoid implementation-heavy detail unless the user asks for it.",
+      "Prefer a short, conversational answer with only the most relevant project details."
+    ];
+  }
+
+  return [
+    "Code work mode is enabled: prefer concrete engineering detail, file or command specifics, and verification context when useful."
+  ];
+}
+
 function appendPersonalization(instructions: string[], personalization?: string): string {
   if (!personalization?.trim()) {
     return instructions.join("\n");
@@ -681,6 +696,7 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     `Task:\n${request.taskPrompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`,
+    formatWorkModeContext(request.workMode),
     profileContext,
     memoryContext,
     instructionContext,
@@ -700,6 +716,7 @@ function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): st
   return [
     `Task:\n${request.taskPrompt}`,
     `Speed mode:\n${request.speed}`,
+    formatWorkModeContext(request.workMode),
     profileContext,
     memoryContext,
     instructionContext,
@@ -718,7 +735,8 @@ function createAskInput(request: GenerateAgentAskRequest): string {
   const parts = [
     `User message:\n${request.prompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
-    `Speed mode:\n${request.speed}`
+    `Speed mode:\n${request.speed}`,
+    formatWorkModeContext(request.workMode)
   ];
 
   if (profileContext) {
@@ -785,6 +803,20 @@ function formatAgentMemories(
 }
 
 // 把 Agent 配置转成模型可读约束, 控制权限和工具边界
+function formatWorkModeContext(workMode: AgentWorkMode = "code"): string {
+  if (workMode === "daily") {
+    return [
+      "Work mode:",
+      "daily - keep answers lighter and less implementation-heavy unless the user asks for code-level detail."
+    ].join("\n");
+  }
+
+  return [
+    "Work mode:",
+    "code - include concrete engineering details, relevant files, commands, and verification context when useful."
+  ].join("\n");
+}
+
 function formatAgentProfile(
   agentProfile?: GenerateAgentAskRequest["agentProfile"] | GenerateAgentPlanRequest["agentProfile"]
 ): string {
