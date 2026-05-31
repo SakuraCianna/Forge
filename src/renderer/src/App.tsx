@@ -19,6 +19,7 @@ import {
   resolveAgentActionExecution,
   getRunnablePendingAgentActions,
   runAgentActionBatch,
+  shouldTreatMissingInspectAsNewFile,
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
@@ -1719,7 +1720,7 @@ export function App(): ReactElement {
     updateAgentActionStatus(threadId, action.id, "running");
 
     if (execution.kind === "open-file") {
-      return await openAgentFileAction(threadId, action.id, execution.relativePath);
+      return await openAgentFileAction(threadId, action, execution.relativePath);
     } else if (execution.kind === "generate-file-change") {
       return await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "run-command") {
@@ -1883,21 +1884,50 @@ export function App(): ReactElement {
   // 打开动作关联文件, 方便用户从计划直接跳到代码
   async function openAgentFileAction(
     threadId: string,
-    actionId: string,
+    action: AgentAction,
     relativePath: string
   ): Promise<AgentAction["status"]> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
-      updateAgentActionStatus(threadId, actionId, "failed");
+      updateAgentActionStatus(threadId, action.id, "failed");
       return "failed";
     }
 
     try {
       await previewProjectFile(relativePath);
-      updateAgentActionStatus(threadId, actionId, "completed");
+      updateAgentActionStatus(threadId, action.id, "completed");
       return "completed";
     } catch (error) {
-      updateAgentActionStatus(threadId, actionId, "failed");
+      const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+
+      if (
+        thread?.agentActions &&
+        isMissingProjectFileError(error) &&
+        shouldTreatMissingInspectAsNewFile(action, thread.agentActions)
+      ) {
+        const file = createEmptyProjectTextFile(relativePath);
+        const createdAt = new Date().toISOString();
+
+        setPreviewFile(file);
+        setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
+        updateAgentActionStatus(threadId, action.id, "completed");
+        setThreads((current) =>
+          appendThreadEvents(current, threadId, [
+            {
+              id: `${threadId}-missing-inspect-new-file-${action.id}-${createdAt}`,
+              kind: "file",
+              message:
+                settings.language === "zh-CN"
+                  ? `目标文件尚不存在, 将按新文件继续创建: ${file.relativePath}`
+                  : `Target file does not exist yet; continuing as a new file: ${file.relativePath}`,
+              createdAt
+            }
+          ])
+        );
+        return "completed";
+      }
+
+      updateAgentActionStatus(threadId, action.id, "failed");
       appendThreadError(
         threadId,
         formatAgentRuntimeError(
@@ -2467,6 +2497,8 @@ export function App(): ReactElement {
         setActiveView("workspace");
         setComposerSubmitSignal((current) => current + 1);
       }}
+      onMinimizeWindow={() => void window.forge.windowControls.minimize()}
+      onToggleMaximizeWindow={() => void window.forge.windowControls.toggleMaximize()}
       onPickProject={() => void pickProject()}
       onRemoveProject={removeProjectRecord}
       onRenameProject={renameProject}

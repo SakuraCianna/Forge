@@ -132,6 +132,35 @@ export function getRunnablePendingAgentActions(
   return runnableActions;
 }
 
+// 新建文件计划常见顺序是先 inspect 再 edit; inspect 发现文件不存在时不应阻断后续创建
+export function shouldTreatMissingInspectAsNewFile(
+  action: AgentAction,
+  actions: AgentAction[]
+): boolean {
+  const target = normalizeComparableActionTarget(action.target);
+
+  if (action.kind !== "inspect-file" || !target) {
+    return false;
+  }
+
+  const actionIndex = actions.findIndex((candidate) => candidate.id === action.id);
+
+  if (actionIndex < 0) {
+    return false;
+  }
+
+  return actions.slice(actionIndex + 1).some((candidate) => {
+    const candidateTarget = normalizeComparableActionTarget(candidate.target);
+
+    return (
+      candidate.kind === "edit-file" &&
+      candidate.status === "pending" &&
+      Boolean(candidateTarget) &&
+      candidateTarget === target
+    );
+  });
+}
+
 type AgentActionBatchResult = {
   completed: number;
   stoppedAt: AgentAction | null;
@@ -204,6 +233,13 @@ function normalizeAgentActionRunOutcome(outcome: AgentActionRunOutcome): {
     status: outcome.status,
     continueBatch: outcome.continueBatch ?? true
   };
+}
+
+// 归一化动作目标, 让 Windows 反斜杠和大小写差异不影响同文件判断
+function normalizeComparableActionTarget(target: string | undefined): string | null {
+  const normalized = target?.trim().replace(/\\/g, "/").toLocaleLowerCase();
+
+  return normalized || null;
 }
 
 // 判断动作是否适合自动执行, manual 和 commit 必须留给用户确认
