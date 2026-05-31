@@ -30,7 +30,7 @@ Forge 适合这些场景：
 ### Agent 任务线程
 
 - 每个需求会进入独立任务线程，保留用户输入、模型计划、执行日志、文件事件和命令结果。
-- 主对话区默认只展示用户请求、最终回答和真正需要处理的低打扰图标入口，Agent 动作流水、目录列表、文件读取、命令细节和队列状态保留在动作详情与日志视图里，避免把内部执行记录铺满屏幕。
+- 主对话区默认只展示用户请求、最终回答和真正需要处理的低打扰图标入口，Agent 动作流水、目录列表、文件读取、命令细节和队列状态默认折叠进“已处理”，避免把内部执行记录铺满屏幕。
 - 模型生成的计划会被解析成 Agent 动作队列，包括读取文件、生成修改、运行命令、提交检查和人工审查门禁。
 - 计划提示支持 read、list_directory、glob、grep、git_status、bash 和 edit 等受控工具名，让模型优先产出可执行工具步骤。
 - 后续文件编辑会带上前置文件读取、目录、glob、文本搜索和 Git 检查结果，让多步骤 Agent 不丢失刚收集到的上下文。
@@ -194,8 +194,8 @@ src/
 | `npm run dev` | 启动 Electron 开发环境 |
 | `npm run build` | 类型检查并构建应用 |
 | `npm run typecheck` | 运行主进程和渲染层 TypeScript 检查 |
-| `npm test` | 运行全部 Vitest 测试 |
-| `npm run test:watch` | 以 watch 模式运行测试 |
+| `npm test` | 运行 Vitest；当前无测试文件时直接通过 |
+| `npm run test:watch` | 以 watch 模式运行 Vitest；当前无测试文件时直接通过 |
 | `npm run lint` | 运行 ESLint |
 
 ## 当前状态
