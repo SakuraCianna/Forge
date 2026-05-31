@@ -154,6 +154,30 @@ describe("agentExecutionPlan", () => {
     ]);
   });
 
+  it("turns root directory inspect targets into project directory list actions", () => {
+    const steps: AgentPlanStep[] = [
+      {
+        id: "step-1",
+        title: "List root",
+        description: "List project root.",
+        kind: "inspect",
+        status: "pending",
+        target: "."
+      }
+    ];
+
+    expect(createAgentActionsFromPlanSteps(steps)).toEqual([
+      {
+        id: "action-1",
+        stepId: "step-1",
+        kind: "list-directory",
+        label: "List .",
+        status: "pending",
+        target: "."
+      }
+    ]);
+  });
+
   it("turns git status verification into a controlled Git action", () => {
     const steps: AgentPlanStep[] = [
       {
