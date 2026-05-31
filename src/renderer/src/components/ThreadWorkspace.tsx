@@ -642,8 +642,6 @@ export function ThreadWorkspace({
 
           {renderCompactMemoryContext(selectedThread.contextMemories ?? [])}
 
-          {renderCompactAgentControlPanel()}
-
           {compactProcessedSummary ? renderCompactProcessedSummary(compactProcessedSummary) : null}
 
           {showActivityHeartbeat && threadActivitySummary
@@ -663,8 +661,6 @@ export function ThreadWorkspace({
               </div>
             ) : null}
           </section>
-
-          {renderCompactContinuationShortcut()}
         </div>
       </section>
     );
@@ -1055,16 +1051,6 @@ export function ThreadWorkspace({
         ) : null}
       </section>
     );
-  }
-
-  // compact 主屏按 Codex 风格只呈现可读输出, 恢复和门禁入口留在完整工作区
-  function renderCompactAgentControlPanel(): ReactElement | null {
-    return null;
-  }
-
-  // 完成态也不再额外铺一个“下一步”入口, 让主屏只保留最终回答和已处理标题
-  function renderCompactContinuationShortcut(): ReactElement | null {
-    return null;
   }
 
   // 展示正在运行的命令和可终止操作, 避免命令信息散落在正文

@@ -63,6 +63,21 @@ function closeSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvoke
   getSenderWindow(event)?.close();
 }
 
+// 只允许浏览器打开普通网页链接, 避免渲染层把 file:, shell: 或自定义协议交给系统处理
+function openTrustedExternalUrl(url: string): void {
+  try {
+    const parsedUrl = new URL(url);
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return;
+    }
+
+    void shell.openExternal(parsedUrl.toString());
+  } catch {
+    // 忽略无效 URL, 主窗口仍会拒绝创建新窗口
+  }
+}
+
 // 创建主窗口并接入预加载脚本, 开发和生产加载路径分开
 function createWindow(): void {
   // Windows 使用隐藏标题栏, 自定义顶部工作台区域保持和原生窗口按钮对齐
@@ -95,7 +110,7 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    openTrustedExternalUrl(url);
     return { action: "deny" };
   });
 
