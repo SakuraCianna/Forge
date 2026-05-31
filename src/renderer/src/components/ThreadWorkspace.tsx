@@ -142,29 +142,7 @@ function shouldShowCompactTranscriptEvent(event: TaskThreadEvent): boolean {
     return false;
   }
 
-  return event.kind === "user" || event.kind === "result" || event.kind === "error";
-}
-
-// 队列完成后的继续规划只给一个轻量入口, 不再把完成清单和状态模板铺到主屏
-function canShowCompactContinuationPlan(
-  selectedThread: TaskThread,
-  pendingChangeCount: number,
-  commandSafetyPolicy: AgentCommandSafetyPolicy,
-  agentPaused: boolean,
-  hasContinuationHandler: boolean
-): boolean {
-  const agentActions = selectedThread.agentActions ?? [];
-  const controlState = getAgentControlState(agentActions, pendingChangeCount, commandSafetyPolicy);
-
-  return (
-    hasContinuationHandler &&
-    agentActions.length > 0 &&
-    !agentPaused &&
-    pendingChangeCount === 0 &&
-    !controlState.queueBlockerAction &&
-    controlState.runnablePendingActions.length === 0 &&
-    !controlState.activeGateAction
-  );
+  return event.kind === "user" || event.kind === "result";
 }
 
 // 把线程状态拆成简洁对话视图, 复杂执行细节只在需要的标签里展示
@@ -666,11 +644,11 @@ export function ThreadWorkspace({
 
           {renderCompactAgentControlPanel()}
 
+          {compactProcessedSummary ? renderCompactProcessedSummary(compactProcessedSummary) : null}
+
           {showActivityHeartbeat && threadActivitySummary
             ? renderCompactActivityHeartbeat(threadActivitySummary)
             : null}
-
-          {compactProcessedSummary ? renderCompactProcessedSummary(compactProcessedSummary) : null}
 
           <section
             role="region"
@@ -1079,237 +1057,14 @@ export function ThreadWorkspace({
     );
   }
 
-  // compact 视图也必须暴露真实门禁操作, 否则用户会看到“需要确认”却没有入口
+  // compact 主屏按 Codex 风格只呈现可读输出, 恢复和门禁入口留在完整工作区
   function renderCompactAgentControlPanel(): ReactElement | null {
-    const agentActions = selectedThread.agentActions ?? [];
-    const pendingChangeCount = allChangePreviews.length;
-    const controlState = getAgentControlState(agentActions, pendingChangeCount, commandSafetyPolicy);
-    const hasActionableState =
-      agentPaused ||
-      pendingChangeCount > 0 ||
-      controlState.runnablePendingActions.length > 0 ||
-      Boolean(controlState.activeGateAction) ||
-      Boolean(controlState.queueBlockerAction);
-
-    if (!hasActionableState) {
-      return null;
-    }
-
-    const copy = getCompactAgentControlCopy(language);
-    const firstChangePreview = allChangePreviews[0] ?? null;
-    const blockedAction = controlState.queueBlockerAction;
-    const failedAction = blockedAction?.status === "failed" ? blockedAction : null;
-    const activeGateAction = controlState.activeGateAction;
-    const buttons: ReactElement[] = [];
-
-    // 将复杂门禁压缩成一排图标按钮, 文案只放进可访问名称和悬浮提示
-    const addButton = (
-      key: string,
-      label: string,
-      Icon: typeof Play,
-      onClick: () => void,
-      tone: "neutral" | "primary" | "warning" = "neutral"
-    ): void => {
-      const className =
-        tone === "primary"
-          ? "flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
-          : tone === "warning"
-            ? "flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#f4c7ab] bg-white text-[#9a3412] transition hover:bg-[#fff7ed] active:scale-[0.97]"
-            : "flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]";
-
-      buttons.push(
-        <Tooltip key={key} label={label}>
-          <button type="button" aria-label={label} onClick={onClick} className={className}>
-            <Icon className="h-4 w-4" />
-          </button>
-        </Tooltip>
-      );
-    };
-
-    if (agentPaused && onResumeAgent) {
-      addButton("resume", copy.resumeAgent, Play, () => onResumeAgent(selectedThread.id), "primary");
-    }
-
-    if (!agentPaused && pendingChangeCount > 0) {
-      if (firstChangePreview) {
-        addButton(
-          "review-changes",
-          `${copy.reviewChanges} ${firstChangePreview.relativePath}`,
-          FileText,
-          () => {
-            onPreviewFile(firstChangePreview.relativePath);
-            onOpenFiles?.();
-          },
-          "primary"
-        );
-      }
-
-      if (onApplyAllChanges) {
-        addButton("apply-all", copy.applyQueuedChanges, CheckCircle2, onApplyAllChanges);
-      }
-
-      if (onDiscardAllChanges) {
-        addButton("discard-all", copy.discardQueuedChanges, SkipForward, onDiscardAllChanges);
-      }
-    }
-
-    if (!agentPaused && failedAction) {
-      if (onRunAgentAction) {
-        addButton(
-          "retry-action",
-          `${copy.retryQueuedAction} ${failedAction.label}`,
-          RotateCcw,
-          () => onRunAgentAction(selectedThread.id, failedAction),
-          "warning"
-        );
-      }
-
-      if (onGenerateFailureFix) {
-        addButton(
-          "generate-fix",
-          `${copy.generateQueuedFixPlan} ${failedAction.label}`,
-          Wrench,
-          () => onGenerateFailureFix(selectedThread.id, failedAction),
-          "primary"
-        );
-      }
-
-      if (onSkipAgentAction && canSkipAgentAction(failedAction)) {
-        addButton(
-          "skip-failed",
-          `${copy.skipQueuedAction} ${failedAction.label}`,
-          SkipForward,
-          () => onSkipAgentAction(selectedThread.id, failedAction),
-          "warning"
-        );
-      }
-    }
-
-    if (!agentPaused && pendingChangeCount === 0 && !failedAction) {
-      if (controlState.runnablePendingActions.length > 0) {
-        if (onRunAgentActions) {
-          addButton(
-            "continue-safe",
-            copy.continueSafe,
-            Play,
-            () => onRunAgentActions(selectedThread.id, controlState.runnablePendingActions),
-            "primary"
-          );
-        } else if (controlState.nextRunnableAction && onRunAgentAction) {
-          addButton(
-            "run-next",
-            copy.runNext,
-            Play,
-            () => onRunAgentAction(selectedThread.id, controlState.nextRunnableAction!),
-            "primary"
-          );
-        }
-      } else if (activeGateAction) {
-        const commandRisk =
-          activeGateAction.kind === "run-command" && activeGateAction.command
-            ? resolveAgentCommandRisk(activeGateAction.command, commandSafetyPolicy)
-            : null;
-
-        if (
-          activeGateAction.kind === "run-command" &&
-          activeGateAction.command &&
-          commandRisk?.level === "ask" &&
-          !fullAccess
-        ) {
-          if (onApproveAgentCommand) {
-            addButton(
-              "approve-command",
-              `${copy.approveQueuedCommand} ${activeGateAction.command}`,
-              CheckCircle2,
-              () => onApproveAgentCommand(selectedThread.id, activeGateAction),
-              "primary"
-            );
-          }
-
-          if (onAllowAgentCommand) {
-            addButton(
-              "allow-command",
-              `${copy.allowQueuedCommand} ${activeGateAction.command}`,
-              CheckCircle2,
-              () => onAllowAgentCommand(selectedThread.id, activeGateAction),
-              "neutral"
-            );
-          }
-        } else if (activeGateAction.kind === "manual" && onCompleteAgentAction) {
-          addButton(
-            "complete-manual",
-            `${copy.confirmQueuedAction} ${activeGateAction.label}`,
-            CheckCircle2,
-            () => onCompleteAgentAction(selectedThread.id, activeGateAction),
-            "primary"
-          );
-        } else if (activeGateAction.kind === "commit" && onOpenSourceControl) {
-          addButton(
-            "open-source-control",
-            `${copy.openQueuedSourceControl} ${activeGateAction.label}`,
-            Terminal,
-            onOpenSourceControl,
-            "primary"
-          );
-        }
-
-        if (onSkipAgentAction && canSkipAgentAction(activeGateAction)) {
-          addButton(
-            "skip-gate",
-            `${copy.skipQueuedAction} ${activeGateAction.label}`,
-            SkipForward,
-            () => onSkipAgentAction(selectedThread.id, activeGateAction),
-            commandRisk?.level === "deny" ? "warning" : "neutral"
-          );
-        }
-      }
-    }
-
-    if (buttons.length === 0) {
-      return null;
-    }
-
-    return (
-      <section
-        role="toolbar"
-        aria-label={copy.aria}
-        className="mx-auto flex w-full max-w-[680px] justify-start gap-1.5"
-      >
-        {buttons}
-      </section>
-    );
+    return null;
   }
 
-  // 完成态只保留一个图标按钮作为后续规划入口, 避免主屏再次出现大块模板面板
+  // 完成态也不再额外铺一个“下一步”入口, 让主屏只保留最终回答和已处理标题
   function renderCompactContinuationShortcut(): ReactElement | null {
-    const canGenerateContinuationPlan = canShowCompactContinuationPlan(
-      selectedThread,
-      allChangePreviews.length,
-      commandSafetyPolicy,
-      agentPaused,
-      Boolean(onGenerateContinuationPlan)
-    );
-
-    if (!canGenerateContinuationPlan) {
-      return null;
-    }
-
-    const copy = getCompactAgentControlCopy(language);
-
-    return (
-      <div className="mx-auto flex w-full max-w-[680px] justify-start">
-        <Tooltip label={copy.generateNextPlan}>
-          <button
-            type="button"
-            aria-label={copy.generateNextPlan}
-            onClick={() => onGenerateContinuationPlan?.(selectedThread.id)}
-            className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]"
-          >
-            <Brain className="h-4 w-4" />
-          </button>
-        </Tooltip>
-      </div>
-    );
+    return null;
   }
 
   // 展示正在运行的命令和可终止操作, 避免命令信息散落在正文
@@ -3295,63 +3050,6 @@ export function ThreadWorkspace({
       </div>
     );
   }
-}
-
-type AgentControlState = {
-  queueStats: {
-    completed: number;
-    failed: number;
-    total: number;
-  };
-  hasPendingFileChanges: boolean;
-  queueBlockerAction: AgentAction | null;
-  nextPendingAction: AgentAction | null;
-  runnablePendingActions: AgentAction[];
-  nextRunnableAction: AgentAction | null;
-  nextGateAction: AgentAction | null;
-  activeGateAction: AgentAction | null;
-  queueComplete: boolean;
-};
-
-// 将完整队列状态归一成 compact/full 视图都能消费的门禁状态
-function getAgentControlState(
-  agentActions: AgentAction[],
-  pendingChangeCount: number,
-  commandSafetyPolicy: AgentCommandSafetyPolicy
-): AgentControlState {
-  const queueStats = getQueueStats(agentActions);
-  const hasPendingFileChanges = pendingChangeCount > 0;
-  const queueBlockerAction = getQueueBlockerAction(agentActions, commandSafetyPolicy);
-  const queueBlocked =
-    hasPendingFileChanges ||
-    queueBlockerAction?.status === "failed" ||
-    queueBlockerAction?.status === "running";
-  const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(agentActions);
-  const runnablePendingActions = queueBlocked
-    ? []
-    : getRunnablePendingAgentActions(agentActions, commandSafetyPolicy);
-  const nextRunnableAction =
-    nextPendingAction && isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
-      ? nextPendingAction
-      : null;
-  const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
-  const activeGateAction =
-    nextPendingAction && !isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
-      ? nextPendingAction
-      : nextGateAction;
-  const queueComplete = queueStats.total > 0 && queueStats.completed === queueStats.total;
-
-  return {
-    queueStats,
-    hasPendingFileChanges,
-    queueBlockerAction,
-    nextPendingAction,
-    runnablePendingActions,
-    nextRunnableAction,
-    nextGateAction,
-    activeGateAction,
-    queueComplete
-  };
 }
 
 // 提供 compact Agent 操作面板的中英文文案

@@ -26,7 +26,7 @@ import {
   resolveAgentActionExecution,
   getRunnablePendingAgentActions,
   runAgentActionBatch,
-  shouldTreatMissingInspectAsNewFile,
+  resolveMissingInspectFileFallback,
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
@@ -2643,7 +2643,7 @@ export function App(): ReactElement {
     threadId: string,
     action: AgentAction,
     relativePath: string
-  ): Promise<AgentAction["status"]> {
+  ): Promise<AgentActionRunOutcome> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
       updateAgentActionStatus(threadId, action.id, "failed");
@@ -2675,12 +2675,12 @@ export function App(): ReactElement {
       return "completed";
     } catch (error) {
       const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+      const missingInspectFallback =
+        thread?.agentActions && isMissingProjectFileError(error)
+          ? resolveMissingInspectFileFallback(action, thread.agentActions, thread.prompt)
+          : null;
 
-      if (
-        thread?.agentActions &&
-        isMissingProjectFileError(error) &&
-        shouldTreatMissingInspectAsNewFile(action, thread.agentActions)
-      ) {
+      if (missingInspectFallback === "continue-existing-edit") {
         const file = createEmptyProjectTextFile(relativePath);
         const createdAt = new Date().toISOString();
 
@@ -2701,6 +2701,26 @@ export function App(): ReactElement {
           ])
         );
         return "completed";
+      }
+
+      if (missingInspectFallback === "generate-file-change") {
+        const createdAt = new Date().toISOString();
+
+        setThreads((current) =>
+          appendThreadEvents(current, threadId, [
+            {
+              id: `${threadId}-missing-inspect-generate-file-${action.id}-${createdAt}`,
+              kind: "file",
+              message:
+                settings.language === "zh-CN"
+                  ? `目标文件尚不存在, 将按新文件直接生成: ${relativePath}`
+                  : `Target file does not exist yet; generating it as a new file: ${relativePath}`,
+              createdAt
+            }
+          ])
+        );
+
+        return generateAgentFileChangeAction(threadId, action, relativePath);
       }
 
       updateAgentActionStatus(threadId, action.id, "failed");

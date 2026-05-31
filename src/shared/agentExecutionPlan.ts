@@ -28,7 +28,7 @@ type AgentActionDraft = Omit<AgentAction, "id">;
 
 // 把模型步骤映射成带状态的动作队列, 执行器只消费这种稳定结构
 export function createAgentActionsFromPlanSteps(steps: AgentPlanStep[]): AgentAction[] {
-  const drafts = steps.map(createAgentActionDraft);
+  const drafts = steps.flatMap(createAgentActionDrafts);
   const hasExecutableAction = drafts.some((draft) => draft.kind !== "manual");
   const actionsToKeep = hasExecutableAction
     ? drafts.filter((draft) => draft.kind !== "manual" || Boolean(draft.target))
@@ -38,6 +38,22 @@ export function createAgentActionsFromPlanSteps(steps: AgentPlanStep[]): AgentAc
     id: `action-${index + 1}`,
     ...draft
   }));
+}
+
+// 模型有时会把多个文件塞进一个 target, 这里拆成独立动作, 避免 realpath 读取一个不存在的拼接路径
+function createAgentActionDrafts(step: AgentPlanStep): AgentActionDraft[] {
+  const normalizedTarget = normalizeActionTarget(step.target);
+  const targets = shouldSplitStepTarget(step.kind)
+    ? splitMultiFileTarget(normalizedTarget)
+    : normalizedTarget
+      ? [normalizedTarget]
+      : [];
+
+  if (targets.length <= 1) {
+    return [createAgentActionDraft(step)];
+  }
+
+  return targets.map((target) => createAgentActionDraft({ ...step, target }));
 }
 
 // 先把单个计划步骤转换成未编号动作, 过滤说明步后再统一编号
@@ -152,6 +168,40 @@ function normalizeActionTarget(target: string | undefined): string | undefined {
   const normalized = target?.trim().replace(/^`|`$/g, "");
 
   return normalized || undefined;
+}
+
+function shouldSplitStepTarget(kind: AgentPlanStep["kind"]): boolean {
+  return kind === "inspect" || kind === "edit" || kind === "verify";
+}
+
+function splitMultiFileTarget(target: string | undefined): string[] {
+  if (!target || !/[、，,；;\n]/u.test(target)) {
+    return target ? [target] : [];
+  }
+
+  const segments = target
+    .split(/[、，,；;\n]+/u)
+    .map((segment) => normalizeActionTarget(segment))
+    .filter((segment): segment is string => Boolean(segment));
+
+  if (segments.length <= 1 || !segments.every(isLikelyFilePath)) {
+    return [target];
+  }
+
+  const firstDirectory = getDirectoryPrefix(segments[0]);
+
+  return segments.map((segment) =>
+    firstDirectory && !segment.includes("/") && !segment.includes("\\")
+      ? `${firstDirectory}/${segment}`
+      : segment
+  );
+}
+
+function getDirectoryPrefix(target: string): string | null {
+  const normalizedTarget = target.replace(/\\/g, "/");
+  const separatorIndex = normalizedTarget.lastIndexOf("/");
+
+  return separatorIndex > 0 ? normalizedTarget.slice(0, separatorIndex) : null;
 }
 
 // 判断目标是否像 glob 模式, 让文件匹配走专用工具而不是读一个不存在的路径
