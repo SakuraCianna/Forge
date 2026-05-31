@@ -58,6 +58,8 @@ type ThreadWorkspaceProps = {
   commandSafetyRules?: CommandSafetyRule[];
   fullAccess?: boolean;
   agentPaused?: boolean;
+  showProcessedSummary?: boolean;
+  defaultExpandProcessedSummary?: boolean;
   projectScan?: ProjectScanResult | null;
   previewFile?: ProjectTextFile | null;
   changePreview?: ProjectFileChangePreview | null;
@@ -174,6 +176,8 @@ export function ThreadWorkspace({
   commandSafetyRules = [],
   fullAccess = false,
   agentPaused = false,
+  showProcessedSummary = true,
+  defaultExpandProcessedSummary = false,
   projectScan = null,
   previewFile = null,
   changePreview = null,
@@ -210,7 +214,9 @@ export function ThreadWorkspace({
   const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("plan");
   const [selectedAgentActionId, setSelectedAgentActionId] = useState<string | null>(null);
-  const [compactProcessedExpanded, setCompactProcessedExpanded] = useState(false);
+  const [compactProcessedExpanded, setCompactProcessedExpanded] = useState(
+    defaultExpandProcessedSummary
+  );
   const commandSafetyPolicy = useMemo<AgentCommandSafetyPolicy>(
     () => ({ fullAccess, rules: commandSafetyRules }),
     [commandSafetyRules, fullAccess]
@@ -239,10 +245,10 @@ export function ThreadWorkspace({
   const hasCompactSourceEvents = (selectedThread?.events.length ?? 0) > 0;
   const compactProcessedSummary = useMemo(
     () =>
-      selectedThread
+      showProcessedSummary && selectedThread
         ? getCompactProcessedSummary(selectedThread, visibleCompactEvents, language)
         : null,
-    [language, selectedThread, visibleCompactEvents.length]
+    [language, selectedThread, showProcessedSummary, visibleCompactEvents.length]
   );
   const duration = useMemo(() => {
     if (!selectedThread) {
@@ -268,6 +274,10 @@ export function ThreadWorkspace({
       setSelectedFilePaths([]);
     }
   }, [projectScan]);
+
+  useEffect(() => {
+    setCompactProcessedExpanded(defaultExpandProcessedSummary);
+  }, [defaultExpandProcessedSummary, selectedThread?.id]);
 
   // 从命令输入区创建运行请求, 交给主流程负责真实执行
   function submitCommand(): void {

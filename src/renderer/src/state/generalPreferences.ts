@@ -24,6 +24,8 @@ export type GeneralPreferences = {
   terminalShell: TerminalShell;
   autoReview: boolean;
   defaultPermission: boolean;
+  showProcessedSummary: boolean;
+  expandProcessedSummary: boolean;
   backgroundImageDataUrl: string | null;
   backgroundOpacity: number;
   commandSafetyRules: CommandSafetyRule[];
@@ -41,6 +43,8 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     terminalShell: "powershell",
     autoReview: true,
     defaultPermission: true,
+    showProcessedSummary: true,
+    expandProcessedSummary: false,
     backgroundImageDataUrl: null,
     backgroundOpacity: 0.18,
     commandSafetyRules: [],
@@ -162,6 +166,8 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
       value.terminalShell === "git-bash") &&
     (!("autoReview" in value) || typeof value.autoReview === "boolean") &&
     (!("defaultPermission" in value) || typeof value.defaultPermission === "boolean") &&
+    (!("showProcessedSummary" in value) || typeof value.showProcessedSummary === "boolean") &&
+    (!("expandProcessedSummary" in value) || typeof value.expandProcessedSummary === "boolean") &&
     (!("backgroundImageDataUrl" in value) ||
       value.backgroundImageDataUrl === null ||
       (typeof value.backgroundImageDataUrl === "string" &&

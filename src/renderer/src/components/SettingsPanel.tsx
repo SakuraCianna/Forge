@@ -429,6 +429,37 @@ export function SettingsPanel({
 
           <div>
             <div className="mb-3">
+              <h2 className="text-sm font-semibold text-[#202123]">{copy.outputTitle}</h2>
+              <p className="mt-1 text-xs leading-5 text-[#6e6e80]">{copy.outputDescription}</p>
+            </div>
+            <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+              <PreferenceToggle
+                label={copy.showProcessedSummary}
+                description={copy.showProcessedSummaryDescription}
+                enabled={generalPreferences.showProcessedSummary}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    showProcessedSummary: !generalPreferences.showProcessedSummary
+                  })
+                }
+              />
+              <PreferenceToggle
+                label={copy.expandProcessedSummary}
+                description={copy.expandProcessedSummaryDescription}
+                enabled={generalPreferences.expandProcessedSummary}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    expandProcessedSummary: !generalPreferences.expandProcessedSummary
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-3">
               <h2 className="text-sm font-semibold text-[#202123]">{copy.appBackground}</h2>
               <p className="mt-1 text-xs leading-5 text-[#6e6e80]">
                 {copy.appBackgroundDescription}
@@ -2183,6 +2214,12 @@ function getGeneralSettingsCopy(language: Language): {
   fullAccess: string;
   fullAccessDescription: string;
   languageDescription: string;
+  outputDescription: string;
+  outputTitle: string;
+  showProcessedSummary: string;
+  showProcessedSummaryDescription: string;
+  expandProcessedSummary: string;
+  expandProcessedSummaryDescription: string;
   permissionsDescription: string;
   permissionsTitle: string;
   readOnly: string;
@@ -2232,6 +2269,12 @@ function getGeneralSettingsCopy(language: Language): {
       fullAccess: "完全访问权限",
       fullAccessDescription: "允许请求额外文件和联网命令, 生产操作仍需谨慎",
       languageDescription: "应用 UI 语言",
+      outputDescription: "控制主对话区如何呈现 Agent 的内部执行反馈",
+      outputTitle: "输出体验",
+      showProcessedSummary: "显示“已处理”摘要",
+      showProcessedSummaryDescription: "把读取文件, 命令和 Agent 事件折叠到一行轻量反馈里",
+      expandProcessedSummary: "默认展开已处理详情",
+      expandProcessedSummaryDescription: "进入线程时直接展开最近内部步骤, 适合调试 Agent 稳定性",
       permissionsDescription: "控制智能体默认能做什么, 高风险操作仍会保留明确反馈",
       permissionsTitle: "权限",
       readOnly: "只读模式",
@@ -2283,6 +2326,13 @@ function getGeneralSettingsCopy(language: Language): {
     fullAccess: "Full access",
     fullAccessDescription: "Allow extra file access and network commands when needed",
     languageDescription: "Application UI language",
+    outputDescription: "Control how the main conversation presents internal agent activity",
+    outputTitle: "Output experience",
+    showProcessedSummary: "Show processed summary",
+    showProcessedSummaryDescription: "Fold file reads, commands, and agent events into one quiet status row",
+    expandProcessedSummary: "Expand processed details by default",
+    expandProcessedSummaryDescription:
+      "Open each thread with recent internal steps visible for agent debugging",
     permissionsDescription: "Control what the agent can do by default",
     permissionsTitle: "Permissions",
     readOnly: "Read only",
