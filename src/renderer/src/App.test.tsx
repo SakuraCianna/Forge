@@ -77,13 +77,17 @@ describe("App agent execution", () => {
         nextContent: nextFile.content
       })
     );
-    expect(forge.agent.generateFileChange).toHaveBeenCalledWith(
+    const fileChangeRequest = vi.mocked(forge.agent.generateFileChange).mock.calls[0]?.[0];
+    expect(fileChangeRequest).toEqual(
       expect.objectContaining({
         currentContent: "",
-        relativePath: "ProjectGuide.md",
-        taskPrompt: "Create ProjectGuide.md explaining how to use this project"
+        relativePath: "ProjectGuide.md"
       })
     );
+    expect(fileChangeRequest?.taskPrompt).toContain(
+      "Original task:\nCreate ProjectGuide.md explaining how to use this project"
+    );
+    expect(fileChangeRequest?.taskPrompt).toContain("Target file:\nProjectGuide.md");
   });
 });
 
