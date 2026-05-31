@@ -5,7 +5,11 @@ type WorkMode = "code" | "daily";
 type DefaultOpenTarget = "recent-project" | "blank";
 type AgentRuntime = "windows-native" | "wsl";
 type TerminalShell = "powershell" | "cmd" | "git-bash";
+type ComposerSubmitShortcut = "enter" | "ctrl-enter";
 export type CommandSafetyRuleLevel = "allow" | "ask" | "deny";
+
+export const minCommandTimeoutSeconds = 15;
+export const maxCommandTimeoutSeconds = 1800;
 
 export type CommandSafetyRule = {
   id: string;
@@ -22,6 +26,8 @@ export type GeneralPreferences = {
   defaultOpenTarget: DefaultOpenTarget;
   agentRuntime: AgentRuntime;
   terminalShell: TerminalShell;
+  composerSubmitShortcut: ComposerSubmitShortcut;
+  commandTimeoutSeconds: number;
   autoReview: boolean;
   defaultPermission: boolean;
   showProcessedSummary: boolean;
@@ -41,6 +47,8 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     defaultOpenTarget: "recent-project",
     agentRuntime: "windows-native",
     terminalShell: "powershell",
+    composerSubmitShortcut: "enter",
+    commandTimeoutSeconds: 120,
     autoReview: true,
     defaultPermission: true,
     showProcessedSummary: true,
@@ -133,6 +141,8 @@ function normalizePermissionPreferences(preferences: GeneralPreferences): Genera
 
   return {
     ...preferences,
+    composerSubmitShortcut: normalizeComposerSubmitShortcut(preferences.composerSubmitShortcut),
+    commandTimeoutSeconds: clampCommandTimeoutSeconds(preferences.commandTimeoutSeconds),
     defaultPermission: true,
     autoReview: true,
     fullAccess,
@@ -164,6 +174,12 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
       value.terminalShell === "powershell" ||
       value.terminalShell === "cmd" ||
       value.terminalShell === "git-bash") &&
+    (!("composerSubmitShortcut" in value) ||
+      value.composerSubmitShortcut === "enter" ||
+      value.composerSubmitShortcut === "ctrl-enter") &&
+    (!("commandTimeoutSeconds" in value) ||
+      (typeof value.commandTimeoutSeconds === "number" &&
+        Number.isFinite(value.commandTimeoutSeconds))) &&
     (!("autoReview" in value) || typeof value.autoReview === "boolean") &&
     (!("defaultPermission" in value) || typeof value.defaultPermission === "boolean") &&
     (!("showProcessedSummary" in value) || typeof value.showProcessedSummary === "boolean") &&
@@ -182,6 +198,23 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
     (!("readOnly" in value) || typeof value.readOnly === "boolean") &&
     (!("telemetry" in value) || typeof value.telemetry === "boolean")
   );
+}
+
+// 将命令超时限制在可用范围, 避免设置异常导致命令立刻失败或长时间挂起
+export function clampCommandTimeoutSeconds(value: number): number {
+  if (!Number.isFinite(value)) {
+    return createDefaultGeneralPreferences().commandTimeoutSeconds;
+  }
+
+  return Math.min(
+    Math.max(Math.round(value), minCommandTimeoutSeconds),
+    maxCommandTimeoutSeconds
+  );
+}
+
+// 兼容坏数据和未来迁移, 发送快捷键只允许两种明确模式
+function normalizeComposerSubmitShortcut(value: unknown): ComposerSubmitShortcut {
+  return value === "ctrl-enter" ? "ctrl-enter" : "enter";
 }
 
 // 归一化命令安全规则列表, 丢弃空模式和无效级别

@@ -2655,7 +2655,7 @@ export function App(): ReactElement {
         projectRoot: currentProject.path,
         cwd: currentProject.path,
         command,
-        timeoutMs: 120000
+        timeoutMs: generalPreferences.commandTimeoutSeconds * 1000
       });
 
       const status =
