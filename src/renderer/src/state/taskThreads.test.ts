@@ -22,6 +22,7 @@ import {
   cancelThread,
   restoreThread,
   toggleThreadPinned,
+  updateThreadAgentActionFromFileChangePreview,
   updateThreadAgentActionStatus,
   type TaskThread
 } from "./taskThreads";
@@ -661,6 +662,70 @@ describe("taskThreads", () => {
       "completed"
     ]);
     expect(threads[0].status).toBe("completed");
+  });
+
+  it("updates the owning agent edit action from file change preview source", () => {
+    const threads = updateThreadAgentActionFromFileChangePreview(
+      [
+        {
+          id: "thread-1",
+          title: "Agent task",
+          prompt: "Agent task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "edit-file",
+              label: "Edit src/App.tsx",
+              status: "pending",
+              target: "src/App.tsx"
+            }
+          ]
+        },
+        {
+          id: "thread-2",
+          title: "Other task",
+          prompt: "Other task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "edit-file",
+              label: "Edit src/Other.tsx",
+              status: "pending",
+              target: "src/Other.tsx"
+            }
+          ]
+        }
+      ],
+      {
+        relativePath: "src/App.tsx",
+        currentContent: "old",
+        nextContent: "new",
+        diff: [],
+        source: {
+          threadId: "thread-1",
+          actionId: "action-1"
+        }
+      },
+      "completed"
+    );
+
+    expect(threads[0].agentActions?.[0].status).toBe("completed");
+    expect(threads[0].status).toBe("completed");
+    expect(threads[1].agentActions?.[0].status).toBe("pending");
   });
 });
 

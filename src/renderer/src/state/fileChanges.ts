@@ -14,7 +14,12 @@ export function upsertFileChangePreview(
     return [...previews, preview];
   }
 
-  return previews.map((candidate, index) => (index === existingIndex ? preview : candidate));
+  const existingPreview = previews[existingIndex];
+  const nextPreview = preview.source || !existingPreview.source
+    ? preview
+    : { ...preview, source: existingPreview.source };
+
+  return previews.map((candidate, index) => (index === existingIndex ? nextPreview : candidate));
 }
 
 // 按相对路径移除预览, 丢弃操作不会触碰真实文件

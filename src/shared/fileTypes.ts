@@ -7,9 +7,15 @@ export type ProjectTextFile = {
   size: number;
 };
 
+export type ProjectFileChangeSource = {
+  threadId: string;
+  actionId?: string;
+};
+
 export type ProjectFileChangePreview = {
   relativePath: string;
   currentContent: string;
   nextContent: string;
   diff: LineDiffEntry[];
+  source?: ProjectFileChangeSource;
 };
