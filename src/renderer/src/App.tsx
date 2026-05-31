@@ -2092,7 +2092,7 @@ export function App(): ReactElement {
       appendThreadEvents(
         current,
         threadId,
-        [createCommandStartedEvent({ threadId, command, runId })],
+        [createCommandStartedEvent({ threadId, command, runId, actionId })],
         "running"
       )
     );
@@ -2117,7 +2117,7 @@ export function App(): ReactElement {
         appendThreadEvents(
           current,
           threadId,
-          [createCommandFinishedEvent({ threadId, result })],
+          [createCommandFinishedEvent({ threadId, result, actionId })],
           status === "completed" ? "running" : "blocked"
         )
       );

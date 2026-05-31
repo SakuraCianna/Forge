@@ -948,7 +948,7 @@ export function ThreadWorkspace({
       agentActions[0] ??
       null;
     const selectedCommandResult = selectedAgentAction?.command
-      ? findLatestCommandResult(selectedThread?.events ?? [], selectedAgentAction.command)
+      ? findLatestCommandResult(selectedThread?.events ?? [], selectedAgentAction)
       : null;
 
     // 读取命令动作的风险等级, 非命令动作不参与审批判断
@@ -2450,12 +2450,24 @@ function findLatestFailedCommandResult(events: TaskThreadEvent[]): CommandRunRes
 // 查找最近命令结果, 成功和失败都可以用于上下文
 function findLatestCommandResult(
   events: TaskThreadEvent[],
-  command: string
+  action: AgentAction
 ): CommandRunResult | null {
+  if (!action.command) {
+    return null;
+  }
+
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const result = events[index]?.commandResult;
 
-    if (result?.command === command) {
+    if (result?.actionId === action.id) {
+      return result;
+    }
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const result = events[index]?.commandResult;
+
+    if (result?.command === action.command && !result.actionId) {
       return result;
     }
   }

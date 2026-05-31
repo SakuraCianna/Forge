@@ -39,6 +39,44 @@ describe("commandEvents", () => {
     });
   });
 
+  it("keeps the owning agent action id on command events", () => {
+    const started = createCommandStartedEvent({
+      threadId: "thread-1",
+      command: "npm test",
+      runId: "run-1",
+      actionId: "action-2",
+      now: () => "2026-05-27T13:00:00.000Z"
+    });
+    const finished = createCommandFinishedEvent({
+      threadId: "thread-1",
+      actionId: "action-2",
+      result: {
+        runId: "run-1",
+        command: "npm test",
+        cwd: "E:\\CodeHome\\Forge",
+        exitCode: 0,
+        stdout: "passed",
+        stderr: "",
+        timedOut: false
+      },
+      now: () => "2026-05-27T13:00:03.000Z"
+    });
+
+    expect(started.commandRun).toEqual({
+      command: "npm test",
+      runId: "run-1",
+      actionId: "action-2",
+      status: "running"
+    });
+    expect(finished.commandResult).toEqual(
+      expect.objectContaining({
+        command: "npm test",
+        runId: "run-1",
+        actionId: "action-2"
+      })
+    );
+  });
+
   it("creates a successful command result event", () => {
     const result = {
       command: "npm test",
