@@ -1,5 +1,5 @@
 // 本文件说明: 验证输入框发送快捷键, 权限菜单和加号菜单
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultGeneralPreferences } from "@/state/generalPreferences";
@@ -113,16 +113,18 @@ describe("TaskComposer", () => {
 
     await user.click(screen.getByRole("button", { name: "Open add menu" }));
 
-    expect(screen.getByRole("menuitem", { name: "Add photos and files" })).toBeInTheDocument();
-    expect(screen.getByText("Goal mode")).toBeInTheDocument();
-    expect(screen.getByText("Plugin system")).toBeInTheDocument();
-    expect(screen.getByTestId("add-menu-goal-switch")).toContainElement(
-      screen.getByTestId("add-menu-goal-switch-knob")
+    const menu = screen.getByRole("menu");
+    const menuItems = within(menu).getAllByRole("menuitem");
+    expect(menuItems).toHaveLength(3);
+    expect(within(menu).getByRole("menuitem", { name: "Add photos and files" })).toBeInTheDocument();
+    expect(menu).toHaveTextContent("Goal mode");
+    expect(menu).toHaveTextContent("Plugin system");
+    expect(within(menu).getByTestId("add-menu-goal-switch")).toContainElement(
+      within(menu).getByTestId("add-menu-goal-switch-knob")
     );
-    expect(screen.getByTestId("add-menu-plugins-switch")).toContainElement(
-      screen.getByTestId("add-menu-plugins-switch-knob")
+    expect(within(menu).getByTestId("add-menu-plugins-switch")).toContainElement(
+      within(menu).getByTestId("add-menu-plugins-switch-knob")
     );
-    expect(screen.queryByText("Plan mode")).not.toBeInTheDocument();
     expect(onPickProject).not.toHaveBeenCalled();
   });
 
@@ -144,16 +146,16 @@ describe("TaskComposer", () => {
       />
     );
 
-    expect(screen.queryByText(/Chat only/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Default permission" })).not.toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: "Auto review" }));
 
-    expect(screen.queryByRole("menuitem", { name: "Default permission" })).not.toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Auto review" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Full access" })).toBeInTheDocument();
+    const menu = screen.getByRole("menu");
+    const menuItems = within(menu).getAllByRole("menuitem");
+    expect(menuItems).toHaveLength(2);
+    expect(menuItems.map((item) => item.textContent)).toEqual(["Auto review", "Full access"]);
+    expect(within(menu).getByRole("menuitem", { name: "Auto review" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Full access" })).toBeInTheDocument();
 
-    await user.click(await screen.findByRole("menuitem", { name: /Full access/ }));
+    await user.click(await within(menu).findByRole("menuitem", { name: /Full access/ }));
 
     expect(onUpdateGeneralPreferences).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -18,7 +18,7 @@ const thread: TaskThread = {
 };
 
 describe("ThreadWorkspace", () => {
-  it("uses a compact Codex-style transcript without nested task panels", () => {
+  it("renders compact user prompt and assistant answer in the transcript", () => {
     render(
       <ThreadWorkspace
         compact
@@ -43,11 +43,12 @@ describe("ThreadWorkspace", () => {
     );
 
     const transcript = screen.getByRole("region", { name: "Conversation transcript" });
+    const userPrompt = screen.getByText(thread.prompt).closest("article");
+
     expect(transcript).toHaveTextContent("A concise answer for the user.");
-    expect(screen.queryByText("Task threads")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Plan" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Steps")).not.toBeInTheDocument();
-    expect(screen.queryByText("Validation")).not.toBeInTheDocument();
+    expect(transcript).toHaveClass("grid", "gap-5");
+    expect(userPrompt).toHaveClass("ml-auto", "max-w-[68%]");
+    expect(transcript.firstElementChild).toHaveClass("grid", "grid-cols-[20px_minmax(0,1fr)]");
   });
 
   it("renders compact assistant output as markdown", () => {
@@ -77,6 +78,41 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByText("欢迎回来")).toBeInTheDocument();
   });
 
+  it("renders compact assistant markdown tables as real tables", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        threads={[
+          {
+            ...thread,
+            events: [
+              {
+                id: "answer",
+                kind: "result",
+                message: [
+                  "**Generated files**",
+                  "",
+                  "| File | Status |",
+                  "| --- | --- |",
+                  "| README.md | created |"
+                ].join("\n"),
+                createdAt: "2026-05-27T13:01:00.000Z"
+              }
+            ]
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    expect(screen.getByText("Generated files").tagName).toBe("STRONG");
+    const table = screen.getByRole("table");
+    expect(within(table).getByRole("columnheader", { name: "File" })).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "created" })).toBeInTheDocument();
+  });
+
   it("keeps compact user prompts minimal and formats assistant timing", () => {
     render(
       <ThreadWorkspace
@@ -102,11 +138,13 @@ describe("ThreadWorkspace", () => {
       />
     );
 
-    expect(screen.getByText("What did this project do?")).toBeInTheDocument();
-    expect(screen.queryByText("Request")).not.toBeInTheDocument();
+    const userPrompt = screen.getByText("What did this project do?").closest("article");
+    const transcript = screen.getByRole("region", { name: "Conversation transcript" });
+
+    expect(userPrompt).toHaveClass("ml-auto", "max-w-[68%]");
+    expect(transcript.firstElementChild).toHaveClass("grid", "grid-cols-[20px_minmax(0,1fr)]");
     expect(screen.getByText(/2026-05-27 \d{2}:01:09/)).toBeInTheDocument();
     expect(screen.getByText(/LLM 8s/)).toBeInTheDocument();
-    expect(screen.queryByText(/T13:01/)).not.toBeInTheDocument();
   });
 
   it("uses tighter compact user bubbles", () => {
