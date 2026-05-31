@@ -7,7 +7,9 @@ const firstPreview: ProjectFileChangePreview = {
   relativePath: "src/App.tsx",
   currentContent: "old",
   nextContent: "new",
-  diff: [{ kind: "remove", oldLineNumber: 1, text: "old" }]
+  diff: [{ kind: "remove", oldLineNumber: 1, text: "old" }],
+  sourceThreadId: "thread-1",
+  sourceActionId: "action-1"
 };
 
 const updatedPreview: ProjectFileChangePreview = {
@@ -20,7 +22,13 @@ const updatedPreview: ProjectFileChangePreview = {
 describe("fileChanges", () => {
   it("adds and replaces previews by relative path", () => {
     expect(upsertFileChangePreview([], firstPreview)).toEqual([firstPreview]);
-    expect(upsertFileChangePreview([firstPreview], updatedPreview)).toEqual([updatedPreview]);
+    expect(upsertFileChangePreview([firstPreview], updatedPreview)).toEqual([
+      {
+        ...updatedPreview,
+        sourceThreadId: "thread-1",
+        sourceActionId: "action-1"
+      }
+    ]);
   });
 
   it("removes previews by relative path", () => {

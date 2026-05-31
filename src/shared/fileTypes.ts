@@ -12,4 +12,6 @@ export type ProjectFileChangePreview = {
   currentContent: string;
   nextContent: string;
   diff: LineDiffEntry[];
+  sourceThreadId?: string;
+  sourceActionId?: string;
 };

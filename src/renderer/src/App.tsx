@@ -79,6 +79,7 @@ import {
   createThreadFromSettings,
   restoreThread,
   toggleThreadPinned,
+  updateThreadAgentActionFromFileChange,
   updateThreadAgentActionStatus,
   type CommandRunResult,
   type TaskThread
@@ -851,6 +852,7 @@ export function App(): ReactElement {
       return;
     }
 
+    const reviewedPreview = changePreviews.find((preview) => preview.relativePath === relativePath);
     const file = await window.forge.files.writeText({
       projectRoot: currentProject.path,
       relativePath,
@@ -860,15 +862,27 @@ export function App(): ReactElement {
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
     void refreshProjectGitStatus();
 
-    if (!selectedThreadId) {
+    const targetThreadId = reviewedPreview?.sourceThreadId ?? selectedThreadId;
+
+    if (!targetThreadId) {
+      if (reviewedPreview) {
+        setThreads((current) =>
+          updateThreadAgentActionFromFileChange(current, reviewedPreview, "completed")
+        );
+      }
       return;
     }
 
     const createdAt = new Date().toISOString();
     setThreads((current) =>
-      appendThreadEvents(current, selectedThreadId, [
+      appendThreadEvents(
+        reviewedPreview
+          ? updateThreadAgentActionFromFileChange(current, reviewedPreview, "completed")
+          : current,
+        targetThreadId,
+        [
         {
-          id: `${selectedThreadId}-file-write-${createdAt}`,
+          id: `${targetThreadId}-file-write-${createdAt}`,
           kind: "file",
           message: `已应用文件修改: ${file.relativePath}`,
           createdAt
@@ -879,7 +893,37 @@ export function App(): ReactElement {
 
   // 丢弃单个待审查变更, 不触碰真实项目文件
   function discardProjectFileChange(relativePath: string): void {
+    const reviewedPreview = changePreviews.find((preview) => preview.relativePath === relativePath);
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
+
+    if (!reviewedPreview) {
+      return;
+    }
+
+    const targetThreadId = reviewedPreview.sourceThreadId ?? selectedThreadId;
+    const createdAt = new Date().toISOString();
+
+    setThreads((current) => {
+      const withReviewedAction = updateThreadAgentActionFromFileChange(
+        current,
+        reviewedPreview,
+        "failed"
+      );
+
+      return targetThreadId
+        ? appendThreadEvents(withReviewedAction, targetThreadId, [
+            {
+              id: `${targetThreadId}-file-discard-${createdAt}`,
+              kind: "file",
+              message:
+                settings.language === "zh-CN"
+                  ? `已丢弃文件修改 ${relativePath}`
+                  : `Discarded file change ${relativePath}`,
+              createdAt
+            }
+          ])
+        : withReviewedAction;
+    });
   }
 
   // 按顺序应用全部变更, 任一失败都停下并提示用户
@@ -910,6 +954,14 @@ export function App(): ReactElement {
     setChangePreviews([]);
     void refreshProjectGitStatus();
 
+    setThreads((current) =>
+      appliedPreviews.reduce(
+        (nextThreads, preview) =>
+          updateThreadAgentActionFromFileChange(nextThreads, preview, "completed"),
+        current
+      )
+    );
+
     if (!selectedThreadId) {
       return;
     }
@@ -929,7 +981,15 @@ export function App(): ReactElement {
 
   // 清空全部待审查变更, 用于用户决定重做方案
   function discardAllProjectFileChanges(): void {
+    const discardedPreviews = [...changePreviews];
     setChangePreviews([]);
+    setThreads((current) =>
+      discardedPreviews.reduce(
+        (nextThreads, preview) =>
+          updateThreadAgentActionFromFileChange(nextThreads, preview, "failed"),
+        current
+      )
+    );
   }
 
   // 调用模型生成单文件修改预览, 结果只进入审查队列
@@ -937,7 +997,7 @@ export function App(): ReactElement {
     relativePath: string,
     currentContent: string,
     threadId?: string,
-    options: { autoApply?: boolean } = {}
+    options: { autoApply?: boolean; sourceActionId?: string } = {}
   ): Promise<boolean | undefined> {
     if (!currentProject) {
       return false;
@@ -1003,6 +1063,11 @@ export function App(): ReactElement {
         relativePath,
         nextContent: result.nextContent
       });
+      const previewWithSource: ProjectFileChangePreview = {
+        ...preview,
+        sourceThreadId: selectedThread.id,
+        ...(options.sourceActionId ? { sourceActionId: options.sourceActionId } : {})
+      };
 
       recordUsageEvent({
         kind: "file-change",
@@ -1015,12 +1080,12 @@ export function App(): ReactElement {
       if (options.autoApply) {
         const writtenFile = await window.forge.files.writeText({
           projectRoot: currentProject.path,
-          relativePath: preview.relativePath,
-          nextContent: preview.nextContent
+          relativePath: previewWithSource.relativePath,
+          nextContent: previewWithSource.nextContent
         });
 
         setPreviewFile(writtenFile);
-        setChangePreviews((current) => removeFileChangePreview(current, preview.relativePath));
+        setChangePreviews((current) => removeFileChangePreview(current, previewWithSource.relativePath));
         void refreshProjectGitStatus();
         setThreads((current) =>
           appendThreadEvents(current, selectedThread.id, [
@@ -1035,7 +1100,7 @@ export function App(): ReactElement {
         return true;
       }
 
-      setChangePreviews((current) => upsertFileChangePreview(current, preview));
+      setChangePreviews((current) => upsertFileChangePreview(current, previewWithSource));
       setThreads((current) =>
         appendThreadEvents(current, selectedThread.id, [
           {
@@ -1834,7 +1899,7 @@ export function App(): ReactElement {
     threadId: string,
     actionId: string,
     relativePath: string
-  ): Promise<AgentAction["status"]> {
+  ): Promise<AgentActionRunOutcome> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
       updateAgentActionStatus(threadId, actionId, "failed");
@@ -1861,11 +1926,21 @@ export function App(): ReactElement {
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
 
       const generated = await generateProjectFileChange(file.relativePath, file.content, threadId, {
-        autoApply: fullAccessMode
+        autoApply: fullAccessMode,
+        sourceActionId: actionId
       });
-      const status = generated ? "completed" : "failed";
-      updateAgentActionStatus(threadId, actionId, status);
-      return status;
+
+      if (!generated) {
+        updateAgentActionStatus(threadId, actionId, "failed");
+        return "failed";
+      }
+
+      if (fullAccessMode) {
+        updateAgentActionStatus(threadId, actionId, "completed");
+        return "completed";
+      }
+
+      return { status: "running", continueBatch: false };
     } catch (error) {
       updateAgentActionStatus(threadId, actionId, "failed");
       appendThreadError(

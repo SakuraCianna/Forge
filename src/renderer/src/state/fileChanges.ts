@@ -14,7 +14,15 @@ export function upsertFileChangePreview(
     return [...previews, preview];
   }
 
-  return previews.map((candidate, index) => (index === existingIndex ? preview : candidate));
+  return previews.map((candidate, index) =>
+    index === existingIndex
+      ? {
+          ...preview,
+          sourceThreadId: preview.sourceThreadId ?? candidate.sourceThreadId,
+          sourceActionId: preview.sourceActionId ?? candidate.sourceActionId
+        }
+      : candidate
+  );
 }
 
 // 按相对路径移除预览, 丢弃操作不会触碰真实文件
