@@ -6,6 +6,7 @@ import type {
   ProjectInstructionFile,
   ProjectScanResult
 } from "../shared/projectTypes.js";
+import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
 
 const ignoredDirectoryNames = new Set([
   ".git",
@@ -78,7 +79,9 @@ export async function scanProjectFiles(
       }
 
       if (entry.isDirectory()) {
-        if (ignoredDirectoryNames.has(entry.name)) {
+        const relativeDirectoryPath = normalizeRelativePath(relative(rootPath, `${directoryPath}${sep}${entry.name}`));
+
+        if (ignoredDirectoryNames.has(entry.name) || isSensitiveProjectPath(relativeDirectoryPath)) {
           continue;
         }
 
@@ -91,9 +94,15 @@ export async function scanProjectFiles(
       }
 
       const filePath = `${directoryPath}${sep}${entry.name}`;
+      const relativePath = normalizeRelativePath(relative(rootPath, filePath));
+
+      if (isSensitiveProjectPath(relativePath)) {
+        continue;
+      }
+
       const fileStat = await stat(filePath);
       files.push({
-        relativePath: normalizeRelativePath(relative(rootPath, filePath)),
+        relativePath,
         size: fileStat.size
       });
     }

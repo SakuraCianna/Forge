@@ -42,6 +42,47 @@ describe("projectFileService", () => {
     ).rejects.toThrow("文件路径必须位于当前项目内");
   });
 
+  it("rejects sensitive files before reading or writing content", async () => {
+    await mkdir(testRoot, { recursive: true });
+    await writeFile(join(testRoot, ".env.local"), "OPENAI_API_KEY=secret", "utf8");
+
+    await expect(
+      readProjectTextFile({
+        projectRoot: testRoot,
+        relativePath: ".env.local"
+      })
+    ).rejects.toThrow("文件路径被安全策略保护");
+
+    await expect(
+      previewProjectTextFileUpdate({
+        projectRoot: testRoot,
+        relativePath: ".env.local",
+        nextContent: "OPENAI_API_KEY=changed"
+      })
+    ).rejects.toThrow("文件路径被安全策略保护");
+
+    await expect(
+      writeProjectTextFile({
+        projectRoot: testRoot,
+        relativePath: "keys/service-account-prod.json",
+        nextContent: "{}"
+      })
+    ).rejects.toThrow("文件路径被安全策略保护");
+  });
+
+  it("allows documented environment templates", async () => {
+    await mkdir(testRoot, { recursive: true });
+    await writeFile(join(testRoot, ".env.example"), "OPENAI_API_KEY=\n", "utf8");
+
+    const result = await readProjectTextFile({
+      projectRoot: testRoot,
+      relativePath: ".env.example"
+    });
+
+    expect(result.relativePath).toBe(".env.example");
+    expect(result.content).toBe("OPENAI_API_KEY=\n");
+  });
+
   it("rejects files over the configured size limit", async () => {
     await mkdir(testRoot, { recursive: true });
     await writeFile(join(testRoot, "large.txt"), "x".repeat(8), "utf8");
