@@ -365,6 +365,22 @@ describe("agentActionExecutor", () => {
     expect(resolveAgentCommandRisk("npm run typecheck")).toEqual({ level: "allow" });
   });
 
+  it("allows read-only PowerShell pipeline helper commands", () => {
+    expect(resolveAgentCommandRisk("Get-ChildItem -Recurse src | Select-Object -First 20")).toEqual({
+      level: "allow"
+    });
+    expect(resolveAgentCommandRisk("Get-ChildItem src | Where-Object Name -Like *.ts | Sort-Object Name")).toEqual({
+      level: "allow"
+    });
+  });
+
+  it("requires approval for PowerShell pipeline helpers with script blocks", () => {
+    expect(resolveAgentCommandRisk("rg TODO src | Where-Object { $_ -match 'TODO' }")).toEqual({
+      level: "ask",
+      reason: "command is not in the safe allowlist"
+    });
+  });
+
   it("uses configured command rules for non-destructive commands", () => {
     expect(
       resolveAgentCommandRisk("npm run e2e -- --ui", {
