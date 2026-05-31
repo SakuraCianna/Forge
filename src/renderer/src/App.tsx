@@ -2892,6 +2892,7 @@ export function App(): ReactElement {
         commandSafetyRules={generalPreferences.commandSafetyRules}
         fullAccess={fullAccessMode}
         agentPaused={agentPaused}
+        showActivityHeartbeat={generalPreferences.showActivityHeartbeat}
         showProcessedSummary={generalPreferences.showProcessedSummary}
         defaultExpandProcessedSummary={generalPreferences.expandProcessedSummary}
         projectScan={projectScanResult}

@@ -32,6 +32,7 @@ export type GeneralPreferences = {
   autoGenerateFailureFixes: boolean;
   autoReview: boolean;
   defaultPermission: boolean;
+  showActivityHeartbeat: boolean;
   showProcessedSummary: boolean;
   expandProcessedSummary: boolean;
   backgroundImageDataUrl: string | null;
@@ -55,6 +56,7 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     autoGenerateFailureFixes: false,
     autoReview: true,
     defaultPermission: true,
+    showActivityHeartbeat: true,
     showProcessedSummary: true,
     expandProcessedSummary: false,
     backgroundImageDataUrl: null,
@@ -189,6 +191,7 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
       typeof value.autoGenerateFailureFixes === "boolean") &&
     (!("autoReview" in value) || typeof value.autoReview === "boolean") &&
     (!("defaultPermission" in value) || typeof value.defaultPermission === "boolean") &&
+    (!("showActivityHeartbeat" in value) || typeof value.showActivityHeartbeat === "boolean") &&
     (!("showProcessedSummary" in value) || typeof value.showProcessedSummary === "boolean") &&
     (!("expandProcessedSummary" in value) || typeof value.expandProcessedSummary === "boolean") &&
     (!("backgroundImageDataUrl" in value) ||
