@@ -29,6 +29,7 @@ export type GeneralPreferences = {
   composerSubmitShortcut: ComposerSubmitShortcut;
   commandTimeoutSeconds: number;
   autoRunSafeActions: boolean;
+  autoGenerateFailureFixes: boolean;
   autoReview: boolean;
   defaultPermission: boolean;
   showProcessedSummary: boolean;
@@ -51,6 +52,7 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     composerSubmitShortcut: "enter",
     commandTimeoutSeconds: 120,
     autoRunSafeActions: true,
+    autoGenerateFailureFixes: false,
     autoReview: true,
     defaultPermission: true,
     showProcessedSummary: true,
@@ -183,6 +185,8 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
       (typeof value.commandTimeoutSeconds === "number" &&
         Number.isFinite(value.commandTimeoutSeconds))) &&
     (!("autoRunSafeActions" in value) || typeof value.autoRunSafeActions === "boolean") &&
+    (!("autoGenerateFailureFixes" in value) ||
+      typeof value.autoGenerateFailureFixes === "boolean") &&
     (!("autoReview" in value) || typeof value.autoReview === "boolean") &&
     (!("defaultPermission" in value) || typeof value.defaultPermission === "boolean") &&
     (!("showProcessedSummary" in value) || typeof value.showProcessedSummary === "boolean") &&

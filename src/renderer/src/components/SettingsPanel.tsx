@@ -491,6 +491,17 @@ export function SettingsPanel({
                   })
                 }
               />
+              <PreferenceToggle
+                label={copy.autoGenerateFailureFixes}
+                description={copy.autoGenerateFailureFixesDescription}
+                enabled={generalPreferences.autoGenerateFailureFixes}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    autoGenerateFailureFixes: !generalPreferences.autoGenerateFailureFixes
+                  })
+                }
+              />
             </div>
           </div>
 
@@ -2256,6 +2267,8 @@ function getGeneralSettingsCopy(language: Language): {
   appBackgroundDescription: string;
   autoReview: string;
   autoReviewDescription: string;
+  autoGenerateFailureFixes: string;
+  autoGenerateFailureFixesDescription: string;
   autoRunSafeActions: string;
   autoRunSafeActionsDescription: string;
   backgroundOpacity: string;
@@ -2339,6 +2352,8 @@ function getGeneralSettingsCopy(language: Language): {
       appBackgroundDescription: "上传一张壁纸作为 Forge 的背景, 默认保持轻微透明避免影响阅读",
       autoReview: "自动审核",
       autoReviewDescription: "运行前自动审查潜在高风险操作",
+      autoGenerateFailureFixes: "失败时自动生成修复计划",
+      autoGenerateFailureFixesDescription: "队列动作失败后自动生成一次恢复计划, 避免主屏停在沉默失败上",
       autoRunSafeActions: "自动运行安全步骤",
       autoRunSafeActionsDescription: "生成计划后自动推进读取, 搜索和允许的命令, 遇到审查或风险门禁仍会停下",
       backgroundOpacity: "背景透明度",
@@ -2407,6 +2422,9 @@ function getGeneralSettingsCopy(language: Language): {
       "Upload a wallpaper for Forge. The default opacity stays subtle so code remains readable.",
     autoReview: "Auto review",
     autoReviewDescription: "Review potentially risky operations before running",
+    autoGenerateFailureFixes: "Auto-generate failure fixes",
+    autoGenerateFailureFixesDescription:
+      "Generate one recovery plan after a queue action fails so the main screen does not stall silently",
     autoRunSafeActions: "Auto-run safe steps",
     autoRunSafeActionsDescription:
       "After planning, run safe reads, searches, and allowed commands automatically while still stopping at gates",
