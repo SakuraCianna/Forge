@@ -26,6 +26,7 @@ import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
 } from "@/agent/failureFixPrompt";
+import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { formatRemoteModelError, formatRuntimeError } from "@/i18n/runtimeErrors";
 import { useI18n } from "@/i18n/useI18n";
@@ -937,7 +938,7 @@ export function App(): ReactElement {
     relativePath: string,
     currentContent: string,
     threadId?: string,
-    options: { autoApply?: boolean } = {}
+    options: { action?: AgentAction | null; autoApply?: boolean } = {}
   ): Promise<boolean | undefined> {
     if (!currentProject) {
       return false;
@@ -980,7 +981,7 @@ export function App(): ReactElement {
         agentMemories,
         currentProject.path,
         8,
-        `${selectedThread.prompt} ${relativePath} ${currentContent.slice(0, 1200)}`
+        `${selectedThread.prompt} ${options.action?.label ?? ""} ${relativePath} ${currentContent.slice(0, 1200)}`
       );
 
       setThreads((current) => attachThreadMemoryContext(current, selectedThread.id, memories));
@@ -994,7 +995,7 @@ export function App(): ReactElement {
         personalization: createPersonalizationPrompt(personalization),
         projectScan: projectScanResult,
         speed: selectedThread.speed,
-        taskPrompt: selectedThread.prompt,
+        taskPrompt: createFileChangeTaskPrompt(selectedThread, relativePath, options.action),
         relativePath,
         currentContent
       });
@@ -1721,7 +1722,7 @@ export function App(): ReactElement {
     if (execution.kind === "open-file") {
       return await openAgentFileAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "generate-file-change") {
-      return await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
+      return await generateAgentFileChangeAction(threadId, action, execution.relativePath);
     } else if (execution.kind === "run-command") {
       const commandRisk = resolveAgentCommandRisk(execution.command, {
         fullAccess: fullAccessMode,
@@ -1832,12 +1833,12 @@ export function App(): ReactElement {
   // 执行文件修改动作时先生成预览, 用户审查后才写入磁盘
   async function generateAgentFileChangeAction(
     threadId: string,
-    actionId: string,
+    action: AgentAction,
     relativePath: string
   ): Promise<AgentAction["status"]> {
     if (!currentProject) {
       setTaskNotice(t("projects.required"));
-      updateAgentActionStatus(threadId, actionId, "failed");
+      updateAgentActionStatus(threadId, action.id, "failed");
       return "failed";
     }
 
@@ -1861,13 +1862,14 @@ export function App(): ReactElement {
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
 
       const generated = await generateProjectFileChange(file.relativePath, file.content, threadId, {
+        action,
         autoApply: fullAccessMode
       });
       const status = generated ? "completed" : "failed";
-      updateAgentActionStatus(threadId, actionId, status);
+      updateAgentActionStatus(threadId, action.id, status);
       return status;
     } catch (error) {
-      updateAgentActionStatus(threadId, actionId, "failed");
+      updateAgentActionStatus(threadId, action.id, "failed");
       appendThreadError(
         threadId,
         formatAgentRuntimeError(
