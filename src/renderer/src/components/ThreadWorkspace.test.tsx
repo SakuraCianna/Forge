@@ -907,6 +907,9 @@ describe("ThreadWorkspace", () => {
       />
     );
 
+    expect(screen.getByText("命令会修改依赖或项目状态")).toBeInTheDocument();
+    expect(screen.queryByText("command may change dependencies or project state")).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "命令" }));
 
     const approvals = screen.getByRole("region", { name: "命令审批记录" });

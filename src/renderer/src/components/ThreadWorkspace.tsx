@@ -1340,7 +1340,7 @@ export function ThreadWorkspace({
                 {event.commandApproval.command}
               </p>
               <p className="mt-1 text-[12px] leading-5 text-[#6e6e80]">
-                {event.commandApproval.reason}
+                {formatAgentCommandRiskReason(language, event.commandApproval.reason)}
               </p>
             </div>
           </article>
