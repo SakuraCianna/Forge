@@ -58,6 +58,7 @@ type ThreadWorkspaceProps = {
   commandSafetyRules?: CommandSafetyRule[];
   fullAccess?: boolean;
   agentPaused?: boolean;
+  showActivityHeartbeat?: boolean;
   showProcessedSummary?: boolean;
   defaultExpandProcessedSummary?: boolean;
   projectScan?: ProjectScanResult | null;
@@ -176,6 +177,7 @@ export function ThreadWorkspace({
   commandSafetyRules = [],
   fullAccess = false,
   agentPaused = false,
+  showActivityHeartbeat = true,
   showProcessedSummary = true,
   defaultExpandProcessedSummary = false,
   projectScan = null,
@@ -664,6 +666,10 @@ export function ThreadWorkspace({
 
           {renderCompactAgentControlPanel()}
 
+          {showActivityHeartbeat && threadActivitySummary
+            ? renderCompactActivityHeartbeat(threadActivitySummary)
+            : null}
+
           {compactProcessedSummary ? renderCompactProcessedSummary(compactProcessedSummary) : null}
 
           <section
@@ -1011,6 +1017,33 @@ export function ThreadWorkspace({
           </Tooltip>
         ))}
       </div>
+    );
+  }
+
+  // 在主屏保留一条低噪声活动心跳, 避免隐藏细节后看起来没有响应
+  function renderCompactActivityHeartbeat(summary: ThreadActivitySummary): ReactElement {
+    const isRunning = summary.kind === "running";
+
+    return (
+      <section
+        role="status"
+        aria-live="polite"
+        className={`mx-auto flex w-full max-w-[680px] items-center gap-2 rounded-[12px] border px-3 py-2 text-[12px] ${
+          isRunning
+            ? "border-[#dbeafe] bg-[#eff6ff] text-[#1d4ed8]"
+            : "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
+        }`}
+      >
+        <span
+          aria-hidden="true"
+          className={`h-2 w-2 shrink-0 rounded-full ${
+            isRunning ? "animate-pulse bg-[#2563eb]" : "bg-[#f97316]"
+          }`}
+        />
+        <span className="shrink-0 font-medium">{summary.label}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{summary.command}</span>
+        {summary.meta ? <span className="shrink-0 opacity-80">{summary.meta}</span> : null}
+      </section>
     );
   }
 
@@ -3827,12 +3860,14 @@ function getThreadActivitySummary(
     language === "zh-CN"
       ? {
           running: "运行中",
+          actionRunning: "正在处理",
           failure: "最近失败",
           timedOut: "已超时",
           exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`
         }
       : {
           running: "Running command",
+          actionRunning: "Working",
           failure: "Last failure",
           timedOut: "timed out",
           exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`
@@ -3844,6 +3879,17 @@ function getThreadActivitySummary(
       kind: "running",
       label: copy.running,
       command: runningCommand,
+      meta: null
+    };
+  }
+
+  const runningAction = findLatestUnfinishedAgentActionRun(events);
+
+  if (runningAction) {
+    return {
+      kind: "running",
+      label: copy.actionRunning,
+      command: runningAction,
       meta: null
     };
   }
@@ -3964,6 +4010,30 @@ function findLatestUnfinishedCommandRun(events: TaskThreadEvent[]): string | nul
       !finishedRuns.has(getCommandRunKey(event.commandRun.command, event.commandRun.runId))
     ) {
       return event.commandRun.command;
+    }
+  }
+
+  return null;
+}
+
+// 查找最近未完成 Agent 动作, 覆盖读文件和生成修改这类没有命令输出的步骤
+function findLatestUnfinishedAgentActionRun(events: TaskThreadEvent[]): string | null {
+  const settledActionIds = new Set<string>();
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const actionRun = events[index]?.agentActionRun;
+
+    if (!actionRun) {
+      continue;
+    }
+
+    if (actionRun.status !== "started") {
+      settledActionIds.add(actionRun.actionId);
+      continue;
+    }
+
+    if (!settledActionIds.has(actionRun.actionId)) {
+      return actionRun.label;
     }
   }
 

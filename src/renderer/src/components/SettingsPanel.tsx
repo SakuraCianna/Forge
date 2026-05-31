@@ -512,6 +512,17 @@ export function SettingsPanel({
             </div>
             <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
               <PreferenceToggle
+                label={copy.showActivityHeartbeat}
+                description={copy.showActivityHeartbeatDescription}
+                enabled={generalPreferences.showActivityHeartbeat}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    showActivityHeartbeat: !generalPreferences.showActivityHeartbeat
+                  })
+                }
+              />
+              <PreferenceToggle
                 label={copy.showProcessedSummary}
                 description={copy.showProcessedSummaryDescription}
                 enabled={generalPreferences.showProcessedSummary}
@@ -2305,6 +2316,8 @@ function getGeneralSettingsCopy(language: Language): {
   inputRunTitle: string;
   outputDescription: string;
   outputTitle: string;
+  showActivityHeartbeat: string;
+  showActivityHeartbeatDescription: string;
   showProcessedSummary: string;
   showProcessedSummaryDescription: string;
   expandProcessedSummary: string;
@@ -2373,6 +2386,8 @@ function getGeneralSettingsCopy(language: Language): {
       inputRunTitle: "输入与运行",
       outputDescription: "控制主对话区如何呈现 Agent 的内部执行反馈",
       outputTitle: "输出体验",
+      showActivityHeartbeat: "显示运行心跳",
+      showActivityHeartbeatDescription: "在主对话区保留一条轻量状态行, 显示 Forge 正在处理的命令或动作",
       showProcessedSummary: "显示“已处理”摘要",
       showProcessedSummaryDescription: "把读取文件, 命令和 Agent 事件折叠到一行轻量反馈里",
       expandProcessedSummary: "默认展开已处理详情",
@@ -2445,6 +2460,9 @@ function getGeneralSettingsCopy(language: Language): {
     inputRunTitle: "Input and run",
     outputDescription: "Control how the main conversation presents internal agent activity",
     outputTitle: "Output experience",
+    showActivityHeartbeat: "Show activity heartbeat",
+    showActivityHeartbeatDescription:
+      "Keep one quiet status row in the main conversation while Forge runs commands or actions",
     showProcessedSummary: "Show processed summary",
     showProcessedSummaryDescription: "Fold file reads, commands, and agent events into one quiet status row",
     expandProcessedSummary: "Expand processed details by default",
