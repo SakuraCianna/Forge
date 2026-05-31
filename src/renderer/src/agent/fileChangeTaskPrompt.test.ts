@@ -76,11 +76,17 @@ describe("fileChangeTaskPrompt", () => {
           {
             id: "event-1",
             kind: "file",
-            message: "项目搜索完成: handleSubmit (1 个结果)\n- src/App.tsx:42 function handleSubmit()",
+            message: "文件读取完成: package.json (42 bytes)\nContent preview:\n{\"scripts\":{\"test\":\"vitest\"}}",
             createdAt: "2026-05-27T13:01:00.000Z"
           },
           {
             id: "event-2",
+            kind: "file",
+            message: "项目搜索完成: handleSubmit (1 个结果)\n- src/App.tsx:42 function handleSubmit()",
+            createdAt: "2026-05-27T13:01:30.000Z"
+          },
+          {
+            id: "event-3",
             kind: "file",
             message: "已应用文件修改: docs/usage.md",
             createdAt: "2026-05-27T13:02:00.000Z"
@@ -95,6 +101,7 @@ describe("fileChangeTaskPrompt", () => {
     );
 
     expect(prompt).toContain("Prior controlled tool results:");
+    expect(prompt).toContain("文件读取完成: package.json");
     expect(prompt).toContain("项目搜索完成: handleSubmit");
     expect(prompt).toContain("目录列表完成: src");
     expect(prompt).not.toContain("已应用文件修改");

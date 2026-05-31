@@ -839,9 +839,9 @@ export function App(): ReactElement {
   }
 
   // 按路径读取项目文件并生成可阅读预览
-  async function previewProjectFile(relativePath: string): Promise<void> {
+  async function previewProjectFile(relativePath: string): Promise<ProjectTextFile | null> {
     if (!currentProject) {
-      return;
+      return null;
     }
 
     const file = await window.forge.files.readText({
@@ -850,6 +850,8 @@ export function App(): ReactElement {
     });
     setPreviewFile(file);
     setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
+
+    return file;
   }
 
   // 展示待应用文件变更的 diff, 让用户先审查再落盘
@@ -1802,6 +1804,20 @@ export function App(): ReactElement {
     return recentAgentToolResultsRef.current.get(threadId) ?? [];
   }
 
+  // 文件读取动作只记录有限摘要, 让后续编辑有上下文但不把超长文件塞进提示
+  function formatProjectFileReadResultMessage(language: Language, file: ProjectTextFile): string {
+    const content = file.content.trim();
+    const preview = content ? content.split(/\r?\n/u).slice(0, 80).join("\n").slice(0, 5000) : "";
+    const header =
+      language === "zh-CN"
+        ? `文件读取完成: ${file.relativePath} (${file.size} bytes${preview.length < content.length ? ", 已截断" : ""})`
+        : `File read complete: ${file.relativePath} (${file.size} bytes${preview.length < content.length ? ", truncated" : ""})`;
+
+    return preview
+      ? [header, "Content preview:", preview].join("\n")
+      : `${header}\n${language === "zh-CN" ? "文件为空。" : "File is empty."}`;
+  }
+
   // 执行单个 Agent 动作, 失败时保留可恢复的结果说明
   async function runAgentAction(
     threadId: string,
@@ -2249,8 +2265,27 @@ export function App(): ReactElement {
     }
 
     try {
-      await previewProjectFile(relativePath);
+      const file = await previewProjectFile(relativePath);
+      const createdAt = new Date().toISOString();
+      const message = file ? formatProjectFileReadResultMessage(settings.language, file) : null;
+
+      if (message) {
+        rememberAgentToolResult(threadId, message);
+      }
+
       updateAgentActionStatus(threadId, action.id, "completed");
+      if (message) {
+        setThreads((current) =>
+          appendThreadEvents(current, threadId, [
+            {
+              id: `${threadId}-agent-read-file-${action.id}-${createdAt}`,
+              kind: "file",
+              message,
+              createdAt
+            }
+          ])
+        );
+      }
       return "completed";
     } catch (error) {
       const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
