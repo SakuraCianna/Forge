@@ -29,6 +29,7 @@ const dependencyChangeReason = "command may change dependencies or project state
 const gitMutationReason = "command may change Git history or remote state";
 const destructiveCommandReason = "command can delete files or rewrite history";
 const unknownCommandReason = "command is not in the safe allowlist";
+const shellOutputRedirectionReason = "命令可能通过 shell 重定向写入文件";
 
 // 根据动作类型决定执行方式, 不能自动执行的动作返回阻塞原因
 export function resolveAgentActionExecution(action: AgentAction): AgentActionExecution {
@@ -274,6 +275,10 @@ function resolveSingleCommandRisk(
     return configuredRisk;
   }
 
+  if (hasShellOutputRedirection(normalized)) {
+    return configuredRisk ?? { level: "ask", reason: shellOutputRedirectionReason };
+  }
+
   if (isDependencyChangingCommand(normalized)) {
     return configuredRisk ?? { level: "ask", reason: dependencyChangeReason };
   }
@@ -360,6 +365,11 @@ function isDestructiveCommand(command: string): boolean {
 // 识别会改变依赖或项目状态的包管理命令
 function isDependencyChangingCommand(command: string): boolean {
   return /^(npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall|update|upgrade)\b/u.test(command);
+}
+
+// 识别会把命令输出写入文件的 shell 重定向, 让 Agent 停下来等用户确认
+function hasShellOutputRedirection(command: string): boolean {
+  return /(?:^|\s)(?:\d?>>?|\*>>?|>>?)\s*\S/u.test(command);
 }
 
 // 识别需要用户明确确认的 Git 写操作
