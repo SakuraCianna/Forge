@@ -105,6 +105,11 @@ type ThreadActivitySummary = {
   meta: string | null;
 };
 
+type CompactActivityCue = {
+  label: string;
+  detail: string | null;
+};
+
 type AgentConfirmationItemKind =
   | "pending-changes"
   | "failed-action"
@@ -230,6 +235,13 @@ export function ThreadWorkspace({
     [selectedThread]
   );
   const hasCompactSourceEvents = (selectedThread?.events.length ?? 0) > 0;
+  const compactActivityCue = useMemo(
+    () =>
+      selectedThread
+        ? getCompactActivityCue(selectedThread, visibleCompactEvents.length, language)
+        : null,
+    [language, selectedThread, visibleCompactEvents.length]
+  );
   const duration = useMemo(() => {
     if (!selectedThread) {
       return "0m";
@@ -647,6 +659,8 @@ export function ThreadWorkspace({
           >
             {visibleCompactEvents.length > 0 ? (
               visibleCompactEvents.map((event) => renderCompactEvent(event))
+            ) : compactActivityCue ? (
+              renderCompactActivityCue(compactActivityCue)
             ) : !hasCompactSourceEvents ? (
               <div className="text-sm text-[#8e8ea0]">
                 {language === "zh-CN" ? "等待 Forge 开始执行" : "Waiting for Forge to start"}
@@ -985,6 +999,23 @@ export function ThreadWorkspace({
           </Tooltip>
         ))}
       </div>
+    );
+  }
+
+  // 当内部事件被主屏过滤时保留一条低打扰心跳, 避免执行中看起来没有任何输出
+  function renderCompactActivityCue(cue: CompactActivityCue): ReactElement {
+    return (
+      <article role="status" aria-live="polite" className="grid grid-cols-[20px_minmax(0,1fr)] gap-3">
+        <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#f7f7f8] text-[#565869]">
+          <Activity className="h-3.5 w-3.5 animate-pulse" />
+        </span>
+        <div className="min-w-0">
+          <div className="text-[11px] text-[#8e8ea0]">{cue.label}</div>
+          {cue.detail ? (
+            <p className="mt-1 break-words text-sm leading-6 text-[#202123]">{cue.detail}</p>
+          ) : null}
+        </div>
+      </article>
     );
   }
 
@@ -3802,6 +3833,118 @@ function getThreadActivitySummary(
     command: failedResult.command,
     meta: failedResult.timedOut ? copy.timedOut : copy.exit(failedResult.exitCode)
   };
+}
+
+// 在没有用户可读输出时根据最新内部事件生成一条简短运行反馈
+function getCompactActivityCue(
+  thread: TaskThread,
+  visibleEventCount: number,
+  language: Language
+): CompactActivityCue | null {
+  if (visibleEventCount > 0) {
+    return null;
+  }
+
+  const copy =
+    language === "zh-CN"
+      ? {
+          planning: "Forge 正在组织步骤",
+          working: "Forge 正在处理",
+          command: "Forge 正在运行命令",
+          blocked: "Forge 需要你处理下一步",
+          finishing: "Forge 正在整理输出",
+          waiting: "等待模型返回可读输出",
+          actionDetail: (label: string) => `正在执行 ${label}`,
+          commandDetail: (command: string) => command,
+          waitingActionDetail: (label: string) => `等待处理 ${label}`,
+          completedActionDetail: (label: string) => `已完成 ${label}, 正在整理结果`
+        }
+      : {
+          planning: "Forge is planning",
+          working: "Forge is working",
+          command: "Forge is running a command",
+          blocked: "Forge needs your next action",
+          finishing: "Forge is preparing the response",
+          waiting: "Waiting for a readable response",
+          actionDetail: (label: string) => `Working on ${label}`,
+          commandDetail: (command: string) => command,
+          waitingActionDetail: (label: string) => `Waiting on ${label}`,
+          completedActionDetail: (label: string) => `Finished ${label}, preparing the result`
+        };
+
+  const latestEvent = thread.events.at(-1) ?? null;
+  const latestActionRun = findLatestAgentActionRun(thread.events);
+
+  if (latestEvent?.commandRun) {
+    return {
+      label: copy.command,
+      detail: copy.commandDetail(latestEvent.commandRun.command)
+    };
+  }
+
+  if (latestActionRun) {
+    if (latestActionRun.status === "waiting" || latestActionRun.status === "failed") {
+      return {
+        label: copy.blocked,
+        detail: copy.waitingActionDetail(latestActionRun.label)
+      };
+    }
+
+    if (latestActionRun.status === "completed" || latestActionRun.status === "confirmed") {
+      return {
+        label: copy.finishing,
+        detail: copy.completedActionDetail(latestActionRun.label)
+      };
+    }
+
+    return {
+      label: copy.working,
+      detail: copy.actionDetail(latestActionRun.label)
+    };
+  }
+
+  if (latestEvent?.kind === "plan") {
+    return {
+      label: copy.planning,
+      detail: copy.waiting
+    };
+  }
+
+  if (latestEvent?.kind === "file" || latestEvent?.kind === "command") {
+    return {
+      label: copy.working,
+      detail: copy.waiting
+    };
+  }
+
+  if (thread.status === "running" || thread.status === "planned") {
+    return {
+      label: copy.working,
+      detail: copy.waiting
+    };
+  }
+
+  if (thread.status === "blocked") {
+    return {
+      label: copy.blocked,
+      detail: copy.waiting
+    };
+  }
+
+  return null;
+}
+
+// 查找最新 Agent 动作运行事件, 用于 compact 心跳展示当前真实工作
+function findLatestAgentActionRun(events: TaskThreadEvent[]): AgentActionRunRecord | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const run = events[index]?.agentActionRun;
+
+    if (run) {
+      return run;
+    }
+  }
+
+  return null;
 }
 
 // 把事件类型压成短标签, 避免对话区出现内部术语

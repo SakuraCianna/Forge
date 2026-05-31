@@ -87,6 +87,55 @@ describe("ThreadWorkspace", () => {
     expect(transcript.firstElementChild).toHaveClass("grid", "grid-cols-[20px_minmax(0,1fr)]");
   });
 
+  it("shows a compact activity cue while internal agent events are hidden", () => {
+    render(
+      <ThreadWorkspace
+        compact
+        language="zh-CN"
+        threads={[
+          {
+            ...thread,
+            prompt: "帮我写一份项目说明书.md",
+            status: "running",
+            events: [
+              {
+                id: "agent-started",
+                kind: "plan",
+                message: "Started agent action: Edit 项目说明书.md",
+                createdAt: "2026-05-27T13:00:01.000Z",
+                agentActionRun: {
+                  actionId: "action-1",
+                  label: "Edit 项目说明书.md",
+                  status: "started",
+                  startedAt: "2026-05-27T13:00:01.000Z"
+                }
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "edit-file",
+                label: "Edit 项目说明书.md",
+                status: "running",
+                target: "项目说明书.md"
+              }
+            ]
+          }
+        ]}
+        selectedThreadId="thread-1"
+        onSelectThread={() => undefined}
+      />
+    );
+
+    const transcript = screen.getByRole("region", { name: "Conversation transcript" });
+    const activity = screen.getByRole("status");
+
+    expect(transcript).not.toHaveTextContent("Started agent action: Edit 项目说明书.md");
+    expect(activity).toHaveTextContent("Forge 正在处理");
+    expect(activity).toHaveTextContent("正在执行 Edit 项目说明书.md");
+  });
+
   it("shows compact manual gate confirmation controls", async () => {
     const user = userEvent.setup();
     const onCompleteAgentAction = vi.fn();
