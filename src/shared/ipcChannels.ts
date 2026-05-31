@@ -37,6 +37,7 @@ export const gitChannels = {
 
 export const fileChannels = {
   readText: "forge:file:read-text",
+  searchText: "forge:file:search-text",
   previewTextUpdate: "forge:file:preview-text-update",
   writeText: "forge:file:write-text"
 } as const;

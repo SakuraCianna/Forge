@@ -7,6 +7,25 @@ export type ProjectTextFile = {
   size: number;
 };
 
+export type ProjectTextSearchRequest = {
+  projectRoot: string;
+  query: string;
+  limit?: number;
+  maxFileBytes?: number;
+};
+
+export type ProjectTextSearchMatch = {
+  relativePath: string;
+  lineNumber: number;
+  preview: string;
+};
+
+export type ProjectTextSearchResult = {
+  query: string;
+  matches: ProjectTextSearchMatch[];
+  truncated: boolean;
+};
+
 type ProjectFileChangeSource = {
   threadId: string;
   actionId?: string;

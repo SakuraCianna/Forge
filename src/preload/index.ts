@@ -21,7 +21,11 @@ import type {
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
-import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
+import type {
+  ProjectFileChangePreview,
+  ProjectTextFile,
+  ProjectTextSearchResult
+} from "../shared/fileTypes.js";
 import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
@@ -122,6 +126,12 @@ contextBridge.exposeInMainWorld("forge", {
       relativePath: string;
       maxBytes?: number;
     }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.readText, request),
+    searchText: (request: {
+      projectRoot: string;
+      query: string;
+      limit?: number;
+      maxFileBytes?: number;
+    }): Promise<ProjectTextSearchResult> => ipcRenderer.invoke(fileChannels.searchText, request),
     previewTextUpdate: (request: {
       projectRoot: string;
       relativePath: string;

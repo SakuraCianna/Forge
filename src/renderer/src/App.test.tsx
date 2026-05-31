@@ -144,6 +144,76 @@ describe("App agent execution", () => {
     expect(forge.agent.generateFileChange).not.toHaveBeenCalled();
     expect(forge.files.writeText).not.toHaveBeenCalled();
   });
+
+  it("runs project search actions without invoking the shell command runner", async () => {
+    const user = userEvent.setup();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Search for submit handler",
+      createdAt: "2026-05-31T01:20:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Search submit handler",
+          description: "Search for handleSubmit before editing.",
+          kind: "inspect",
+          status: "pending",
+          target: "handleSubmit"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "",
+      nextContent: "",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "",
+        size: 0
+      }
+    });
+
+    vi.mocked(forge.files.searchText).mockResolvedValueOnce({
+      query: "handleSubmit",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          lineNumber: 42,
+          preview: "function handleSubmit() {"
+        }
+      ],
+      truncated: false
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Find handleSubmit");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(forge.files.searchText).toHaveBeenCalledWith({
+        projectRoot,
+        query: "handleSubmit",
+        limit: 40
+      })
+    );
+    expect(forge.commands.run).not.toHaveBeenCalled();
+    expect(await screen.findByText(/项目搜索完成: handleSubmit/)).toBeInTheDocument();
+    expect(screen.getByText(/src\/App\.tsx:42/)).toBeInTheDocument();
+  });
 });
 
 // 准备一个已打开项目和可用模型, 让 App 启动后直接进入项目工作区
@@ -229,6 +299,11 @@ function createForgeMock({
       readText: vi.fn(async () => {
         throw new Error("ENOENT: no such file or directory");
       }),
+      searchText: vi.fn(async () => ({
+        query: "",
+        matches: [],
+        truncated: false
+      })),
       previewTextUpdate: vi.fn(async () => preview),
       writeText: vi.fn(async () => writtenFile)
     }

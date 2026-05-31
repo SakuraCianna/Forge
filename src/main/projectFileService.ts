@@ -1,8 +1,17 @@
 // 本文件说明: 在项目根目录内安全读取, 预览和写入文本文件
-import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
-import type { ProjectFileChangePreview, ProjectTextFile } from "../shared/fileTypes.js";
-import { assertProjectPathNotSensitive } from "../shared/sensitiveProjectFiles.js";
+import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { dirname, relative, resolve, sep } from "node:path";
+import type {
+  ProjectFileChangePreview,
+  ProjectTextFile,
+  ProjectTextSearchMatch,
+  ProjectTextSearchRequest,
+  ProjectTextSearchResult
+} from "../shared/fileTypes.js";
+import {
+  assertProjectPathNotSensitive,
+  isSensitiveProjectPath
+} from "../shared/sensitiveProjectFiles.js";
 import { createLineDiff } from "../shared/textDiff.js";
 
 type ReadProjectTextFileOptions = {
@@ -10,6 +19,18 @@ type ReadProjectTextFileOptions = {
   relativePath: string;
   maxBytes?: number;
 };
+
+const searchIgnoredDirectoryNames = new Set([
+  ".git",
+  ".vite",
+  "coverage",
+  "dist",
+  "dist-electron",
+  "node_modules",
+  "out"
+]);
+
+const maxSearchPreviewChars = 240;
 
 // 读取文本文件前检查路径边界和大小, 防止大文件拖慢预览
 export async function readProjectTextFile({
@@ -61,6 +82,78 @@ export async function previewProjectTextFileUpdate({
     currentContent: currentFile.content,
     nextContent,
     diff: createLineDiff(currentFile.content, nextContent)
+  };
+}
+
+// 在项目内执行受控文本搜索, 用于 Agent inspect/search 动作
+export async function searchProjectTextFiles({
+  projectRoot,
+  query,
+  limit = 80,
+  maxFileBytes = 256000
+}: ProjectTextSearchRequest): Promise<ProjectTextSearchResult> {
+  const normalizedQuery = normalizeSearchQuery(query);
+  const resultLimit = Math.min(200, Math.max(1, Math.round(limit)));
+  const resolvedProjectRoot = await realpath(projectRoot);
+  const matches: ProjectTextSearchMatch[] = [];
+  let truncated = false;
+
+  // 递归搜索时跳过敏感路径, 大文件和构建产物, 避免把搜索工具变成无限制读文件入口
+  async function walk(directoryPath: string): Promise<void> {
+    if (matches.length >= resultLimit) {
+      truncated = true;
+      return;
+    }
+
+    const entries = await readdir(directoryPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (matches.length >= resultLimit) {
+        truncated = true;
+        return;
+      }
+
+      const absolutePath = `${directoryPath}${sep}${entry.name}`;
+      const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
+
+      if (entry.isDirectory()) {
+        if (searchIgnoredDirectoryNames.has(entry.name) || isSensitiveProjectPath(relativePath)) {
+          continue;
+        }
+
+        await walk(absolutePath);
+        continue;
+      }
+
+      if (!entry.isFile() || isSensitiveProjectPath(relativePath)) {
+        continue;
+      }
+
+      const fileStat = await stat(absolutePath);
+
+      if (fileStat.size > maxFileBytes) {
+        continue;
+      }
+
+      const content = await readFile(absolutePath, "utf8");
+
+      if (content.includes("\u0000")) {
+        continue;
+      }
+
+      if (collectSearchMatches(relativePath, content, normalizedQuery, matches, resultLimit)) {
+        truncated = true;
+        return;
+      }
+    }
+  }
+
+  await walk(resolvedProjectRoot);
+
+  return {
+    query: normalizedQuery,
+    matches,
+    truncated
   };
 }
 
@@ -131,6 +224,47 @@ async function readProjectTextFileOrEmpty({
       size: 0
     };
   }
+}
+
+// 把搜索关键词收敛成非空短文本, 防止意外全仓库匹配
+function normalizeSearchQuery(query: string): string {
+  const normalized = query.trim().slice(0, 160);
+
+  if (!normalized) {
+    throw new Error("搜索关键词不能为空。");
+  }
+
+  return normalized;
+}
+
+// 从单个文本文件收集搜索命中, 按行返回有限预览
+function collectSearchMatches(
+  relativePath: string,
+  content: string,
+  query: string,
+  matches: ProjectTextSearchMatch[],
+  limit: number
+): boolean {
+  const normalizedQuery = query.toLocaleLowerCase();
+  const lines = content.split(/\r?\n/u);
+
+  for (const [index, line] of lines.entries()) {
+    if (!line.toLocaleLowerCase().includes(normalizedQuery)) {
+      continue;
+    }
+
+    if (matches.length >= limit) {
+      return true;
+    }
+
+    matches.push({
+      relativePath,
+      lineNumber: index + 1,
+      preview: line.trim().slice(0, maxSearchPreviewChars)
+    });
+  }
+
+  return false;
 }
 
 // 读取已存在文件的真实路径, 新文件保持 null 继续走创建流程

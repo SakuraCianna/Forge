@@ -1,7 +1,13 @@
 // 本文件说明: 将模型计划步骤转成前端可执行动作队列
 import type { AgentPlanStep } from "./agentTypes.js";
 
-type AgentActionKind = "inspect-file" | "edit-file" | "run-command" | "commit" | "manual";
+type AgentActionKind =
+  | "inspect-file"
+  | "search-project"
+  | "edit-file"
+  | "run-command"
+  | "commit"
+  | "manual";
 
 type AgentActionStatus = "pending" | "running" | "completed" | "failed" | "skipped";
 
@@ -40,6 +46,16 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
       stepId: step.id,
       kind: "inspect-file",
       label: `Inspect ${normalizedTarget}`,
+      status: "pending",
+      target: normalizedTarget
+    };
+  }
+
+  if (step.kind === "inspect" && normalizedTarget) {
+    return {
+      stepId: step.id,
+      kind: "search-project",
+      label: `Search ${normalizedTarget}`,
       status: "pending",
       target: normalizedTarget
     };

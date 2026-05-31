@@ -12,7 +12,11 @@ import type {
   GenerateAgentPlanRequest
 } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
-import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
+import type {
+  ProjectFileChangePreview,
+  ProjectTextFile,
+  ProjectTextSearchResult
+} from "@shared/fileTypes";
 import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
@@ -92,6 +96,12 @@ declare global {
           relativePath: string;
           maxBytes?: number;
         }) => Promise<ProjectTextFile>;
+        searchText: (request: {
+          projectRoot: string;
+          query: string;
+          limit?: number;
+          maxFileBytes?: number;
+        }) => Promise<ProjectTextSearchResult>;
         previewTextUpdate: (request: {
           projectRoot: string;
           relativePath: string;
