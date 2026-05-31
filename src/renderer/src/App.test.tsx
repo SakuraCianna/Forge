@@ -650,6 +650,99 @@ describe("App agent execution", () => {
     expect(forge.commands.run).not.toHaveBeenCalled();
     expect(await screen.findByText(/已跳过 Agent 动作: Run Remove-Item -Recurse src/)).toBeInTheDocument();
   });
+
+  it("uses a pending agent commit suggestion from source control and records the commit action", async () => {
+    const user = userEvent.setup();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Commit changes",
+      createdAt: "2026-05-31T01:40:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Commit changes",
+          description: "Commit the completed work.",
+          kind: "commit",
+          status: "pending",
+          target: "git commit -m \"完善 Agent 提交门禁\""
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "",
+      nextContent: "",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "",
+        size: 0
+      }
+    });
+    const dirtyStatus = {
+      isRepo: true,
+      changedFiles: ["README.md"],
+      changes: [
+        {
+          path: "README.md",
+          status: "M",
+          diff: "diff --git a/README.md b/README.md\n+updated"
+        }
+      ],
+      rawStatus: " M README.md\n"
+    };
+
+    vi.mocked(forge.git.status).mockResolvedValue(dirtyStatus);
+    vi.mocked(forge.git.commit).mockResolvedValueOnce({
+      output: "[main abc123] 完善 Agent 提交门禁",
+      status: {
+        isRepo: true,
+        changedFiles: [],
+        changes: [],
+        rawStatus: ""
+      }
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Commit with agent suggestion");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("button", { name: "源代码管理" }));
+
+    expect(await screen.findByText("Agent 提交建议")).toBeInTheDocument();
+    expect(screen.getByText("完善 Agent 提交门禁")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "使用 Agent 提交建议" }));
+    expect(screen.getByLabelText("提交信息")).toHaveValue("完善 Agent 提交门禁");
+
+    await user.click(screen.getByRole("button", { name: "提交" }));
+
+    await waitFor(() =>
+      expect(forge.git.commit).toHaveBeenCalledWith({
+        projectRoot,
+        message: "完善 Agent 提交门禁"
+      })
+    );
+    expect(await screen.findByText("已创建 Git 提交")).toBeInTheDocument();
+
+    const threadRow = screen.getByText("Commit with agent suggestion").closest("button");
+    expect(threadRow).not.toBeNull();
+    await user.click(threadRow!);
+
+    expect(await screen.findByText(/已完成 Agent 提交动作: 完善 Agent 提交门禁/)).toBeInTheDocument();
+  });
 });
 
 // 准备一个已打开项目和可用模型, 让 App 启动后直接进入项目工作区
