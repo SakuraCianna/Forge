@@ -1554,6 +1554,103 @@ export function ThreadWorkspace({
       return actionQueueCopy.manualGateBody(action.label);
     }
 
+    // 动作详情也提供门禁和恢复操作, 避免用户看完详情后还要回到队列顶部找确认入口
+    function renderAgentActionDetailControls(action: AgentAction): ReactElement | null {
+      if (!selectedThread) {
+        return null;
+      }
+
+      const commandRisk = getCommandRiskForAction(action);
+      const controls: ReactElement[] = [];
+
+      if (
+        action.status === "pending" &&
+        action.kind === "run-command" &&
+        action.command &&
+        commandRisk?.level === "ask" &&
+        onApproveAgentCommand
+      ) {
+        controls.push(
+          <button
+            key="approve-command"
+            type="button"
+            onClick={() => onApproveAgentCommand(selectedThread.id, action)}
+            className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {actionQueueCopy.approveCommand}
+          </button>
+        );
+      }
+
+      if (action.status === "pending" && action.kind === "commit" && onOpenSourceControl) {
+        controls.push(
+          <button
+            key="open-source-control"
+            type="button"
+            onClick={onOpenSourceControl}
+            className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {actionQueueCopy.openSourceControl}
+          </button>
+        );
+      }
+
+      if (action.status === "pending" && action.kind === "manual" && onCompleteAgentAction) {
+        controls.push(
+          <button
+            key="complete-manual"
+            type="button"
+            onClick={() => onCompleteAgentAction(selectedThread.id, action)}
+            className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {actionQueueCopy.markReviewComplete}
+          </button>
+        );
+      }
+
+      if (action.status === "failed" && onRunAgentAction) {
+        controls.push(
+          <button
+            key="retry-failed"
+            type="button"
+            onClick={() => onRunAgentAction(selectedThread.id, action)}
+            className="h-7 rounded-[10px] border border-[#f4c7ab] bg-white px-2 text-[11px] font-medium text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+          >
+            {recoveryActionCopy.retryFailed}
+          </button>
+        );
+      }
+
+      if (action.status === "failed" && onGenerateFailureFix) {
+        controls.push(
+          <button
+            key="generate-fix"
+            type="button"
+            onClick={() => onGenerateFailureFix(selectedThread.id, action)}
+            className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {recoveryActionCopy.generateFixPlan}
+          </button>
+        );
+      }
+
+      if (onSkipAgentAction && canSkipAgentAction(action)) {
+        controls.push(
+          <button
+            key="skip-action"
+            type="button"
+            aria-label={`${actionQueueCopy.skipAction} ${action.label}`}
+            onClick={() => onSkipAgentAction(selectedThread.id, action)}
+            className="h-7 rounded-[10px] border border-[#f4c7ab] bg-white px-2 text-[11px] font-medium text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+          >
+            {actionQueueCopy.skipAction}
+          </button>
+        );
+      }
+
+      return controls.length > 0 ? <div className="mt-3 flex flex-wrap gap-2">{controls}</div> : null;
+    }
+
     // 展示单个动作的输入, 输出和恢复入口
     function renderAgentActionDetails(
       action: AgentAction,
@@ -1594,6 +1691,7 @@ export function ThreadWorkspace({
             </div>
             <p className="mt-1 text-sm leading-5 text-[#202123]">{getActionNextStep(action)}</p>
           </div>
+          {renderAgentActionDetailControls(action)}
           {commandResult ? (
             <div className="mt-3 border-t border-[#ececf1] pt-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
