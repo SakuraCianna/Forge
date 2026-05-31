@@ -119,6 +119,8 @@ describe("AppShell", () => {
     const onNewProjectChat = vi.fn();
     const onRenameProject = vi.fn();
     const onTogglePinProject = vi.fn();
+    const onMinimizeWindow = vi.fn();
+    const onToggleMaximizeWindow = vi.fn();
     const projectPath = "E:\\CodeHome\\Forge";
 
     render(
@@ -132,6 +134,8 @@ describe("AppShell", () => {
         onNavigate={onNavigate}
         onNewProjectChat={onNewProjectChat}
         onRenameProject={onRenameProject}
+        onMinimizeWindow={onMinimizeWindow}
+        onToggleMaximizeWindow={onToggleMaximizeWindow}
         onTogglePinProject={onTogglePinProject}
       >
         <section>Workbench</section>
@@ -139,7 +143,7 @@ describe("AppShell", () => {
     );
 
     const titleMenus = screen.getByRole("navigation", { name: "Forge title bar menus" });
-    expect(titleMenus).toHaveClass("ml-2", "gap-5");
+    expect(titleMenus).toHaveClass("ml-3", "gap-7");
 
     await user.click(within(titleMenus).getByRole("button", { name: "File" }));
     await user.click(screen.getByRole("menuitem", { name: "New chat in current project" }));
@@ -171,8 +175,16 @@ describe("AppShell", () => {
     expect(onNavigate).toHaveBeenCalledWith("source");
 
     await user.click(within(titleMenus).getByRole("button", { name: "Window" }));
-    expect(screen.getByRole("menuitem", { name: "Workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Files" })).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Minimize window" }));
+    expect(onMinimizeWindow).toHaveBeenCalledOnce();
+
+    await user.click(within(titleMenus).getByRole("button", { name: "Window" }));
+    await user.click(screen.getByRole("menuitem", { name: "Toggle maximize" }));
+    expect(onToggleMaximizeWindow).toHaveBeenCalledOnce();
+
+    await user.click(within(titleMenus).getByRole("button", { name: "Window" }));
+    expect(screen.queryByRole("menuitem", { name: "Workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Files" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Show settings" }));
     expect(onNavigate).toHaveBeenCalledWith("settings");
   });

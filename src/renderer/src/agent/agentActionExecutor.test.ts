@@ -8,7 +8,8 @@ import {
   resolveAgentCommandRisk,
   resolveAgentActionPermission,
   resolveAgentActionExecution,
-  runAgentActionBatch
+  runAgentActionBatch,
+  shouldTreatMissingInspectAsNewFile
 } from "./agentActionExecutor";
 
 describe("agentActionExecutor", () => {
@@ -232,6 +233,33 @@ describe("agentActionExecutor", () => {
         })
       ])
     ).toEqual([]);
+  });
+
+  it("allows a missing inspect step to hand off to a later create-file edit", () => {
+    const inspectNewFile = createAction({
+      id: "action-1",
+      kind: "inspect-file",
+      target: "项目说明书.md"
+    });
+    const createNewFile = createAction({
+      id: "action-2",
+      kind: "edit-file",
+      target: "项目说明书.md"
+    });
+
+    expect(
+      shouldTreatMissingInspectAsNewFile(inspectNewFile, [inspectNewFile, createNewFile])
+    ).toBe(true);
+    expect(
+      shouldTreatMissingInspectAsNewFile(inspectNewFile, [
+        inspectNewFile,
+        createAction({
+          id: "action-3",
+          kind: "edit-file",
+          target: "README.md"
+        })
+      ])
+    ).toBe(false);
   });
 
   it("runs safe action batches in order and stops after the first non-completed action", async () => {
