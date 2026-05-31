@@ -88,10 +88,16 @@ describe("SettingsPanel", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Default permission" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Read only" }));
+
+    expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
+      expect.objectContaining({ readOnly: true, fullAccess: false })
+    );
+
     await user.click(screen.getByRole("button", { name: "Full access" }));
 
     expect(onUpdateGeneralPreferences).toHaveBeenLastCalledWith(
-      expect.objectContaining({ autoReview: true, fullAccess: true })
+      expect.objectContaining({ autoReview: true, readOnly: false, fullAccess: true })
     );
   });
 

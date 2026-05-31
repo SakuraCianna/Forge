@@ -2,6 +2,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
+import type { AgentProfileContext } from "@shared/agentTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
@@ -296,9 +297,13 @@ export function App(): ReactElement {
   const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
-  const activeAgentProfileContext = getActiveAgentProfileContext(agentProfiles);
+  const activeAgentProfileContext = applyGeneralPermissionModeToAgentProfile(
+    getActiveAgentProfileContext(agentProfiles),
+    generalPreferences
+  );
   const fullAccessMode =
-    generalPreferences.fullAccess || activeAgentProfileContext.permissionMode === "full";
+    !generalPreferences.readOnly &&
+    (generalPreferences.fullAccess || activeAgentProfileContext.permissionMode === "full");
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -2901,6 +2906,22 @@ function formatPreviewStatus(
   }
 
   return language === "zh-CN" ? "原始内容" : "Raw content";
+}
+
+// 将全局权限模式叠加到当前 Agent 配置, 只读模式必须在运行时硬拦截写操作
+function applyGeneralPermissionModeToAgentProfile(
+  agentProfile: AgentProfileContext,
+  generalPreferences: GeneralPreferences
+): AgentProfileContext {
+  if (!generalPreferences.readOnly) {
+    return agentProfile;
+  }
+
+  return {
+    ...agentProfile,
+    permissionMode: "auto",
+    enabledTools: agentProfile.enabledTools.filter((tool) => tool === "read")
+  };
 }
 
 // 渲染轻量提示条, 不把提示样式散落在多个视图

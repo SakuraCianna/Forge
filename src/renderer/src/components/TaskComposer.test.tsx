@@ -128,7 +128,7 @@ describe("TaskComposer", () => {
     expect(onPickProject).not.toHaveBeenCalled();
   });
 
-  it("offers only auto review and full access permission choices", async () => {
+  it("offers read only, auto review, and full access permission choices", async () => {
     const user = userEvent.setup();
     const onUpdateGeneralPreferences = vi.fn();
     const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
@@ -150,8 +150,13 @@ describe("TaskComposer", () => {
 
     const menu = screen.getByRole("menu");
     const menuItems = within(menu).getAllByRole("menuitem");
-    expect(menuItems).toHaveLength(2);
-    expect(menuItems.map((item) => item.textContent)).toEqual(["Auto review", "Full access"]);
+    expect(menuItems).toHaveLength(3);
+    expect(menuItems.map((item) => item.textContent)).toEqual([
+      "Read only",
+      "Auto review",
+      "Full access"
+    ]);
+    expect(within(menu).getByRole("menuitem", { name: "Read only" })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitem", { name: "Auto review" })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitem", { name: "Full access" })).toBeInTheDocument();
 
@@ -161,7 +166,36 @@ describe("TaskComposer", () => {
       expect.objectContaining({
         defaultPermission: true,
         autoReview: true,
-        fullAccess: true
+        fullAccess: true,
+        readOnly: false
+      })
+    );
+  });
+
+  it("can switch the composer into read only mode", async () => {
+    const user = userEvent.setup();
+    const onUpdateGeneralPreferences = vi.fn();
+    const settings = { ...createDefaultModelSettings(), language: "en-US" as const };
+
+    render(
+      <TaskComposer
+        settings={settings}
+        generalPreferences={createDefaultGeneralPreferences()}
+        onUpdateGeneralPreferences={onUpdateGeneralPreferences}
+        onSelectIntelligence={vi.fn()}
+        onSelectModel={vi.fn()}
+        onSelectSpeed={vi.fn()}
+        onSubmitTask={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Auto review" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Read only/ }));
+
+    expect(onUpdateGeneralPreferences).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fullAccess: false,
+        readOnly: true
       })
     );
   });
