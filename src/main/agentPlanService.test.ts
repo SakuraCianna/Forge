@@ -92,6 +92,8 @@ describe("agentPlanService", () => {
     const [_url, init] = fetcher.mock.calls[0];
     const body = JSON.parse(String(init.body));
     expect(body.instructions).toContain('"files"');
+    expect(body.instructions).toContain('"list_directory"');
+    expect(body.instructions).toContain("Do not use shell commands for directory listing");
     expect(body.input).toContain("src/renderer/src/App.tsx");
     expect(result).toMatchObject({
       providerId: "openai",
@@ -337,6 +339,73 @@ describe("agentPlanService", () => {
         kind: "verify",
         description: "Run focused tests",
         target: "npm test -- src/main/agentPlanService.test.ts"
+      })
+    ]);
+  });
+
+  it("parses tool-aware structured plan steps into controlled targets", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: JSON.stringify({
+              steps: [
+                {
+                  tool: "LS",
+                  description: "List renderer source directory",
+                  path: "src/renderer/src"
+                },
+                {
+                  tool: "Glob",
+                  description: "Find React files",
+                  pattern: "src/**/*.tsx"
+                },
+                {
+                  tool: "Grep",
+                  description: "Search for submit handler",
+                  query: "handleSubmit"
+                },
+                {
+                  tool: "git_status",
+                  description: "Check working tree"
+                },
+                {
+                  tool: "Bash",
+                  description: "Run tests",
+                  command: "npm test -- --reporter=dot"
+                }
+              ]
+            })
+          })
+        )
+    );
+
+    const result = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(result.steps).toEqual([
+      expect.objectContaining({
+        kind: "inspect",
+        target: "src/renderer/src"
+      }),
+      expect.objectContaining({
+        kind: "inspect",
+        target: "src/**/*.tsx"
+      }),
+      expect.objectContaining({
+        kind: "inspect",
+        target: "handleSubmit"
+      }),
+      expect.objectContaining({
+        kind: "verify",
+        target: "git status --short"
+      }),
+      expect.objectContaining({
+        kind: "verify",
+        target: "npm test -- --reporter=dot"
       })
     ]);
   });

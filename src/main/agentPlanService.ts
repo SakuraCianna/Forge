@@ -70,6 +70,15 @@ type ParsedPlanStepDraft = {
   title?: string;
 };
 
+type StructuredToolHint =
+  | "read"
+  | "list-directory"
+  | "glob"
+  | "grep"
+  | "git-status"
+  | "bash"
+  | "edit";
+
 const maxFilesBySpeed = {
   fast: 24,
   balanced: 60
@@ -354,8 +363,11 @@ function createAgentPlanInstructions(personalization?: string): string {
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
     'Prefer a JSON object with a "steps" array. Each step must include "kind", "description", and optional "target".',
+    'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "git_status", "bash", or "edit".',
     'For one step that edits multiple files, use a "files" string array so Forge can expand it into separate file actions.',
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
+    'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for text search queries, and "git_status" for git status or diff checks.',
+    "Do not use shell commands for directory listing, file globbing, text search, or git status/diff when a controlled tool can express the same step.",
     "If you cannot produce JSON, use a numbered list of concrete steps and mention target files or commands in backticks when known.",
     "If the user asks to create, write, or save a named file, include an edit step targeting that exact file path in backticks.",
     "Do not reveal hidden chain-of-thought. Show only actionable engineering steps.",
@@ -968,13 +980,25 @@ function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft[] {
   const title = readStringField(value, ["title", "label", "name"]);
   const description =
     readStringField(value, ["description", "task", "action", "summary"]) ?? title ?? "";
-  const rawTarget = readStringField(value, ["target", "file", "path", "command"]);
+  const toolHint = normalizeStructuredToolHint(readStringField(value, ["tool", "toolName", "tool_name"]));
+  const rawTarget = readStringField(value, [
+    "target",
+    "file",
+    "path",
+    "directory",
+    "pattern",
+    "query",
+    "command"
+  ]);
   const rawKind = readStringField(value, ["kind", "type"]);
-  const kind = normalizePlanStepKind(rawKind, `${description} ${rawTarget ?? ""}`);
+  const kind = normalizePlanStepKind(rawKind, `${description} ${rawTarget ?? ""}`, toolHint);
   const structuredTargets =
     kind === "verify" ? [] : readStringArrayField(value, ["targets", "files", "paths"]);
   const fallbackTarget = readStepTarget(description, kind);
-  const target = rawTarget?.trim() || structuredTargets[0] || fallbackTarget;
+  const target =
+    normalizeStructuredToolTarget(toolHint, rawTarget, fallbackTarget) ??
+    structuredTargets[0] ??
+    fallbackTarget;
   const finalDescription = description.trim() || target || "Review this plan step";
   const targets = structuredTargets.length > 0 ? structuredTargets : target ? [target] : [];
   const baseStep = {
@@ -1033,12 +1057,87 @@ function readStringArrayField(value: Record<string, unknown>, keys: string[]): s
   return [...new Set(targets)];
 }
 
+// 读取模型输出里的工具名, 兼容 Claude Code 和 OpenCode 常见命名
+function normalizeStructuredToolHint(tool: string | undefined): StructuredToolHint | null {
+  const normalized = tool?.trim().toLowerCase().replace(/[\s_]+/g, "-");
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (["read", "view", "open"].includes(normalized)) {
+    return "read";
+  }
+
+  if (["ls", "list", "list-directory", "directory-list"].includes(normalized)) {
+    return "list-directory";
+  }
+
+  if (["glob", "file-glob"].includes(normalized)) {
+    return "glob";
+  }
+
+  if (["grep", "search", "text-search"].includes(normalized)) {
+    return "grep";
+  }
+
+  if (["git", "git-status", "git-diff"].includes(normalized)) {
+    return "git-status";
+  }
+
+  if (["bash", "shell", "command", "run-command"].includes(normalized)) {
+    return "bash";
+  }
+
+  if (["edit", "write", "patch", "apply-patch"].includes(normalized)) {
+    return "edit";
+  }
+
+  return null;
+}
+
+// 让工具字段优先决定目标形态, 没有目标时给目录和 Git 检查合理默认值
+function normalizeStructuredToolTarget(
+  toolHint: StructuredToolHint | null,
+  rawTarget: string | undefined,
+  fallbackTarget: string | undefined
+): string | undefined {
+  const target = rawTarget?.trim() || fallbackTarget?.trim();
+
+  if (toolHint === "list-directory") {
+    return target || ".";
+  }
+
+  if (toolHint === "git-status") {
+    if (target && /^git\s+(?:status|diff)(?:\s|$)/iu.test(target)) {
+      return target;
+    }
+
+    return "git status --short";
+  }
+
+  return target || undefined;
+}
+
 // 支持模型常见 kind 别名, 没有可信 kind 时回退到文本推断
 function normalizePlanStepKind(
   rawKind: string | undefined,
-  fallbackText: string
+  fallbackText: string,
+  toolHint: StructuredToolHint | null = null
 ): AgentPlanStepKind {
   const normalized = rawKind?.trim().toLowerCase().replace(/[_\s]+/g, "-");
+
+  if (toolHint === "bash" || toolHint === "git-status") {
+    return "verify";
+  }
+
+  if (toolHint === "read" || toolHint === "list-directory" || toolHint === "glob" || toolHint === "grep") {
+    return "inspect";
+  }
+
+  if (toolHint === "edit") {
+    return "edit";
+  }
 
   if (normalized === "inspect" || normalized === "read" || normalized === "search") {
     return "inspect";

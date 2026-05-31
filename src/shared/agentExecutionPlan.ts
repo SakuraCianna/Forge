@@ -160,6 +160,7 @@ function isLikelyDirectoryPath(target: string): boolean {
   const lastSegment = normalizedTarget.split("/").filter(Boolean).at(-1) ?? normalizedTarget;
 
   return (
+    normalizedTarget === "." ||
     /\/$/u.test(normalizedTarget) ||
     (/[/\\]/u.test(target) && !/\.[a-z0-9]+$/iu.test(lastSegment)) ||
     /^(src|docs?|test|tests|packages|apps|components|lib|server|client)$/iu.test(normalizedTarget)
