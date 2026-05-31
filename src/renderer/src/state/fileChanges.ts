@@ -31,14 +31,13 @@ export function upsertFileChangePreview(
     return [...previews, preview];
   }
 
-  return previews.map((candidate, index) =>
-    index === existingIndex
-      ? {
-          ...preview,
-          source: preview.source ?? candidate.source
-        }
-      : candidate
-  );
+  const existingPreview = previews[existingIndex];
+  const nextPreview =
+    preview.source || !existingPreview.source
+      ? preview
+      : { ...preview, source: existingPreview.source };
+
+  return previews.map((candidate, index) => (index === existingIndex ? nextPreview : candidate));
 }
 
 // 按相对路径移除预览, 丢弃操作不会触碰真实文件
@@ -64,7 +63,7 @@ export function listFileChangePreviewSources(
   const sources = new Map<string, FileChangePreviewSource>();
 
   for (const preview of previews) {
-    if (!preview.source) {
+    if (!preview.source?.actionId) {
       continue;
     }
 

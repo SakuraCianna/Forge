@@ -34,7 +34,6 @@ import { useI18n } from "@/i18n/useI18n";
 import {
   attachFileChangePreviewSource,
   findFileChangePreviewSource,
-  listFileChangePreviewSources,
   removeFileChangePreview,
   upsertFileChangePreview,
   type FileChangePreviewSource
@@ -88,6 +87,7 @@ import {
   createThreadFromSettings,
   restoreThread,
   toggleThreadPinned,
+  updateThreadAgentActionFromFileChangePreview,
   updateThreadAgentActionStatus,
   type CommandRunResult,
   type TaskThread
@@ -863,7 +863,7 @@ export function App(): ReactElement {
       return;
     }
 
-    const reviewedPreview = changePreviews.find((preview) => preview.relativePath === relativePath);
+    const pendingPreview = changePreviews.find((preview) => preview.relativePath === relativePath);
     const file = await window.forge.files.writeText({
       projectRoot: currentProject.path,
       relativePath,
@@ -873,61 +873,65 @@ export function App(): ReactElement {
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
     void refreshProjectGitStatus();
 
-    if (reviewedPreview?.source) {
-      markFileChangeSourceApplied(reviewedPreview.source, file.relativePath);
-      return;
-    }
+    const eventThreadId = pendingPreview?.source?.threadId ?? selectedThreadId;
 
-    if (!selectedThreadId) {
+    if (!eventThreadId) {
       return;
     }
 
     const createdAt = new Date().toISOString();
-    setThreads((current) =>
-      appendThreadEvents(current, selectedThreadId, [
+    setThreads((current) => {
+      const withEvent = appendThreadEvents(current, eventThreadId, [
         {
-          id: `${selectedThreadId}-file-write-${createdAt}`,
+          id: `${eventThreadId}-file-write-${createdAt}`,
           kind: "file",
           message: `已应用文件修改: ${file.relativePath}`,
           createdAt
         }
-      ])
-    );
+      ]);
+
+      return updateThreadAgentActionFromFileChangePreview(withEvent, pendingPreview, "completed");
+    });
   }
 
   // 丢弃单个待审查变更, 不触碰真实项目文件
   function discardProjectFileChange(relativePath: string): void {
-    const reviewedPreview = changePreviews.find((preview) => preview.relativePath === relativePath);
+    const pendingPreview = changePreviews.find((preview) => preview.relativePath === relativePath);
+
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
 
-    if (!reviewedPreview) {
+    const eventThreadId = pendingPreview?.source?.threadId ?? selectedThreadId;
+
+    if (!eventThreadId) {
       return;
     }
 
-    if (reviewedPreview.source) {
-      markFileChangeSourceDiscarded(reviewedPreview.source, relativePath);
-      return;
-    }
-
-    if (!selectedThreadId) {
-      return;
-    }
-
+    const actionBacked = Boolean(pendingPreview?.source?.actionId);
     const createdAt = new Date().toISOString();
+    setThreads((current) => {
+      const withEvent = appendThreadEvents(
+        current,
+        eventThreadId,
+        [
+          {
+            id: `${eventThreadId}-file-discard-${createdAt}`,
+            kind: actionBacked ? "error" : "file",
+            message:
+              settings.language === "zh-CN"
+                ? actionBacked
+                  ? `已丢弃文件修改, Agent 已暂停: ${relativePath}`
+                  : `已丢弃文件修改 ${relativePath}`
+                : actionBacked
+                  ? `Discarded file change, Agent paused: ${relativePath}`
+                  : `Discarded file change ${relativePath}`,
+            createdAt
+          }
+        ],
+        actionBacked ? "blocked" : undefined
+      );
 
-    setThreads((current) =>
-      appendThreadEvents(current, selectedThreadId, [
-        {
-          id: `${selectedThreadId}-file-discard-${createdAt}`,
-          kind: "file",
-          message:
-            settings.language === "zh-CN"
-              ? `已丢弃文件修改 ${relativePath}`
-              : `Discarded file change ${relativePath}`,
-          createdAt
-        }
-      ])
-    );
+      return updateThreadAgentActionFromFileChangePreview(withEvent, pendingPreview, "failed");
+    });
   }
 
   // 按顺序应用全部变更, 任一失败都停下并提示用户
@@ -937,7 +941,6 @@ export function App(): ReactElement {
     }
 
     const appliedPreviews = [...changePreviews];
-    const appliedSources = listFileChangePreviewSources(appliedPreviews);
     let nextPreviewFile: ProjectTextFile | null = null;
 
     for (const preview of appliedPreviews) {
@@ -959,13 +962,33 @@ export function App(): ReactElement {
     setChangePreviews([]);
     void refreshProjectGitStatus();
 
-    if (appliedSources.length > 0) {
-      for (const source of appliedSources) {
-        markFileChangeSourceApplied(source, source.actionLabel);
+    for (const preview of appliedPreviews) {
+      if (!preview.source?.threadId) {
+        continue;
       }
+
+      const previewSource = preview.source;
+      const createdAt = new Date().toISOString();
+      setThreads((current) => {
+        const withEvent = appendThreadEvents(current, previewSource.threadId, [
+          {
+            id: `${previewSource.threadId}-file-write-${preview.relativePath}-${createdAt}`,
+            kind: "file",
+            message:
+              settings.language === "zh-CN"
+                ? `已应用文件修改: ${preview.relativePath}`
+                : `Applied file change: ${preview.relativePath}`,
+            createdAt
+          }
+        ]);
+
+        return updateThreadAgentActionFromFileChangePreview(withEvent, preview, "completed");
+      });
     }
 
-    if (!selectedThreadId) {
+    const manualAppliedCount = appliedPreviews.filter((preview) => !preview.source?.threadId).length;
+
+    if (!selectedThreadId || manualAppliedCount === 0) {
       return;
     }
 
@@ -975,7 +998,7 @@ export function App(): ReactElement {
         {
           id: `${selectedThreadId}-file-write-all-${createdAt}`,
           kind: "file",
-          message: `已应用 ${appliedPreviews.length} 个文件修改`,
+          message: `已应用 ${manualAppliedCount} 个文件修改`,
           createdAt
         }
       ])
@@ -984,60 +1007,38 @@ export function App(): ReactElement {
 
   // 清空全部待审查变更, 用于用户决定重做方案
   function discardAllProjectFileChanges(): void {
-    const discardedSources = listFileChangePreviewSources(changePreviews);
+    const discardedPreviews = [...changePreviews];
 
     setChangePreviews([]);
 
-    for (const source of discardedSources) {
-      markFileChangeSourceDiscarded(source, source.actionLabel);
-    }
-  }
+    for (const preview of discardedPreviews) {
+      if (!preview.source?.threadId) {
+        continue;
+      }
 
-  // 应用待审查变更后把来源 Agent 动作标记完成, 让后续安全步骤继续推进
-  function markFileChangeSourceApplied(source: FileChangePreviewSource, subject: string): void {
-    const createdAt = new Date().toISOString();
-
-    setThreads((current) =>
-      updateThreadAgentActionStatus(
-        appendThreadEvents(current, source.threadId, [
-          {
-            id: `${source.threadId}-file-source-applied-${source.actionId}-${createdAt}`,
-            kind: "file",
-            message: `已应用 Agent 文件修改: ${subject}`,
-            createdAt
-          }
-        ]),
-        source.threadId,
-        source.actionId,
-        "completed"
-      )
-    );
-  }
-
-  // 丢弃整份待审查变更时阻塞来源动作, 避免后续验证在没有落盘修改时继续跑
-  function markFileChangeSourceDiscarded(source: FileChangePreviewSource, subject: string): void {
-    const createdAt = new Date().toISOString();
-
-    setThreads((current) =>
-      updateThreadAgentActionStatus(
-        appendThreadEvents(
+      const previewSource = preview.source;
+      const createdAt = new Date().toISOString();
+      setThreads((current) => {
+        const withEvent = appendThreadEvents(
           current,
-          source.threadId,
+          previewSource.threadId,
           [
             {
-              id: `${source.threadId}-file-source-discarded-${source.actionId}-${createdAt}`,
+              id: `${previewSource.threadId}-file-discard-${preview.relativePath}-${createdAt}`,
               kind: "error",
-              message: `已丢弃 Agent 文件修改: ${subject}`,
+              message:
+                settings.language === "zh-CN"
+                  ? `已丢弃文件修改, Agent 已暂停: ${preview.relativePath}`
+                  : `Discarded file change, Agent paused: ${preview.relativePath}`,
               createdAt
             }
           ],
           "blocked"
-        ),
-        source.threadId,
-        source.actionId,
-        "failed"
-      )
-    );
+        );
+
+        return updateThreadAgentActionFromFileChangePreview(withEvent, preview, "failed");
+      });
+    }
   }
 
   // 调用模型生成单文件修改预览, 结果只进入审查队列
@@ -1115,7 +1116,10 @@ export function App(): ReactElement {
         relativePath,
         nextContent: result.nextContent
       });
-      const sourcedPreview = attachFileChangePreviewSource(preview, options.source ?? null);
+      const sourcedPreview = attachFileChangePreviewSource(
+        preview,
+        options.source ?? { threadId: selectedThread.id }
+      );
 
       recordUsageEvent({
         kind: "file-change",

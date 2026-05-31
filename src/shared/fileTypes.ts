@@ -7,14 +7,16 @@ export type ProjectTextFile = {
   size: number;
 };
 
+export type ProjectFileChangeSource = {
+  threadId: string;
+  actionId?: string;
+  actionLabel?: string;
+};
+
 export type ProjectFileChangePreview = {
   relativePath: string;
   currentContent: string;
   nextContent: string;
   diff: LineDiffEntry[];
-  source?: {
-    threadId: string;
-    actionId: string;
-    actionLabel: string;
-  };
+  source?: ProjectFileChangeSource;
 };

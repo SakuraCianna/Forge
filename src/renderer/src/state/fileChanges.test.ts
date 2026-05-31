@@ -39,6 +39,26 @@ describe("fileChanges", () => {
     ]);
   });
 
+  it("preserves agent source metadata when refreshing an existing preview", () => {
+    const sourcedPreview: ProjectFileChangePreview = {
+      ...firstPreview,
+      source: {
+        threadId: "thread-1",
+        actionId: "action-2"
+      }
+    };
+
+    expect(upsertFileChangePreview([sourcedPreview], updatedPreview)).toEqual([
+      {
+        ...updatedPreview,
+        source: {
+          threadId: "thread-1",
+          actionId: "action-2"
+        }
+      }
+    ]);
+  });
+
   it("removes previews by relative path", () => {
     expect(removeFileChangePreview([firstPreview], "src/App.tsx")).toEqual([]);
     expect(removeFileChangePreview([firstPreview], "src/Other.tsx")).toEqual([firstPreview]);

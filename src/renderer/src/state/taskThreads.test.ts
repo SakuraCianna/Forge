@@ -22,7 +22,7 @@ import {
   cancelThread,
   restoreThread,
   toggleThreadPinned,
-  updateThreadAgentActionFromFileChange,
+  updateThreadAgentActionFromFileChangePreview,
   updateThreadAgentActionStatus,
   type TaskThread
 } from "./taskThreads";
@@ -665,7 +665,7 @@ describe("taskThreads", () => {
   });
 
   it("updates the exact agent action that produced a reviewed file change", () => {
-    const threads = updateThreadAgentActionFromFileChange(
+    const threads = updateThreadAgentActionFromFileChangePreview(
       [
         {
           id: "thread-1",
@@ -716,7 +716,7 @@ describe("taskThreads", () => {
       "completed"
     ]);
 
-    const failedThreads = updateThreadAgentActionFromFileChange(
+    const failedThreads = updateThreadAgentActionFromFileChangePreview(
       threads,
       {
         relativePath: "src/App.tsx",
@@ -737,6 +737,70 @@ describe("taskThreads", () => {
       "completed"
     ]);
     expect(failedThreads[0].status).toBe("blocked");
+  });
+
+  it("keeps other threads untouched when applying a sourced file change", () => {
+    const threads = updateThreadAgentActionFromFileChangePreview(
+      [
+        {
+          id: "thread-1",
+          title: "Agent task",
+          prompt: "Agent task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "edit-file",
+              label: "Edit src/App.tsx",
+              status: "pending",
+              target: "src/App.tsx"
+            }
+          ]
+        },
+        {
+          id: "thread-2",
+          title: "Other task",
+          prompt: "Other task",
+          status: "running",
+          modelId: "openai:gpt-5.5",
+          intelligence: "high",
+          speed: "balanced",
+          createdAt: "2026-05-27T13:00:00.000Z",
+          events: [],
+          agentActions: [
+            {
+              id: "action-1",
+              stepId: "step-1",
+              kind: "edit-file",
+              label: "Edit src/Other.tsx",
+              status: "pending",
+              target: "src/Other.tsx"
+            }
+          ]
+        }
+      ],
+      {
+        relativePath: "src/App.tsx",
+        currentContent: "old",
+        nextContent: "new",
+        diff: [],
+        source: {
+          threadId: "thread-1",
+          actionId: "action-1"
+        }
+      },
+      "completed"
+    );
+
+    expect(threads[0].agentActions?.[0].status).toBe("completed");
+    expect(threads[0].status).toBe("completed");
+    expect(threads[1].agentActions?.[0].status).toBe("pending");
   });
 });
 

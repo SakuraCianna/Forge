@@ -358,13 +358,13 @@ export function completeNextPendingAgentAction(
   });
 }
 
-// 根据文件变更预览记录的来源更新对应 Agent action, 避免多文件审查时误完成队列中的其他 edit
-export function updateThreadAgentActionFromFileChange(
+// 根据文件变更预览来源更新对应 Agent 动作, 避免切换会话后写错线程
+export function updateThreadAgentActionFromFileChangePreview(
   threads: TaskThread[],
-  preview: ProjectFileChangePreview,
+  preview: ProjectFileChangePreview | null | undefined,
   status: AgentAction["status"]
 ): TaskThread[] {
-  if (!preview.source) {
+  if (!preview?.source?.threadId || !preview.source.actionId) {
     return threads;
   }
 
