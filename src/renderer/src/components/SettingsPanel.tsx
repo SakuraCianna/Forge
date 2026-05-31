@@ -32,9 +32,12 @@ import type { TaskThread } from "@/state/taskThreads";
 import type { AgentMemoryEntry } from "@/state/agentMemory";
 import type { AgentProfile, AgentProfilePatch, AgentProfileTool } from "@/state/agentProfiles";
 import {
+  clampAutoRunBatchSize,
   clampCommandTimeoutSeconds,
   defaultCommandSafetyRuleReason,
+  maxAutoRunBatchSize,
   maxCommandTimeoutSeconds,
+  minAutoRunBatchSize,
   minCommandTimeoutSeconds,
   type CommandSafetyRule,
   type CommandSafetyRuleLevel,
@@ -491,6 +494,26 @@ export function SettingsPanel({
                   })
                 }
               />
+              <SettingRow label={copy.autoRunBatchSize} description={copy.autoRunBatchSizeDescription}>
+                <label className="inline-flex h-9 min-w-28 items-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123]">
+                  <input
+                    type="number"
+                    min={minAutoRunBatchSize}
+                    max={maxAutoRunBatchSize}
+                    step="1"
+                    aria-label={copy.autoRunBatchSize}
+                    value={generalPreferences.autoRunBatchSize}
+                    onChange={(event) =>
+                      onUpdateGeneralPreferences({
+                        ...generalPreferences,
+                        autoRunBatchSize: clampAutoRunBatchSize(Number(event.currentTarget.value))
+                      })
+                    }
+                    className="w-12 bg-transparent text-right outline-none"
+                  />
+                  <span className="text-xs text-[#6e6e80]">{copy.autoRunBatchSizeUnit}</span>
+                </label>
+              </SettingRow>
               <PreferenceToggle
                 label={copy.autoGenerateFailureFixes}
                 description={copy.autoGenerateFailureFixesDescription}
@@ -2280,6 +2303,9 @@ function getGeneralSettingsCopy(language: Language): {
   autoReviewDescription: string;
   autoGenerateFailureFixes: string;
   autoGenerateFailureFixesDescription: string;
+  autoRunBatchSize: string;
+  autoRunBatchSizeDescription: string;
+  autoRunBatchSizeUnit: string;
   autoRunSafeActions: string;
   autoRunSafeActionsDescription: string;
   backgroundOpacity: string;
@@ -2367,6 +2393,9 @@ function getGeneralSettingsCopy(language: Language): {
       autoReviewDescription: "运行前自动审查潜在高风险操作",
       autoGenerateFailureFixes: "失败时自动生成修复计划",
       autoGenerateFailureFixesDescription: "队列动作失败后自动生成一次恢复计划, 避免主屏停在沉默失败上",
+      autoRunBatchSize: "每轮自动运行步数",
+      autoRunBatchSizeDescription: "限制一次自动推进的动作数量, 让长任务像 Codex 一样分批可感知地前进",
+      autoRunBatchSizeUnit: "步",
       autoRunSafeActions: "自动运行安全步骤",
       autoRunSafeActionsDescription: "生成计划后自动推进读取, 搜索和允许的命令, 遇到审查或风险门禁仍会停下",
       backgroundOpacity: "背景透明度",
@@ -2440,6 +2469,10 @@ function getGeneralSettingsCopy(language: Language): {
     autoGenerateFailureFixes: "Auto-generate failure fixes",
     autoGenerateFailureFixesDescription:
       "Generate one recovery plan after a queue action fails so the main screen does not stall silently",
+    autoRunBatchSize: "Auto-run steps per pass",
+    autoRunBatchSizeDescription:
+      "Limit how many actions run in one automatic pass so long tasks keep moving in visible chunks",
+    autoRunBatchSizeUnit: "steps",
     autoRunSafeActions: "Auto-run safe steps",
     autoRunSafeActionsDescription:
       "After planning, run safe reads, searches, and allowed commands automatically while still stopping at gates",

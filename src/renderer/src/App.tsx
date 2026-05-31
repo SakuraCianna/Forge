@@ -417,19 +417,21 @@ export function App(): ReactElement {
       fullAccess: fullAccessMode,
       rules: generalPreferences.commandSafetyRules
     });
-    const runKey = `${nextThread.id}:${runnableActions.map((action) => action.id).join(",")}`;
+    const runnableActionBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
+    const runKey = `${nextThread.id}:${runnableActionBatch.map((action) => action.id).join(",")}`;
 
     if (activeAgentAutoRunKeysRef.current.has(runKey)) {
       return;
     }
 
     activeAgentAutoRunKeysRef.current.add(runKey);
-    void runAgentActions(nextThread.id, runnableActions).finally(() => {
+    void runAgentActions(nextThread.id, runnableActionBatch).finally(() => {
       activeAgentAutoRunKeysRef.current.delete(runKey);
     });
   }, [
     changePreviews.length,
     fullAccessMode,
+    generalPreferences.autoRunBatchSize,
     generalPreferences.autoRunSafeActions,
     generalPreferences.commandSafetyRules,
     threads
