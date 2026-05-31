@@ -2288,6 +2288,7 @@ export function App(): ReactElement {
           updateAgentActionStatus(threadId, action.id, "completed")
         }
         onOpenSourceControl={() => setActiveView("source")}
+        onOpenFiles={() => setActiveView("files")}
         onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
         onCancelCommand={(threadId, runId) => void cancelThreadCommand(threadId, runId)}
         onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}

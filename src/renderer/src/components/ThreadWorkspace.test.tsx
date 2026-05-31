@@ -51,6 +51,143 @@ describe("ThreadWorkspace", () => {
     expect(transcript.firstElementChild).toHaveClass("grid", "grid-cols-[20px_minmax(0,1fr)]");
   });
 
+  it("shows compact manual gate confirmation controls", async () => {
+    const user = userEvent.setup();
+    const onCompleteAgentAction = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "blocked",
+            events: [
+              {
+                id: "plan-ready",
+                kind: "plan",
+                message: "Execution plan created, but the next step needs your review.",
+                createdAt: "2026-05-27T13:00:04.000Z"
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "manual",
+                label: "Review diff",
+                status: "pending"
+              }
+            ]
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onCompleteAgentAction={onCompleteAgentAction}
+      />
+    );
+
+    const controls = screen.getByRole("region", { name: "Agent action confirmation" });
+
+    expect(within(controls).getAllByText("Waiting for manual confirmation").length).toBeGreaterThan(0);
+
+    await user.click(within(controls).getByRole("button", { name: "Mark review complete" }));
+
+    expect(onCompleteAgentAction).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", kind: "manual" })
+    );
+  });
+
+  it("shows compact command approval controls", async () => {
+    const user = userEvent.setup();
+    const onApproveAgentCommand = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "blocked",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Install dependencies",
+                status: "pending",
+                command: "npm install"
+              }
+            ]
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onApproveAgentCommand={onApproveAgentCommand}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Approve command npm install" }));
+
+    expect(onApproveAgentCommand).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", command: "npm install" })
+    );
+  });
+
+  it("opens pending compact file changes in the files view", async () => {
+    const user = userEvent.setup();
+    const onPreviewFile = vi.fn();
+    const onOpenFiles = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "running",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "edit-file",
+                label: "Edit src/App.tsx",
+                status: "running",
+                target: "src/App.tsx"
+              }
+            ]
+          }
+        ]}
+        changePreviews={[
+          {
+            relativePath: "src/App.tsx",
+            currentContent: "old",
+            nextContent: "new",
+            diff: [],
+            source: {
+              threadId: "thread-1",
+              actionId: "action-1"
+            }
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onPreviewFile={onPreviewFile}
+        onOpenFiles={onOpenFiles}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Review changes src/App.tsx" }));
+
+    expect(onPreviewFile).toHaveBeenCalledWith("src/App.tsx");
+    expect(onOpenFiles).toHaveBeenCalled();
+  });
+
   it("renders compact assistant output as markdown", () => {
     render(
       <ThreadWorkspace
