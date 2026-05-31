@@ -1286,6 +1286,61 @@ describe("ThreadWorkspace", () => {
     expect(details).not.toHaveTextContent("src/other.ts:9 unrelated action");
   });
 
+  it("copies selected action context with the latest tool result", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Copy action context",
+            events: [
+              {
+                id: "thread-1-agent-search-action-1-2026-05-27T13:06:00.000Z",
+                kind: "file",
+                message:
+                  "Project search complete: handleSubmit (1 result)\nsrc/App.tsx:42 const handleSubmit = () => {}",
+                createdAt: "2026-05-27T13:06:00.000Z"
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "search-project",
+                label: "Search handleSubmit",
+                status: "completed",
+                target: "handleSubmit"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const details = screen.getByRole("region", { name: "Action details" });
+
+    await user.click(within(details).getByRole("button", { name: "Copy action context" }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      "Action: Search handleSubmit\nKind: search-project\nStatus: completed\nTarget: handleSubmit\nNext step: Completed\nTool result:\nProject search complete: handleSubmit (1 result)\nsrc/App.tsx:42 const handleSubmit = () => {}"
+    );
+  });
+
   it("lets users complete a manual gate from the selected action details", async () => {
     const user = userEvent.setup();
     const onCompleteAgentAction = vi.fn();

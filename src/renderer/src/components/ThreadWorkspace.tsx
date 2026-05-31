@@ -1240,6 +1240,7 @@ export function ThreadWorkspace({
             selectAction: (label: string) => `选择动作 ${label}`,
             commandOutput: "最近命令输出",
             toolResult: "工具结果",
+            copyContext: "复制动作上下文",
             exitCode: "退出码",
             cwd: "目录",
             stdout: "stdout",
@@ -1265,6 +1266,7 @@ export function ThreadWorkspace({
             selectAction: (label: string) => `Select action ${label}`,
             commandOutput: "Last command output",
             toolResult: "Tool result",
+            copyContext: "Copy action context",
             exitCode: "Exit code",
             cwd: "cwd",
             stdout: "stdout",
@@ -1663,16 +1665,40 @@ export function ThreadWorkspace({
         { label: actionDetailsCopy.target, value: action.target ?? actionDetailsCopy.noTarget },
         ...(action.command ? [{ label: actionDetailsCopy.command, value: action.command }] : [])
       ];
+      const actionStatusLabel = getActionStatusLabel(action);
+      const nextStep = getActionNextStep(action);
 
       return (
         <section
           aria-label={actionDetailsCopy.title}
           className="rounded-[18px] border border-[#ececf1] bg-white p-4"
         >
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#202123]">
-            <Layers className="h-4 w-4 text-[#565869]" />
-            {actionDetailsCopy.title}
-          </h2>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#202123]">
+              <Layers className="h-4 w-4 text-[#565869]" />
+              {actionDetailsCopy.title}
+            </h2>
+            <Tooltip label={actionDetailsCopy.copyContext}>
+              <button
+                type="button"
+                aria-label={actionDetailsCopy.copyContext}
+                onClick={() =>
+                  void navigator.clipboard?.writeText(
+                    formatAgentActionContextForClipboard(
+                      action,
+                      actionStatusLabel,
+                      nextStep,
+                      commandResult,
+                      toolResult
+                    )
+                  )
+                }
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#6e6e80] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.99]"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          </div>
           <p className="text-sm font-medium leading-5 text-[#202123]">{action.label}</p>
           <dl className="mt-3 grid gap-2">
             {detailRows.map((row) => (
@@ -1689,7 +1715,7 @@ export function ThreadWorkspace({
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
               {actionDetailsCopy.nextStep}
             </div>
-            <p className="mt-1 text-sm leading-5 text-[#202123]">{getActionNextStep(action)}</p>
+            <p className="mt-1 text-sm leading-5 text-[#202123]">{nextStep}</p>
           </div>
           {renderAgentActionDetailControls(action)}
           {commandResult ? (
@@ -3477,6 +3503,35 @@ function getAssistantResponseActionCopy(language: Language): {
     like: "Like response",
     dislike: "Dislike response"
   };
+}
+
+// 复制动作详情时保留动作元数据和最近输出, 方便用户把单步上下文交给模型继续分析
+function formatAgentActionContextForClipboard(
+  action: AgentAction,
+  statusLabel: string,
+  nextStep: string,
+  commandResult: CommandRunResult | null,
+  toolResult: TaskThreadEvent | null
+): string {
+  const metadata = [
+    `Action: ${action.label}`,
+    `Kind: ${action.kind}`,
+    `Status: ${statusLabel}`,
+    action.target ? `Target: ${action.target}` : null,
+    action.command ? `Command: ${action.command}` : null,
+    `Next step: ${nextStep}`
+  ].filter((line): line is string => Boolean(line));
+  const sections = [...metadata];
+
+  if (commandResult) {
+    sections.push(`Command result:\n${formatCommandResultForClipboard(commandResult)}`);
+  }
+
+  if (toolResult) {
+    sections.push(`Tool result:\n${toolResult.message.trim()}`);
+  }
+
+  return sections.join("\n");
 }
 
 // 压缩命令输出片段, 错误恢复提示只需要最后几行
