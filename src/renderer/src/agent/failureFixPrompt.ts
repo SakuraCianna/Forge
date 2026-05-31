@@ -87,7 +87,11 @@ function formatCommandOutput(value: string): string {
     return trimmed;
   }
 
-  return `${trimmed.slice(0, maxLength)}\n... output truncated`;
+  const omittedMarker = "\n... output truncated, middle omitted ...\n";
+  const headLength = 640;
+  const tailLength = maxLength - omittedMarker.length - headLength;
+
+  return `${trimmed.slice(0, headLength)}${omittedMarker}${trimmed.slice(-tailLength)}`;
 }
 
 // 把动作队列压缩成修复计划上下文, 帮助模型避开已经完成的重复步骤
@@ -153,7 +157,7 @@ function formatRecentExecutionEvent(event: TaskThreadEvent): string | null {
 
     return [
       `- command result at ${event.createdAt}: ${truncateInline(result.command)} exitCode=${result.exitCode}, timedOut=${result.timedOut}, cancelled=${Boolean(result.cancelled)}`,
-      output ? `  output: ${truncateInline(output, 360)}` : null
+      output ? `  output: ${formatRecentCommandOutputSnippet(output)}` : null
     ]
       .filter((line): line is string => Boolean(line))
       .join("\n");
@@ -179,4 +183,20 @@ function truncateInline(value: string, maxLength = 140): string {
   }
 
   return `${normalized.slice(0, maxLength)}...`;
+}
+
+// 最近命令摘要保留首尾, 让修复计划能看到日志末尾的真实错误
+function formatRecentCommandOutputSnippet(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const maxLength = 360;
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  const omittedMarker = " ... output truncated, middle omitted ... ";
+  const headLength = 140;
+  const tailLength = maxLength - omittedMarker.length - headLength;
+
+  return `${normalized.slice(0, headLength)}${omittedMarker}${normalized.slice(-tailLength)}`;
 }
