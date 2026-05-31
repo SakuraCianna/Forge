@@ -1262,6 +1262,59 @@ describe("ThreadWorkspace", () => {
     expect(screen.getByRole("button", { name: "Pending change src/App.tsx" })).toBeInTheDocument();
   });
 
+  it("shows review state when a running edit action has generated pending changes", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Review running edit",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "edit-file",
+                label: "Edit src/App.tsx",
+                status: "running",
+                target: "src/App.tsx"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run npm test",
+                status: "pending",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        changePreviews={[
+          {
+            relativePath: "src/App.tsx",
+            currentContent: "old",
+            nextContent: "new",
+            diff: [{ kind: "add", newLineNumber: 1, text: "new" }]
+          }
+        ]}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentActions={vi.fn()}
+      />
+    );
+
+    const status = screen.getByRole("region", { name: "Agent run" });
+    expect(within(status).getByText("Review generated changes")).toBeInTheDocument();
+    expect(within(status).getByText("1 pending change")).toBeInTheDocument();
+    expect(within(status).queryByText("Running")).not.toBeInTheDocument();
+  });
+
   it("shows manual gates as review requirements instead of runnable steps", () => {
     render(
       <ThreadWorkspace
