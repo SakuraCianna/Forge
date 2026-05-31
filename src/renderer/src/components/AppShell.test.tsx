@@ -111,6 +111,67 @@ describe("AppShell", () => {
     expect(onRun).toHaveBeenCalledOnce();
   });
 
+  it("keeps title bar menus left aligned and avoids duplicate Settings under Edit", async () => {
+    const user = userEvent.setup();
+    const onArchiveProjectChats = vi.fn();
+    const onCreateProjectWorktree = vi.fn();
+    const onNavigate = vi.fn();
+    const onNewProjectChat = vi.fn();
+    const onRenameProject = vi.fn();
+    const onTogglePinProject = vi.fn();
+    const projectPath = "E:\\CodeHome\\Forge";
+
+    render(
+      <AppShell
+        language="en-US"
+        activeView="workspace"
+        currentProjectName="Forge"
+        currentProjectPath={projectPath}
+        onArchiveProjectChats={onArchiveProjectChats}
+        onCreateProjectWorktree={onCreateProjectWorktree}
+        onNavigate={onNavigate}
+        onNewProjectChat={onNewProjectChat}
+        onRenameProject={onRenameProject}
+        onTogglePinProject={onTogglePinProject}
+      >
+        <section>Workbench</section>
+      </AppShell>
+    );
+
+    const titleMenus = screen.getByRole("navigation", { name: "Forge title bar menus" });
+    expect(titleMenus).toHaveClass("ml-4", "gap-3");
+
+    await user.click(within(titleMenus).getByRole("button", { name: "File" }));
+    await user.click(screen.getByRole("menuitem", { name: "New chat in current project" }));
+    expect(onNewProjectChat).toHaveBeenCalledWith(projectPath);
+
+    await user.click(within(titleMenus).getByRole("button", { name: "Edit" }));
+    expect(screen.queryByRole("menuitem", { name: "Settings" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Rename project" }));
+    expect(onRenameProject).toHaveBeenCalledWith(projectPath);
+
+    await user.click(within(titleMenus).getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("menuitem", { name: "Pin current project" }));
+    expect(onTogglePinProject).toHaveBeenCalledWith(projectPath);
+
+    await user.click(within(titleMenus).getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("menuitem", { name: "Create permanent worktree" }));
+    expect(onCreateProjectWorktree).toHaveBeenCalledWith(projectPath);
+
+    await user.click(within(titleMenus).getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("menuitem", { name: "Archive current project chats" }));
+    expect(onArchiveProjectChats).toHaveBeenCalledWith(projectPath);
+
+    await user.click(within(titleMenus).getByRole("button", { name: "View" }));
+    expect(screen.queryByRole("menuitem", { name: "Settings" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Source control" }));
+    expect(onNavigate).toHaveBeenCalledWith("source");
+
+    await user.click(within(titleMenus).getByRole("button", { name: "Window" }));
+    await user.click(screen.getByRole("menuitem", { name: "Show settings" }));
+    expect(onNavigate).toHaveBeenCalledWith("settings");
+  });
+
 
   it("offers project actions and conversation archive controls from the sidebar", async () => {
     const user = userEvent.setup();

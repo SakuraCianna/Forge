@@ -1286,11 +1286,18 @@ export function App(): ReactElement {
         createdAt: plan.createdAt
       });
       const agentActions = createAgentActionsFromPlanSteps(plan.steps ?? []);
+      const runnableAgentActions = getRunnablePendingAgentActions(agentActions, {
+        rules: generalPreferences.commandSafetyRules
+      });
       const planMessage =
-        agentActions.length > 0
+        runnableAgentActions.length > 0
           ? settings.language === "zh-CN"
-            ? "已生成执行计划, Forge 将自动执行可安全步骤。"
+            ? "已生成执行计划, Forge 正在准备自动执行安全步骤。"
             : "Execution plan created. Forge will auto-run safe steps."
+          : agentActions.length > 0
+            ? settings.language === "zh-CN"
+              ? "已生成执行计划, 但下一步需要你先确认。"
+              : "Execution plan created, but the next step needs your review."
           : settings.language === "zh-CN"
             ? "已生成执行计划, 但没有可执行步骤。"
             : "Execution plan created, but no executable steps were found.";
@@ -1307,7 +1314,11 @@ export function App(): ReactElement {
                 createdAt: plan.createdAt
               }
             ],
-            agentActions.length > 0 ? "planned" : "completed"
+            runnableAgentActions.length > 0
+              ? "planned"
+              : agentActions.length > 0
+                ? "blocked"
+                : "completed"
           ),
           threadId,
           agentActions

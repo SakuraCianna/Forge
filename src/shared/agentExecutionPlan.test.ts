@@ -81,4 +81,35 @@ describe("agentExecutionPlan", () => {
       }
     ]);
   });
+
+  it("does not let non-actionable planning notes block later file creation", () => {
+    const steps: AgentPlanStep[] = [
+      {
+        id: "step-1",
+        title: "Confirm scope",
+        description: "确认项目说明书需要覆盖的内容。",
+        kind: "other",
+        status: "pending"
+      },
+      {
+        id: "step-2",
+        title: "Create project guide",
+        description: "创建 项目说明书.md, 介绍这个项目怎么使用。",
+        kind: "edit",
+        status: "pending",
+        target: "项目说明书.md"
+      }
+    ];
+
+    expect(createAgentActionsFromPlanSteps(steps)).toEqual([
+      {
+        id: "action-1",
+        stepId: "step-2",
+        kind: "edit-file",
+        label: "Edit 项目说明书.md",
+        status: "pending",
+        target: "项目说明书.md"
+      }
+    ]);
+  });
 });

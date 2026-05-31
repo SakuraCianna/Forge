@@ -64,22 +64,29 @@ type NavItem = {
 
 type ShellCopy = {
   addProject: string;
+  aboutForge: string;
   archiveAllChats: string;
+  archiveCurrentProjectChats: string;
   archiveConversation: string;
   archiveProjectChats: string;
+  currentProjectChat: string;
   editMenu: string;
   fileMenu: string;
   filesView: string;
   helpMenu: string;
+  helpCenter: string;
   newChat: string;
   openProject: string;
   conversations: string;
   createWorktree: string;
+  pinCurrentProject: string;
   newProjectChat: (name: string) => string;
   projectSource: string;
   resetSidebar: string;
   runCurrentInput: string;
   settingsView: string;
+  showSettings: string;
+  sourceView: string;
   openInSource: string;
   pinConversation: string;
   pinProject: string;
@@ -140,6 +147,9 @@ export function AppShell({
   } as CSSProperties;
   const wallpaperOpacity = clampWallpaperOpacity(backgroundOpacity);
   const hasWallpaper = Boolean(backgroundImageDataUrl);
+  const selectedProjectEntry = currentProjectPath
+    ? (projects.find((project) => project.path === currentProjectPath) ?? null)
+    : null;
 
   useEffect(() => {
     // 从本地存储恢复侧边栏宽度, 窗口变化时重新夹紧范围
@@ -210,14 +220,15 @@ export function AppShell({
           hasWallpaper ? "bg-white/58" : "bg-white/90 backdrop-blur"
         }`}
       >
-        <div className="drag-region flex h-12 items-center gap-2 px-4">
+        <div className="drag-region flex h-12 items-center gap-2 overflow-visible px-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#ececf1] bg-white text-[#202123] shadow-sm">
             <Hammer className="h-4 w-4" />
           </div>
           <span className="text-[12px] font-semibold tracking-normal text-[#202123]">Forge</span>
+          {renderTitleBarMenus()}
         </div>
 
-        <div className="drag-region flex h-12 items-center">{renderTitleBarMenus()}</div>
+        <div className="drag-region h-12" aria-hidden="true" />
         <div className="drag-region h-12" aria-hidden="true" />
       </header>
 
@@ -307,13 +318,19 @@ export function AppShell({
     return (
       <nav
         aria-label={copy.titleBarMenus}
-        className="no-drag ml-3 hidden min-w-0 items-center gap-0.5 md:flex"
+        className="no-drag ml-4 hidden min-w-0 items-center gap-3 md:flex"
       >
         <TitleBarMenu label={copy.fileMenu}>
           <MenuItem onSelect={onNewTask}>
             <Plus className="h-4 w-4" />
             {copy.newChat}
           </MenuItem>
+          {currentProjectPath ? (
+            <MenuItem onSelect={() => onNewProjectChat?.(currentProjectPath)}>
+              <MessageSquare className="h-4 w-4" />
+              {copy.currentProjectChat}
+            </MenuItem>
+          ) : null}
           <MenuItem onSelect={onPickProject}>
             <FolderPlus className="h-4 w-4" />
             {copy.openProject}
@@ -326,15 +343,25 @@ export function AppShell({
 
         <TitleBarMenu label={copy.editMenu}>
           {currentProjectPath ? (
-            <MenuItem onSelect={() => onRenameProject?.(currentProjectPath)}>
-              <Edit3 className="h-4 w-4" />
-              {copy.renameProject}
-            </MenuItem>
+            <>
+              <MenuItem onSelect={() => onRenameProject?.(currentProjectPath)}>
+                <Edit3 className="h-4 w-4" />
+                {copy.renameProject}
+              </MenuItem>
+              <MenuItem onSelect={() => onTogglePinProject?.(currentProjectPath)}>
+                <Pin className="h-4 w-4" />
+                {selectedProjectEntry?.pinned ? copy.unpinProject : copy.pinCurrentProject}
+              </MenuItem>
+              <MenuItem onSelect={() => onCreateProjectWorktree?.(currentProjectPath)}>
+                <FolderPlus className="h-4 w-4" />
+                {copy.createWorktree}
+              </MenuItem>
+              <MenuItem onSelect={() => onArchiveProjectChats?.(currentProjectPath)}>
+                <Archive className="h-4 w-4" />
+                {copy.archiveCurrentProjectChats}
+              </MenuItem>
+            </>
           ) : null}
-          <MenuItem onSelect={() => onNavigate("settings")}>
-            <Settings className="h-4 w-4" />
-            {copy.settingsView}
-          </MenuItem>
         </TitleBarMenu>
 
         <TitleBarMenu label={copy.viewMenu}>
@@ -348,7 +375,7 @@ export function AppShell({
           </MenuItem>
           <MenuItem onSelect={() => onNavigate("source")}>
             <GitBranch className="h-4 w-4" />
-            {copy.projectSource}
+            {copy.sourceView}
           </MenuItem>
         </TitleBarMenu>
 
@@ -359,14 +386,18 @@ export function AppShell({
           </MenuItem>
           <MenuItem onSelect={() => onNavigate("settings")}>
             <Settings className="h-4 w-4" />
-            {copy.settingsView}
+            {copy.showSettings}
           </MenuItem>
         </TitleBarMenu>
 
         <TitleBarMenu label={copy.helpMenu}>
           <MenuItem onSelect={() => onNavigate("settings")}>
             <Hammer className="h-4 w-4" />
-            Forge
+            {copy.aboutForge}
+          </MenuItem>
+          <MenuItem onSelect={() => onNavigate("workspace")}>
+            <Home className="h-4 w-4" />
+            {copy.helpCenter}
           </MenuItem>
         </TitleBarMenu>
       </nav>
@@ -714,19 +745,24 @@ function getShellCopy(language: Language): ShellCopy {
   if (language === "zh-CN") {
     return {
       addProject: "新增项目",
+      aboutForge: "关于 Forge",
       archiveAllChats: "归档所有聊天",
+      archiveCurrentProjectChats: "归档当前项目对话",
       archiveConversation: "归档对话",
       archiveProjectChats: "归档对话",
       conversations: "对话",
       createWorktree: "创建永久工作树",
+      currentProjectChat: "当前项目新对话",
       editMenu: "编辑",
       fileMenu: "文件",
       filesView: "文件",
       helpMenu: "帮助",
+      helpCenter: "回到 Forge 工作区",
       newChat: "新对话",
       newProjectChat: (name) => `在 ${name} 开启新对话`,
       openProject: "打开项目",
       openInSource: "在源代码管理中打开",
+      pinCurrentProject: "置顶当前项目",
       pinConversation: "置顶对话",
       pinProject: "置顶项目",
       projectSource: "源代码管理",
@@ -736,6 +772,8 @@ function getShellCopy(language: Language): ShellCopy {
       renameProject: "重命名项目",
       runCurrentInput: "运行当前输入",
       settingsView: "设置",
+      showSettings: "显示设置",
+      sourceView: "源代码管理",
       threadOptions: (title) => `对话更多选项 ${title}`,
       titleBarMenus: "Forge 标题栏菜单",
       unpinProject: "取消置顶项目",
@@ -747,19 +785,24 @@ function getShellCopy(language: Language): ShellCopy {
 
   return {
     addProject: "Add project",
+    aboutForge: "About Forge",
     archiveAllChats: "Archive all chats",
+    archiveCurrentProjectChats: "Archive current project chats",
     archiveConversation: "Archive conversation",
     archiveProjectChats: "Archive conversations",
     conversations: "Conversations",
     createWorktree: "Create permanent worktree",
+    currentProjectChat: "New chat in current project",
     editMenu: "Edit",
     fileMenu: "File",
     filesView: "Files",
     helpMenu: "Help",
+    helpCenter: "Return to Forge workspace",
     newChat: "New chat",
     newProjectChat: (name) => `New chat in ${name}`,
     openProject: "Open project",
     openInSource: "Open in source control",
+    pinCurrentProject: "Pin current project",
     pinConversation: "Pin conversation",
     pinProject: "Pin project",
     projectSource: "Source control",
@@ -769,6 +812,8 @@ function getShellCopy(language: Language): ShellCopy {
     renameProject: "Rename project",
     runCurrentInput: "Run current input",
     settingsView: "Settings",
+    showSettings: "Show settings",
+    sourceView: "Source control",
     threadOptions: (title) => `Conversation options ${title}`,
     titleBarMenus: "Forge title bar menus",
     unpinProject: "Unpin project",
