@@ -63,6 +63,13 @@ type StreamReadResult = {
   truncated: boolean;
 };
 
+type ParsedPlanStepDraft = {
+  description: string;
+  kind: AgentPlanStepKind;
+  target?: string;
+  title?: string;
+};
+
 const maxFilesBySpeed = {
   fast: 24,
   balanced: 60
@@ -344,7 +351,9 @@ function createAgentPlanInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
-    "Prefer a numbered list of concrete steps. Mention target files or commands in backticks when known.",
+    'Prefer a JSON object with a "steps" array. Each step must include "kind", "description", and optional "target".',
+    'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
+    "If you cannot produce JSON, use a numbered list of concrete steps and mention target files or commands in backticks when known.",
     "If the user asks to create, write, or save a named file, include an edit step targeting that exact file path in backticks.",
     "Do not reveal hidden chain-of-thought. Show only actionable engineering steps.",
     "Prefer Chinese when the user writes Chinese. Keep file paths exact when mentioned.",
@@ -825,29 +834,183 @@ function stripMarkdownCodeFence(value: string): string {
 
 // 从模型文本里解析步骤列表, 失败时回退到单个说明步骤
 function parseAgentPlanSteps(text: string): AgentPlanStep[] {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .flatMap((line) => {
-      const match = /^(?:\d+[.)]|[-*])\s+(.+)$/.exec(line);
+  const structuredSteps = parseStructuredAgentPlanSteps(text);
+  const descriptions: ParsedPlanStepDraft[] =
+    structuredSteps.length > 0
+      ? structuredSteps
+      : text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .flatMap((line) => {
+            const match = /^(?:\d+[.)]|[-*])\s+(.+)$/.exec(line);
 
-      return match ? [match[1].trim()] : [];
-    })
-    .filter(Boolean)
+            return match
+              ? [
+                  {
+                    description: match[1].trim(),
+                    kind: inferStepKind(match[1])
+                  }
+                ]
+              : [];
+          })
+          .filter((step) => step.description);
+
+  return descriptions
     .slice(0, 12)
-    .map((description, index) => {
-      const kind = inferStepKind(description);
-      const target = readStepTarget(description, kind);
+    .map((step, index) => {
+      const kind = step.kind;
+      const target = step.target ?? readStepTarget(step.description, kind);
 
       return {
         id: `step-${index + 1}`,
-        title: createStepTitle(description),
-        description,
+        title: step.title?.trim() || createStepTitle(step.description),
+        description: step.description,
         kind,
         status: "pending" as const,
         ...(target ? { target } : {})
       };
     });
+}
+
+// 优先解析模型输出的结构化 JSON steps, 失败时让自然语言列表解析接管
+function parseStructuredAgentPlanSteps(text: string): ParsedPlanStepDraft[] {
+  for (const candidate of readJsonPlanCandidates(text)) {
+    try {
+      const value = JSON.parse(candidate) as unknown;
+      const steps = readStructuredStepsArray(value)
+        .map(normalizeStructuredPlanStep)
+        .filter((step): step is ParsedPlanStepDraft => Boolean(step));
+
+      if (steps.length > 0) {
+        return steps;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return [];
+}
+
+// 提取 fenced json, 纯 JSON, 以及混合文本里的顶层 JSON 对象作为候选
+function readJsonPlanCandidates(text: string): string[] {
+  const candidates: string[] = [];
+
+  for (const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/giu)) {
+    const candidate = match[1]?.trim();
+
+    if (candidate) {
+      candidates.push(candidate);
+    }
+  }
+
+  const trimmed = text.trim();
+
+  if (trimmed) {
+    candidates.push(trimmed);
+  }
+
+  const objectStart = trimmed.indexOf("{");
+  const objectEnd = trimmed.lastIndexOf("}");
+
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(trimmed.slice(objectStart, objectEnd + 1));
+  }
+
+  const arrayStart = trimmed.indexOf("[");
+  const arrayEnd = trimmed.lastIndexOf("]");
+
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    candidates.push(trimmed.slice(arrayStart, arrayEnd + 1));
+  }
+
+  return [...new Set(candidates)];
+}
+
+// 兼容 { steps: [...] } 和直接返回数组两种结构化计划
+function readStructuredStepsArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (isRecord(value) && Array.isArray(value.steps)) {
+    return value.steps;
+  }
+
+  return [];
+}
+
+// 把结构化 step 的别名字段归一化成 Forge 内部计划步骤草稿
+function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const title = readStringField(value, ["title", "label", "name"]);
+  const description =
+    readStringField(value, ["description", "task", "action", "summary"]) ?? title ?? "";
+  const rawTarget = readStringField(value, ["target", "file", "path", "command"]);
+  const rawKind = readStringField(value, ["kind", "type"]);
+  const kind = normalizePlanStepKind(rawKind, `${description} ${rawTarget ?? ""}`);
+  const fallbackTarget = readStepTarget(description, kind);
+  const target = rawTarget?.trim() || fallbackTarget;
+  const finalDescription = description.trim() || target || "Review this plan step";
+
+  return {
+    description: finalDescription,
+    kind,
+    ...(target ? { target } : {}),
+    ...(title ? { title } : {})
+  };
+}
+
+// 读取结构化计划里的字符串字段, 忽略数组和对象等不安全类型
+function readStringField(value: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const fieldValue = value[key];
+
+    if (typeof fieldValue === "string" && fieldValue.trim()) {
+      return fieldValue.trim();
+    }
+  }
+
+  return undefined;
+}
+
+// 支持模型常见 kind 别名, 没有可信 kind 时回退到文本推断
+function normalizePlanStepKind(
+  rawKind: string | undefined,
+  fallbackText: string
+): AgentPlanStepKind {
+  const normalized = rawKind?.trim().toLowerCase().replace(/[_\s]+/g, "-");
+
+  if (normalized === "inspect" || normalized === "read" || normalized === "search") {
+    return "inspect";
+  }
+
+  if (normalized === "edit" || normalized === "write" || normalized === "modify" || normalized === "create") {
+    return "edit";
+  }
+
+  if (
+    normalized === "verify" ||
+    normalized === "run" ||
+    normalized === "run-command" ||
+    normalized === "test" ||
+    normalized === "build"
+  ) {
+    return "verify";
+  }
+
+  if (normalized === "commit" || normalized === "git") {
+    return "commit";
+  }
+
+  if (normalized === "other" || normalized === "manual") {
+    return "other";
+  }
+
+  return inferStepKind(fallbackText);
 }
 
 // 为步骤生成短标题, UI 队列只展示前几个字

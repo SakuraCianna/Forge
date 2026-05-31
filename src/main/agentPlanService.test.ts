@@ -156,6 +156,75 @@ describe("agentPlanService", () => {
     ]);
   });
 
+  it("parses structured JSON plan steps before falling back to numbered text", async () => {
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            output_text: [
+              "Here is the actionable plan:",
+              "```json",
+              JSON.stringify({
+                steps: [
+                  {
+                    kind: "read",
+                    title: "Inspect shell",
+                    description: "Inspect the shell component",
+                    file: "src/renderer/src/components/AppShell.tsx"
+                  },
+                  {
+                    type: "create",
+                    description: "Create project usage notes",
+                    path: "docs/usage.md"
+                  },
+                  {
+                    kind: "run-command",
+                    description: "Run tests",
+                    command: "npm test -- --reporter=dot"
+                  }
+                ]
+              }),
+              "```",
+              "1. This fallback line should not be used."
+            ].join("\n")
+          })
+        )
+    );
+
+    const result = await generateAgentPlan({
+      request,
+      keyVault: { readProviderKey: async () => "sk-test" },
+      fetcher
+    });
+
+    expect(result.steps).toEqual([
+      {
+        id: "step-1",
+        title: "Inspect shell",
+        description: "Inspect the shell component",
+        kind: "inspect",
+        status: "pending",
+        target: "src/renderer/src/components/AppShell.tsx"
+      },
+      {
+        id: "step-2",
+        title: "Create project usage notes",
+        description: "Create project usage notes",
+        kind: "edit",
+        status: "pending",
+        target: "docs/usage.md"
+      },
+      {
+        id: "step-3",
+        title: "Run tests",
+        description: "Run tests",
+        kind: "verify",
+        status: "pending",
+        target: "npm test -- --reporter=dot"
+      }
+    ]);
+  });
+
   it("extracts unquoted local commands from verification plan steps", async () => {
     const fetcher = vi.fn(
       async () =>
