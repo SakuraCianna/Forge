@@ -300,6 +300,7 @@ export function App(): ReactElement {
   const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
   const activeAskStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
   const activeAgentAutoRunKeysRef = useRef<Set<string>>(new Set());
+  const recentAgentToolResultsRef = useRef<Map<string, string[]>>(new Map());
   const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
@@ -1118,7 +1119,9 @@ export function App(): ReactElement {
         personalization: createPersonalizationPrompt(personalization),
         projectScan: projectScanResult,
         speed: selectedThread.speed,
-        taskPrompt: createFileChangeTaskPrompt(selectedThread, relativePath, options.action),
+        taskPrompt: createFileChangeTaskPrompt(selectedThread, relativePath, options.action, {
+          toolResults: getRecentAgentToolResults(selectedThread.id)
+        }),
         relativePath,
         currentContent
       });
@@ -1787,6 +1790,18 @@ export function App(): ReactElement {
     setThreads((current) => updateThreadAgentActionStatus(current, threadId, actionId, status));
   }
 
+  // 同批自动执行时 React 状态尚未刷新, 这里缓存刚完成的读类工具结果
+  function rememberAgentToolResult(threadId: string, message: string): void {
+    const currentMessages = recentAgentToolResultsRef.current.get(threadId) ?? [];
+
+    recentAgentToolResultsRef.current.set(threadId, [...currentMessages, message].slice(-8));
+  }
+
+  // 读取当前线程的近期工具结果, 供后续编辑提示使用
+  function getRecentAgentToolResults(threadId: string): string[] {
+    return recentAgentToolResultsRef.current.get(threadId) ?? [];
+  }
+
   // 执行单个 Agent 动作, 失败时保留可恢复的结果说明
   async function runAgentAction(
     threadId: string,
@@ -1984,14 +1999,16 @@ export function App(): ReactElement {
         limit: 80
       });
       const createdAt = new Date().toISOString();
+      const message = formatProjectDirectoryListResultMessage(settings.language, result);
 
+      rememberAgentToolResult(threadId, message);
       updateAgentActionStatus(threadId, action.id, "completed");
       setThreads((current) =>
         appendThreadEvents(current, threadId, [
           {
             id: `${threadId}-agent-list-directory-${action.id}-${createdAt}`,
             kind: "file",
-            message: formatProjectDirectoryListResultMessage(settings.language, result),
+            message,
             createdAt
           }
         ])
@@ -2025,16 +2042,18 @@ export function App(): ReactElement {
     try {
       const status = await window.forge.git.status({ projectRoot: currentProject.path });
       const createdAt = new Date().toISOString();
+      const message = formatProjectGitStatusMessage(settings.language, status);
 
       setGitStatus(status);
       setGitNotice(null);
+      rememberAgentToolResult(threadId, message);
       updateAgentActionStatus(threadId, action.id, "completed");
       setThreads((current) =>
         appendThreadEvents(current, threadId, [
           {
             id: `${threadId}-agent-git-status-${action.id}-${createdAt}`,
             kind: "file",
-            message: formatProjectGitStatusMessage(settings.language, status),
+            message,
             createdAt
           }
         ])
@@ -2073,14 +2092,16 @@ export function App(): ReactElement {
         limit: 80
       });
       const createdAt = new Date().toISOString();
+      const message = formatProjectGlobResultMessage(settings.language, result);
 
+      rememberAgentToolResult(threadId, message);
       updateAgentActionStatus(threadId, action.id, "completed");
       setThreads((current) =>
         appendThreadEvents(current, threadId, [
           {
             id: `${threadId}-agent-glob-${action.id}-${createdAt}`,
             kind: "file",
-            message: formatProjectGlobResultMessage(settings.language, result),
+            message,
             createdAt
           }
         ])
@@ -2119,14 +2140,16 @@ export function App(): ReactElement {
         limit: 40
       });
       const createdAt = new Date().toISOString();
+      const message = formatProjectSearchResultMessage(settings.language, result);
 
+      rememberAgentToolResult(threadId, message);
       updateAgentActionStatus(threadId, action.id, "completed");
       setThreads((current) =>
         appendThreadEvents(current, threadId, [
           {
             id: `${threadId}-agent-search-${action.id}-${createdAt}`,
             kind: "file",
-            message: formatProjectSearchResultMessage(settings.language, result),
+            message,
             createdAt
           }
         ])
