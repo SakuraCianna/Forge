@@ -27,6 +27,7 @@ export type GeneralPreferences = {
   backgroundOpacity: number;
   commandSafetyRules: CommandSafetyRule[];
   fullAccess: boolean;
+  readOnly: boolean;
   telemetry: boolean;
 };
 
@@ -43,6 +44,7 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     backgroundOpacity: 0.18,
     commandSafetyRules: [],
     fullAccess: false,
+    readOnly: false,
     telemetry: false
   };
 }
@@ -78,11 +80,14 @@ export function loadGeneralPreferences(storage: Storage): GeneralPreferences {
 
 // 兼容旧版权限字段, 并保持命令安全规则可用
 function normalizePermissionPreferences(preferences: GeneralPreferences): GeneralPreferences {
+  const fullAccess = Boolean(preferences.fullAccess);
+
   return {
     ...preferences,
     defaultPermission: true,
     autoReview: true,
-    fullAccess: preferences.fullAccess,
+    fullAccess,
+    readOnly: !fullAccess && Boolean(preferences.readOnly),
     commandSafetyRules: normalizeCommandSafetyRules(preferences.commandSafetyRules)
   };
 }
@@ -123,6 +128,7 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
         value.backgroundOpacity <= 0.6)) &&
     (!("commandSafetyRules" in value) || Array.isArray(value.commandSafetyRules)) &&
     (!("fullAccess" in value) || typeof value.fullAccess === "boolean") &&
+    (!("readOnly" in value) || typeof value.readOnly === "boolean") &&
     (!("telemetry" in value) || typeof value.telemetry === "boolean")
   );
 }

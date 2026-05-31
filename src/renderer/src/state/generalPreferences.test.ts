@@ -37,6 +37,7 @@ describe("generalPreferences", () => {
       terminalShell: "powershell",
       autoReview: true,
       fullAccess: false,
+      readOnly: false,
       defaultPermission: true,
       telemetry: false,
       backgroundImageDataUrl: null,
@@ -51,7 +52,8 @@ describe("generalPreferences", () => {
       workMode: "daily",
       terminalShell: "cmd",
       backgroundImageDataUrl: "data:image/png;base64,abc",
-      backgroundOpacity: 0.24
+      backgroundOpacity: 0.24,
+      readOnly: true
     });
 
     saveGeneralPreferences(storage, preferences);
@@ -61,11 +63,13 @@ describe("generalPreferences", () => {
       autoReview: true,
       terminalShell: "cmd",
       backgroundImageDataUrl: "data:image/png;base64,abc",
-      backgroundOpacity: 0.24
+      backgroundOpacity: 0.24,
+      readOnly: true,
+      fullAccess: false
     });
   });
 
-  it("normalizes old permission data to auto review or full access only", () => {
+  it("normalizes old permission data to guarded auto mode", () => {
     expect(
       loadGeneralPreferences(
         createMemoryStorage(
@@ -79,7 +83,24 @@ describe("generalPreferences", () => {
     ).toMatchObject({
       defaultPermission: true,
       autoReview: true,
-      fullAccess: false
+      fullAccess: false,
+      readOnly: false
+    });
+  });
+
+  it("keeps full access stronger than read only when persisted data conflicts", () => {
+    expect(
+      loadGeneralPreferences(
+        createMemoryStorage(
+          JSON.stringify({
+            fullAccess: true,
+            readOnly: true
+          })
+        )
+      )
+    ).toMatchObject({
+      fullAccess: true,
+      readOnly: false
     });
   });
 

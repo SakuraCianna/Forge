@@ -529,6 +529,20 @@ export function SettingsPanel({
             </div>
             <div className="overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
               <PreferenceToggle
+                label={copy.readOnly}
+                description={copy.readOnlyDescription}
+                enabled={generalPreferences.readOnly}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    defaultPermission: true,
+                    autoReview: true,
+                    readOnly: !generalPreferences.readOnly,
+                    fullAccess: false
+                  })
+                }
+              />
+              <PreferenceToggle
                 label={copy.autoReview}
                 description={copy.autoReviewDescription}
                 enabled={generalPreferences.autoReview}
@@ -537,6 +551,7 @@ export function SettingsPanel({
                     ...generalPreferences,
                     defaultPermission: true,
                     autoReview: true,
+                    readOnly: false,
                     fullAccess: false
                   })
                 }
@@ -550,6 +565,7 @@ export function SettingsPanel({
                     ...generalPreferences,
                     defaultPermission: true,
                     autoReview: true,
+                    readOnly: false,
                     fullAccess: !generalPreferences.fullAccess
                   })
                 }
@@ -2169,6 +2185,8 @@ function getGeneralSettingsCopy(language: Language): {
   languageDescription: string;
   permissionsDescription: string;
   permissionsTitle: string;
+  readOnly: string;
+  readOnlyDescription: string;
   recentProject: string;
   telemetry: string;
   telemetryDescription: string;
@@ -2216,6 +2234,8 @@ function getGeneralSettingsCopy(language: Language): {
       languageDescription: "应用 UI 语言",
       permissionsDescription: "控制智能体默认能做什么, 高风险操作仍会保留明确反馈",
       permissionsTitle: "权限",
+      readOnly: "只读模式",
+      readOnlyDescription: "只允许读取项目和回答问题, 不生成修改, 不运行命令",
       recentProject: "最近项目",
       telemetry: "诊断信息",
       telemetryDescription: "本地保留基础诊断开关, 默认关闭",
@@ -2265,6 +2285,8 @@ function getGeneralSettingsCopy(language: Language): {
     languageDescription: "Application UI language",
     permissionsDescription: "Control what the agent can do by default",
     permissionsTitle: "Permissions",
+    readOnly: "Read only",
+    readOnlyDescription: "Allow reading and answers only, without edits, commands, or Git actions",
     recentProject: "Recent project",
     telemetry: "Diagnostics",
     telemetryDescription: "Keep local diagnostics off by default",

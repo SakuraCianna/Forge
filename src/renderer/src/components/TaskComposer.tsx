@@ -1,11 +1,12 @@
 // 本文件说明: 渲染统一输入框, 附件菜单, 权限选择和模型入口
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
+import type { ComponentType, KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowUp,
   Check,
   ChevronDown,
+  Eye,
   Paperclip,
   Plug,
   Plus,
@@ -22,7 +23,7 @@ import {
 } from "@/state/generalPreferences";
 import { ModelSelector } from "./ModelSelector";
 
-type ComposerPermissionMode = "auto" | "full";
+type ComposerPermissionMode = "read-only" | "auto" | "full";
 
 type TaskComposerProps = {
   busy?: boolean;
@@ -187,7 +188,7 @@ export function TaskComposer({
     </section>
   );
 
-  // 渲染权限模式菜单, 目前只开放自动审查和完全访问权限
+  // 渲染权限模式菜单, 对齐代码 Agent 常见的只读, 审查和完全访问三档
   function renderPermissionSelector(): ReactElement {
     const permissionMode = getPermissionMode(resolvedGeneralPreferences);
     const permissionOption = getPermissionOption(copy, permissionMode);
@@ -213,7 +214,7 @@ export function TaskComposer({
             sideOffset={8}
             className="forge-dropdown-content forge-dropdown-fast z-50 w-44 rounded-[12px] border border-[#d9d9e3] bg-white p-1 text-[12px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
-            {(["auto", "full"] as const).map((mode) => {
+            {(["read-only", "auto", "full"] as const).map((mode) => {
               const option = getPermissionOption(copy, mode);
 
               return (
@@ -300,6 +301,7 @@ function getComposerCopy(language: ModelSettings["language"]): {
   goalMode: string;
   openAddMenu: string;
   pluginSystem: string;
+  readOnlyPermission: string;
   stopResponse: string;
 } {
   if (language === "zh-CN") {
@@ -310,6 +312,7 @@ function getComposerCopy(language: ModelSettings["language"]): {
       goalMode: "追求目标",
       openAddMenu: "打开添加菜单",
       pluginSystem: "插件系统",
+      readOnlyPermission: "只读模式",
       stopResponse: "停止回答"
     };
   }
@@ -321,12 +324,17 @@ function getComposerCopy(language: ModelSettings["language"]): {
     goalMode: "Goal mode",
     openAddMenu: "Open add menu",
     pluginSystem: "Plugin system",
+    readOnlyPermission: "Read only",
     stopResponse: "Stop response"
   };
 }
 
 // 从通用偏好读取当前权限模式, 旧值统一回退自动审查
 function getPermissionMode(preferences: GeneralPreferences): ComposerPermissionMode {
+  if (preferences.readOnly) {
+    return "read-only";
+  }
+
   if (preferences.fullAccess) {
     return "full";
   }
@@ -343,7 +351,8 @@ function applyPermissionMode(
     ...preferences,
     defaultPermission: true,
     autoReview: true,
-    fullAccess: mode === "full"
+    fullAccess: mode === "full",
+    readOnly: mode === "read-only"
   };
 }
 
@@ -352,9 +361,13 @@ function getPermissionOption(
   copy: ReturnType<typeof getComposerCopy>,
   mode: ComposerPermissionMode
 ): {
-  Icon: typeof ShieldCheck;
+  Icon: ComponentType<{ className?: string }>;
   label: string;
 } {
+  if (mode === "read-only") {
+    return { Icon: Eye, label: copy.readOnlyPermission };
+  }
+
   if (mode === "full") {
     return { Icon: ShieldAlert, label: copy.fullAccessPermission };
   }

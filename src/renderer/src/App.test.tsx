@@ -89,6 +89,61 @@ describe("App agent execution", () => {
     );
     expect(fileChangeRequest?.taskPrompt).toContain("Target file:\nProjectGuide.md");
   });
+
+  it("blocks edit actions when global read only mode is enabled", async () => {
+    const user = userEvent.setup();
+    saveGeneralPreferences(window.localStorage, {
+      ...createDefaultGeneralPreferences(),
+      readOnly: true
+    });
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Edit README.md",
+      createdAt: "2026-05-31T01:10:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Edit README",
+          description: "Edit README.md",
+          kind: "edit",
+          status: "pending",
+          target: "README.md"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "old",
+      nextContent: "new",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "new",
+        size: 3
+      }
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Update README.md");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByText(/未允许编辑文件/)).toBeInTheDocument();
+    expect(forge.agent.generateFileChange).not.toHaveBeenCalled();
+    expect(forge.files.writeText).not.toHaveBeenCalled();
+  });
 });
 
 // 准备一个已打开项目和可用模型, 让 App 启动后直接进入项目工作区
