@@ -230,6 +230,54 @@ export function mergeFetchedModels(settings: ModelSettings, fetchedModels: Forge
   };
 }
 
+// OpenRouter 启动缓存是参考资料: 先合入 OpenRouter 模型, 再给其他供应商的同名模型补价格和缓存价格
+export function mergeOpenRouterReferenceModels(
+  settings: ModelSettings,
+  openRouterModels: ForgeModel[]
+): ModelSettings {
+  const withOpenRouterModels = mergeFetchedModels(settings, openRouterModels);
+  const lookup = createOpenRouterReferenceLookup(openRouterModels);
+  const models = withOpenRouterModels.models.map((model) => {
+    if (model.providerId === "openrouter") {
+      return model;
+    }
+
+    const reference = lookup.get(normalizeReferenceModelName(model.modelName));
+
+    if (!reference) {
+      return model;
+    }
+
+    return {
+      ...model,
+      pricing: mergeReferencePricing(model.pricing, reference.pricing),
+      capabilities: {
+        ...model.capabilities,
+        contextWindow: model.capabilities.contextWindow ?? reference.capabilities.contextWindow,
+        toolCalling:
+          model.capabilities.toolCalling === "unknown"
+            ? reference.capabilities.toolCalling
+            : model.capabilities.toolCalling,
+        streaming:
+          model.capabilities.streaming === "unknown"
+            ? reference.capabilities.streaming
+            : model.capabilities.streaming,
+        vision:
+          model.capabilities.vision === "unknown"
+            ? reference.capabilities.vision
+            : model.capabilities.vision
+      }
+    };
+  });
+  const currentModel = models.find((model) => model.id === withOpenRouterModels.currentModelId) ?? null;
+
+  return {
+    ...withOpenRouterModels,
+    models,
+    speed: normalizeSpeedForModel(withOpenRouterModels.speed, currentModel)
+  };
+}
+
 // 更新供应商 Base URL, 空值会恢复目录默认配置
 export function updateProviderBaseUrl(
   settings: ModelSettings,
@@ -531,6 +579,66 @@ function dedupeModelsById(models: ForgeModel[]): ForgeModel[] {
   return Array.from(modelsById.values());
 }
 
+function createOpenRouterReferenceLookup(models: ForgeModel[]): Map<string, ForgeModel> {
+  const lookup = new Map<string, ForgeModel>();
+
+  for (const model of models) {
+    const aliases = new Set([
+      normalizeReferenceModelName(model.modelName),
+      normalizeReferenceModelName(model.modelName.split("/").at(-1) ?? model.modelName)
+    ]);
+
+    for (const alias of aliases) {
+      if (alias && !lookup.has(alias)) {
+        lookup.set(alias, model);
+      }
+    }
+  }
+
+  return lookup;
+}
+
+function mergeReferencePricing(
+  currentPricing: ModelPricing | undefined,
+  referencePricing: ModelPricing | undefined
+): ModelPricing | undefined {
+  if (!referencePricing) {
+    return currentPricing;
+  }
+
+  if (!currentPricing) {
+    return {
+      ...referencePricing,
+      source: "openrouter-reference"
+    };
+  }
+
+  if (currentPricing.source === "openrouter-reference") {
+    return {
+      ...referencePricing,
+      source: "openrouter-reference"
+    };
+  }
+
+  return {
+    inputPerMillion: currentPricing.inputPerMillion,
+    outputPerMillion: currentPricing.outputPerMillion,
+    cacheReadPerMillion:
+      currentPricing.cacheReadPerMillion ?? referencePricing.cacheReadPerMillion,
+    cacheWritePerMillion:
+      currentPricing.cacheWritePerMillion ?? referencePricing.cacheWritePerMillion,
+    source: currentPricing.source ?? "provider-api"
+  };
+}
+
+function normalizeReferenceModelName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^models\//u, "")
+    .replace(/[:_\s]+/gu, "-");
+}
+
 // 从持久化远端模型恢复 ForgeModel, 无效编码模型会被过滤
 function createDetectedModel(
   providers: ForgeProvider[],
@@ -741,7 +849,17 @@ function isModelPricing(value: unknown): value is ModelPricing {
     Number.isFinite(value.inputPerMillion) &&
     Number.isFinite(value.outputPerMillion) &&
     value.inputPerMillion >= 0 &&
-    value.outputPerMillion >= 0
+    value.outputPerMillion >= 0 &&
+    (!("cacheReadPerMillion" in value) ||
+      value.cacheReadPerMillion === undefined ||
+      (typeof value.cacheReadPerMillion === "number" &&
+        Number.isFinite(value.cacheReadPerMillion) &&
+        value.cacheReadPerMillion >= 0)) &&
+    (!("cacheWritePerMillion" in value) ||
+      value.cacheWritePerMillion === undefined ||
+      (typeof value.cacheWritePerMillion === "number" &&
+        Number.isFinite(value.cacheWritePerMillion) &&
+        value.cacheWritePerMillion >= 0))
   );
 }
 

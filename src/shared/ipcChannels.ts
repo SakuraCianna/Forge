@@ -6,7 +6,8 @@ export const keyVaultChannels = {
 } as const;
 
 export const providerModelChannels = {
-  fetch: "forge:provider-models:fetch"
+  fetch: "forge:provider-models:fetch",
+  refreshOpenRouterCatalog: "forge:provider-models:refresh-openrouter-catalog"
 } as const;
 
 export const agentChannels = {

@@ -1527,7 +1527,8 @@ export function SettingsPanel({
             const usage = providerUsage[provider.id] ?? summarizeUsage([], usageRates);
             const legacyProviderRate = usageRates[provider.id] ?? {
               inputPerMillion: 0,
-              outputPerMillion: 0
+              outputPerMillion: 0,
+              source: "manual" as const
             };
             const providerModels = getProviderModelRows(provider.id);
             const isExpanded = expandedUsageProviders[provider.id] === true;
@@ -1580,14 +1581,21 @@ export function SettingsPanel({
                   >
                     <div className="overflow-hidden rounded-[12px]">
                       {providerModels.map((modelRow, modelIndex) => {
-                        const modelRate = usageRates[modelRow.id] ?? legacyProviderRate;
+                        const modelRate =
+                          usageRates[modelRow.id] ?? modelRow.pricing ?? legacyProviderRate;
                         const usageForModel =
                           modelUsage[modelRow.id] ?? summarizeUsage([], usageRates);
+                        const showCacheReadPrice =
+                          modelRate.cacheReadPerMillion !== undefined ||
+                          usageForModel.cacheReadTokens > 0;
+                        const showCacheWritePrice =
+                          modelRate.cacheWritePerMillion !== undefined ||
+                          usageForModel.cacheWriteTokens > 0;
 
                         return (
                           <div
                             key={modelRow.id}
-                            className={`grid gap-3 px-3 py-3 lg:grid-cols-[minmax(180px,1fr)_minmax(150px,200px)_minmax(150px,200px)_92px] lg:items-end ${
+                            className={`grid gap-3 px-3 py-3 lg:grid-cols-[minmax(180px,1fr)_repeat(4,minmax(120px,170px))_92px] lg:items-end ${
                               modelIndex === 0 ? "" : "border-t border-[#ececf1]"
                             }`}
                           >
@@ -1598,6 +1606,9 @@ export function SettingsPanel({
                               <span className="mt-1 block truncate text-[11px] text-[#8e8ea0]">
                                 {formatInteger(usageForModel.totalTokens)} tokens /{" "}
                                 {usageForModel.requests} requests
+                              </span>
+                              <span className="mt-1 block truncate text-[11px] text-[#8e8ea0]">
+                                {formatPricingSource(settings.language, modelRate.source)}
                               </span>
                             </div>
                             <PriceInput
@@ -1620,6 +1631,34 @@ export function SettingsPanel({
                                 })
                               }
                             />
+                            {showCacheReadPrice ? (
+                              <PriceInput
+                                label={getUsageModelCacheReadLabel(settings.language)}
+                                value={modelRate.cacheReadPerMillion ?? 0}
+                                onChange={(value) =>
+                                  onUpdateUsageRate(modelRow.id, {
+                                    ...modelRate,
+                                    cacheReadPerMillion: value
+                                  })
+                                }
+                              />
+                            ) : (
+                              <span />
+                            )}
+                            {showCacheWritePrice ? (
+                              <PriceInput
+                                label={getUsageModelCacheWriteLabel(settings.language)}
+                                value={modelRate.cacheWritePerMillion ?? 0}
+                                onChange={(value) =>
+                                  onUpdateUsageRate(modelRow.id, {
+                                    ...modelRate,
+                                    cacheWritePerMillion: value
+                                  })
+                                }
+                              />
+                            ) : (
+                              <span />
+                            )}
                             <div className="text-xs font-semibold text-[#202123] lg:text-right">
                               ${usageForModel.estimatedCost.toFixed(4)}
                             </div>
@@ -1649,11 +1688,13 @@ export function SettingsPanel({
   }
 
   // 过滤供应商模型行, 搜索词同时匹配名称和模型 id
-  function getProviderModelRows(providerId: string): Array<{ id: string; label: string }> {
-    const rowsById = new Map<string, { id: string; label: string }>();
+  function getProviderModelRows(
+    providerId: string
+  ): Array<{ id: string; label: string; pricing?: UsageRate }> {
+    const rowsById = new Map<string, { id: string; label: string; pricing?: UsageRate }>();
 
     for (const model of settings.models.filter((candidate) => candidate.providerId === providerId)) {
-      rowsById.set(model.id, { id: model.id, label: model.label });
+      rowsById.set(model.id, { id: model.id, label: model.label, pricing: model.pricing });
     }
 
     for (const event of usageEvents.filter((candidate) => candidate.providerId === providerId)) {
@@ -1878,11 +1919,8 @@ function formatModelDetails(
   details.push(...formatModelCapabilityLabels(language, model));
 
   if (model.pricing) {
-    details.push(
-      `$${formatPrice(model.pricing.inputPerMillion)} / $${formatPrice(
-        model.pricing.outputPerMillion
-      )} / 1M`
-    );
+    details.push(formatModelPricing(language, model.pricing));
+    details.push(formatPricingSource(language, model.pricing.source));
   }
 
   details.push(formatCapabilitySource(language, model.capabilitySource));
@@ -1963,6 +2001,41 @@ function formatContextWindow(language: Language, contextWindow: number): string 
     contextWindow >= 1000 ? `${Math.round(contextWindow / 1000)}K` : formatInteger(contextWindow);
 
   return language === "zh-CN" ? `${compactValue} 上下文` : `${compactValue} context`;
+}
+
+function formatModelPricing(language: Language, pricing: UsageRate): string {
+  const basePrice = `$${formatPrice(pricing.inputPerMillion)} / $${formatPrice(
+    pricing.outputPerMillion
+  )} / 1M`;
+  const cacheParts = [
+    pricing.cacheReadPerMillion !== undefined
+      ? `${language === "zh-CN" ? "缓存命中" : "cache read"} $${formatPrice(
+          pricing.cacheReadPerMillion
+        )}`
+      : null,
+    pricing.cacheWritePerMillion !== undefined
+      ? `${language === "zh-CN" ? "缓存写入" : "cache write"} $${formatPrice(
+          pricing.cacheWritePerMillion
+        )}`
+      : null
+  ].filter(Boolean);
+
+  return cacheParts.length > 0 ? `${basePrice} (${cacheParts.join(" / ")})` : basePrice;
+}
+
+function formatPricingSource(
+  language: Language,
+  source: UsageRate["source"] | undefined
+): string {
+  if (source === "openrouter-reference") {
+    return language === "zh-CN" ? "价格来源 OpenRouter 参考价" : "Price source OpenRouter reference";
+  }
+
+  if (source === "manual") {
+    return language === "zh-CN" ? "价格来源 手动填写" : "Price source Manual";
+  }
+
+  return language === "zh-CN" ? "价格来源 模型列表" : "Price source Provider API";
 }
 
 // 把每百万 token 价格格式化成美元字符串
@@ -2186,6 +2259,14 @@ function getUsageModelInputLabel(language: Language): string {
 // 生成模型输出价格字段标签
 function getUsageModelOutputLabel(language: Language): string {
   return language === "zh-CN" ? "模型输出单价 / 1M" : "Model output price / 1M";
+}
+
+function getUsageModelCacheReadLabel(language: Language): string {
+  return language === "zh-CN" ? "缓存命中单价 / 1M" : "Cache hit price / 1M";
+}
+
+function getUsageModelCacheWriteLabel(language: Language): string {
+  return language === "zh-CN" ? "缓存写入单价 / 1M" : "Cache write price / 1M";
 }
 
 // 返回记忆设置文案, 后续扩展记忆类型时集中维护

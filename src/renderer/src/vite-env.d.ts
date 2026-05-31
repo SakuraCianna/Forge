@@ -47,6 +47,7 @@ declare global {
       };
       models: {
         fetchProviderModels: (provider: ForgeProvider) => Promise<ForgeModel[]>;
+        refreshOpenRouterCatalog: () => Promise<ForgeModel[]>;
       };
       agent: {
         generatePlan: (request: GenerateAgentPlanRequest) => Promise<AgentPlanResult>;

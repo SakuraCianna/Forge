@@ -53,6 +53,7 @@ import {
   deleteCustomProvider,
   loadModelSettings,
   mergeFetchedModels,
+  mergeOpenRouterReferenceModels,
   removeProviderModels,
   saveModelSettings,
   setCurrentModel,
@@ -396,6 +397,28 @@ export function App(): ReactElement {
   useEffect(() => {
     saveAgentProfiles(window.localStorage, agentProfiles);
   }, [agentProfiles]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void window.forge.models
+      .refreshOpenRouterCatalog()
+      .then((models) => {
+        if (disposed || models.length === 0) {
+          return;
+        }
+
+        setUsageRates((current) => mergeModelPricingRates(current, models));
+        setSettings((current) => mergeOpenRouterReferenceModels(current, models));
+      })
+      .catch(() => {
+        // OpenRouter 参考目录是静默增强, 启动失败不打扰用户主流程
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(() => {
     return window.forge.commands.onOutput((chunk) => {
@@ -3284,7 +3307,10 @@ export function App(): ReactElement {
           onClearUsage={() => setUsageEvents([])}
           onUpdatePersonalization={(nextPersonalization) => setPersonalization(nextPersonalization)}
           onUpdateUsageRate={(providerId, rate) =>
-            setUsageRates((current) => ({ ...current, [providerId]: rate }))
+            setUsageRates((current) => ({
+              ...current,
+              [providerId]: { ...rate, source: "manual" }
+            }))
           }
         />
       </div>

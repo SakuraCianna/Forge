@@ -63,7 +63,9 @@ contextBridge.exposeInMainWorld("forge", {
   },
   models: {
     fetchProviderModels: (provider: ForgeProvider) =>
-      ipcRenderer.invoke(providerModelChannels.fetch, provider)
+      ipcRenderer.invoke(providerModelChannels.fetch, provider),
+    refreshOpenRouterCatalog: () =>
+      ipcRenderer.invoke(providerModelChannels.refreshOpenRouterCatalog)
   },
   agent: {
     generatePlan: (request: GenerateAgentPlanRequest): Promise<AgentPlanResult> =>

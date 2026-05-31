@@ -3,6 +3,7 @@ import type { ForgeModel, ForgeProvider } from "../shared/modelTypes.js";
 import { providerModelChannels } from "../shared/ipcChannels.js";
 
 type ProviderModelFetcher = (provider: ForgeProvider) => Promise<ForgeModel[]>;
+type OpenRouterCatalogRefresher = () => Promise<ForgeModel[]>;
 
 type IpcHandler = (_event: unknown, ...args: unknown[]) => Promise<unknown>;
 
@@ -13,10 +14,14 @@ export { providerModelChannels };
 // 暴露模型列表拉取入口, 渲染层只传供应商配置
 export function registerProviderModelHandlers(
   fetchModels: ProviderModelFetcher,
+  refreshOpenRouterCatalog: OpenRouterCatalogRefresher,
   registerHandler: RegisterHandler
 ): void {
   registerHandler(providerModelChannels.fetch, async (_event, provider) =>
     fetchModels(assertProvider(provider))
+  );
+  registerHandler(providerModelChannels.refreshOpenRouterCatalog, async () =>
+    refreshOpenRouterCatalog()
   );
 }
 

@@ -26,6 +26,7 @@ import {
 } from "./projectFileService.js";
 import { pickProjectDirectory } from "./projectPicker.js";
 import { scanProjectFiles } from "./projectScanner.js";
+import { createOpenRouterModelCatalog } from "./openRouterModelCatalog.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
 import { registerProviderModelHandlers } from "./providerModelsIpc.js";
 import { windowChannels } from "../shared/ipcChannels.js";
@@ -123,16 +124,23 @@ void app.whenReady().then(() => {
     }
   });
 
+  const openRouterCatalog = createOpenRouterModelCatalog({
+    directory: app.getPath("userData")
+  });
+
   registerKeyVaultHandlers(keyVault, (channel, handler) => {
     ipcMain.handle(channel, handler);
   });
 
   registerProviderModelHandlers(
-    (provider) => fetchModelsForProvider({ provider, keyVault }),
+    (provider) => fetchModelsForProvider({ provider, keyVault, openRouterCatalog }),
+    () => openRouterCatalog.refresh(),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }
   );
+
+  void openRouterCatalog.refresh();
 
   // Agent 调用统一经过主进程, 避免把 provider key 暴露给前端页面
   registerAgentHandlers(
