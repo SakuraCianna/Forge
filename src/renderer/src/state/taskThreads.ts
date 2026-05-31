@@ -11,6 +11,7 @@ export type TaskThreadEventKind = "user" | "plan" | "command" | "file" | "error"
 
 export type CommandRunResult = {
   runId?: string;
+  actionId?: string;
   command: string;
   cwd: string;
   exitCode: number | null;
@@ -22,6 +23,7 @@ export type CommandRunResult = {
 
 export type CommandRunState = {
   runId?: string;
+  actionId?: string;
   command: string;
   status: "running";
   stdout?: string;

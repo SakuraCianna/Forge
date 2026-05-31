@@ -7,12 +7,14 @@ type CreateCommandStartedEventOptions = {
   threadId: string;
   command: string;
   runId?: string;
+  actionId?: string;
   now?: () => string;
 };
 
 type CreateCommandFinishedEventOptions = {
   threadId: string;
   result: CommandResult;
+  actionId?: string;
   now?: () => string;
 };
 
@@ -23,6 +25,7 @@ export function createCommandStartedEvent({
   threadId,
   command,
   runId,
+  actionId,
   now = () => new Date().toISOString()
 }: CreateCommandStartedEventOptions): TaskThreadEvent {
   const createdAt = now();
@@ -34,6 +37,7 @@ export function createCommandStartedEvent({
     commandRun: {
       command,
       runId,
+      actionId,
       status: "running"
     },
     createdAt
@@ -44,9 +48,11 @@ export function createCommandStartedEvent({
 export function createCommandFinishedEvent({
   threadId,
   result,
+  actionId,
   now = () => new Date().toISOString()
 }: CreateCommandFinishedEventOptions): TaskThreadEvent {
   const createdAt = now();
+  const commandResult = actionId ? { ...result, actionId } : result;
   const sections = [
     result.cancelled ? "命令已取消" : "",
     `命令执行完成, exitCode=${result.exitCode}`,
@@ -59,7 +65,7 @@ export function createCommandFinishedEvent({
     id: `${threadId}-command-finished-${createdAt}`,
     kind: result.exitCode === 0 && !result.timedOut && !result.cancelled ? "result" : "error",
     message: sections.join("\n"),
-    commandResult: result,
+    commandResult,
     createdAt
   };
 }

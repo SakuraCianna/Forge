@@ -1025,6 +1025,86 @@ describe("ThreadWorkspace", () => {
     expect(within(details).getByText("failed tests")).toBeInTheDocument();
   });
 
+  it("shows command output for the selected agent action when commands repeat", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Repeated command output",
+            events: [
+              {
+                id: "event-command-action-1",
+                kind: "result",
+                message: "Unit test command finished",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  actionId: "action-1",
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 0,
+                  stdout: "unit suite passed",
+                  stderr: "",
+                  timedOut: false
+                }
+              },
+              {
+                id: "event-command-action-2",
+                kind: "error",
+                message: "Integration test command failed",
+                createdAt: "2026-05-27T13:06:00.000Z",
+                commandResult: {
+                  actionId: "action-2",
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: "integration suite failed",
+                  stderr: "database unavailable",
+                  timedOut: false
+                }
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Run unit tests",
+                status: "completed",
+                command: "npm test"
+              },
+              {
+                id: "action-2",
+                stepId: "step-2",
+                kind: "run-command",
+                label: "Run integration tests",
+                status: "failed",
+                command: "npm test"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select action Run unit tests" }));
+
+    const details = screen.getByRole("region", { name: "Action details" });
+    expect(within(details).getByText("unit suite passed")).toBeInTheDocument();
+    expect(within(details).queryByText("integration suite failed")).not.toBeInTheDocument();
+    expect(within(details).queryByText("database unavailable")).not.toBeInTheDocument();
+  });
+
   it("runs the next pending agent action from the queue", async () => {
     const user = userEvent.setup();
     const onRunAgentAction = vi.fn();
