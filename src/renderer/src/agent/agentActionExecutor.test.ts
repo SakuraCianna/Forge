@@ -58,6 +58,12 @@ describe("agentActionExecutor", () => {
     });
   });
 
+  it("runs controlled Git status checks for git actions", () => {
+    expect(resolveAgentActionExecution(createAction({ kind: "git-status" }))).toEqual({
+      kind: "git-status"
+    });
+  });
+
   it("keeps manual and commit actions behind an explicit review gate", () => {
     expect(resolveAgentActionExecution(createAction({ kind: "manual" }))).toEqual({
       kind: "manual-gate",
@@ -154,6 +160,25 @@ describe("agentActionExecutor", () => {
     });
 
     expect(getRunnablePendingAgentActions([glob, search]).map((action) => action.id)).toEqual([
+      "action-1",
+      "action-2"
+    ]);
+  });
+
+  it("includes controlled Git status actions in safe batches", () => {
+    const gitStatus = createAction({
+      id: "action-1",
+      status: "pending",
+      kind: "git-status"
+    });
+    const verify = createAction({
+      id: "action-2",
+      status: "pending",
+      kind: "run-command",
+      command: "npm test"
+    });
+
+    expect(getRunnablePendingAgentActions([gitStatus, verify]).map((action) => action.id)).toEqual([
       "action-1",
       "action-2"
     ]);
@@ -453,6 +478,26 @@ describe("agentActionExecutor", () => {
       resolveAgentActionPermission(
         createAction({ kind: "run-command", command: "npm test" }),
         createProfile({ enabledTools: ["command"] })
+      )
+    ).toEqual({ ok: true });
+  });
+
+  it("treats controlled Git status as a Git tool permission", () => {
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "git-status" }),
+        createProfile({ enabledTools: ["read"] })
+      )
+    ).toEqual({
+      ok: false,
+      tool: "git",
+      message: "Agent profile Review does not allow git actions"
+    });
+
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "git-status" }),
+        createProfile({ enabledTools: ["read", "git"] })
       )
     ).toEqual({ ok: true });
   });

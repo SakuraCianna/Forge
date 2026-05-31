@@ -1332,12 +1332,12 @@ export function ThreadWorkspace({
       }
 
       if (
-        (action.kind === "glob-project" || action.kind === "search-project") &&
-        action.target &&
+        (action.kind === "glob-project" || action.kind === "search-project" || action.kind === "git-status") &&
+        (action.kind === "git-status" || action.target) &&
         selectedThread &&
         onRunAgentAction
       ) {
-        const query = action.target;
+        const query = action.target ?? action.label;
 
         return (
           <button
