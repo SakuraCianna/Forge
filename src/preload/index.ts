@@ -23,6 +23,7 @@ import type { ForgeProvider } from "../shared/modelTypes.js";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
 import type {
   ProjectFileChangePreview,
+  ProjectFileGlobResult,
   ProjectTextFile,
   ProjectTextSearchResult
 } from "../shared/fileTypes.js";
@@ -126,6 +127,11 @@ contextBridge.exposeInMainWorld("forge", {
       relativePath: string;
       maxBytes?: number;
     }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.readText, request),
+    globFiles: (request: {
+      projectRoot: string;
+      pattern: string;
+      limit?: number;
+    }): Promise<ProjectFileGlobResult> => ipcRenderer.invoke(fileChannels.globFiles, request),
     searchText: (request: {
       projectRoot: string;
       query: string;

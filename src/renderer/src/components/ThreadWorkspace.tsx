@@ -1331,13 +1331,18 @@ export function ThreadWorkspace({
         );
       }
 
-      if (action.kind === "search-project" && action.target && selectedThread && onRunAgentAction) {
+      if (
+        (action.kind === "glob-project" || action.kind === "search-project") &&
+        action.target &&
+        selectedThread &&
+        onRunAgentAction
+      ) {
         const query = action.target;
 
         return (
           <button
             type="button"
-            aria-label={`Run search action ${query}`}
+            aria-label={`Run ${action.kind} action ${query}`}
             onClick={() => onRunAgentAction(selectedThread.id, action)}
             className="mt-2 h-7 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#202123] transition hover:bg-[#f7f7f8]"
           >

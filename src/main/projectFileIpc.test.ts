@@ -24,6 +24,11 @@ describe("projectFileIpc", () => {
         size: request.nextContent.length
       }),
       async (request) => ({
+        pattern: request.pattern,
+        matches: [],
+        truncated: false
+      }),
+      async (request) => ({
         query: request.query,
         matches: [],
         truncated: false
@@ -55,6 +60,7 @@ describe("projectFileIpc", () => {
         diff: []
       }),
       async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 3 }),
+      async (request) => ({ pattern: request.pattern, matches: [], truncated: false }),
       async (request) => ({ query: request.query, matches: [], truncated: false }),
       (channel, handler) => handlers.set(channel, handler)
     );
@@ -88,6 +94,7 @@ describe("projectFileIpc", () => {
         diff: []
       }),
       async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 0 }),
+      async (request) => ({ pattern: request.pattern, matches: [], truncated: false }),
       async (request) => ({
         query: request.query,
         matches: [
@@ -114,6 +121,49 @@ describe("projectFileIpc", () => {
           relativePath: "src/App.tsx",
           lineNumber: 7,
           preview: "const target = true;"
+        }
+      ],
+      truncated: false
+    });
+  });
+
+  it("registers a project file glob handler", async () => {
+    const handlers = new Map<string, (_event: unknown, ...args: unknown[]) => Promise<unknown>>();
+
+    registerProjectFileHandlers(
+      async (request) => ({ relativePath: request.relativePath, content: "", size: 0 }),
+      async (request) => ({
+        relativePath: request.relativePath,
+        currentContent: "",
+        nextContent: request.nextContent,
+        diff: []
+      }),
+      async (request) => ({ relativePath: request.relativePath, content: request.nextContent, size: 0 }),
+      async (request) => ({
+        pattern: request.pattern,
+        matches: [
+          {
+            relativePath: "src/App.tsx",
+            size: 128
+          }
+        ],
+        truncated: false
+      }),
+      async (request) => ({ query: request.query, matches: [], truncated: false }),
+      (channel, handler) => handlers.set(channel, handler)
+    );
+
+    await expect(
+      handlers.get(fileChannels.globFiles)?.(null, {
+        projectRoot: "E:\\CodeHome\\Forge",
+        pattern: "src/**/*.tsx"
+      })
+    ).resolves.toEqual({
+      pattern: "src/**/*.tsx",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          size: 128
         }
       ],
       truncated: false

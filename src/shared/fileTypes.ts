@@ -14,6 +14,23 @@ export type ProjectTextSearchRequest = {
   maxFileBytes?: number;
 };
 
+export type ProjectFileGlobRequest = {
+  projectRoot: string;
+  pattern: string;
+  limit?: number;
+};
+
+export type ProjectFileGlobMatch = {
+  relativePath: string;
+  size: number;
+};
+
+export type ProjectFileGlobResult = {
+  pattern: string;
+  matches: ProjectFileGlobMatch[];
+  truncated: boolean;
+};
+
 export type ProjectTextSearchMatch = {
   relativePath: string;
   lineNumber: number;

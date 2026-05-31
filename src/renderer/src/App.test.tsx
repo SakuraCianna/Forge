@@ -214,6 +214,75 @@ describe("App agent execution", () => {
     expect(await screen.findByText(/项目搜索完成: handleSubmit/)).toBeInTheDocument();
     expect(screen.getByText(/src\/App\.tsx:42/)).toBeInTheDocument();
   });
+
+  it("runs project glob actions without invoking the shell command runner", async () => {
+    const user = userEvent.setup();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Find TSX files",
+      createdAt: "2026-05-31T01:25:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Find TSX files",
+          description: "Find TSX files before editing.",
+          kind: "inspect",
+          status: "pending",
+          target: "src/**/*.tsx"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "",
+      nextContent: "",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "",
+        size: 0
+      }
+    });
+
+    vi.mocked(forge.files.globFiles).mockResolvedValueOnce({
+      pattern: "src/**/*.tsx",
+      matches: [
+        {
+          relativePath: "src/App.tsx",
+          size: 128
+        }
+      ],
+      truncated: false
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Find TSX files");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(forge.files.globFiles).toHaveBeenCalledWith({
+        projectRoot,
+        pattern: "src/**/*.tsx",
+        limit: 80
+      })
+    );
+    expect(forge.commands.run).not.toHaveBeenCalled();
+    expect(await screen.findByText(/文件匹配完成: src\/\*\*\/\*\.tsx/)).toBeInTheDocument();
+    expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
+  });
 });
 
 // 准备一个已打开项目和可用模型, 让 App 启动后直接进入项目工作区
@@ -299,6 +368,11 @@ function createForgeMock({
       readText: vi.fn(async () => {
         throw new Error("ENOENT: no such file or directory");
       }),
+      globFiles: vi.fn(async () => ({
+        pattern: "",
+        matches: [],
+        truncated: false
+      })),
       searchText: vi.fn(async () => ({
         query: "",
         matches: [],

@@ -49,6 +49,15 @@ describe("agentActionExecutor", () => {
     });
   });
 
+  it("runs project file glob matching for glob actions", () => {
+    expect(
+      resolveAgentActionExecution(createAction({ kind: "glob-project", target: "src/**/*.tsx" }))
+    ).toEqual({
+      kind: "glob-project",
+      pattern: "src/**/*.tsx"
+    });
+  });
+
   it("keeps manual and commit actions behind an explicit review gate", () => {
     expect(resolveAgentActionExecution(createAction({ kind: "manual" }))).toEqual({
       kind: "manual-gate",
@@ -125,6 +134,26 @@ describe("agentActionExecutor", () => {
     });
 
     expect(getRunnablePendingAgentActions([search, inspect]).map((action) => action.id)).toEqual([
+      "action-1",
+      "action-2"
+    ]);
+  });
+
+  it("includes project glob actions in safe read batches", () => {
+    const glob = createAction({
+      id: "action-1",
+      status: "pending",
+      kind: "glob-project",
+      target: "src/**/*.tsx"
+    });
+    const search = createAction({
+      id: "action-2",
+      status: "pending",
+      kind: "search-project",
+      target: "handleSubmit"
+    });
+
+    expect(getRunnablePendingAgentActions([glob, search]).map((action) => action.id)).toEqual([
       "action-1",
       "action-2"
     ]);
@@ -383,6 +412,26 @@ describe("agentActionExecutor", () => {
     expect(
       resolveAgentActionPermission(
         createAction({ kind: "search-project", target: "handleSubmit" }),
+        createProfile({ enabledTools: ["read"] })
+      )
+    ).toEqual({ ok: true });
+  });
+
+  it("treats project glob as a read tool permission", () => {
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "glob-project", target: "src/**/*.tsx" }),
+        createProfile({ enabledTools: [] })
+      )
+    ).toEqual({
+      ok: false,
+      tool: "read",
+      message: "Agent profile Review does not allow read actions"
+    });
+
+    expect(
+      resolveAgentActionPermission(
+        createAction({ kind: "glob-project", target: "src/**/*.tsx" }),
         createProfile({ enabledTools: ["read"] })
       )
     ).toEqual({ ok: true });

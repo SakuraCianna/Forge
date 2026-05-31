@@ -2,6 +2,8 @@
 import { fileChannels } from "../shared/ipcChannels.js";
 import type {
   ProjectFileChangePreview,
+  ProjectFileGlobRequest,
+  ProjectFileGlobResult,
   ProjectTextFile,
   ProjectTextSearchRequest,
   ProjectTextSearchResult
@@ -18,6 +20,10 @@ type UpdateProjectTextFileRequest = ReadProjectTextFileRequest & {
 };
 
 type ReadProjectTextFile = (request: ReadProjectTextFileRequest) => Promise<ProjectTextFile>;
+
+type GlobProjectFiles = (
+  request: ProjectFileGlobRequest
+) => Promise<ProjectFileGlobResult>;
 
 type SearchProjectTextFiles = (
   request: ProjectTextSearchRequest
@@ -40,11 +46,16 @@ export function registerProjectFileHandlers(
   readProjectTextFile: ReadProjectTextFile,
   previewProjectTextFileUpdate: PreviewProjectTextFileUpdate,
   writeProjectTextFile: WriteProjectTextFile,
+  globProjectFiles: GlobProjectFiles,
   searchProjectTextFiles: SearchProjectTextFiles,
   registerHandler: RegisterHandler
 ): void {
   registerHandler(fileChannels.readText, async (_event, request) =>
     readProjectTextFile(assertReadRequest(request))
+  );
+
+  registerHandler(fileChannels.globFiles, async (_event, request) =>
+    globProjectFiles(assertGlobRequest(request))
   );
 
   registerHandler(fileChannels.searchText, async (_event, request) =>
@@ -58,6 +69,23 @@ export function registerProjectFileHandlers(
   registerHandler(fileChannels.writeText, async (_event, request) =>
     writeProjectTextFile(assertUpdateRequest(request))
   );
+}
+
+// 校验项目 glob 请求, 只允许明确的项目根目录和匹配模式
+function assertGlobRequest(value: unknown): ProjectFileGlobRequest {
+  if (
+    !isRecord(value) ||
+    typeof value.projectRoot !== "string" ||
+    typeof value.pattern !== "string"
+  ) {
+    throw new Error("无效的文件匹配请求。");
+  }
+
+  return {
+    projectRoot: value.projectRoot,
+    pattern: value.pattern,
+    limit: typeof value.limit === "number" ? value.limit : undefined
+  };
 }
 
 // 校验项目搜索请求, 只允许明确的项目根目录和搜索关键词
