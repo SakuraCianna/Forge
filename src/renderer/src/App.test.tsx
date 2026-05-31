@@ -289,6 +289,84 @@ describe("App agent execution", () => {
     expect(fileChangeRequest?.taskPrompt).toContain("src/App.tsx:42 function handleSubmit()");
   });
 
+  it("passes inspected file content into the following file edit prompt", async () => {
+    const user = userEvent.setup();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Inspect package and edit app",
+      createdAt: "2026-05-31T01:23:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Inspect package",
+          description: "Inspect package.json before editing.",
+          kind: "inspect",
+          status: "pending",
+          target: "package.json"
+        },
+        {
+          id: "step-2",
+          title: "Edit App",
+          description: "Update App with package script context.",
+          kind: "edit",
+          status: "pending",
+          target: "src/App.tsx"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "src/App.tsx",
+      currentContent: "export const App = () => null;",
+      nextContent: "export const App = () => 'updated';",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "src/App.tsx",
+        content: "export const App = () => 'updated';",
+        size: 36
+      }
+    });
+
+    vi.mocked(forge.files.readText).mockImplementation(async (request) => {
+      if (request.relativePath === "package.json") {
+        return {
+          relativePath: "package.json",
+          content: "{\"scripts\":{\"test\":\"vitest\"}}",
+          size: 29
+        };
+      }
+
+      return {
+        relativePath: "src/App.tsx",
+        content: "export const App = () => null;",
+        size: 30
+      };
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Use package script context in App");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => expect(forge.agent.generateFileChange).toHaveBeenCalled());
+
+    const fileChangeRequest = vi.mocked(forge.agent.generateFileChange).mock.calls[0]?.[0];
+    expect(fileChangeRequest?.taskPrompt).toContain("Prior controlled tool results:");
+    expect(fileChangeRequest?.taskPrompt).toContain("文件读取完成: package.json");
+    expect(fileChangeRequest?.taskPrompt).toContain("\"scripts\":{\"test\":\"vitest\"}");
+  });
+
   it("runs project glob actions without invoking the shell command runner", async () => {
     const user = userEvent.setup();
     const plan: AgentPlanResult = {

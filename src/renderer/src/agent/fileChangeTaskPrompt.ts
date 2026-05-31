@@ -46,7 +46,7 @@ function formatControlledToolResultContext(thread: TaskThread, extraToolResults:
 
 // 只把读类工具结果放进编辑上下文, 避免混入文件应用日志
 function isControlledToolResultMessage(message: string): boolean {
-  return /^(目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|Git 状态完成|Git status complete):/u.test(
+  return /^(文件读取完成|File read complete|目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|Git 状态完成|Git status complete):/u.test(
     message.trim()
   );
 }
