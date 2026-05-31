@@ -1332,7 +1332,10 @@ export function ThreadWorkspace({
       }
 
       if (
-        (action.kind === "glob-project" || action.kind === "search-project" || action.kind === "git-status") &&
+        (action.kind === "list-directory" ||
+          action.kind === "glob-project" ||
+          action.kind === "search-project" ||
+          action.kind === "git-status") &&
         (action.kind === "git-status" || action.target) &&
         selectedThread &&
         onRunAgentAction

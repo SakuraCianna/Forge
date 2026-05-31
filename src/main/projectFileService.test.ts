@@ -4,6 +4,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   globProjectFiles,
+  listProjectDirectory,
   previewProjectTextFileUpdate,
   readProjectTextFile,
   searchProjectTextFiles,
@@ -83,6 +84,62 @@ describe("projectFileService", () => {
 
     expect(result.relativePath).toBe(".env.example");
     expect(result.content).toBe("OPENAI_API_KEY=\n");
+  });
+
+  it("lists project directories without reading file content or sensitive entries", async () => {
+    await mkdir(join(testRoot, "src", "components"), { recursive: true });
+    await mkdir(join(testRoot, "src", "node_modules"), { recursive: true });
+    await writeFile(join(testRoot, "src", "App.tsx"), "export const App = true;", "utf8");
+    await writeFile(join(testRoot, "src", ".env.local"), "SECRET=true", "utf8");
+    await writeFile(join(testRoot, "src", "node_modules", "dep.ts"), "dep", "utf8");
+
+    const result = await listProjectDirectory({
+      projectRoot: testRoot,
+      relativePath: "src"
+    });
+
+    expect(result).toEqual({
+      relativePath: "src",
+      entries: [
+        {
+          name: "App.tsx",
+          relativePath: "src/App.tsx",
+          kind: "file",
+          size: 24
+        },
+        {
+          name: "components",
+          relativePath: "src/components",
+          kind: "directory"
+        }
+      ],
+      truncated: false
+    });
+  });
+
+  it("truncates project directory listings at the configured limit", async () => {
+    await mkdir(testRoot, { recursive: true });
+    await writeFile(join(testRoot, "a.ts"), "", "utf8");
+    await writeFile(join(testRoot, "b.ts"), "", "utf8");
+
+    const result = await listProjectDirectory({
+      projectRoot: testRoot,
+      limit: 1
+    });
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("rejects directory traversal when listing project directories", async () => {
+    await mkdir(testRoot, { recursive: true });
+
+    await expect(
+      listProjectDirectory({
+        projectRoot: testRoot,
+        relativePath: "../"
+      })
+    ).rejects.toThrow("目录路径不能包含上级目录");
   });
 
   it("searches project text files without exposing sensitive files", async () => {

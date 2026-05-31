@@ -5,6 +5,7 @@ import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "@/state/
 
 type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }
+  | { kind: "list-directory"; relativePath: string }
   | { kind: "glob-project"; pattern: string }
   | { kind: "search-project"; query: string }
   | { kind: "git-status" }
@@ -42,6 +43,10 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
 
   if (action.kind === "inspect-file" && action.target) {
     return { kind: "open-file", relativePath: action.target };
+  }
+
+  if (action.kind === "list-directory" && action.target) {
+    return { kind: "list-directory", relativePath: action.target };
   }
 
   if (action.kind === "glob-project" && action.target) {
@@ -265,6 +270,7 @@ export function isRunnableAgentAction(
 ): boolean {
   if (
     (action.kind === "inspect-file" ||
+      action.kind === "list-directory" ||
       action.kind === "glob-project" ||
       action.kind === "search-project" ||
       action.kind === "git-status" ||
@@ -287,6 +293,7 @@ export function isRunnableAgentAction(
 function getRequiredToolForAction(action: AgentAction): AgentToolPermission | null {
   if (
     action.kind === "inspect-file" ||
+    action.kind === "list-directory" ||
     action.kind === "glob-project" ||
     action.kind === "search-project"
   ) {

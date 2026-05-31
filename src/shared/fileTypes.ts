@@ -14,6 +14,25 @@ export type ProjectTextSearchRequest = {
   maxFileBytes?: number;
 };
 
+export type ProjectDirectoryListRequest = {
+  projectRoot: string;
+  relativePath?: string;
+  limit?: number;
+};
+
+export type ProjectDirectoryEntry = {
+  name: string;
+  relativePath: string;
+  kind: "directory" | "file";
+  size?: number;
+};
+
+export type ProjectDirectoryListResult = {
+  relativePath: string;
+  entries: ProjectDirectoryEntry[];
+  truncated: boolean;
+};
+
 export type ProjectFileGlobRequest = {
   projectRoot: string;
   pattern: string;

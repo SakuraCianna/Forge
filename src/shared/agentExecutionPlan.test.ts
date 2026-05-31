@@ -130,6 +130,30 @@ describe("agentExecutionPlan", () => {
     ]);
   });
 
+  it("turns directory inspect targets into project directory list actions", () => {
+    const steps: AgentPlanStep[] = [
+      {
+        id: "step-1",
+        title: "Inspect source directory",
+        description: "List source files before choosing edits.",
+        kind: "inspect",
+        status: "pending",
+        target: "src/renderer/src"
+      }
+    ];
+
+    expect(createAgentActionsFromPlanSteps(steps)).toEqual([
+      {
+        id: "action-1",
+        stepId: "step-1",
+        kind: "list-directory",
+        label: "List src/renderer/src",
+        status: "pending",
+        target: "src/renderer/src"
+      }
+    ]);
+  });
+
   it("turns git status verification into a controlled Git action", () => {
     const steps: AgentPlanStep[] = [
       {
