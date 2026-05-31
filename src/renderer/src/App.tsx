@@ -384,6 +384,10 @@ export function App(): ReactElement {
   }, []);
 
   useEffect(() => {
+    if (!generalPreferences.autoRunSafeActions) {
+      return;
+    }
+
     if (changePreviews.length > 0) {
       return;
     }
@@ -419,7 +423,13 @@ export function App(): ReactElement {
     void runAgentActions(nextThread.id, runnableActions).finally(() => {
       activeAgentAutoRunKeysRef.current.delete(runKey);
     });
-  }, [changePreviews.length, fullAccessMode, generalPreferences.commandSafetyRules, threads]);
+  }, [
+    changePreviews.length,
+    fullAccessMode,
+    generalPreferences.autoRunSafeActions,
+    generalPreferences.commandSafetyRules,
+    threads
+  ]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -1487,9 +1497,13 @@ export function App(): ReactElement {
       });
       const planMessage =
         runnableAgentActions.length > 0
-          ? settings.language === "zh-CN"
-            ? "已生成执行计划, Forge 正在准备自动执行安全步骤。"
-            : "Execution plan created. Forge will auto-run safe steps."
+          ? generalPreferences.autoRunSafeActions
+            ? settings.language === "zh-CN"
+              ? "已生成执行计划, Forge 正在准备自动执行安全步骤。"
+              : "Execution plan created. Forge will auto-run safe steps."
+            : settings.language === "zh-CN"
+              ? "已生成执行计划, 等你确认继续运行安全步骤。"
+              : "Execution plan created. Continue when you want Forge to run safe steps."
           : agentActions.length > 0
             ? settings.language === "zh-CN"
               ? "已生成执行计划, 但下一步需要你先确认。"

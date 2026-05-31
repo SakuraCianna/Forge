@@ -480,6 +480,17 @@ export function SettingsPanel({
                   <span className="text-xs text-[#6e6e80]">{copy.commandTimeoutUnit}</span>
                 </label>
               </SettingRow>
+              <PreferenceToggle
+                label={copy.autoRunSafeActions}
+                description={copy.autoRunSafeActionsDescription}
+                enabled={generalPreferences.autoRunSafeActions}
+                onToggle={() =>
+                  onUpdateGeneralPreferences({
+                    ...generalPreferences,
+                    autoRunSafeActions: !generalPreferences.autoRunSafeActions
+                  })
+                }
+              />
             </div>
           </div>
 
@@ -2245,6 +2256,8 @@ function getGeneralSettingsCopy(language: Language): {
   appBackgroundDescription: string;
   autoReview: string;
   autoReviewDescription: string;
+  autoRunSafeActions: string;
+  autoRunSafeActionsDescription: string;
   backgroundOpacity: string;
   backgroundOpacityDescription: string;
   blankWorkspace: string;
@@ -2326,6 +2339,8 @@ function getGeneralSettingsCopy(language: Language): {
       appBackgroundDescription: "上传一张壁纸作为 Forge 的背景, 默认保持轻微透明避免影响阅读",
       autoReview: "自动审核",
       autoReviewDescription: "运行前自动审查潜在高风险操作",
+      autoRunSafeActions: "自动运行安全步骤",
+      autoRunSafeActionsDescription: "生成计划后自动推进读取, 搜索和允许的命令, 遇到审查或风险门禁仍会停下",
       backgroundOpacity: "背景透明度",
       backgroundOpacityDescription: "控制壁纸的显示强度",
       blankWorkspace: "空白工作区",
@@ -2392,6 +2407,9 @@ function getGeneralSettingsCopy(language: Language): {
       "Upload a wallpaper for Forge. The default opacity stays subtle so code remains readable.",
     autoReview: "Auto review",
     autoReviewDescription: "Review potentially risky operations before running",
+    autoRunSafeActions: "Auto-run safe steps",
+    autoRunSafeActionsDescription:
+      "After planning, run safe reads, searches, and allowed commands automatically while still stopping at gates",
     backgroundOpacity: "App background opacity",
     backgroundOpacityDescription: "Control how strongly the wallpaper appears",
     blankWorkspace: "Blank workspace",
