@@ -381,6 +381,13 @@ describe("agentActionExecutor", () => {
     });
   });
 
+  it("requires approval for allowlisted commands that redirect output", () => {
+    expect(resolveAgentCommandRisk("rg TODO src > result.txt")).toEqual({
+      level: "ask",
+      reason: "命令可能通过 shell 重定向写入文件"
+    });
+  });
+
   it("uses configured command rules for non-destructive commands", () => {
     expect(
       resolveAgentCommandRisk("npm run e2e -- --ui", {
