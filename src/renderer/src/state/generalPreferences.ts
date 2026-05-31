@@ -15,6 +15,7 @@ export type CommandSafetyRule = {
 };
 
 export const defaultCommandSafetyRuleReason = "matched configured command policy";
+export const agentApprovedCommandRuleReason = "approved from agent confirmation queue";
 
 export type GeneralPreferences = {
   workMode: WorkMode;
@@ -57,6 +58,50 @@ export function updateGeneralPreferences(
   return normalizePermissionPreferences({
     ...preferences,
     ...patch
+  });
+}
+
+// 从一次命令审批创建精确 allow 规则, 避免把宽泛模式误加入自动执行白名单
+export function createExactCommandAllowRule(
+  command: string,
+  deps: { createId?: () => string } = {}
+): CommandSafetyRule | null {
+  const pattern = normalizeCommandPattern(command);
+
+  if (!pattern || pattern.length > 160) {
+    return null;
+  }
+
+  return {
+    id: deps.createId?.() ?? createCommandSafetyRuleId("agent-allow"),
+    pattern,
+    level: "allow",
+    reason: agentApprovedCommandRuleReason
+  };
+}
+
+// 追加命令安全规则时去重, 让重复批准同一精确命令不会刷出多条配置
+export function appendCommandSafetyRule(
+  preferences: GeneralPreferences,
+  rule: CommandSafetyRule
+): GeneralPreferences {
+  const normalizedRule = normalizeCommandSafetyRule(rule, preferences.commandSafetyRules.length);
+
+  if (!normalizedRule) {
+    return preferences;
+  }
+
+  const existingRule = preferences.commandSafetyRules.find(
+    (candidate) =>
+      candidate.pattern === normalizedRule.pattern && candidate.level === normalizedRule.level
+  );
+
+  if (existingRule) {
+    return preferences;
+  }
+
+  return updateGeneralPreferences(preferences, {
+    commandSafetyRules: [...preferences.commandSafetyRules, normalizedRule]
   });
 }
 
@@ -175,6 +220,17 @@ function normalizeTextField(value: unknown, maxLength: number): string {
 }
 
 // 将 unknown 缩窄成普通对象, 方便字段校验
+// 命令规则按执行器的匹配方式收敛空白, 让保存的精确规则能命中同一条命令
+function normalizeCommandPattern(command: string): string {
+  return command.trim().replace(/\s+/g, " ");
+}
+
+// 生成本地规则 id, 不依赖 React 组件中的设置页实现
+function createCommandSafetyRuleId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// 将 unknown 缩小为普通对象, 方便偏好字段校验
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

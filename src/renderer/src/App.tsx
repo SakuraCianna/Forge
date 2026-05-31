@@ -120,6 +120,8 @@ import {
 } from "@/state/codeFormatting";
 import { isDirectAnswerPrompt } from "@/state/conversationRouting";
 import {
+  appendCommandSafetyRule,
+  createExactCommandAllowRule,
   createDefaultGeneralPreferences,
   loadGeneralPreferences,
   saveGeneralPreferences,
@@ -2242,6 +2244,44 @@ export function App(): ReactElement {
   }
 
   // 批量执行动作队列, 每一步都通过线程事件回写进度
+  // 将本次命令审批沉淀成精确 allow 规则, 同时批准当前动作继续执行
+  async function allowAgentCommandAction(threadId: string, action: AgentAction): Promise<void> {
+    if (action.kind !== "run-command" || !action.command) {
+      return;
+    }
+
+    const rule = createExactCommandAllowRule(action.command);
+
+    if (!rule) {
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? "该命令过长, 无法保存为精确允许规则, 已改为仅批准本次执行"
+          : "This command is too long to save as an exact allow rule, so Forge approved it once."
+      );
+      await approveAgentCommandAction(threadId, action);
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    setGeneralPreferences((current) => appendCommandSafetyRule(current, rule));
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        {
+          id: `${threadId}-command-allow-rule-${action.id}-${createdAt}`,
+          kind: "plan",
+          message:
+            settings.language === "zh-CN"
+              ? `已允许后续自动运行精确命令: ${rule.pattern}`
+              : `Allowed exact command for future agent runs: ${rule.pattern}`,
+          createdAt
+        }
+      ])
+    );
+
+    await approveAgentCommandAction(threadId, action);
+  }
+
+  // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
     await runAgentActionBatch(actions, (action) => {
       if (cancelledThreadIdsRef.current.has(threadId)) {
@@ -2800,6 +2840,7 @@ export function App(): ReactElement {
         onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
         onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
         onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
+        onAllowAgentCommand={(threadId, action) => void allowAgentCommandAction(threadId, action)}
         onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
         onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
         onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}

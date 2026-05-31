@@ -103,6 +103,7 @@ describe("ThreadWorkspace", () => {
   it("shows compact command approval controls", async () => {
     const user = userEvent.setup();
     const onApproveAgentCommand = vi.fn();
+    const onAllowAgentCommand = vi.fn();
 
     render(
       <ThreadWorkspace
@@ -127,12 +128,20 @@ describe("ThreadWorkspace", () => {
         ]}
         onSelectThread={() => undefined}
         onApproveAgentCommand={onApproveAgentCommand}
+        onAllowAgentCommand={onAllowAgentCommand}
       />
     );
 
     await user.click(screen.getByRole("button", { name: "Approve command npm install" }));
 
     expect(onApproveAgentCommand).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ id: "action-1", command: "npm install" })
+    );
+
+    await user.click(screen.getByRole("button", { name: "Always allow queued command npm install" }));
+
+    expect(onAllowAgentCommand).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({ id: "action-1", command: "npm install" })
     );

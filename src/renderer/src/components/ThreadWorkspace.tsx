@@ -68,6 +68,7 @@ type ThreadWorkspaceProps = {
   onRunAgentAction?: (threadId: string, action: AgentAction) => void;
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
+  onAllowAgentCommand?: (threadId: string, action: AgentAction) => void;
   onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onGenerateContinuationPlan?: (threadId: string) => void;
@@ -142,6 +143,7 @@ export function ThreadWorkspace({
   onRunAgentAction,
   onRunAgentActions,
   onApproveAgentCommand,
+  onAllowAgentCommand,
   onGenerateFailureFix,
   onGenerateCommandFix,
   onGenerateContinuationPlan,
@@ -401,6 +403,21 @@ export function ThreadWorkspace({
         >
           <CheckCircle2 className="h-3.5 w-3.5" />
           {copy.approveCommand}
+        </button>
+      );
+    }
+
+    if (item.kind === "command-approval" && action.command && onAllowAgentCommand) {
+      controls.push(
+        <button
+          key="allow-command"
+          type="button"
+          aria-label={`${copy.allowQueuedCommand} ${action.command}`}
+          onClick={() => onAllowAgentCommand(selectedThread.id, action)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {copy.allowExactCommand}
         </button>
       );
     }
@@ -3523,6 +3540,7 @@ function getCompactAgentControlCopy(language: Language) {
       applyQueuedChanges: "应用队列修改",
       discardQueuedChanges: "丢弃队列修改",
       approveQueuedCommand: "批准队列命令",
+      allowQueuedCommand: "始终允许队列命令",
       confirmQueuedAction: "确认队列动作",
       openQueuedSourceControl: "打开队列源码管理",
       retryQueuedAction: "重试队列动作",
@@ -3553,6 +3571,7 @@ function getCompactAgentControlCopy(language: Language) {
       continueSafe: "继续安全动作",
       runNext: "运行下一步",
       approveCommand: "批准命令",
+      allowExactCommand: "始终允许精确命令",
       commandNeedsApproval: "命令需要批准",
       commandBlocked: "命令已被安全策略阻止",
       openSourceControl: "打开源代码管理",
@@ -3595,6 +3614,7 @@ function getCompactAgentControlCopy(language: Language) {
     applyQueuedChanges: "Apply queued changes",
     discardQueuedChanges: "Discard queued changes",
     approveQueuedCommand: "Approve queued command",
+    allowQueuedCommand: "Always allow queued command",
     confirmQueuedAction: "Confirm queued action",
     openQueuedSourceControl: "Open queued source control",
     retryQueuedAction: "Retry queued action",
@@ -3625,6 +3645,7 @@ function getCompactAgentControlCopy(language: Language) {
     continueSafe: "Continue safe actions",
     runNext: "Run next action",
     approveCommand: "Approve command",
+    allowExactCommand: "Always allow exact command",
     commandNeedsApproval: "Command needs approval",
     commandBlocked: "Command blocked by safety policy",
     openSourceControl: "Open source control",

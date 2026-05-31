@@ -1,6 +1,9 @@
 // 本文件说明: 覆盖通用偏好的默认值, 持久化和权限迁移
 import { describe, expect, it } from "vitest";
 import {
+  agentApprovedCommandRuleReason,
+  appendCommandSafetyRule,
+  createExactCommandAllowRule,
   createDefaultGeneralPreferences,
   loadGeneralPreferences,
   saveGeneralPreferences,
@@ -170,6 +173,46 @@ describe("generalPreferences", () => {
         pattern: "npm run publish-*",
         level: "ask",
         reason: "publishes preview"
+      }
+    ]);
+  });
+
+  it("creates exact allow rules from approved agent commands", () => {
+    expect(
+      createExactCommandAllowRule(" npm   install ", { createId: () => "agent-allow-test" })
+    ).toEqual({
+      id: "agent-allow-test",
+      pattern: "npm install",
+      level: "allow",
+      reason: agentApprovedCommandRuleReason
+    });
+  });
+
+  it("does not create exact command rules for empty or overly long commands", () => {
+    expect(createExactCommandAllowRule("   ")).toBeNull();
+    expect(createExactCommandAllowRule("npm run " + "x".repeat(180))).toBeNull();
+  });
+
+  it("deduplicates appended command safety rules by pattern and level", () => {
+    const preferences = updateGeneralPreferences(createDefaultGeneralPreferences(), {
+      commandSafetyRules: [
+        {
+          id: "existing",
+          pattern: "npm install",
+          level: "allow",
+          reason: "already allowed"
+        }
+      ]
+    });
+    const rule = createExactCommandAllowRule("npm install", { createId: () => "new-rule" });
+
+    expect(rule).not.toBeNull();
+    expect(appendCommandSafetyRule(preferences, rule!).commandSafetyRules).toEqual([
+      {
+        id: "existing",
+        pattern: "npm install",
+        level: "allow",
+        reason: "already allowed"
       }
     ]);
   });
