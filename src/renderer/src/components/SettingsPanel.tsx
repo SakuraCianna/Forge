@@ -1515,10 +1515,19 @@ export function SettingsPanel({
   function renderUsageSection(): ReactElement {
     return (
       <SectionFrame>
-        <div className="mb-4 grid gap-3 md:grid-cols-4">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
           <MetricTile label={t("settings.usageRequests")} value={String(totalUsage.requests)} />
+          <MetricTile label={t("settings.totalTokens")} value={formatInteger(totalUsage.totalTokens)} />
           <MetricTile label={t("settings.inputTokens")} value={formatInteger(totalUsage.inputTokens)} />
           <MetricTile label={t("settings.outputTokens")} value={formatInteger(totalUsage.outputTokens)} />
+          <MetricTile
+            label={t("settings.cacheReadTokens")}
+            value={formatInteger(totalUsage.cacheReadTokens)}
+          />
+          <MetricTile
+            label={t("settings.cacheWriteTokens")}
+            value={formatInteger(totalUsage.cacheWriteTokens)}
+          />
           <MetricTile label={t("settings.estimatedCost")} value={`$${totalUsage.estimatedCost.toFixed(4)}`} />
         </div>
 
@@ -1549,7 +1558,7 @@ export function SettingsPanel({
                       [provider.id]: !isExpanded
                     }))
                   }
-                  className="grid w-full gap-4 rounded-[12px] px-1 py-1.5 text-left transition hover:bg-[#f7f7f8] lg:grid-cols-[minmax(180px,1fr)_minmax(120px,180px)_92px_18px] lg:items-center"
+                  className="grid w-full gap-4 rounded-[12px] px-1 py-1.5 text-left transition hover:bg-[#f7f7f8] lg:grid-cols-[minmax(180px,1fr)_minmax(260px,420px)_92px_18px] lg:items-center"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <ProviderMark provider={provider} fallbackLabel={provider.label} size="md" />
@@ -1562,12 +1571,11 @@ export function SettingsPanel({
                       </span>
                     </span>
                   </div>
-                  <div className="text-xs text-[#6e6e80] lg:text-right">
-                    <span className="block font-medium text-[#202123]">
-                      {formatInteger(usage.totalTokens)}
-                    </span>
-                    <span>{t("settings.totalTokens")}</span>
-                  </div>
+                  <TokenUsageBreakdown
+                    usage={usage}
+                    language={settings.language}
+                    className="lg:justify-end"
+                  />
                   <div className="text-sm font-semibold text-[#202123] lg:text-right">
                     ${usage.estimatedCost.toFixed(4)}
                   </div>
@@ -1607,6 +1615,11 @@ export function SettingsPanel({
                                 {formatInteger(usageForModel.totalTokens)} tokens /{" "}
                                 {usageForModel.requests} requests
                               </span>
+                              <TokenUsageBreakdown
+                                usage={usageForModel}
+                                language={settings.language}
+                                className="mt-2"
+                              />
                               <span className="mt-1 block truncate text-[11px] text-[#8e8ea0]">
                                 {formatPricingSource(settings.language, modelRate.source)}
                               </span>
@@ -2226,6 +2239,43 @@ function MetricTile({ label, value }: { label: string; value: string }): ReactEl
   );
 }
 
+type TokenBreakdownUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+};
+
+// 用紧凑文本展示 token 分项, 避免供应商和模型行只剩一个总数
+function TokenUsageBreakdown({
+  usage,
+  language,
+  className = ""
+}: {
+  usage: TokenBreakdownUsage;
+  language: Language;
+  className?: string;
+}): ReactElement {
+  const labels = getTokenBreakdownLabels(language);
+  const items = [
+    { label: labels.input, value: usage.inputTokens },
+    { label: labels.output, value: usage.outputTokens },
+    { label: labels.cacheRead, value: usage.cacheReadTokens ?? 0 },
+    { label: labels.cacheWrite, value: usage.cacheWriteTokens ?? 0 }
+  ];
+
+  return (
+    <div className={`flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-5 text-[#6e6e80] ${className}`}>
+      {items.map((item) => (
+        <span key={item.label} className="whitespace-nowrap">
+          {item.label}{" "}
+          <span className="font-medium text-[#202123]">{formatInteger(item.value)}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // 渲染价格输入框, 空值代表未知价格
 function PriceInput({
   label,
@@ -2267,6 +2317,27 @@ function getUsageModelCacheReadLabel(language: Language): string {
 
 function getUsageModelCacheWriteLabel(language: Language): string {
   return language === "zh-CN" ? "缓存写入单价 / 1M" : "Cache write price / 1M";
+}
+
+function getTokenBreakdownLabels(language: Language): {
+  input: string;
+  output: string;
+  cacheRead: string;
+  cacheWrite: string;
+} {
+  return language === "zh-CN"
+    ? {
+        input: "输入",
+        output: "输出",
+        cacheRead: "缓存命中",
+        cacheWrite: "缓存写入"
+      }
+    : {
+        input: "Input",
+        output: "Output",
+        cacheRead: "Cache hit",
+        cacheWrite: "Cache write"
+      };
 }
 
 // 返回记忆设置文案, 后续扩展记忆类型时集中维护
