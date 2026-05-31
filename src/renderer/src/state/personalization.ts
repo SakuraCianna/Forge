@@ -1,7 +1,7 @@
 // 本文件说明: 保存回答风格偏好并生成模型可读的个性化提示
 const personalizationStorageKey = "forge.personalization";
 
-export type ReplyTone = "friendly" | "concise" | "technical";
+type ReplyTone = "friendly" | "concise" | "technical";
 
 export type PersonalizationSettings = {
   replyTone: ReplyTone;

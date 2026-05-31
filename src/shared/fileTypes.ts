@@ -7,7 +7,7 @@ export type ProjectTextFile = {
   size: number;
 };
 
-export type ProjectFileChangeSource = {
+type ProjectFileChangeSource = {
   threadId: string;
   actionId?: string;
   actionLabel?: string;

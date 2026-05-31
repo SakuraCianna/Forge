@@ -6,9 +6,9 @@ import type { CommandOutputChunk } from "@shared/commandTypes";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import { getEnabledModels } from "./modelSettings";
 
-export type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
+type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
 
-export type TaskThreadEventKind = "user" | "plan" | "command" | "file" | "error" | "result";
+type TaskThreadEventKind = "user" | "plan" | "command" | "file" | "error" | "result";
 
 export type CommandRunResult = {
   runId?: string;
@@ -22,7 +22,7 @@ export type CommandRunResult = {
   cancelled?: boolean;
 };
 
-export type CommandRunState = {
+type CommandRunState = {
   runId?: string;
   actionId?: string;
   command: string;
@@ -31,7 +31,7 @@ export type CommandRunState = {
   stderr?: string;
 };
 
-export type CommandApprovalRecord = {
+type CommandApprovalRecord = {
   command: string;
   reason: string;
   approvedAt: string;
@@ -76,7 +76,7 @@ type ThreadMemorySource = AgentMemoryContext & {
   sourceThreadId?: string;
 };
 
-export type CreateThreadResult =
+type CreateThreadResult =
   | { ok: true; thread: TaskThread }
   | { ok: false; reason: "empty-prompt" | "missing-model" };
 

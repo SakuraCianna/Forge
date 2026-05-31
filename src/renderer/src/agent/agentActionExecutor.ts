@@ -16,7 +16,7 @@ export type AgentActionPermissionResult =
   | { ok: true }
   | { ok: false; tool: AgentToolPermission; message: string };
 
-export type AgentCommandRisk =
+type AgentCommandRisk =
   | { level: "allow" }
   | { level: "ask" | "deny"; reason: string };
 

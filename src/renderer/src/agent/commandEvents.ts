@@ -1,7 +1,7 @@
 // 本文件说明: 把命令运行开始和结束结果转换成线程事件
 import type { CommandRunResult, TaskThreadEvent } from "@/state/taskThreads";
 
-export type CommandResult = CommandRunResult;
+type CommandResult = CommandRunResult;
 
 type CreateCommandStartedEventOptions = {
   threadId: string;

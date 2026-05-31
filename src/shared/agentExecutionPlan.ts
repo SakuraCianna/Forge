@@ -1,9 +1,9 @@
 // 本文件说明: 将模型计划步骤转成前端可执行动作队列
 import type { AgentPlanStep } from "./agentTypes.js";
 
-export type AgentActionKind = "inspect-file" | "edit-file" | "run-command" | "commit" | "manual";
+type AgentActionKind = "inspect-file" | "edit-file" | "run-command" | "commit" | "manual";
 
-export type AgentActionStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+type AgentActionStatus = "pending" | "running" | "completed" | "failed" | "skipped";
 
 export type AgentAction = {
   id: string;

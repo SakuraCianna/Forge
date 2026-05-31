@@ -2,7 +2,7 @@
 const agentMemoryStorageKey = "forge.agentMemories";
 const maxMemoryContentLength = 420;
 
-export type AgentMemoryScope = "global" | "project";
+type AgentMemoryScope = "global" | "project";
 
 export type AgentMemoryEntry = {
   id: string;
@@ -14,7 +14,7 @@ export type AgentMemoryEntry = {
   sourceThreadId?: string;
 };
 
-export type AgentMemoryCandidate = {
+type AgentMemoryCandidate = {
   content: string;
   projectPath?: string | null;
   sourceThreadId?: string;

@@ -13,7 +13,7 @@ export type UsageRate = {
 // 费率可以按提供商 ID 或精确模型 ID 配置, 模型级费率优先
 export type UsageRateMap = Record<string, UsageRate>;
 
-export type UsageSummary = {
+type UsageSummary = {
   requests: number;
   inputTokens: number;
   outputTokens: number;

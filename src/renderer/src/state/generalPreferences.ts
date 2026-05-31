@@ -1,10 +1,10 @@
 // 本文件说明: 持久化通用偏好和命令安全规则
 const generalPreferencesStorageKey = "forge.generalPreferences";
 
-export type WorkMode = "code" | "daily";
-export type DefaultOpenTarget = "recent-project" | "blank";
-export type AgentRuntime = "windows-native" | "wsl";
-export type TerminalShell = "powershell" | "cmd" | "git-bash";
+type WorkMode = "code" | "daily";
+type DefaultOpenTarget = "recent-project" | "blank";
+type AgentRuntime = "windows-native" | "wsl";
+type TerminalShell = "powershell" | "cmd" | "git-bash";
 export type CommandSafetyRuleLevel = "allow" | "ask" | "deny";
 
 export type CommandSafetyRule = {
