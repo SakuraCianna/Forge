@@ -544,7 +544,8 @@ function extractGeminiTokenUsage(response: Record<string, unknown>): TokenUsage 
     inputTokens,
     outputTokens,
     totalTokens,
-    reasoningTokens: readNumber(response.usageMetadata.thoughtsTokenCount)
+    reasoningTokens: readNumber(response.usageMetadata.thoughtsTokenCount),
+    cacheReadTokens: readNumber(response.usageMetadata.cachedContentTokenCount)
   });
 }
 
