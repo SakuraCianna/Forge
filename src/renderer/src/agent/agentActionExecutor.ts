@@ -7,6 +7,7 @@ type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }
   | { kind: "glob-project"; pattern: string }
   | { kind: "search-project"; query: string }
+  | { kind: "git-status" }
   | { kind: "generate-file-change"; relativePath: string }
   | { kind: "run-command"; command: string }
   | { kind: "manual-gate"; reason: "review" | "commit" }
@@ -49,6 +50,10 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
 
   if (action.kind === "search-project" && action.target) {
     return { kind: "search-project", query: action.target };
+  }
+
+  if (action.kind === "git-status") {
+    return { kind: "git-status" };
   }
 
   if (action.kind === "edit-file" && action.target) {
@@ -262,8 +267,9 @@ export function isRunnableAgentAction(
     (action.kind === "inspect-file" ||
       action.kind === "glob-project" ||
       action.kind === "search-project" ||
+      action.kind === "git-status" ||
       action.kind === "edit-file") &&
-    action.target
+    (action.kind === "git-status" || action.target)
   ) {
     return true;
   }
@@ -295,7 +301,7 @@ function getRequiredToolForAction(action: AgentAction): AgentToolPermission | nu
     return "command";
   }
 
-  if (action.kind === "commit") {
+  if (action.kind === "git-status" || action.kind === "commit") {
     return "git";
   }
 

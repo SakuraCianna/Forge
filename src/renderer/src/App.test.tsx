@@ -283,6 +283,72 @@ describe("App agent execution", () => {
     expect(await screen.findByText(/文件匹配完成: src\/\*\*\/\*\.tsx/)).toBeInTheDocument();
     expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
   });
+
+  it("runs controlled Git status actions without invoking the shell command runner", async () => {
+    const user = userEvent.setup();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Check Git changes",
+      createdAt: "2026-05-31T01:30:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Check Git status",
+          description: "Inspect working tree before commit.",
+          kind: "verify",
+          status: "pending",
+          target: "git status --short"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "",
+      nextContent: "",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "",
+        size: 0
+      }
+    });
+
+    vi.mocked(forge.git.status).mockResolvedValue({
+      isRepo: true,
+      changedFiles: ["src/App.tsx"],
+      changes: [
+        {
+          path: "src/App.tsx",
+          status: "M",
+          diff: "diff --git a/src/App.tsx b/src/App.tsx\n+changed"
+        }
+      ],
+      rawStatus: " M src/App.tsx\n"
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Check git status");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => expect(forge.git.status).toHaveBeenCalledWith({ projectRoot }));
+    expect(forge.commands.run).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Git 状态完成: 1 个文件有改动/)).toBeInTheDocument();
+    expect(screen.getByText(/src\/App\.tsx/)).toBeInTheDocument();
+    expect(screen.getByText(/Diff 摘要/)).toBeInTheDocument();
+  });
 });
 
 // 准备一个已打开项目和可用模型, 让 App 启动后直接进入项目工作区

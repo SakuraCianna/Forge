@@ -130,6 +130,30 @@ describe("agentExecutionPlan", () => {
     ]);
   });
 
+  it("turns git status verification into a controlled Git action", () => {
+    const steps: AgentPlanStep[] = [
+      {
+        id: "step-1",
+        title: "Check Git status",
+        description: "Check working tree before commit.",
+        kind: "verify",
+        status: "pending",
+        target: "git status --short"
+      }
+    ];
+
+    expect(createAgentActionsFromPlanSteps(steps)).toEqual([
+      {
+        id: "action-1",
+        stepId: "step-1",
+        kind: "git-status",
+        label: "Check Git status",
+        status: "pending",
+        target: "git status --short"
+      }
+    ]);
+  });
+
   it("does not let non-actionable planning notes block later file creation", () => {
     const steps: AgentPlanStep[] = [
       {

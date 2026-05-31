@@ -5,6 +5,7 @@ type AgentActionKind =
   | "inspect-file"
   | "glob-project"
   | "search-project"
+  | "git-status"
   | "edit-file"
   | "run-command"
   | "commit"
@@ -41,6 +42,20 @@ export function createAgentActionsFromPlanSteps(steps: AgentPlanStep[]): AgentAc
 // 先把单个计划步骤转换成未编号动作, 过滤说明步后再统一编号
 function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
   const normalizedTarget = normalizeActionTarget(step.target);
+
+  if (
+    (step.kind === "inspect" || step.kind === "verify") &&
+    normalizedTarget &&
+    isGitStatusTarget(normalizedTarget)
+  ) {
+    return {
+      stepId: step.id,
+      kind: "git-status",
+      label: "Check Git status",
+      status: "pending",
+      target: normalizedTarget
+    };
+  }
 
   if (step.kind === "inspect" && normalizedTarget && isLikelyGlobPattern(normalizedTarget)) {
     return {
@@ -121,6 +136,11 @@ function normalizeActionTarget(target: string | undefined): string | undefined {
 // 判断目标是否像 glob 模式, 让文件匹配走专用工具而不是读一个不存在的路径
 function isLikelyGlobPattern(target: string): boolean {
   return /[*?[\]]/u.test(target);
+}
+
+// 常见 Git 只读检查走受控 Git IPC, 不通过 shell 执行命令
+function isGitStatusTarget(target: string): boolean {
+  return /^git\s+(?:status|diff)(?:\s|$)/iu.test(target.trim().replace(/\s+/g, " "));
 }
 
 // 用轻量规则判断目标是否像文件路径, 避免误把普通说明当文件

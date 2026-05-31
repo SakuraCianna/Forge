@@ -1851,6 +1851,8 @@ export function App(): ReactElement {
       return await globAgentProjectAction(threadId, action, execution.pattern);
     } else if (execution.kind === "search-project") {
       return await searchAgentProjectAction(threadId, action, execution.query);
+    } else if (execution.kind === "git-status") {
+      return await inspectAgentGitStatusAction(threadId, action);
     } else if (execution.kind === "generate-file-change") {
       return await generateAgentFileChangeAction(threadId, action, execution.relativePath);
     } else if (execution.kind === "run-command") {
@@ -1958,6 +1960,49 @@ export function App(): ReactElement {
   // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
     await runAgentActionBatch(actions, (action) => runAgentAction(threadId, action));
+  }
+
+  // 执行受控 Git 状态动作, 复用主进程 Git IPC 而不是让 Agent 拼 shell
+  async function inspectAgentGitStatusAction(
+    threadId: string,
+    action: AgentAction
+  ): Promise<AgentAction["status"]> {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      updateAgentActionStatus(threadId, action.id, "failed");
+      return "failed";
+    }
+
+    try {
+      const status = await window.forge.git.status({ projectRoot: currentProject.path });
+      const createdAt = new Date().toISOString();
+
+      setGitStatus(status);
+      setGitNotice(null);
+      updateAgentActionStatus(threadId, action.id, "completed");
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-agent-git-status-${action.id}-${createdAt}`,
+            kind: "file",
+            message: formatProjectGitStatusMessage(settings.language, status),
+            createdAt
+          }
+        ])
+      );
+      return "completed";
+    } catch (error) {
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "file",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+      return "failed";
+    }
   }
 
   // 执行受控项目 glob 动作, 只返回候选文件路径和大小
@@ -3035,6 +3080,52 @@ function formatProjectSearchResultMessage(
   }
 
   return [header, ...lines].join("\n");
+}
+
+// 将 Git 状态和 diff 片段压缩成 Agent 时间线摘要, 避免直接暴露 shell 输出
+function formatProjectGitStatusMessage(language: Language, status: ProjectGitStatus): string {
+  if (!status.isRepo) {
+    return language === "zh-CN"
+      ? "Git 状态完成: 当前项目不是 Git 仓库。"
+      : "Git status complete: current project is not a Git repository.";
+  }
+
+  if (status.changedFiles.length === 0) {
+    return language === "zh-CN"
+      ? "Git 状态完成: 工作区干净。"
+      : "Git status complete: working tree is clean.";
+  }
+
+  const header =
+    language === "zh-CN"
+      ? `Git 状态完成: ${status.changedFiles.length} 个文件有改动`
+      : `Git status complete: ${status.changedFiles.length} ${status.changedFiles.length === 1 ? "file" : "files"} changed`;
+  const fileLines = status.changes.slice(0, 12).map((change) =>
+    language === "zh-CN"
+      ? `- ${change.path} (${formatGitStatus(change.status, language)})`
+      : `- ${change.path} (${formatGitStatus(change.status, language)})`
+  );
+  const remaining = status.changedFiles.length - fileLines.length;
+  const diffLines = status.changes
+    .flatMap((change) => change.diff.split(/\r?\n/u).filter(Boolean).slice(0, 8))
+    .slice(0, 18)
+    .map((line) => `  ${line.slice(0, 180)}`);
+
+  if (remaining > 0) {
+    fileLines.push(language === "zh-CN" ? `- 还有 ${remaining} 个文件未显示` : `- ${remaining} more not shown`);
+  }
+
+  if (diffLines.length === 0) {
+    return [header, ...fileLines].join("\n");
+  }
+
+  return [
+    header,
+    ...fileLines,
+    "",
+    language === "zh-CN" ? "Diff 摘要:" : "Diff summary:",
+    ...diffLines
+  ].join("\n");
 }
 
 // 将 glob 文件匹配结果压缩成线程时间线里的可读摘要
