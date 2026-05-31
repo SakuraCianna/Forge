@@ -105,9 +105,10 @@ type ThreadActivitySummary = {
   meta: string | null;
 };
 
-type CompactActivityCue = {
+type CompactProcessedSummary = {
   label: string;
-  detail: string | null;
+  duration: string;
+  hiddenEvents: TaskThreadEvent[];
 };
 
 type AgentConfirmationItemKind =
@@ -209,6 +210,7 @@ export function ThreadWorkspace({
   const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("plan");
   const [selectedAgentActionId, setSelectedAgentActionId] = useState<string | null>(null);
+  const [compactProcessedExpanded, setCompactProcessedExpanded] = useState(false);
   const commandSafetyPolicy = useMemo<AgentCommandSafetyPolicy>(
     () => ({ fullAccess, rules: commandSafetyRules }),
     [commandSafetyRules, fullAccess]
@@ -235,10 +237,10 @@ export function ThreadWorkspace({
     [selectedThread]
   );
   const hasCompactSourceEvents = (selectedThread?.events.length ?? 0) > 0;
-  const compactActivityCue = useMemo(
+  const compactProcessedSummary = useMemo(
     () =>
       selectedThread
-        ? getCompactActivityCue(selectedThread, visibleCompactEvents.length, language)
+        ? getCompactProcessedSummary(selectedThread, visibleCompactEvents, language)
         : null,
     [language, selectedThread, visibleCompactEvents.length]
   );
@@ -652,6 +654,8 @@ export function ThreadWorkspace({
 
           {renderCompactAgentControlPanel()}
 
+          {compactProcessedSummary ? renderCompactProcessedSummary(compactProcessedSummary) : null}
+
           <section
             role="region"
             aria-label="Conversation transcript"
@@ -659,8 +663,6 @@ export function ThreadWorkspace({
           >
             {visibleCompactEvents.length > 0 ? (
               visibleCompactEvents.map((event) => renderCompactEvent(event))
-            ) : compactActivityCue ? (
-              renderCompactActivityCue(compactActivityCue)
             ) : !hasCompactSourceEvents ? (
               <div className="text-sm text-[#8e8ea0]">
                 {language === "zh-CN" ? "等待 Forge 开始执行" : "Waiting for Forge to start"}
@@ -1002,20 +1004,35 @@ export function ThreadWorkspace({
     );
   }
 
-  // 当内部事件被主屏过滤时保留一条低打扰心跳, 避免执行中看起来没有任何输出
-  function renderCompactActivityCue(cue: CompactActivityCue): ReactElement {
+  // 将内部执行流水折叠进一条已处理摘要, 正文只保留最终可读输出
+  function renderCompactProcessedSummary(summary: CompactProcessedSummary): ReactElement {
     return (
-      <article role="status" aria-live="polite" className="grid grid-cols-[20px_minmax(0,1fr)] gap-3">
-        <span className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#f7f7f8] text-[#565869]">
-          <Activity className="h-3.5 w-3.5 animate-pulse" />
-        </span>
-        <div className="min-w-0">
-          <div className="text-[11px] text-[#8e8ea0]">{cue.label}</div>
-          {cue.detail ? (
-            <p className="mt-1 break-words text-sm leading-6 text-[#202123]">{cue.detail}</p>
-          ) : null}
-        </div>
-      </article>
+      <section className="mx-auto w-full max-w-[680px] border-b border-[#ececf1] pb-2">
+        <button
+          type="button"
+          aria-expanded={compactProcessedExpanded}
+          onClick={() => setCompactProcessedExpanded((expanded) => !expanded)}
+          className="flex h-7 items-center gap-2 text-left text-sm font-medium text-[#8e8ea0] transition hover:text-[#565869]"
+        >
+          <span>{summary.label}</span>
+          <span>{summary.duration}</span>
+          <ArrowRight
+            className={`h-3.5 w-3.5 transition ${
+              compactProcessedExpanded ? "rotate-90" : ""
+            }`}
+          />
+        </button>
+        {compactProcessedExpanded ? (
+          <div className="mt-2 grid gap-1.5 rounded-[12px] bg-[#f7f7f8] p-2 text-[12px] text-[#6e6e80]">
+            {summary.hiddenEvents.slice(-8).map((event) => (
+              <div key={event.id} className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+                <span className="text-[#8e8ea0]">{formatEventTimestamp(event.createdAt)}</span>
+                <span className="min-w-0 truncate">{event.message}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
     );
   }
 
@@ -3835,116 +3852,53 @@ function getThreadActivitySummary(
   };
 }
 
-// 在没有用户可读输出时根据最新内部事件生成一条简短运行反馈
-function getCompactActivityCue(
+// 生成 Codex 风格的已处理摘要, 把内部步骤默认折叠起来
+function getCompactProcessedSummary(
   thread: TaskThread,
-  visibleEventCount: number,
+  visibleEvents: TaskThreadEvent[],
   language: Language
-): CompactActivityCue | null {
-  if (visibleEventCount > 0) {
+): CompactProcessedSummary | null {
+  const visibleEventIds = new Set(visibleEvents.map((event) => event.id));
+  const hiddenEvents = thread.events.filter((event) => !visibleEventIds.has(event.id));
+
+  if (hiddenEvents.length === 0) {
     return null;
   }
 
-  const copy =
-    language === "zh-CN"
-      ? {
-          planning: "Forge 正在组织步骤",
-          working: "Forge 正在处理",
-          command: "Forge 正在运行命令",
-          blocked: "Forge 需要你处理下一步",
-          finishing: "Forge 正在整理输出",
-          waiting: "等待模型返回可读输出",
-          actionDetail: (label: string) => `正在执行 ${label}`,
-          commandDetail: (command: string) => command,
-          waitingActionDetail: (label: string) => `等待处理 ${label}`,
-          completedActionDetail: (label: string) => `已完成 ${label}, 正在整理结果`
-        }
-      : {
-          planning: "Forge is planning",
-          working: "Forge is working",
-          command: "Forge is running a command",
-          blocked: "Forge needs your next action",
-          finishing: "Forge is preparing the response",
-          waiting: "Waiting for a readable response",
-          actionDetail: (label: string) => `Working on ${label}`,
-          commandDetail: (command: string) => command,
-          waitingActionDetail: (label: string) => `Waiting on ${label}`,
-          completedActionDetail: (label: string) => `Finished ${label}, preparing the result`
-        };
-
-  const latestEvent = thread.events.at(-1) ?? null;
-  const latestActionRun = findLatestAgentActionRun(thread.events);
-
-  if (latestEvent?.commandRun) {
-    return {
-      label: copy.command,
-      detail: copy.commandDetail(latestEvent.commandRun.command)
-    };
-  }
-
-  if (latestActionRun) {
-    if (latestActionRun.status === "waiting" || latestActionRun.status === "failed") {
-      return {
-        label: copy.blocked,
-        detail: copy.waitingActionDetail(latestActionRun.label)
-      };
-    }
-
-    if (latestActionRun.status === "completed" || latestActionRun.status === "confirmed") {
-      return {
-        label: copy.finishing,
-        detail: copy.completedActionDetail(latestActionRun.label)
-      };
-    }
-
-    return {
-      label: copy.working,
-      detail: copy.actionDetail(latestActionRun.label)
-    };
-  }
-
-  if (latestEvent?.kind === "plan") {
-    return {
-      label: copy.planning,
-      detail: copy.waiting
-    };
-  }
-
-  if (latestEvent?.kind === "file" || latestEvent?.kind === "command") {
-    return {
-      label: copy.working,
-      detail: copy.waiting
-    };
-  }
-
-  if (thread.status === "running" || thread.status === "planned") {
-    return {
-      label: copy.working,
-      detail: copy.waiting
-    };
-  }
-
-  if (thread.status === "blocked") {
-    return {
-      label: copy.blocked,
-      detail: copy.waiting
-    };
-  }
-
-  return null;
+  return {
+    label: language === "zh-CN" ? "已处理" : "Processed",
+    duration: formatCompactProcessedDuration(thread),
+    hiddenEvents
+  };
 }
 
-// 查找最新 Agent 动作运行事件, 用于 compact 心跳展示当前真实工作
-function findLatestAgentActionRun(events: TaskThreadEvent[]): AgentActionRunRecord | null {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const run = events[index]?.agentActionRun;
+// 计算已处理摘要的耗时, 运行中的线程使用当前时间保证用户看到持续反馈
+function formatCompactProcessedDuration(thread: TaskThread): string {
+  const startedAt = Date.parse(thread.events[0]?.createdAt ?? thread.createdAt);
+  const lastEvent = thread.events.at(-1);
+  const finishedAt =
+    thread.status === "running" || thread.status === "planned"
+      ? Date.now()
+      : Date.parse(lastEvent?.completedAt ?? lastEvent?.createdAt ?? thread.createdAt);
 
-    if (run) {
-      return run;
-    }
+  if (Number.isNaN(startedAt) || Number.isNaN(finishedAt)) {
+    return "";
   }
 
-  return null;
+  return formatCompactDuration(Math.max(0, finishedAt - startedAt));
+}
+
+// 使用短耗时格式贴近 Codex 已处理行, 避免占用正文空间
+function formatCompactDuration(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes <= 0) {
+    return `${seconds}s`;
+  }
+
+  return `${minutes}m ${seconds}s`;
 }
 
 // 把事件类型压成短标签, 避免对话区出现内部术语
