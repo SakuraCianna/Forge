@@ -2084,6 +2084,50 @@ describe("ThreadWorkspace", () => {
     expect(onRunCommand).toHaveBeenCalledWith("thread-1", "npm test");
   });
 
+  it("keeps the final error visible when command history output is long", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Long command output",
+            events: [
+              {
+                id: "event-command-result",
+                kind: "error",
+                message: "Command failed",
+                createdAt: "2026-05-27T13:05:00.000Z",
+                commandResult: {
+                  command: "npm test",
+                  cwd: "E:\\CodeHome\\Forge",
+                  exitCode: 1,
+                  stdout: `start\n${"x".repeat(1200)}\nFINAL ERROR: failed assertion`,
+                  stderr: "",
+                  timedOut: false
+                }
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Commands" }));
+
+    expect(screen.getByText(/output truncated/)).toBeInTheDocument();
+    expect(screen.getByText(/FINAL ERROR: failed assertion/)).toBeInTheDocument();
+  });
+
   it("shows scanned project files and previews selected content", async () => {
     const user = userEvent.setup();
     const onPreviewFile = vi.fn();

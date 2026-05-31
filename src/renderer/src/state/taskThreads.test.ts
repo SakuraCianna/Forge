@@ -246,6 +246,46 @@ describe("taskThreads", () => {
     expect(withStderr[0].events[0].commandRun?.stderr).toBe("warning line\n");
   });
 
+  it("marks long live command output as truncated while keeping the latest lines", () => {
+    const threads: TaskThread[] = [
+      {
+        id: "thread-1",
+        title: "Run tests",
+        prompt: "Run tests",
+        status: "running",
+        modelId: "openai:gpt-5.5",
+        intelligence: "high",
+        speed: "balanced",
+        createdAt: "2026-05-27T13:00:00.000Z",
+        events: [
+          {
+            id: "event-command-started",
+            kind: "command",
+            message: "Started command",
+            createdAt: "2026-05-27T13:05:00.000Z",
+            commandRun: {
+              command: "npm test",
+              runId: "run-1",
+              status: "running"
+            }
+          }
+        ]
+      }
+    ];
+
+    const updated = appendCommandRunOutput(threads, {
+      runId: "run-1",
+      command: "npm test",
+      stream: "stdout",
+      chunk: `start\n${"x".repeat(13000)}\nFINAL ERROR: failed assertion`
+    });
+    const stdout = updated[0].events[0].commandRun?.stdout ?? "";
+
+    expect(stdout).toContain("[Forge output truncated");
+    expect(stdout).not.toContain("start");
+    expect(stdout).toContain("FINAL ERROR: failed assertion");
+  });
+
   it("creates a structured command approval audit event", () => {
     const event = createCommandApprovalEvent({
       threadId: "thread-1",

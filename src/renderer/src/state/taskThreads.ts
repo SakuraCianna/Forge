@@ -443,6 +443,8 @@ export function archiveProjectThreads(threads: TaskThread[], projectPath: string
 }
 
 const maxLiveCommandOutputLength = 12000;
+const liveCommandOutputTruncationNotice =
+  "[Forge output truncated; showing latest command output]\n";
 
 // 优先用 runId 匹配命令输出, 旧事件没有 runId 时回退到命令文本
 function commandRunMatchesOutput(
@@ -462,5 +464,7 @@ function limitLiveCommandOutput(value: string): string {
     return value;
   }
 
-  return value.slice(value.length - maxLiveCommandOutputLength);
+  const tailLength = maxLiveCommandOutputLength - liveCommandOutputTruncationNotice.length;
+
+  return `${liveCommandOutputTruncationNotice}${value.slice(-tailLength)}`;
 }
