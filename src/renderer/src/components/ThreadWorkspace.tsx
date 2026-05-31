@@ -65,6 +65,7 @@ type ThreadWorkspaceProps = {
   onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
   onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
+  onGenerateContinuationPlan?: (threadId: string) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
   onSkipAgentAction?: (threadId: string, action: AgentAction) => void;
   onResumeAgent?: (threadId: string) => void;
@@ -120,6 +121,7 @@ export function ThreadWorkspace({
   onApproveAgentCommand,
   onGenerateFailureFix,
   onGenerateCommandFix,
+  onGenerateContinuationPlan,
   onCompleteAgentAction,
   onSkipAgentAction,
   onResumeAgent,
@@ -618,12 +620,21 @@ export function ThreadWorkspace({
     const agentActions = selectedThread.agentActions ?? [];
     const pendingChangeCount = allChangePreviews.length;
     const controlState = getAgentControlState(agentActions, pendingChangeCount, commandSafetyPolicy);
+    const canGenerateContinuationPlan =
+      Boolean(onGenerateContinuationPlan) &&
+      agentActions.length > 0 &&
+      !agentPaused &&
+      pendingChangeCount === 0 &&
+      !controlState.queueBlockerAction &&
+      controlState.runnablePendingActions.length === 0 &&
+      !controlState.activeGateAction;
     const hasActionableState =
       agentPaused ||
       pendingChangeCount > 0 ||
       controlState.runnablePendingActions.length > 0 ||
       Boolean(controlState.activeGateAction) ||
-      Boolean(controlState.queueBlockerAction);
+      Boolean(controlState.queueBlockerAction) ||
+      canGenerateContinuationPlan;
 
     if (!hasActionableState) {
       return null;
@@ -842,6 +853,26 @@ export function ThreadWorkspace({
                 </button>
               ) : null}
             </div>
+          </div>
+        ) : null}
+
+        {canGenerateContinuationPlan ? (
+          <div className="mt-4 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-3">
+            <p className="text-sm font-semibold leading-5 text-[#202123]">
+              {copy.generateNextPlan}
+            </p>
+            <p className="mt-1 text-[12px] leading-5 text-[#565869]">
+              {copy.generateNextPlanBody}
+            </p>
+            <button
+              type="button"
+              aria-label={copy.generateNextPlan}
+              onClick={() => onGenerateContinuationPlan?.(selectedThread.id)}
+              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2.5 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+            >
+              <Brain className="h-3.5 w-3.5" />
+              {copy.generateNextPlan}
+            </button>
           </div>
         ) : null}
 
@@ -1139,7 +1170,9 @@ export function ThreadWorkspace({
             progress: (completed: number, total: number) => `已完成 ${completed} / ${total} 个动作`,
             failedCount: (count: number) => `${count} 个失败`,
             queueStoppedAt: (label: string) => `队列停止在 ${label}`,
-            generateEdit: "生成修改"
+            generateEdit: "生成修改",
+            generateNextPlan: "生成后续计划",
+            generateNextPlanBody: "根据当前线程状态继续规划下一批步骤"
           }
         : {
             title: "Steps",
@@ -1170,7 +1203,9 @@ export function ThreadWorkspace({
               `${completed} / ${total} actions completed`,
             failedCount: (count: number) => `${count} failed`,
             queueStoppedAt: (label: string) => `Queue stopped at ${label}`,
-            generateEdit: "Generate edit"
+            generateEdit: "Generate edit",
+            generateNextPlan: "Generate next plan",
+            generateNextPlanBody: "Continue from the current thread state"
           };
     const agentRunCopy =
       language === "zh-CN"
@@ -1304,6 +1339,14 @@ export function ThreadWorkspace({
         ? nextPendingAction
         : nextGateAction;
     const queueComplete = queueStats.total > 0 && queueStats.completed === queueStats.total;
+    const canGenerateContinuationPlan =
+      Boolean(onGenerateContinuationPlan && selectedThread) &&
+      agentActions.length > 0 &&
+      !agentPaused &&
+      !hasPendingFileChanges &&
+      !queueBlockerAction &&
+      runnablePendingActions.length === 0 &&
+      !activeGateAction;
     const agentRunStatus =
       hasPendingFileChanges
         ? agentRunCopy.reviewGeneratedChanges
@@ -2202,6 +2245,25 @@ export function ThreadWorkspace({
                 ) : null}
               </div>
             ) : null}
+            {canGenerateContinuationPlan ? (
+              <div className="mb-3 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-2">
+                <p className="text-sm font-medium leading-5 text-[#202123]">
+                  {actionQueueCopy.generateNextPlan}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-4 text-[#6e6e80]">
+                  {actionQueueCopy.generateNextPlanBody}
+                </p>
+                <button
+                  type="button"
+                  aria-label={actionQueueCopy.generateNextPlan}
+                  onClick={() => selectedThread && onGenerateContinuationPlan?.(selectedThread.id)}
+                  className="mt-2 inline-flex h-7 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                >
+                  <Brain className="h-3.5 w-3.5" />
+                  {actionQueueCopy.generateNextPlan}
+                </button>
+              </div>
+            ) : null}
             {!agentPaused && runnablePendingActions.length === 0 && activeGateAction ? (
               <div className="mb-3 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-2">
                 <p className="text-sm font-medium leading-5 text-[#9a3412]">
@@ -2953,6 +3015,8 @@ function getCompactAgentControlCopy(language: Language) {
       failedTitle: "动作失败, 队列已暂停",
       retryAction: "重试动作",
       generateFixPlan: "生成修复计划",
+      generateNextPlan: "生成后续计划",
+      generateNextPlanBody: "根据当前线程状态, 已完成动作和工具结果继续规划下一批步骤",
       readyStatus: "就绪",
       pendingStatus: "待执行"
     };
@@ -2997,6 +3061,9 @@ function getCompactAgentControlCopy(language: Language) {
     failedTitle: "Action failed, queue paused",
     retryAction: "Retry action",
     generateFixPlan: "Generate fix plan",
+    generateNextPlan: "Generate next plan",
+    generateNextPlanBody:
+      "Continue from the current thread state, completed actions, and tool results.",
     readyStatus: "Ready",
     pendingStatus: "Pending"
   };
