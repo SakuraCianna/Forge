@@ -2400,7 +2400,7 @@ function getGeneralSettingsCopy(language: Language): {
       telemetry: "诊断信息",
       telemetryDescription: "本地保留基础诊断开关, 默认关闭",
       terminalShell: "集成终端 Shell",
-      terminalShellDescription: "选择要在集成终端中打开的 Shell",
+      terminalShellDescription: "选择真实命令执行使用的 Shell, Git Bash 需要 bash.exe 已加入 PATH",
       submitWithCtrlEnter: "Ctrl Enter 发送",
       submitWithEnter: "Enter 发送",
       uploadBackground: "上传背景图",
@@ -2476,7 +2476,8 @@ function getGeneralSettingsCopy(language: Language): {
     telemetry: "Diagnostics",
     telemetryDescription: "Keep local diagnostics off by default",
     terminalShell: "Integrated terminal shell",
-    terminalShellDescription: "Choose the shell opened in the integrated terminal",
+    terminalShellDescription:
+      "Choose the shell used for real command execution. Git Bash requires bash.exe on PATH.",
     submitWithCtrlEnter: "Ctrl Enter sends",
     submitWithEnter: "Enter sends",
     uploadBackground: "Upload background image",

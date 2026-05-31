@@ -187,7 +187,7 @@ async function runProjectCommandWithRegistry(
 
     child.on("error", (error) => {
       cleanup();
-      reject(new Error(`启动命令 Shell 失败：${error.message}`));
+      reject(createShellStartError(shellInvocation, error));
     });
   });
 }
@@ -197,25 +197,41 @@ function createShellInvocation(
   command: string,
   shell: CommandShell,
   shellExecutable?: string
-): { executable: string; args: string[] } {
+): { executable: string; args: string[]; label: string; recoveryHint: string } {
   if (shell === "cmd") {
     return {
       executable: shellExecutable ?? "cmd.exe",
-      args: ["/d", "/s", "/c", command]
+      args: ["/d", "/s", "/c", command],
+      label: "Command Prompt",
+      recoveryHint: "Choose PowerShell in Settings if Command Prompt is unavailable."
     };
   }
 
   if (shell === "git-bash") {
     return {
       executable: shellExecutable ?? "bash.exe",
-      args: ["-lc", command]
+      args: ["-lc", command],
+      label: "Git Bash",
+      recoveryHint: "Install Git for Windows or add bash.exe to PATH, then retry the command."
     };
   }
 
   return {
     executable: shellExecutable ?? "powershell.exe",
-    args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command]
+    args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+    label: "PowerShell",
+    recoveryHint: "Choose CMD in Settings if PowerShell is unavailable."
   };
+}
+
+// Shell 启动失败时保留可修复信息, 不让用户只看到底层 spawn ENOENT
+function createShellStartError(
+  shellInvocation: ReturnType<typeof createShellInvocation>,
+  error: Error
+): Error {
+  return new Error(
+    `Command shell ${shellInvocation.label} (${shellInvocation.executable}) could not be started. ${shellInvocation.recoveryHint} Details: ${error.message}`
+  );
 }
 
 // 优先杀掉整棵进程树, 失败时回退到子进程自身
