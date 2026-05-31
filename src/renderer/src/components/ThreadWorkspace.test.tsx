@@ -216,6 +216,45 @@ describe("ThreadWorkspace", () => {
     );
   });
 
+  it("shows compact continuation planning controls after the queue has no pending actions", async () => {
+    const user = userEvent.setup();
+    const onGenerateContinuationPlan = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "completed",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect README.md",
+                status: "completed",
+                target: "README.md"
+              }
+            ]
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onGenerateContinuationPlan={onGenerateContinuationPlan}
+      />
+    );
+
+    const controls = screen.getByRole("region", { name: "Agent action confirmation" });
+
+    expect(within(controls).getAllByText("Generate next plan").length).toBeGreaterThan(0);
+
+    await user.click(within(controls).getByRole("button", { name: "Generate next plan" }));
+
+    expect(onGenerateContinuationPlan).toHaveBeenCalledWith("thread-1");
+  });
+
   it("opens pending compact file changes in the files view", async () => {
     const user = userEvent.setup();
     const onPreviewFile = vi.fn();

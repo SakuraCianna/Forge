@@ -34,6 +34,7 @@ import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
 } from "@/agent/failureFixPrompt";
+import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { formatRemoteModelError, formatRuntimeError } from "@/i18n/runtimeErrors";
@@ -1617,6 +1618,71 @@ export function App(): ReactElement {
     await generateFailureFixPlan(threadId, action, result);
   }
 
+  // 基于当前线程真实状态生成后续计划, 用于完成或跳过一批动作后的长任务续跑
+  async function generateContinuationPlan(threadId: string): Promise<void> {
+    const thread = threads.find((candidate) => candidate.id === threadId);
+
+    if (!thread) {
+      return;
+    }
+
+    if (!currentProject || !projectScanResult) {
+      setTaskNotice(t("projects.required"));
+      appendThreadError(
+        threadId,
+        settings.language === "zh-CN"
+          ? "需要先打开并索引项目, 才能基于当前状态生成后续计划"
+          : "Open and scan a project before generating a continuation plan."
+      );
+      return;
+    }
+
+    const model = settings.models.find((candidate) => candidate.id === thread.modelId);
+    const provider = model
+      ? settings.providers.find((candidate) => candidate.id === model.providerId)
+      : null;
+
+    if (!model || !provider) {
+      appendThreadError(
+        threadId,
+        settings.language === "zh-CN"
+          ? "未找到当前模型或提供商配置"
+          : "Current model or provider configuration was not found."
+      );
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    setTaskNotice(null);
+    clearPausedAgentThread(threadId);
+    setThreads((current) =>
+      appendThreadEvents(
+        current,
+        threadId,
+        [
+          {
+            id: `${threadId}-continuation-plan-${createdAt}`,
+            kind: "plan",
+            message:
+              settings.language === "zh-CN"
+                ? "正在基于当前线程状态生成后续计划"
+                : "Generating a continuation plan from current thread state",
+            createdAt
+          }
+        ],
+        "running"
+      )
+    );
+
+    await generateThreadPlan({
+      threadId,
+      taskPrompt: createContinuationPlanTaskPrompt(thread),
+      model,
+      provider,
+      projectScan: projectScanResult
+    });
+  }
+
   // 按线程所属项目取得扫描结果, 缺失时回退到当前项目扫描
   function getProjectScanForThread(thread: TaskThread): ProjectScanResult | null {
     if (!currentProject || !projectScanResult) {
@@ -2676,6 +2742,7 @@ export function App(): ReactElement {
         onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
         onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
         onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
+        onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
         onCompleteAgentAction={completeAgentAction}
         onSkipAgentAction={skipAgentAction}
         onResumeAgent={resumeAgentThread}

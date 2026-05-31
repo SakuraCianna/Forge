@@ -838,6 +838,111 @@ describe("App agent execution", () => {
     );
     expect(await screen.findByText("已恢复 Agent 执行")).toBeInTheDocument();
   });
+
+  it("generates a continuation plan from completed agent context and runs the next safe action", async () => {
+    const user = userEvent.setup();
+    const englishSettings = addManualModel(createDefaultModelSettings(), "openai", "gpt-test");
+    saveModelSettings(window.localStorage, { ...englishSettings, language: "en-US" });
+    const initialPlan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Inspect README first",
+      createdAt: "2026-05-31T01:50:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Inspect README",
+          description: "Inspect README.md before continuing.",
+          kind: "inspect",
+          status: "pending",
+          target: "README.md"
+        }
+      ]
+    };
+    const continuationPlan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Inspect package next",
+      createdAt: "2026-05-31T01:51:00.000Z",
+      steps: [
+        {
+          id: "step-2",
+          title: "Inspect package",
+          description: "Inspect package.json after reviewing README.",
+          kind: "inspect",
+          status: "pending",
+          target: "package.json"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "",
+      nextContent: "",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan: initialPlan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "",
+        size: 0
+      }
+    });
+
+    vi.mocked(forge.agent.generatePlan)
+      .mockResolvedValueOnce(initialPlan)
+      .mockResolvedValueOnce(continuationPlan);
+    vi.mocked(forge.files.readText).mockImplementation(async (request) => ({
+      relativePath: request.relativePath,
+      content:
+        request.relativePath === "README.md"
+          ? "# Forge\nInitial context"
+          : "{\"name\":\"forge\"}",
+      size: request.relativePath === "README.md" ? 23 : 16
+    }));
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Inspect README and then continue planning");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(forge.files.readText).toHaveBeenCalledWith({
+        projectRoot,
+        relativePath: "README.md"
+      })
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Generate next plan" }));
+
+    await waitFor(() => expect(forge.agent.generatePlan).toHaveBeenCalledTimes(2));
+    const continuationRequest = vi.mocked(forge.agent.generatePlan).mock.calls[1]?.[0];
+    expect(continuationRequest?.taskPrompt).toContain(
+      "Generate the next execution plan from the current state."
+    );
+    expect(continuationRequest?.taskPrompt).toContain("[completed] Inspect README.md");
+    expect(continuationRequest?.taskPrompt).toContain("File read complete: README.md");
+    expect(continuationRequest?.taskPrompt).toContain("do not repeat completed or skipped actions");
+
+    await waitFor(() =>
+      expect(forge.files.readText).toHaveBeenCalledWith({
+        projectRoot,
+        relativePath: "package.json"
+      })
+    );
+    expect(
+      await screen.findByText("Generating a continuation plan from current thread state")
+    ).toBeInTheDocument();
+  });
 });
 
 // 准备一个已打开项目和可用模型, 让 App 启动后直接进入项目工作区
