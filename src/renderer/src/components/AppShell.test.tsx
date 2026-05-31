@@ -111,7 +111,7 @@ describe("AppShell", () => {
     expect(onRun).toHaveBeenCalledOnce();
   });
 
-  it("keeps title bar menus left aligned and avoids duplicate Settings under Edit", async () => {
+  it("keeps title bar menus left aligned and exposes settings from Edit and Window", async () => {
     const user = userEvent.setup();
     const onArchiveProjectChats = vi.fn();
     const onCreateProjectWorktree = vi.fn();
@@ -139,14 +139,17 @@ describe("AppShell", () => {
     );
 
     const titleMenus = screen.getByRole("navigation", { name: "Forge title bar menus" });
-    expect(titleMenus).toHaveClass("ml-4", "gap-3");
+    expect(titleMenus).toHaveClass("ml-2", "gap-5");
 
     await user.click(within(titleMenus).getByRole("button", { name: "File" }));
     await user.click(screen.getByRole("menuitem", { name: "New chat in current project" }));
     expect(onNewProjectChat).toHaveBeenCalledWith(projectPath);
 
     await user.click(within(titleMenus).getByRole("button", { name: "Edit" }));
-    expect(screen.queryByRole("menuitem", { name: "Settings" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Show settings" }));
+    expect(onNavigate).toHaveBeenCalledWith("settings");
+
+    await user.click(within(titleMenus).getByRole("button", { name: "Edit" }));
     await user.click(screen.getByRole("menuitem", { name: "Rename project" }));
     expect(onRenameProject).toHaveBeenCalledWith(projectPath);
 
@@ -168,6 +171,8 @@ describe("AppShell", () => {
     expect(onNavigate).toHaveBeenCalledWith("source");
 
     await user.click(within(titleMenus).getByRole("button", { name: "Window" }));
+    expect(screen.getByRole("menuitem", { name: "Workspace" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Files" })).toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Show settings" }));
     expect(onNavigate).toHaveBeenCalledWith("settings");
   });

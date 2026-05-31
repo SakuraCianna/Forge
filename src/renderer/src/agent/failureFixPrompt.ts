@@ -8,6 +8,8 @@ export function createFailureFixTaskPrompt(
   action: AgentAction,
   commandResult: CommandRunResult | null = null
 ): string {
+  const actionQueueContext = formatActionQueueContext(thread.agentActions ?? [], action.id);
+  const recentExecutionContext = formatRecentExecutionContext(thread.events);
   const failureDetails = [
     `Failed action: ${action.label}`,
     `Action kind: ${action.kind}`,
@@ -18,13 +20,21 @@ export function createFailureFixTaskPrompt(
 
   return [
     `Original task: ${thread.prompt}`,
+    `Current thread status: ${thread.status}`,
     "",
     ...failureDetails,
+    actionQueueContext ? `Action queue:\n${actionQueueContext}` : null,
+    recentExecutionContext ? `Recent execution context:\n${recentExecutionContext}` : null,
     "",
     "Generate a recovery execution plan for this failure.",
     "First identify the likely cause using the command output when present, then inspect the smallest useful files, propose focused edits, and finish with verification commands.",
+    'Return a JSON object with a "steps" array when possible. Each step must include "kind", "description", and optional "target".',
+    'Allowed step kinds are "inspect", "edit", "verify", "commit", and "other".',
+    "Reuse completed work. Do not repeat already completed inspect or edit actions unless the failure output specifically points back to them.",
     "Keep the plan safe: do not skip tests, do not hide the failure, and stop before any manual review or commit step."
-  ].join("\n");
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
 }
 
 // 根据动作目标在命令结果里找到最相关的失败记录
@@ -49,8 +59,17 @@ export function findLatestCommandResultForAction(
 
 // 把命令, cwd 和退出码整理成修复提示上下文
 function formatCommandResult(result: CommandRunResult): string {
+  const summary = [
+    `exitCode=${result.exitCode}`,
+    `timedOut=${result.timedOut}`,
+    `cancelled=${Boolean(result.cancelled)}`,
+    result.runId ? `runId=${result.runId}` : null
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join(", ");
+
   return [
-    `Command result: exitCode=${result.exitCode}, timedOut=${result.timedOut}`,
+    `Command result: ${summary}`,
     `Command cwd: ${result.cwd}`,
     result.stdout.trim() ? `stdout:\n${formatCommandOutput(result.stdout)}` : null,
     result.stderr.trim() ? `stderr:\n${formatCommandOutput(result.stderr)}` : null
@@ -69,4 +88,95 @@ function formatCommandOutput(value: string): string {
   }
 
   return `${trimmed.slice(0, maxLength)}\n... output truncated`;
+}
+
+// 把动作队列压缩成修复计划上下文, 帮助模型避开已经完成的重复步骤
+function formatActionQueueContext(actions: AgentAction[], failedActionId: string): string | null {
+  if (actions.length === 0) {
+    return null;
+  }
+
+  const maxActions = 10;
+  const failedIndex = Math.max(0, actions.findIndex((candidate) => candidate.id === failedActionId));
+  const startIndex = Math.max(0, Math.min(failedIndex - 3, actions.length - maxActions));
+  const visibleActions = actions.slice(startIndex, startIndex + maxActions);
+  const lines = visibleActions.map((candidate) => formatActionQueueLine(candidate, failedActionId));
+
+  if (startIndex > 0) {
+    lines.unshift(`- ... ${startIndex} earlier actions omitted`);
+  }
+
+  const omittedAfter = actions.length - startIndex - visibleActions.length;
+
+  if (omittedAfter > 0) {
+    lines.push(`- ... ${omittedAfter} later actions omitted`);
+  }
+
+  return lines.join("\n");
+}
+
+// 把单个动作整理成一行队列快照, 保留目标和命令方便模型续接
+function formatActionQueueLine(action: AgentAction, failedActionId: string): string {
+  const currentFailure = action.id === failedActionId ? ", current failure" : "";
+  const details = [
+    `kind=${action.kind}`,
+    action.target ? `target=${truncateInline(action.target)}` : null,
+    action.command ? `command=${truncateInline(action.command)}` : null
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join(", ");
+
+  return `- [${action.status}${currentFailure}] ${truncateInline(action.label)}${
+    details ? ` (${details})` : ""
+  }`;
+}
+
+// 汇总最近的执行事件, 让失败修复能看到停住前真正发生了什么
+function formatRecentExecutionContext(events: TaskThreadEvent[]): string | null {
+  const lines = events
+    .slice(-10)
+    .map(formatRecentExecutionEvent)
+    .filter((line): line is string => Boolean(line));
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  return lines.join("\n");
+}
+
+// 把时间线事件转成短日志, 命令结果优先带退出码和关键输出
+function formatRecentExecutionEvent(event: TaskThreadEvent): string | null {
+  if (event.commandResult) {
+    const result = event.commandResult;
+    const output = result.stderr.trim() || result.stdout.trim();
+
+    return [
+      `- command result at ${event.createdAt}: ${truncateInline(result.command)} exitCode=${result.exitCode}, timedOut=${result.timedOut}, cancelled=${Boolean(result.cancelled)}`,
+      output ? `  output: ${truncateInline(output, 360)}` : null
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join("\n");
+  }
+
+  if (event.commandRun) {
+    return `- command running at ${event.createdAt}: ${truncateInline(event.commandRun.command)}`;
+  }
+
+  if (event.kind === "error" || event.kind === "file" || event.kind === "plan") {
+    return `- ${event.kind} at ${event.createdAt}: ${truncateInline(event.message, 260)}`;
+  }
+
+  return null;
+}
+
+// 压缩单行上下文, 避免长路径或错误输出把修复提示词撑得过大
+function truncateInline(value: string, maxLength = 140): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength)}...`;
 }

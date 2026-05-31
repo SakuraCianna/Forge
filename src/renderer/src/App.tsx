@@ -287,6 +287,9 @@ export function App(): ReactElement {
   const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
+  const activeAgentProfileContext = getActiveAgentProfileContext(agentProfiles);
+  const fullAccessMode =
+    generalPreferences.fullAccess || activeAgentProfileContext.permissionMode === "full";
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -337,6 +340,7 @@ export function App(): ReactElement {
       }
 
       const runnableActions = getRunnablePendingAgentActions(thread.agentActions ?? [], {
+        fullAccess: fullAccessMode,
         rules: generalPreferences.commandSafetyRules
       });
 
@@ -348,6 +352,7 @@ export function App(): ReactElement {
     }
 
     const runnableActions = getRunnablePendingAgentActions(nextThread.agentActions ?? [], {
+      fullAccess: fullAccessMode,
       rules: generalPreferences.commandSafetyRules
     });
     const runKey = `${nextThread.id}:${runnableActions.map((action) => action.id).join(",")}`;
@@ -360,7 +365,7 @@ export function App(): ReactElement {
     void runAgentActions(nextThread.id, runnableActions).finally(() => {
       activeAgentAutoRunKeysRef.current.delete(runKey);
     });
-  }, [changePreviews.length, generalPreferences.commandSafetyRules, threads]);
+  }, [changePreviews.length, fullAccessMode, generalPreferences.commandSafetyRules, threads]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -1287,6 +1292,7 @@ export function App(): ReactElement {
       });
       const agentActions = createAgentActionsFromPlanSteps(plan.steps ?? []);
       const runnableAgentActions = getRunnablePendingAgentActions(agentActions, {
+        fullAccess: fullAccessMode,
         rules: generalPreferences.commandSafetyRules
       });
       const planMessage =
@@ -1659,7 +1665,7 @@ export function App(): ReactElement {
     action: AgentAction,
     options: { approvedCommand?: boolean } = {}
   ): Promise<AgentActionRunOutcome> {
-    const activeAgentProfile = getActiveAgentProfileContext(agentProfiles);
+    const activeAgentProfile = activeAgentProfileContext;
     const permission = resolveAgentActionPermission(action, activeAgentProfile);
 
     if (!permission.ok) {
@@ -1718,6 +1724,7 @@ export function App(): ReactElement {
       return await generateAgentFileChangeAction(threadId, action.id, execution.relativePath);
     } else if (execution.kind === "run-command") {
       const commandRisk = resolveAgentCommandRisk(execution.command, {
+        fullAccess: fullAccessMode,
         rules: generalPreferences.commandSafetyRules
       });
 
@@ -1733,7 +1740,7 @@ export function App(): ReactElement {
         );
       }
 
-      if (commandRisk.level === "ask" && !generalPreferences.fullAccess && !options.approvedCommand) {
+      if (commandRisk.level === "ask" && !fullAccessMode && !options.approvedCommand) {
         return blockAgentCommandAction(
           threadId,
           action,
@@ -1788,6 +1795,7 @@ export function App(): ReactElement {
     if (action.kind === "run-command" && action.command) {
       const command = action.command;
       const commandRisk = resolveAgentCommandRisk(command, {
+        fullAccess: fullAccessMode,
         rules: generalPreferences.commandSafetyRules
       });
 
@@ -1853,7 +1861,7 @@ export function App(): ReactElement {
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
 
       const generated = await generateProjectFileChange(file.relativePath, file.content, threadId, {
-        autoApply: generalPreferences.fullAccess
+        autoApply: fullAccessMode
       });
       const status = generated ? "completed" : "failed";
       updateAgentActionStatus(threadId, actionId, status);
@@ -2097,6 +2105,7 @@ export function App(): ReactElement {
         selectedThreadId={selectedThreadId}
         threads={visibleWorkspaceThreads}
         commandSafetyRules={generalPreferences.commandSafetyRules}
+        fullAccess={fullAccessMode}
         projectScan={projectScanResult}
         previewFile={previewFile}
         changePreview={

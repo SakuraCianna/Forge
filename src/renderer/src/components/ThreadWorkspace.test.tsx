@@ -777,6 +777,53 @@ describe("ThreadWorkspace", () => {
     expect(onRunAgentAction).not.toHaveBeenCalled();
   });
 
+  it("treats approval-gated commands as runnable when full access is enabled", async () => {
+    const user = userEvent.setup();
+    const onRunAgentActions = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Run full access command",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "run-command",
+                label: "Install dependencies",
+                status: "pending",
+                command: "npm install"
+              }
+            ]
+          }
+        ]}
+        fullAccess
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+        onRunAgentActions={onRunAgentActions}
+      />
+    );
+
+    const status = screen.getByRole("region", { name: "Agent run" });
+    expect(within(status).getByText("Ready for safe batch")).toBeInTheDocument();
+    expect(within(status).getByText("1 safe actions ready")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve command npm install" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Continue safe agent actions" }));
+
+    expect(onRunAgentActions).toHaveBeenCalledWith("thread-1", [
+      expect.objectContaining({ id: "action-1", command: "npm install" })
+    ]);
+  });
+
   it("shows command approval audit records in the command history", async () => {
     const user = userEvent.setup();
 

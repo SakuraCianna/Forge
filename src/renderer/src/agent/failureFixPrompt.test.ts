@@ -39,11 +39,72 @@ describe("failureFixPrompt", () => {
     const prompt = createFailureFixTaskPrompt(thread, action, commandResult);
 
     expect(prompt).toContain("Original task: Fix the broken test suite");
+    expect(prompt).toContain("Current thread status: blocked");
     expect(prompt).toContain("Failed action: Run npm test");
     expect(prompt).toContain("Failed command: npm test");
-    expect(prompt).toContain("Command result: exitCode=1, timedOut=false");
+    expect(prompt).toContain("Command result: exitCode=1, timedOut=false, cancelled=false");
     expect(prompt).toContain("Command cwd: E:\\CodeHome\\Forge");
     expect(prompt).toContain("stdout:\nran 199 tests");
     expect(prompt).toContain("stderr:\nTypeError: Cannot read properties of undefined");
+    expect(prompt).toContain('Return a JSON object with a "steps" array');
+  });
+
+  it("adds action queue and recent execution context for recovery planning", () => {
+    const failedAction: AgentAction = {
+      id: "action-2",
+      stepId: "step-2",
+      kind: "edit-file",
+      label: "Edit docs/usage.md",
+      status: "failed",
+      target: "docs/usage.md"
+    };
+    const prompt = createFailureFixTaskPrompt(
+      {
+        ...thread,
+        events: [
+          {
+            id: "event-1",
+            kind: "file",
+            message: "Generated file change suggestion docs/usage.md",
+            createdAt: "2026-05-27T13:01:00.000Z"
+          },
+          {
+            id: "event-2",
+            kind: "error",
+            message: "Model file modification failed: file path was missing",
+            createdAt: "2026-05-27T13:02:00.000Z"
+          }
+        ],
+        agentActions: [
+          {
+            id: "action-1",
+            stepId: "step-1",
+            kind: "inspect-file",
+            label: "Inspect package.json",
+            status: "completed",
+            target: "package.json"
+          },
+          failedAction,
+          {
+            id: "action-3",
+            stepId: "step-3",
+            kind: "run-command",
+            label: "Run npm test",
+            status: "pending",
+            command: "npm test"
+          }
+        ]
+      },
+      failedAction
+    );
+
+    expect(prompt).toContain("Action queue:");
+    expect(prompt).toContain("[completed] Inspect package.json");
+    expect(prompt).toContain("[failed, current failure] Edit docs/usage.md");
+    expect(prompt).toContain("[pending] Run npm test");
+    expect(prompt).toContain("Recent execution context:");
+    expect(prompt).toContain("file at 2026-05-27T13:01:00.000Z");
+    expect(prompt).toContain("error at 2026-05-27T13:02:00.000Z");
+    expect(prompt).toContain("Reuse completed work");
   });
 });

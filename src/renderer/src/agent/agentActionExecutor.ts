@@ -21,6 +21,7 @@ export type AgentCommandRisk =
   | { level: "ask" | "deny"; reason: string };
 
 export type AgentCommandSafetyPolicy = {
+  fullAccess?: boolean;
   rules?: CommandSafetyRule[];
 };
 
@@ -215,7 +216,9 @@ export function isRunnableAgentAction(
   }
 
   if (action.kind === "run-command" && action.command) {
-    return resolveAgentCommandRisk(action.command, policy).level === "allow";
+    const risk = resolveAgentCommandRisk(action.command, policy);
+
+    return risk.level === "allow" || (policy.fullAccess === true && risk.level === "ask");
   }
 
   return false;

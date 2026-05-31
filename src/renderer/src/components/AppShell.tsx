@@ -318,7 +318,7 @@ export function AppShell({
     return (
       <nav
         aria-label={copy.titleBarMenus}
-        className="no-drag ml-4 hidden min-w-0 items-center gap-3 md:flex"
+        className="no-drag ml-2 hidden min-w-0 items-center gap-5 md:flex"
       >
         <TitleBarMenu label={copy.fileMenu}>
           <MenuItem onSelect={onNewTask}>
@@ -362,6 +362,10 @@ export function AppShell({
               </MenuItem>
             </>
           ) : null}
+          <MenuItem onSelect={() => onNavigate("settings")}>
+            <Settings className="h-4 w-4" />
+            {copy.showSettings}
+          </MenuItem>
         </TitleBarMenu>
 
         <TitleBarMenu label={copy.viewMenu}>
@@ -380,6 +384,14 @@ export function AppShell({
         </TitleBarMenu>
 
         <TitleBarMenu label={copy.windowMenu}>
+          <MenuItem onSelect={() => onNavigate("workspace")}>
+            <Home className="h-4 w-4" />
+            {copy.workspaceView}
+          </MenuItem>
+          <MenuItem onSelect={() => onNavigate("files")}>
+            <FileCode2 className="h-4 w-4" />
+            {copy.filesView}
+          </MenuItem>
           <MenuItem onSelect={resetSidebarWidth}>
             <FolderOpen className="h-4 w-4" />
             {copy.resetSidebar}

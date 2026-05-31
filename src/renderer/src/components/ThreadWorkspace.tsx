@@ -50,6 +50,7 @@ type ThreadWorkspaceProps = {
   selectedThreadId: string | null;
   threads: TaskThread[];
   commandSafetyRules?: CommandSafetyRule[];
+  fullAccess?: boolean;
   projectScan?: ProjectScanResult | null;
   previewFile?: ProjectTextFile | null;
   changePreview?: ProjectFileChangePreview | null;
@@ -100,6 +101,7 @@ export function ThreadWorkspace({
   selectedThreadId,
   threads,
   commandSafetyRules = [],
+  fullAccess = false,
   projectScan = null,
   previewFile = null,
   changePreview = null,
@@ -132,8 +134,8 @@ export function ThreadWorkspace({
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("plan");
   const [selectedAgentActionId, setSelectedAgentActionId] = useState<string | null>(null);
   const commandSafetyPolicy = useMemo<AgentCommandSafetyPolicy>(
-    () => ({ rules: commandSafetyRules }),
-    [commandSafetyRules]
+    () => ({ fullAccess, rules: commandSafetyRules }),
+    [commandSafetyRules, fullAccess]
   );
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
@@ -960,7 +962,7 @@ export function ThreadWorkspace({
     function getActionStatusLabel(action: AgentAction): string {
       const commandRisk = getCommandRiskForAction(action);
 
-      if (action.status === "pending" && commandRisk?.level === "ask") {
+      if (action.status === "pending" && commandRisk?.level === "ask" && !fullAccess) {
         return actionQueueCopy.commandNeedsApproval;
       }
 
@@ -1028,7 +1030,7 @@ export function ThreadWorkspace({
         const commandToRun = action.command;
         const commandRisk = resolveAgentCommandRisk(commandToRun, commandSafetyPolicy);
 
-        if (commandRisk.level === "ask" && onApproveAgentCommand) {
+        if (commandRisk.level === "ask" && !fullAccess && onApproveAgentCommand) {
           return (
             <button
               type="button"
@@ -1091,7 +1093,7 @@ export function ThreadWorkspace({
 
       const commandRisk = getCommandRiskForAction(action);
 
-      if (commandRisk?.level === "ask") {
+      if (commandRisk?.level === "ask" && !fullAccess) {
         return `${actionDetailsCopy.commandNeedsApproval}: ${formatAgentCommandRiskReason(
           language,
           commandRisk.reason
@@ -1116,7 +1118,7 @@ export function ThreadWorkspace({
     function getGateTitle(action: AgentAction): string {
       const commandRisk = getCommandRiskForAction(action);
 
-      if (commandRisk?.level === "ask") {
+      if (commandRisk?.level === "ask" && !fullAccess) {
         return actionQueueCopy.commandNeedsApproval;
       }
 
@@ -1131,7 +1133,7 @@ export function ThreadWorkspace({
     function getGateBody(action: AgentAction): string {
       const commandRisk = getCommandRiskForAction(action);
 
-      if (commandRisk?.level === "ask") {
+      if (commandRisk?.level === "ask" && !fullAccess) {
         return actionDetailsCopy.commandNeedsApproval;
       }
 
