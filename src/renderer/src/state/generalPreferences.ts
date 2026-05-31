@@ -1,11 +1,10 @@
 // 本文件说明: 持久化通用偏好和命令安全规则
-import type { AgentWorkMode } from "@shared/agentTypes";
+import type { AgentRuntime, AgentWorkMode } from "@shared/agentTypes";
 
 const generalPreferencesStorageKey = "forge.generalPreferences";
 
 type WorkMode = AgentWorkMode;
 type DefaultOpenTarget = "recent-project" | "blank";
-type AgentRuntime = "windows-native" | "wsl";
 type TerminalShell = "powershell" | "cmd" | "git-bash";
 type ComposerSubmitShortcut = "enter" | "ctrl-enter";
 export type CommandSafetyRuleLevel = "allow" | "ask" | "deny";

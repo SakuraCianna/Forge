@@ -2386,7 +2386,7 @@ function getGeneralSettingsCopy(language: Language): {
       composerSubmitShortcutDescription: "控制输入框何时提交任务, 另一种按键保留换行",
       deleteCommandRule: "删除命令规则",
       agentRuntime: "智能体环境",
-      agentRuntimeDescription: "选择智能体在 Windows 上的运行位置",
+      agentRuntimeDescription: "影响模型规划命令时优先使用 Windows 原生还是 WSL 语义",
       appBackground: "软件背景",
       appBackgroundDescription: "上传一张壁纸作为 Forge 的背景, 默认保持轻微透明避免影响阅读",
       autoReview: "自动审核",
@@ -2460,7 +2460,7 @@ function getGeneralSettingsCopy(language: Language): {
     composerSubmitShortcutDescription: "Choose when the composer submits while the other key path keeps newlines",
     deleteCommandRule: "Delete command rule",
     agentRuntime: "Agent runtime",
-    agentRuntimeDescription: "Choose where the agent runs on Windows",
+    agentRuntimeDescription: "Guide whether model-planned commands prefer Windows native or WSL semantics",
     appBackground: "App background",
     appBackgroundDescription:
       "Upload a wallpaper for Forge. The default opacity stays subtle so code remains readable.",

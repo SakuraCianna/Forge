@@ -21,6 +21,7 @@ export type AgentProfileContext = {
 };
 
 export type AgentWorkMode = "code" | "daily";
+export type AgentRuntime = "windows-native" | "wsl";
 
 export type GenerateAgentPlanRequest = {
   provider: ForgeProvider;
@@ -31,6 +32,7 @@ export type GenerateAgentPlanRequest = {
   personalization?: string;
   speed: SpeedMode;
   workMode?: AgentWorkMode;
+  agentRuntime?: AgentRuntime;
   taskPrompt: string;
   projectScan: ProjectScanResult;
 };
@@ -45,6 +47,7 @@ export type GenerateAgentFileChangeRequest = {
   projectScan?: ProjectScanResult | null;
   speed: SpeedMode;
   workMode?: AgentWorkMode;
+  agentRuntime?: AgentRuntime;
   taskPrompt: string;
   relativePath: string;
   currentContent: string;
@@ -61,6 +64,7 @@ export type GenerateAgentAskRequest = {
   projectScan?: ProjectScanResult | null;
   speed: SpeedMode;
   workMode?: AgentWorkMode;
+  agentRuntime?: AgentRuntime;
   prompt: string;
 };
 
