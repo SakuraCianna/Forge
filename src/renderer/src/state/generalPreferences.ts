@@ -10,6 +10,8 @@ export type CommandSafetyRuleLevel = "allow" | "ask" | "deny";
 
 export const minCommandTimeoutSeconds = 15;
 export const maxCommandTimeoutSeconds = 1800;
+export const minAutoRunBatchSize = 1;
+export const maxAutoRunBatchSize = 8;
 
 export type CommandSafetyRule = {
   id: string;
@@ -28,6 +30,7 @@ export type GeneralPreferences = {
   terminalShell: TerminalShell;
   composerSubmitShortcut: ComposerSubmitShortcut;
   commandTimeoutSeconds: number;
+  autoRunBatchSize: number;
   autoRunSafeActions: boolean;
   autoGenerateFailureFixes: boolean;
   autoReview: boolean;
@@ -52,6 +55,7 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     terminalShell: "powershell",
     composerSubmitShortcut: "enter",
     commandTimeoutSeconds: 120,
+    autoRunBatchSize: 3,
     autoRunSafeActions: true,
     autoGenerateFailureFixes: false,
     autoReview: true,
@@ -149,6 +153,7 @@ function normalizePermissionPreferences(preferences: GeneralPreferences): Genera
     ...preferences,
     composerSubmitShortcut: normalizeComposerSubmitShortcut(preferences.composerSubmitShortcut),
     commandTimeoutSeconds: clampCommandTimeoutSeconds(preferences.commandTimeoutSeconds),
+    autoRunBatchSize: clampAutoRunBatchSize(preferences.autoRunBatchSize),
     defaultPermission: true,
     autoReview: true,
     fullAccess,
@@ -186,6 +191,9 @@ function isPersistedGeneralPreferences(value: unknown): value is Partial<General
     (!("commandTimeoutSeconds" in value) ||
       (typeof value.commandTimeoutSeconds === "number" &&
         Number.isFinite(value.commandTimeoutSeconds))) &&
+    (!("autoRunBatchSize" in value) ||
+      (typeof value.autoRunBatchSize === "number" &&
+        Number.isFinite(value.autoRunBatchSize))) &&
     (!("autoRunSafeActions" in value) || typeof value.autoRunSafeActions === "boolean") &&
     (!("autoGenerateFailureFixes" in value) ||
       typeof value.autoGenerateFailureFixes === "boolean") &&
@@ -219,6 +227,17 @@ export function clampCommandTimeoutSeconds(value: number): number {
   return Math.min(
     Math.max(Math.round(value), minCommandTimeoutSeconds),
     maxCommandTimeoutSeconds
+  );
+}
+
+export function clampAutoRunBatchSize(value: number): number {
+  if (!Number.isFinite(value)) {
+    return createDefaultGeneralPreferences().autoRunBatchSize;
+  }
+
+  return Math.min(
+    Math.max(Math.round(value), minAutoRunBatchSize),
+    maxAutoRunBatchSize
   );
 }
 
