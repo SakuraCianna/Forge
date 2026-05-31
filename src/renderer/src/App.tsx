@@ -219,6 +219,7 @@ const enHeroPrompts = [
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
+const maxAutoFailureFixesPerThread = 2;
 
 // 根组件集中持有持久化状态和跨视图动作, 子组件只接收明确回调
 export function App(): ReactElement {
@@ -305,6 +306,9 @@ export function App(): ReactElement {
   const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
   const activeAskStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
   const activeAgentAutoRunKeysRef = useRef<Set<string>>(new Set());
+  const activeAutoFailureFixKeysRef = useRef<Set<string>>(new Set());
+  const autoFailureFixAttemptedKeysRef = useRef<Set<string>>(new Set());
+  const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
   const recentAgentToolResultsRef = useRef<Map<string, string[]>>(new Map());
   const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
@@ -428,6 +432,56 @@ export function App(): ReactElement {
     fullAccessMode,
     generalPreferences.autoRunSafeActions,
     generalPreferences.commandSafetyRules,
+    threads
+  ]);
+
+  useEffect(() => {
+    if (!generalPreferences.autoGenerateFailureFixes || !currentProject || !projectScanResult) {
+      return;
+    }
+
+    if (changePreviews.length > 0) {
+      return;
+    }
+
+    const candidate = threads
+      .filter((thread) => !thread.archived && !cancelledThreadIdsRef.current.has(thread.id))
+      .map((thread) => ({
+        thread,
+        failedAction: findFailedAgentQueueBlocker(thread.agentActions ?? [])
+      }))
+      .find(({ thread, failedAction }) => {
+        if (!failedAction) {
+          return false;
+        }
+
+        const key = createAutoFailureFixKey(thread.id, failedAction.id);
+        const count = autoFailureFixCountsRef.current.get(thread.id) ?? 0;
+
+        return (
+          count < maxAutoFailureFixesPerThread &&
+          !activeAutoFailureFixKeysRef.current.has(key) &&
+          !autoFailureFixAttemptedKeysRef.current.has(key)
+        );
+      });
+
+    if (!candidate?.failedAction) {
+      return;
+    }
+
+    const key = createAutoFailureFixKey(candidate.thread.id, candidate.failedAction.id);
+    const currentCount = autoFailureFixCountsRef.current.get(candidate.thread.id) ?? 0;
+    activeAutoFailureFixKeysRef.current.add(key);
+    autoFailureFixAttemptedKeysRef.current.add(key);
+    autoFailureFixCountsRef.current.set(candidate.thread.id, currentCount + 1);
+    void generateFailureFixPlan(candidate.thread.id, candidate.failedAction).finally(() => {
+      activeAutoFailureFixKeysRef.current.delete(key);
+    });
+  }, [
+    changePreviews.length,
+    currentProject,
+    generalPreferences.autoGenerateFailureFixes,
+    projectScanResult,
     threads
   ]);
 
@@ -3738,6 +3792,24 @@ function formatProjectGlobResultMessage(
   }
 
   return [header, ...lines].join("\n");
+}
+
+// 找到队列中第一个失败阻塞点, 自动恢复只处理真正挡住后续步骤的动作
+function findFailedAgentQueueBlocker(actions: AgentAction[]): AgentAction | null {
+  for (const action of actions) {
+    if (action.status === "completed" || action.status === "skipped") {
+      continue;
+    }
+
+    return action.status === "failed" ? action : null;
+  }
+
+  return null;
+}
+
+// 自动恢复以线程和动作作为幂等键, 避免同一失败点重复生成修复计划
+function createAutoFailureFixKey(threadId: string, actionId: string): string {
+  return `${threadId}:${actionId}`;
 }
 
 // 将全局权限模式叠加到当前 Agent 配置, 只读模式必须在运行时硬拦截写操作
