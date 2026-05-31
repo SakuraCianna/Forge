@@ -37,6 +37,16 @@ type CommandApprovalRecord = {
   approvedAt: string;
 };
 
+export type AgentActionRunRecord = {
+  actionId: string;
+  label: string;
+  status: "started" | "completed" | "failed" | "waiting" | "confirmed" | "skipped";
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  reason?: string;
+};
+
 export type TaskThreadEvent = {
   id: string;
   kind: TaskThreadEventKind;
@@ -46,6 +56,7 @@ export type TaskThreadEvent = {
   commandRun?: CommandRunState;
   commandResult?: CommandRunResult;
   commandApproval?: CommandApprovalRecord;
+  agentActionRun?: AgentActionRunRecord;
 };
 
 export type TaskThread = {
