@@ -743,6 +743,101 @@ describe("App agent execution", () => {
 
     expect(await screen.findByText(/已完成 Agent 提交动作: 完善 Agent 提交门禁/)).toBeInTheDocument();
   });
+
+  it("pauses an active agent batch and resumes remaining safe actions", async () => {
+    const user = userEvent.setup();
+    const firstRead = createDeferred<ProjectTextFile>();
+    const plan: AgentPlanResult = {
+      providerId: "openai",
+      modelId: "openai:gpt-test",
+      text: "Inspect files",
+      createdAt: "2026-05-31T01:45:00.000Z",
+      steps: [
+        {
+          id: "step-1",
+          title: "Inspect README",
+          description: "Inspect README.md",
+          kind: "inspect",
+          status: "pending",
+          target: "README.md"
+        },
+        {
+          id: "step-2",
+          title: "Inspect package",
+          description: "Inspect package.json",
+          kind: "inspect",
+          status: "pending",
+          target: "package.json"
+        }
+      ]
+    };
+    const preview: ProjectFileChangePreview = {
+      relativePath: "README.md",
+      currentContent: "",
+      nextContent: "",
+      diff: []
+    };
+    const forge = createForgeMock({
+      plan,
+      preview,
+      writtenFile: {
+        relativePath: "README.md",
+        content: "",
+        size: 0
+      }
+    });
+
+    vi.mocked(forge.files.readText).mockImplementation(async (request) => {
+      if (request.relativePath === "README.md") {
+        return firstRead.promise;
+      }
+
+      return {
+        relativePath: "package.json",
+        content: "{\"name\":\"forge\"}",
+        size: 16
+      };
+    });
+
+    Object.defineProperty(window, "forge", {
+      configurable: true,
+      value: forge
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(forge.projects.scan).toHaveBeenCalledWith(projectRoot));
+
+    await user.type(screen.getByRole("textbox"), "Inspect README and package");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(forge.files.readText).toHaveBeenCalledWith({
+        projectRoot,
+        relativePath: "README.md"
+      })
+    );
+    await user.click(screen.getByRole("button", { name: "停止回答" }));
+
+    firstRead.resolve({
+      relativePath: "README.md",
+      content: "# Forge",
+      size: 7
+    });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "恢复 Agent" })).toBeInTheDocument());
+    expect(vi.mocked(forge.files.readText).mock.calls).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: "恢复 Agent" }));
+
+    await waitFor(() =>
+      expect(forge.files.readText).toHaveBeenCalledWith({
+        projectRoot,
+        relativePath: "package.json"
+      })
+    );
+    expect(await screen.findByText("已恢复 Agent 执行")).toBeInTheDocument();
+  });
 });
 
 // 准备一个已打开项目和可用模型, 让 App 启动后直接进入项目工作区
@@ -847,4 +942,17 @@ function createForgeMock({
       writeText: vi.fn(async () => writtenFile)
     }
   };
+}
+
+// 构造可手动 resolve 的 Promise, 用于测试 Stop 后批次不会继续冒进
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+
+  return { promise, resolve };
 }

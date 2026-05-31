@@ -138,6 +138,44 @@ describe("ThreadWorkspace", () => {
     );
   });
 
+  it("shows compact resume controls for a paused agent queue", async () => {
+    const user = userEvent.setup();
+    const onResumeAgent = vi.fn();
+
+    render(
+      <ThreadWorkspace
+        compact
+        agentPaused
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            status: "blocked",
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "inspect-file",
+                label: "Inspect README.md",
+                status: "pending",
+                target: "README.md"
+              }
+            ]
+          }
+        ]}
+        onSelectThread={() => undefined}
+        onResumeAgent={onResumeAgent}
+      />
+    );
+
+    expect(screen.getByText("Agent queue paused")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Resume agent" }));
+
+    expect(onResumeAgent).toHaveBeenCalledWith("thread-1");
+  });
+
   it("shows compact skip controls for blocked command gates", async () => {
     const user = userEvent.setup();
     const onSkipAgentAction = vi.fn();
