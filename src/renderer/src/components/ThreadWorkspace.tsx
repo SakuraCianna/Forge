@@ -1007,243 +1007,184 @@ export function ThreadWorkspace({
     const copy = getCompactAgentControlCopy(language);
     const firstChangePreview = allChangePreviews[0] ?? null;
     const blockedAction = controlState.queueBlockerAction;
+    const failedAction = blockedAction?.status === "failed" ? blockedAction : null;
     const activeGateAction = controlState.activeGateAction;
-    const focusLabel =
-      firstChangePreview?.relativePath ??
-      blockedAction?.label ??
-      controlState.nextPendingAction?.label ??
-      activeGateAction?.label ??
-      copy.noCurrent;
-    const statusLabel =
-      agentPaused
-        ? copy.paused
-        : pendingChangeCount > 0
-        ? copy.reviewChangesTitle
-        : blockedAction?.status === "running"
-          ? copy.running
-          : blockedAction?.status === "failed"
-            ? copy.failedTitle
-            : controlState.runnablePendingActions.length > 0
-              ? copy.ready
-              : activeGateAction
-                ? copy.manualGate
-                : controlState.queueComplete
-                  ? copy.complete
-                  : copy.waiting;
-    const confirmationItems = getAgentConfirmationItems({
-      actions: agentActions,
-      changePreviews: allChangePreviews,
-      commandSafetyPolicy,
-      fullAccess,
-      activeGateAction: controlState.activeGateAction,
-      projectPath: selectedThread.projectPath ?? projectScan?.rootPath ?? null,
-      queueBlockerAction: controlState.queueBlockerAction
-    });
+    const buttons: ReactElement[] = [];
+
+    // 将复杂门禁压缩成一排图标按钮, 文案只放进可访问名称和悬浮提示
+    const addButton = (
+      key: string,
+      label: string,
+      Icon: typeof Play,
+      onClick: () => void,
+      tone: "neutral" | "primary" | "warning" = "neutral"
+    ): void => {
+      const className =
+        tone === "primary"
+          ? "flex h-8 w-8 items-center justify-center rounded-[8px] bg-[#202123] text-white transition hover:bg-black active:scale-[0.97]"
+          : tone === "warning"
+            ? "flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#f4c7ab] bg-white text-[#9a3412] transition hover:bg-[#fff7ed] active:scale-[0.97]"
+            : "flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97]";
+
+      buttons.push(
+        <Tooltip key={key} label={label}>
+          <button type="button" aria-label={label} onClick={onClick} className={className}>
+            <Icon className="h-4 w-4" />
+          </button>
+        </Tooltip>
+      );
+    };
+
+    if (agentPaused && onResumeAgent) {
+      addButton("resume", copy.resumeAgent, Play, () => onResumeAgent(selectedThread.id), "primary");
+    }
+
+    if (!agentPaused && pendingChangeCount > 0) {
+      if (firstChangePreview) {
+        addButton(
+          "review-changes",
+          `${copy.reviewChanges} ${firstChangePreview.relativePath}`,
+          FileText,
+          () => {
+            onPreviewFile(firstChangePreview.relativePath);
+            onOpenFiles?.();
+          },
+          "primary"
+        );
+      }
+
+      if (onApplyAllChanges) {
+        addButton("apply-all", copy.applyQueuedChanges, CheckCircle2, onApplyAllChanges);
+      }
+
+      if (onDiscardAllChanges) {
+        addButton("discard-all", copy.discardQueuedChanges, SkipForward, onDiscardAllChanges);
+      }
+    }
+
+    if (!agentPaused && failedAction) {
+      if (onRunAgentAction) {
+        addButton(
+          "retry-action",
+          `${copy.retryQueuedAction} ${failedAction.label}`,
+          RotateCcw,
+          () => onRunAgentAction(selectedThread.id, failedAction),
+          "warning"
+        );
+      }
+
+      if (onGenerateFailureFix) {
+        addButton(
+          "generate-fix",
+          `${copy.generateQueuedFixPlan} ${failedAction.label}`,
+          Wrench,
+          () => onGenerateFailureFix(selectedThread.id, failedAction),
+          "primary"
+        );
+      }
+
+      if (onSkipAgentAction && canSkipAgentAction(failedAction)) {
+        addButton(
+          "skip-failed",
+          `${copy.skipQueuedAction} ${failedAction.label}`,
+          SkipForward,
+          () => onSkipAgentAction(selectedThread.id, failedAction),
+          "warning"
+        );
+      }
+    }
+
+    if (!agentPaused && pendingChangeCount === 0 && !failedAction) {
+      if (controlState.runnablePendingActions.length > 0) {
+        if (onRunAgentActions) {
+          addButton(
+            "continue-safe",
+            copy.continueSafe,
+            Play,
+            () => onRunAgentActions(selectedThread.id, controlState.runnablePendingActions),
+            "primary"
+          );
+        } else if (controlState.nextRunnableAction && onRunAgentAction) {
+          addButton(
+            "run-next",
+            copy.runNext,
+            Play,
+            () => onRunAgentAction(selectedThread.id, controlState.nextRunnableAction!),
+            "primary"
+          );
+        }
+      } else if (activeGateAction) {
+        const commandRisk =
+          activeGateAction.kind === "run-command" && activeGateAction.command
+            ? resolveAgentCommandRisk(activeGateAction.command, commandSafetyPolicy)
+            : null;
+
+        if (
+          activeGateAction.kind === "run-command" &&
+          activeGateAction.command &&
+          commandRisk?.level === "ask" &&
+          !fullAccess
+        ) {
+          if (onApproveAgentCommand) {
+            addButton(
+              "approve-command",
+              `${copy.approveQueuedCommand} ${activeGateAction.command}`,
+              CheckCircle2,
+              () => onApproveAgentCommand(selectedThread.id, activeGateAction),
+              "primary"
+            );
+          }
+
+          if (onAllowAgentCommand) {
+            addButton(
+              "allow-command",
+              `${copy.allowQueuedCommand} ${activeGateAction.command}`,
+              CheckCircle2,
+              () => onAllowAgentCommand(selectedThread.id, activeGateAction),
+              "neutral"
+            );
+          }
+        } else if (activeGateAction.kind === "manual" && onCompleteAgentAction) {
+          addButton(
+            "complete-manual",
+            `${copy.confirmQueuedAction} ${activeGateAction.label}`,
+            CheckCircle2,
+            () => onCompleteAgentAction(selectedThread.id, activeGateAction),
+            "primary"
+          );
+        } else if (activeGateAction.kind === "commit" && onOpenSourceControl) {
+          addButton(
+            "open-source-control",
+            `${copy.openQueuedSourceControl} ${activeGateAction.label}`,
+            Terminal,
+            onOpenSourceControl,
+            "primary"
+          );
+        }
+
+        if (onSkipAgentAction && canSkipAgentAction(activeGateAction)) {
+          addButton(
+            "skip-gate",
+            `${copy.skipQueuedAction} ${activeGateAction.label}`,
+            SkipForward,
+            () => onSkipAgentAction(selectedThread.id, activeGateAction),
+            commandRisk?.level === "deny" ? "warning" : "neutral"
+          );
+        }
+      }
+    }
+
+    if (buttons.length === 0) {
+      return null;
+    }
 
     return (
       <section
-        role="region"
+        role="toolbar"
         aria-label={copy.aria}
-        className="mx-auto w-full max-w-[760px] rounded-[18px] border border-[#d9d9e3] bg-white p-4 shadow-[0_12px_32px_rgba(0,0,0,0.05)]"
+        className="mx-auto flex w-full max-w-[680px] justify-start gap-1.5"
       >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#d9d9e3] bg-[#f7f7f8] px-2.5 py-1 text-[11px] font-semibold text-[#565869]">
-              <ListChecks className="h-3.5 w-3.5 text-[#202123]" />
-              {copy.title}
-            </div>
-            <p className="mt-2 text-base font-semibold leading-6 text-[#202123]">
-              {statusLabel}
-            </p>
-            <p className="mt-1 break-words text-sm leading-5 text-[#565869]">
-              {copy.current}: {focusLabel}
-            </p>
-          </div>
-          <div className="grid min-w-[220px] gap-2 text-[12px] text-[#565869]">
-            <div className="rounded-[12px] bg-[#f7f7f8] px-3 py-2">
-              <div className="text-[11px] font-medium text-[#8e8ea0]">{copy.progress}</div>
-              <div className="mt-0.5 font-semibold text-[#202123]">
-                {copy.progressValue(controlState.queueStats.completed, controlState.queueStats.total)}
-              </div>
-            </div>
-            <div className="rounded-[12px] bg-[#f7f7f8] px-3 py-2">
-              <div className="text-[11px] font-medium text-[#8e8ea0]">{copy.nextGate}</div>
-              <div className="mt-0.5 font-semibold text-[#202123]">
-                {agentPaused
-                  ? copy.paused
-                  : pendingChangeCount > 0
-                  ? copy.pendingChanges(pendingChangeCount)
-                  : controlState.nextGateAction
-                    ? copy.stopsBefore(controlState.nextGateAction.label)
-                    : activeGateAction
-                      ? activeGateAction.label
-                      : copy.noGate}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {renderAgentConfirmationQueue(confirmationItems, copy, "compact")}
-
-        {agentPaused ? (
-          <div className="mt-4 rounded-[14px] border border-[#bfdbfe] bg-[#eff6ff] px-3 py-3">
-            <p className="text-sm font-semibold leading-5 text-[#1d4ed8]">
-              {copy.pausedTitle}
-            </p>
-            <p className="mt-1 text-[12px] leading-5 text-[#1d4ed8]">{copy.pausedBody}</p>
-            {onResumeAgent ? (
-              <button
-                type="button"
-                aria-label={copy.resumeAgent}
-                onClick={() => onResumeAgent(selectedThread.id)}
-                className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#1d4ed8] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#1e40af] active:scale-[0.99]"
-              >
-                <Play className="h-3.5 w-3.5" />
-                {copy.resumeAgent}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!agentPaused && pendingChangeCount > 0 ? (
-          <div className="mt-4 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-3">
-            <p className="text-sm font-semibold leading-5 text-[#9a3412]">
-              {copy.reviewChangesTitle}
-            </p>
-            <p className="mt-1 text-[12px] leading-5 text-[#9a3412]">
-              {copy.reviewChangesBody}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {firstChangePreview ? (
-                <button
-                  type="button"
-                  aria-label={`${copy.reviewChanges} ${firstChangePreview.relativePath}`}
-                  onClick={() => {
-                    onPreviewFile(firstChangePreview.relativePath);
-                    onOpenFiles?.();
-                  }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  {copy.reviewChanges}
-                </button>
-              ) : null}
-              {onApplyAllChanges ? (
-                <button
-                  type="button"
-                  onClick={onApplyAllChanges}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {copy.applyAllChanges}
-                </button>
-              ) : null}
-              {onDiscardAllChanges ? (
-                <button
-                  type="button"
-                  onClick={onDiscardAllChanges}
-                  className="h-8 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
-                >
-                  {copy.discardAllChanges}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {!agentPaused && blockedAction?.status === "failed" ? (
-          <div className="mt-4 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-3">
-            <p className="text-sm font-semibold leading-5 text-[#9a3412]">
-              {copy.failedTitle}
-            </p>
-            <p className="mt-1 text-[12px] leading-5 text-[#9a3412]">{blockedAction.label}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {onRunAgentAction ? (
-                <button
-                  type="button"
-                  onClick={() => onRunAgentAction(selectedThread.id, blockedAction)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  {copy.retryAction}
-                </button>
-              ) : null}
-              {onGenerateFailureFix ? (
-                <button
-                  type="button"
-                  onClick={() => onGenerateFailureFix(selectedThread.id, blockedAction)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-                >
-                  <Wrench className="h-3.5 w-3.5" />
-                  {copy.generateFixPlan}
-                </button>
-              ) : null}
-              {onSkipAgentAction && canSkipAgentAction(blockedAction) ? (
-                <button
-                  type="button"
-                  aria-label={`${copy.skipAction} ${blockedAction.label}`}
-                  onClick={() => onSkipAgentAction(selectedThread.id, blockedAction)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
-                >
-                  <SkipForward className="h-3.5 w-3.5" />
-                  {copy.skipAction}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {!agentPaused && controlState.runnablePendingActions.length > 0 ? (
-          <div className="mt-4 rounded-[14px] border border-[#d9d9e3] bg-[#f7f7f8] px-3 py-3">
-            <p className="text-sm font-semibold leading-5 text-[#202123]">
-              {copy.safeReady(controlState.runnablePendingActions.length)}
-            </p>
-            {controlState.nextGateAction ? (
-              <p className="mt-1 text-[12px] leading-5 text-[#565869]">
-                {copy.stopsBefore(controlState.nextGateAction.label)}
-              </p>
-            ) : null}
-            <div className="mt-3 flex flex-wrap gap-2">
-              {onRunAgentActions ? (
-                <button
-                  type="button"
-                  aria-label="Continue safe agent actions"
-                  onClick={() =>
-                    onRunAgentActions(selectedThread.id, controlState.runnablePendingActions)
-                  }
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2.5 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
-                >
-                  <Play className="h-3.5 w-3.5" />
-                  {copy.continueSafe}
-                </button>
-              ) : controlState.nextRunnableAction && onRunAgentAction ? (
-                <button
-                  type="button"
-                  aria-label="Run next agent action"
-                  onClick={() => onRunAgentAction(selectedThread.id, controlState.nextRunnableAction!)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2.5 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
-                >
-                  <Play className="h-3.5 w-3.5" />
-                  {copy.runNext}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {!agentPaused && controlState.runnablePendingActions.length === 0 && activeGateAction ? (
-          <div className="mt-4 rounded-[14px] border border-[#f4c7ab] bg-[#fff7ed] px-3 py-3">
-            <p className="text-sm font-semibold leading-5 text-[#9a3412]">
-              {getCompactGateTitle(activeGateAction, commandSafetyPolicy, fullAccess, language)}
-            </p>
-            <p className="mt-1 text-[12px] leading-5 text-[#9a3412]">
-              {getCompactGateBody(activeGateAction, commandSafetyPolicy, fullAccess, language)}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {renderCompactGateAction(activeGateAction, copy)}
-            </div>
-          </div>
-        ) : null}
+        {buttons}
       </section>
     );
   }
@@ -1278,86 +1219,6 @@ export function ThreadWorkspace({
         </Tooltip>
       </div>
     );
-  }
-
-  // 渲染 compact 门禁的实际确认动作
-  function renderCompactGateAction(
-    action: AgentAction,
-    copy: ReturnType<typeof getCompactAgentControlCopy>
-  ): ReactElement | null {
-    const commandRisk =
-      action.kind === "run-command" && action.command
-        ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
-        : null;
-    const skipButton =
-      onSkipAgentAction && canSkipAgentAction(action) ? (
-        <button
-          type="button"
-          aria-label={`${copy.skipAction} ${action.label}`}
-          onClick={() => onSkipAgentAction(selectedThread.id, action)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
-        >
-          <SkipForward className="h-3.5 w-3.5" />
-          {copy.skipAction}
-        </button>
-      ) : null;
-
-    if (
-      action.kind === "run-command" &&
-      action.command &&
-      commandRisk?.level === "ask" &&
-      !fullAccess &&
-      onApproveAgentCommand
-    ) {
-      return (
-        <>
-          <button
-            type="button"
-            aria-label={`Approve command ${action.command}`}
-            onClick={() => onApproveAgentCommand(selectedThread.id, action)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {copy.approveCommand}
-          </button>
-          {skipButton}
-        </>
-      );
-    }
-
-    if (action.kind === "commit" && onOpenSourceControl) {
-      return (
-        <>
-          <button
-            type="button"
-            onClick={onOpenSourceControl}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-          >
-            <Terminal className="h-3.5 w-3.5" />
-            {copy.openSourceControl}
-          </button>
-          {skipButton}
-        </>
-      );
-    }
-
-    if (action.kind === "manual" && onCompleteAgentAction) {
-      return (
-        <>
-          <button
-            type="button"
-            onClick={() => onCompleteAgentAction(selectedThread.id, action)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {copy.markReviewComplete}
-          </button>
-          {skipButton}
-        </>
-      );
-    }
-
-    return skipButton;
   }
 
   // 展示正在运行的命令和可终止操作, 避免命令信息散落在正文
@@ -3828,57 +3689,6 @@ function getCompactAgentControlCopy(language: Language) {
     readyStatus: "Ready",
     pendingStatus: "Pending"
   };
-}
-
-// 根据动作和命令风险生成 compact 门禁标题
-function getCompactGateTitle(
-  action: AgentAction,
-  commandSafetyPolicy: AgentCommandSafetyPolicy,
-  fullAccess: boolean,
-  language: Language
-): string {
-  const copy = getCompactAgentControlCopy(language);
-  const commandRisk =
-    action.kind === "run-command" && action.command
-      ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
-      : null;
-
-  if (commandRisk?.level === "ask" && !fullAccess) {
-    return copy.commandNeedsApproval;
-  }
-
-  if (commandRisk?.level === "deny") {
-    return copy.commandBlocked;
-  }
-
-  return copy.manualGate;
-}
-
-// 根据动作和命令风险生成 compact 门禁说明
-function getCompactGateBody(
-  action: AgentAction,
-  commandSafetyPolicy: AgentCommandSafetyPolicy,
-  fullAccess: boolean,
-  language: Language
-): string {
-  const copy = getCompactAgentControlCopy(language);
-  const commandRisk =
-    action.kind === "run-command" && action.command
-      ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
-      : null;
-
-  if (commandRisk?.level === "ask" && !fullAccess) {
-    return `${action.command}: ${formatAgentCommandRiskReason(language, commandRisk.reason)}`;
-  }
-
-  if (commandRisk?.level === "deny") {
-    return `${action.command ?? action.label}: ${formatAgentCommandRiskReason(
-      language,
-      commandRisk.reason
-    )}`;
-  }
-
-  return copy.manualGateBody(action.label);
 }
 
 // 用户可以显式跳过未完成动作, 但不能跳过正在运行或已经终态的动作

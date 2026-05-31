@@ -20,22 +20,13 @@ import {
   isSensitiveProjectPath
 } from "../shared/sensitiveProjectFiles.js";
 import { createLineDiff } from "../shared/textDiff.js";
+import { createProjectIgnoreMatcher } from "./projectIgnore.js";
 
 type ReadProjectTextFileOptions = {
   projectRoot: string;
   relativePath: string;
   maxBytes?: number;
 };
-
-const searchIgnoredDirectoryNames = new Set([
-  ".git",
-  ".vite",
-  "coverage",
-  "dist",
-  "dist-electron",
-  "node_modules",
-  "out"
-]);
 
 const maxSearchPreviewChars = 240;
 
@@ -96,11 +87,12 @@ export async function previewProjectTextFileUpdate({
 export async function listProjectDirectory({
   projectRoot,
   relativePath = ".",
-  limit = 120
+  limit
 }: ProjectDirectoryListRequest): Promise<ProjectDirectoryListResult> {
   const resolvedProjectRoot = await realpath(projectRoot);
   const normalizedRelativePath = normalizeDirectoryRelativePath(relativePath);
-  const resultLimit = Math.min(300, Math.max(1, Math.round(limit)));
+  const resultLimit = normalizeOptionalResultLimit(limit, 300);
+  const ignoreMatcher = await createProjectIgnoreMatcher(resolvedProjectRoot);
 
   if (normalizedRelativePath !== ".") {
     assertProjectPathNotSensitive(normalizedRelativePath);
@@ -138,7 +130,7 @@ export async function listProjectDirectory({
       continue;
     }
 
-    if (entry.isDirectory() && searchIgnoredDirectoryNames.has(entry.name)) {
+    if (ignoreMatcher(entryRelativePath, entry.isDirectory())) {
       continue;
     }
 
@@ -146,7 +138,7 @@ export async function listProjectDirectory({
       continue;
     }
 
-    if (entries.length >= resultLimit) {
+    if (hasReachedLimit(entries.length, resultLimit)) {
       truncated = true;
       break;
     }
@@ -184,12 +176,13 @@ export async function searchProjectTextFiles({
   const normalizedQuery = normalizeSearchQuery(query);
   const resultLimit = Math.min(200, Math.max(1, Math.round(limit)));
   const resolvedProjectRoot = await realpath(projectRoot);
+  const ignoreMatcher = await createProjectIgnoreMatcher(resolvedProjectRoot);
   const matches: ProjectTextSearchMatch[] = [];
   let truncated = false;
 
   // 递归搜索时跳过敏感路径, 大文件和构建产物, 避免把搜索工具变成无限制读文件入口
   async function walk(directoryPath: string): Promise<void> {
-    if (matches.length >= resultLimit) {
+    if (hasReachedLimit(matches.length, resultLimit)) {
       truncated = true;
       return;
     }
@@ -197,7 +190,7 @@ export async function searchProjectTextFiles({
     const entries = await readSortedDirectoryEntries(directoryPath);
 
     for (const entry of entries) {
-      if (matches.length >= resultLimit) {
+      if (hasReachedLimit(matches.length, resultLimit)) {
         truncated = true;
         return;
       }
@@ -206,7 +199,7 @@ export async function searchProjectTextFiles({
       const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
 
       if (entry.isDirectory()) {
-        if (searchIgnoredDirectoryNames.has(entry.name) || isSensitiveProjectPath(relativePath)) {
+        if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, true)) {
           continue;
         }
 
@@ -214,7 +207,7 @@ export async function searchProjectTextFiles({
         continue;
       }
 
-      if (!entry.isFile() || isSensitiveProjectPath(relativePath)) {
+      if (!entry.isFile() || isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
         continue;
       }
 
@@ -250,18 +243,19 @@ export async function searchProjectTextFiles({
 export async function globProjectFiles({
   projectRoot,
   pattern,
-  limit = 120
+  limit
 }: ProjectFileGlobRequest): Promise<ProjectFileGlobResult> {
   const normalizedPattern = normalizeGlobPattern(pattern);
-  const resultLimit = Math.min(500, Math.max(1, Math.round(limit)));
+  const resultLimit = normalizeOptionalResultLimit(limit, 500);
   const patternMatcher = createGlobMatcher(normalizedPattern);
   const resolvedProjectRoot = await realpath(projectRoot);
+  const ignoreMatcher = await createProjectIgnoreMatcher(resolvedProjectRoot);
   const matches: ProjectFileGlobMatch[] = [];
   let truncated = false;
 
   // glob 工具只返回路径和大小, 不读取文件内容
   async function walk(directoryPath: string): Promise<void> {
-    if (matches.length >= resultLimit) {
+    if (hasReachedLimit(matches.length, resultLimit)) {
       truncated = true;
       return;
     }
@@ -269,7 +263,7 @@ export async function globProjectFiles({
     const entries = await readSortedDirectoryEntries(directoryPath);
 
     for (const entry of entries) {
-      if (matches.length >= resultLimit) {
+      if (hasReachedLimit(matches.length, resultLimit)) {
         truncated = true;
         return;
       }
@@ -278,7 +272,7 @@ export async function globProjectFiles({
       const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
 
       if (entry.isDirectory()) {
-        if (searchIgnoredDirectoryNames.has(entry.name) || isSensitiveProjectPath(relativePath)) {
+        if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, true)) {
           continue;
         }
 
@@ -286,7 +280,12 @@ export async function globProjectFiles({
         continue;
       }
 
-      if (!entry.isFile() || isSensitiveProjectPath(relativePath) || !patternMatcher(relativePath)) {
+      if (
+        !entry.isFile() ||
+        isSensitiveProjectPath(relativePath) ||
+        ignoreMatcher(relativePath, false) ||
+        !patternMatcher(relativePath)
+      ) {
         continue;
       }
 
@@ -382,6 +381,20 @@ async function readSortedDirectoryEntries(directoryPath: string): Promise<Dirent
   return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) =>
     left.name.localeCompare(right.name)
   );
+}
+
+// 只有调用方显式传入 limit 时才截断文件列表类结果, 默认展示所有未忽略路径
+function normalizeOptionalResultLimit(limit: number | undefined, maxLimit: number): number | null {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) {
+    return null;
+  }
+
+  return Math.min(maxLimit, Math.max(1, Math.round(limit)));
+}
+
+// null 表示没有人为数量上限, 其它数字按调用方配置截断
+function hasReachedLimit(count: number, limit: number | null): boolean {
+  return limit !== null && count >= limit;
 }
 
 // 目录检查只接受项目内相对目录, 根目录统一记作点号

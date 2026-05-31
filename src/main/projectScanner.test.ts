@@ -11,11 +11,12 @@ describe("projectScanner", () => {
     await rm(testRoot, { recursive: true, force: true });
   });
 
-  it("scans project files while ignoring dependency and build folders", async () => {
+  it("scans project files while respecting gitignore and hiding repository internals", async () => {
     await mkdir(join(testRoot, "src"), { recursive: true });
     await mkdir(join(testRoot, "node_modules", "pkg"), { recursive: true });
     await mkdir(join(testRoot, ".git"), { recursive: true });
     await mkdir(join(testRoot, "out"), { recursive: true });
+    await writeFile(join(testRoot, ".gitignore"), "node_modules/\nout/\n", "utf8");
     await writeFile(join(testRoot, "package.json"), "{}", "utf8");
     await writeFile(join(testRoot, "src", "App.tsx"), "export {}", "utf8");
     await writeFile(join(testRoot, "node_modules", "pkg", "index.js"), "", "utf8");
@@ -26,8 +27,25 @@ describe("projectScanner", () => {
 
     expect(result.rootPath).toBe(testRoot);
     expect(result.files.map((file) => file.relativePath).sort()).toEqual([
+      ".gitignore",
       "package.json",
       "src/App.tsx"
+    ]);
+  });
+
+  it("supports gitignore negation for visible project files", async () => {
+    await mkdir(testRoot, { recursive: true });
+    await writeFile(join(testRoot, ".gitignore"), "*.log\n!keep.log\n", "utf8");
+    await writeFile(join(testRoot, "debug.log"), "hidden", "utf8");
+    await writeFile(join(testRoot, "keep.log"), "visible", "utf8");
+    await writeFile(join(testRoot, "notes.txt"), "visible", "utf8");
+
+    const result = await scanProjectFiles(testRoot);
+
+    expect(result.files.map((file) => file.relativePath).sort()).toEqual([
+      ".gitignore",
+      "keep.log",
+      "notes.txt"
     ]);
   });
 
@@ -56,6 +74,19 @@ describe("projectScanner", () => {
 
     expect(result.files).toHaveLength(1);
     expect(result.truncated).toBe(true);
+  });
+
+  it("does not truncate the project index by default", async () => {
+    await mkdir(testRoot, { recursive: true });
+
+    for (let index = 0; index < 520; index += 1) {
+      await writeFile(join(testRoot, `file-${index}.ts`), "", "utf8");
+    }
+
+    const result = await scanProjectFiles(testRoot);
+
+    expect(result.files).toHaveLength(520);
+    expect(result.truncated).toBe(false);
   });
 
   it("reads project instruction files for agent context", async () => {

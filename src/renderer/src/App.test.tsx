@@ -517,8 +517,7 @@ describe("App agent execution", () => {
     await waitFor(() =>
       expect(forge.files.globFiles).toHaveBeenCalledWith({
         projectRoot,
-        pattern: "src/**/*.tsx",
-        limit: 80
+        pattern: "src/**/*.tsx"
       })
     );
     expect(forge.commands.run).not.toHaveBeenCalled();
@@ -593,8 +592,7 @@ describe("App agent execution", () => {
     await waitFor(() =>
       expect(forge.files.listDirectory).toHaveBeenCalledWith({
         projectRoot,
-        relativePath: "src",
-        limit: 80
+        relativePath: "src"
       })
     );
     expect(forge.commands.run).not.toHaveBeenCalled();
@@ -729,7 +727,7 @@ describe("App agent execution", () => {
     await user.type(screen.getByRole("textbox"), "Skip the unsafe command and inspect README");
     await user.keyboard("{Enter}");
 
-    await user.click(await screen.findByRole("button", { name: /跳过动作 Run Remove-Item -Recurse src/ }));
+    await user.click(await screen.findByRole("button", { name: /跳过队列动作 Run Remove-Item -Recurse src/ }));
 
     await waitFor(() =>
       expect(forge.files.readText).toHaveBeenCalledWith({
