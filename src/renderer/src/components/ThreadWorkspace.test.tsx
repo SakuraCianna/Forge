@@ -1226,6 +1226,66 @@ describe("ThreadWorkspace", () => {
     expect(within(details).getByText("Ready to run")).toBeInTheDocument();
   });
 
+  it("shows the latest controlled tool result for the selected agent action", () => {
+    render(
+      <ThreadWorkspace
+        language="en-US"
+        selectedThreadId="thread-1"
+        threads={[
+          {
+            ...thread,
+            title: "Inspect tool result",
+            events: [
+              {
+                id: "thread-1-agent-search-action-1-2026-05-27T13:04:00.000Z",
+                kind: "file",
+                message: "Project search complete: handleSubmit (1 result)\nsrc/old.ts:7 old hit",
+                createdAt: "2026-05-27T13:04:00.000Z"
+              },
+              {
+                id: "thread-1-agent-search-action-10-2026-05-27T13:05:00.000Z",
+                kind: "file",
+                message:
+                  "Project search complete: handleSubmit (1 result)\nsrc/other.ts:9 unrelated action",
+                createdAt: "2026-05-27T13:05:00.000Z"
+              },
+              {
+                id: "thread-1-agent-search-action-1-2026-05-27T13:06:00.000Z",
+                kind: "file",
+                message:
+                  "Project search complete: handleSubmit (1 result)\nsrc/App.tsx:42 const handleSubmit = () => {}",
+                createdAt: "2026-05-27T13:06:00.000Z"
+              }
+            ],
+            agentActions: [
+              {
+                id: "action-1",
+                stepId: "step-1",
+                kind: "search-project",
+                label: "Search handleSubmit",
+                status: "completed",
+                target: "handleSubmit"
+              }
+            ]
+          }
+        ]}
+        projectScan={null}
+        previewFile={null}
+        changePreview={null}
+        onSelectThread={vi.fn()}
+        onRunCommand={vi.fn()}
+        onPreviewFile={vi.fn()}
+      />
+    );
+
+    const details = screen.getByRole("region", { name: "Action details" });
+
+    expect(within(details).getByText("Tool result")).toBeInTheDocument();
+    expect(details).toHaveTextContent("src/App.tsx:42 const handleSubmit = () => {}");
+    expect(details).not.toHaveTextContent("src/old.ts:7 old hit");
+    expect(details).not.toHaveTextContent("src/other.ts:9 unrelated action");
+  });
+
   it("shows the latest output for a matching command action", () => {
     render(
       <ThreadWorkspace
