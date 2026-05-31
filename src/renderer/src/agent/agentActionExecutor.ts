@@ -376,6 +376,17 @@ function isAllowedCommand(command: string): boolean {
     /^yarn\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
     /^bun\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
     /^(npx\s+)?(?:vitest|tsc|eslint)(?:\s|$)/u.test(command) ||
-    /^(rg|git\s+grep|get-childitem|dir|ls)(?:\s|$)/u.test(command)
+    /^(rg|git\s+grep|get-childitem|dir|ls)(?:\s|$)/u.test(command) ||
+    isAllowedPowerShellPipelineHelperCommand(command)
+  );
+}
+
+// 只允许无脚本块的 PowerShell 管道整理命令, 避免自动执行任意脚本块
+function isAllowedPowerShellPipelineHelperCommand(command: string): boolean {
+  return (
+    !/[{}]/u.test(command) &&
+    /^(select-object|where-object|sort-object|measure-object|format-table|format-list|out-string)(?:\s|$)/u.test(
+      command
+    )
   );
 }
