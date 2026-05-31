@@ -12,4 +12,9 @@ export type ProjectFileChangePreview = {
   currentContent: string;
   nextContent: string;
   diff: LineDiffEntry[];
+  source?: {
+    threadId: string;
+    actionId: string;
+    actionLabel: string;
+  };
 };
