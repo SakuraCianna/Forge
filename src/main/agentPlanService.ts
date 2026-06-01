@@ -124,7 +124,7 @@ export async function generateAgentPlan({
 
   if (!response.ok) {
     throw new Error(
-      formatProviderHttpError(provider.label, "Agent 计划", response.status, response.statusText)
+      formatProviderHttpError(provider.label, "agent request", response.status, response.statusText)
     );
   }
 
@@ -133,7 +133,7 @@ export async function generateAgentPlan({
   const usage = extractTokenUsage(provider.kind, body);
 
   if (!text) {
-    throw new Error(formatEmptyProviderResult(provider.label, "Agent 计划"));
+    throw new Error(formatEmptyProviderResult(provider.label, "agent response"));
   }
 
   return {
@@ -181,7 +181,7 @@ export async function generateAgentPlanStream({
 
   if (!response.ok) {
     throw new Error(
-      formatProviderHttpError(provider.label, "Agent 计划", response.status, response.statusText)
+      formatProviderHttpError(provider.label, "agent request", response.status, response.statusText)
     );
   }
 
@@ -191,7 +191,7 @@ export async function generateAgentPlanStream({
     const usage = extractTokenUsage(provider.kind, body);
 
     if (!text) {
-      throw new Error(formatEmptyProviderResult(provider.label, "Agent 计划"));
+      throw new Error(formatEmptyProviderResult(provider.label, "agent response"));
     }
 
     onDelta(text);
@@ -210,7 +210,7 @@ export async function generateAgentPlanStream({
   const text = streamResult.text.trim();
 
   if (!text) {
-    throw new Error(formatEmptyProviderResult(provider.label, "Agent 计划"));
+    throw new Error(formatEmptyProviderResult(provider.label, "agent response"));
   }
 
   return {
@@ -250,7 +250,7 @@ export async function generateAgentFileChange({
 
   if (!response.ok) {
     throw new Error(
-      formatProviderHttpError(provider.label, "文件修改", response.status, response.statusText)
+      formatProviderHttpError(provider.label, "file change request", response.status, response.statusText)
     );
   }
 
@@ -259,7 +259,7 @@ export async function generateAgentFileChange({
   const usage = extractTokenUsage(provider.kind, body);
 
   if (!nextContent.trim()) {
-    throw new Error(formatEmptyProviderResult(provider.label, "文件修改内容"));
+    throw new Error(formatEmptyProviderResult(provider.label, "file change"));
   }
 
   return {
@@ -299,7 +299,7 @@ export async function generateAgentAsk({
 
   if (!response.ok) {
     throw new Error(
-      formatProviderHttpError(provider.label, "问答", response.status, response.statusText)
+      formatProviderHttpError(provider.label, "ask request", response.status, response.statusText)
     );
   }
 
@@ -308,7 +308,7 @@ export async function generateAgentAsk({
   const usage = extractTokenUsage(provider.kind, body);
 
   if (!text) {
-    throw new Error(formatEmptyProviderResult(provider.label, "问答内容"));
+    throw new Error(formatEmptyProviderResult(provider.label, "ask response"));
   }
 
   return {
@@ -355,7 +355,7 @@ export async function generateAgentAskStream({
 
   if (!response.ok) {
     throw new Error(
-      formatProviderHttpError(provider.label, "问答", response.status, response.statusText)
+      formatProviderHttpError(provider.label, "ask request", response.status, response.statusText)
     );
   }
 
@@ -365,7 +365,7 @@ export async function generateAgentAskStream({
     const usage = extractTokenUsage(provider.kind, body);
 
     if (!text) {
-      throw new Error(formatEmptyProviderResult(provider.label, "问答内容"));
+      throw new Error(formatEmptyProviderResult(provider.label, "ask response"));
     }
 
     onDelta(text);
@@ -409,7 +409,7 @@ export async function generateAgentAskStream({
       throw new Error(
         formatProviderHttpError(
           provider.label,
-          "问答续写",
+          "ask continuation",
           continuationResponse.status,
           continuationResponse.statusText
         )
@@ -434,7 +434,7 @@ export async function generateAgentAskStream({
   }
 
   if (!text.trim()) {
-    throw new Error(formatEmptyProviderResult(provider.label, "问答内容"));
+    throw new Error(formatEmptyProviderResult(provider.label, "ask response"));
   }
 
   return {
@@ -526,10 +526,10 @@ async function readJsonBody(providerLabel: string, response: Response): Promise<
     return JSON.parse(trimmedText) as unknown;
   } catch {
     if (trimmedText.startsWith("<")) {
-      throw new Error(formatHtmlInsteadOfJson(providerLabel, "提供商接口兼容性"));
+      throw new Error(formatHtmlInsteadOfJson(providerLabel, "provider API compatibility"));
     }
 
-    throw new Error(formatInvalidJson(providerLabel, "提供商接口兼容性"));
+    throw new Error(formatInvalidJson(providerLabel, "provider API compatibility"));
   }
 }
 

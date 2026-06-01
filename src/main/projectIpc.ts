@@ -28,7 +28,7 @@ export function registerProjectHandlers(
 // 校验项目路径字符串, 避免扫描器收到无效 IPC 参数
 function assertString(value: unknown): string {
   if (typeof value !== "string") {
-    throw new Error("无效的项目路径参数。");
+    throw new Error("Invalid project path argument");
   }
 
   return value;

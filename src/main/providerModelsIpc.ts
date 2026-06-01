@@ -28,7 +28,7 @@ export function registerProviderModelHandlers(
 // 校验供应商配置的核心字段, Base URL 和 Key 由服务层继续处理
 function assertProvider(value: unknown): ForgeProvider {
   if (!isRecord(value) || typeof value.id !== "string" || typeof value.label !== "string") {
-    throw new Error("无效的模型提供商参数。");
+    throw new Error("Invalid model provider argument");
   }
 
   return value as ForgeProvider;

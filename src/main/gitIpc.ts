@@ -44,7 +44,7 @@ export function registerGitHandlers(
 // 校验 Git 状态请求, 防止空路径传入命令层
 function assertStatusRequest(value: unknown): ProjectGitStatusRequest {
   if (!isRecord(value) || typeof value.projectRoot !== "string") {
-    throw new Error("无效的 Git 状态请求。");
+    throw new Error("Invalid Git status request");
   }
 
   return { projectRoot: value.projectRoot };
@@ -53,7 +53,7 @@ function assertStatusRequest(value: unknown): ProjectGitStatusRequest {
 // 校验提交请求, 项目路径和提交信息都必须由用户明确提供
 function assertCommitRequest(value: unknown): ProjectGitCommitRequest {
   if (!isRecord(value) || typeof value.projectRoot !== "string" || typeof value.message !== "string") {
-    throw new Error("无效的 Git 提交请求。");
+    throw new Error("Invalid Git commit request");
   }
 
   return { projectRoot: value.projectRoot, message: value.message };
@@ -62,7 +62,7 @@ function assertCommitRequest(value: unknown): ProjectGitCommitRequest {
 // 校验工作树创建请求, 名称由服务层继续归一化成安全分支和目录片段
 function assertWorktreeRequest(value: unknown): ProjectGitWorktreeRequest {
   if (!isRecord(value) || typeof value.projectRoot !== "string" || typeof value.name !== "string") {
-    throw new Error("无效的 Git 工作树请求。");
+    throw new Error("Invalid Git worktree request");
   }
 
   return { projectRoot: value.projectRoot, name: value.name };

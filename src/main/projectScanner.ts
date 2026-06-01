@@ -41,14 +41,14 @@ export async function scanProjectFiles(
     rootStat = await stat(rootPath);
   } catch (error) {
     if (isMissingPathError(error)) {
-      throw new Error(`项目路径不存在：${rootPath}`, { cause: error });
+      throw new Error(`Project path does not exist: ${rootPath}`, { cause: error });
     }
 
     throw error;
   }
 
   if (!rootStat.isDirectory()) {
-    throw new Error(`项目路径不是目录：${rootPath}`);
+    throw new Error(`Project path is not a directory: ${rootPath}`);
   }
 
   const ignoreMatcher = await createProjectIgnoreMatcher(rootPath);
