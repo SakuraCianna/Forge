@@ -6,13 +6,15 @@ type ReplyTone = "friendly" | "concise" | "technical";
 export type PersonalizationSettings = {
   replyTone: ReplyTone;
   customInstructions: string;
+  contextSuggestionsEnabled: boolean;
 };
 
 // 创建个性化默认值, 默认保持简洁回答
 export function createDefaultPersonalizationSettings(): PersonalizationSettings {
   return {
     replyTone: "friendly",
-    customInstructions: ""
+    customInstructions: "",
+    contextSuggestionsEnabled: true
   };
 }
 
@@ -30,7 +32,11 @@ export function loadPersonalizationSettings(storage: Storage): PersonalizationSe
     return {
       replyTone: isReplyTone(value.replyTone) ? value.replyTone : "friendly",
       customInstructions:
-        typeof value.customInstructions === "string" ? value.customInstructions : ""
+        typeof value.customInstructions === "string" ? value.customInstructions : "",
+      contextSuggestionsEnabled:
+        typeof value.contextSuggestionsEnabled === "boolean"
+          ? value.contextSuggestionsEnabled
+          : true
     };
   } catch {
     return createDefaultPersonalizationSettings();

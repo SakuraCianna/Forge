@@ -58,6 +58,7 @@ import {
 } from "@/state/usage";
 import { ProviderMark } from "./ProviderMark";
 import { InlineSelectMenu } from "./InlineSelectMenu";
+import { PersonalizationSettingsSection } from "./settings/PersonalizationSettingsSection";
 
 export type ProviderFetchState = {
   status: "idle" | "loading" | "success" | "error";
@@ -280,7 +281,13 @@ export function SettingsPanel({
             {activeSection === "agents" ? renderAgentProfilesSection() : null}
             {activeSection === "memory" ? renderMemorySection() : null}
             {activeSection === "usage" ? renderUsageSection() : null}
-            {activeSection === "personalization" ? renderPersonalizationSection() : null}
+            {activeSection === "personalization" ? (
+              <PersonalizationSettingsSection
+                language={settings.language}
+                personalization={personalization}
+                onUpdatePersonalization={onUpdatePersonalization}
+              />
+            ) : null}
             {activeSection === "archived" ? renderArchivedSection() : null}
           </main>
         </div>
@@ -1736,57 +1743,6 @@ export function SettingsPanel({
     }
 
     return Array.from(rowsById.values());
-  }
-
-  // 渲染个性化设置, 这些内容会追加到模型系统提示
-  function renderPersonalizationSection(): ReactElement {
-    return (
-      <SectionFrame>
-        <div className="grid gap-4">
-          <label className="flex items-center justify-between gap-4 rounded-[14px] border border-[#ececf1] bg-white px-4 py-3 text-sm">
-            <span>
-              <span className="block font-medium text-[#202123]">{t("settings.replyTone")}</span>
-              <span className="mt-1 block text-xs text-[#6e6e80]">{t("settings.replyToneDescription")}</span>
-            </span>
-            <InlineSelectMenu
-              ariaLabel={t("settings.replyTone")}
-              value={personalization.replyTone}
-              options={[
-                { value: "friendly", label: t("settings.tone.friendly") },
-                { value: "concise", label: t("settings.tone.concise") },
-                { value: "technical", label: t("settings.tone.technical") }
-              ]}
-              onChange={(value) =>
-                onUpdatePersonalization({
-                  ...personalization,
-                  replyTone: value as PersonalizationSettings["replyTone"]
-                })
-              }
-            />
-          </label>
-
-          <label className="grid gap-2 rounded-[14px] border border-[#ececf1] bg-white px-4 py-3 text-sm">
-            <span>
-              <span className="block font-medium text-[#202123]">{t("settings.customInstructions")}</span>
-              <span className="mt-1 block text-xs text-[#6e6e80]">
-                {t("settings.customInstructionsDescription")}
-              </span>
-            </span>
-            <textarea
-              value={personalization.customInstructions}
-              onChange={(event) =>
-                onUpdatePersonalization({
-                  ...personalization,
-                  customInstructions: event.currentTarget.value
-                })
-              }
-              className="min-h-36 resize-y rounded-[14px] border border-[#d9d9e3] bg-white p-3 text-sm leading-6 text-[#202123] outline-none transition placeholder:text-[#8e8ea0] focus:border-[#202123]"
-              placeholder={t("settings.customInstructionsPlaceholder")}
-            />
-          </label>
-        </div>
-      </SectionFrame>
-    );
   }
 
   // 渲染已归档对话列表, 方便用户恢复旧会话

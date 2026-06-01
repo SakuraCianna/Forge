@@ -75,6 +75,10 @@ import {
   type PersonalizationSettings
 } from "@/state/personalization";
 import {
+  createHeroComposerPlaceholder,
+  createHeroPromptSuggestions
+} from "@/state/contextSuggestions";
+import {
   addRecentProject,
   createProjectFromPath,
   loadRecentProjects,
@@ -156,72 +160,6 @@ type ProviderKeyStatus = {
   hasKey: boolean;
   last4: string | null;
 };
-
-const zhHeroPrompts = [
-  "我们该做什么？",
-  "要修复哪个问题？",
-  "想实现什么功能？",
-  "需要解释哪段代码？",
-  "今天要锻造哪个想法？",
-  "要把哪个报错处理掉？",
-  "想让 Forge 先读哪里？",
-  "需要补哪一组测试？",
-  "要重构哪个模块？",
-  "想检查哪次变更？",
-  "要生成什么实现计划？",
-  "想优化哪个页面？",
-  "要排查哪个接口？",
-  "需要整理哪段逻辑？",
-  "想让代码更清晰吗？",
-  "要给项目加什么能力？",
-  "今天从哪个文件开始？",
-  "想验证哪个命令？",
-  "要修复构建还是类型？",
-  "需要写一份变更说明吗？",
-  "想比较哪两种方案？",
-  "要找出性能瓶颈吗？",
-  "需要生成提交信息吗？",
-  "要检查 Git 改动吗？",
-  "想让 Forge 先规划吗？",
-  "要把需求拆小吗？",
-  "需要补充文档吗？",
-  "想处理哪个 TODO？",
-  "要让界面更顺手吗？",
-  "准备锻造下一步了吗？"
-];
-
-const enHeroPrompts = [
-  "What should we build?",
-  "What should we fix?",
-  "What feature is next?",
-  "What code should we explain?",
-  "What idea should we forge today?",
-  "Which error should we clear?",
-  "Where should Forge read first?",
-  "Which tests should we add?",
-  "Which module needs refactoring?",
-  "Which change should we review?",
-  "What plan should we generate?",
-  "Which screen should we improve?",
-  "Which API should we debug?",
-  "Which logic needs cleanup?",
-  "Should we make this code clearer?",
-  "What capability should this project gain?",
-  "Which file should we start with?",
-  "Which command should we verify?",
-  "Build issue or type issue?",
-  "Need a change summary?",
-  "Which two approaches should we compare?",
-  "Should we look for a performance bottleneck?",
-  "Need a commit message?",
-  "Should we inspect Git changes?",
-  "Should Forge plan first?",
-  "Should we break this down?",
-  "Need documentation updates?",
-  "Which TODO should we handle?",
-  "Should we make the UI smoother?",
-  "Ready to forge the next step?"
-];
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
@@ -335,9 +273,24 @@ export function App(): ReactElement {
   const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
   const recentAgentToolResultsRef = useRef<Map<string, string[]>>(new Map());
   threadsRef.current = threads;
-  const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
+  const heroSuggestionInput = {
+    language: settings.language,
+    contextSuggestionsEnabled: personalization.contextSuggestionsEnabled,
+    projectName: currentProject?.name ?? null,
+    indexedFileCount: projectScanResult?.files.length ?? 0,
+    changedFileCount: gitStatus?.changedFiles.length ?? 0,
+    pendingChangeCount: changePreviews.length,
+    hasRunningThread: threads.some((thread) => !thread.archived && thread.status === "running"),
+    hasBlockedThread: threads.some((thread) => !thread.archived && thread.status === "blocked"),
+    missingProject: currentProjectMissing
+  };
+  const activeHeroPrompts = createHeroPromptSuggestions(heroSuggestionInput);
+  const heroComposerPlaceholder = createHeroComposerPlaceholder(
+    heroSuggestionInput,
+    t("composer.heroPlaceholder")
+  );
   const activeAgentProfileContext = applyGeneralPermissionModeToAgentProfile(
     getActiveAgentProfileContext(agentProfiles, settings.language),
     generalPreferences
@@ -3128,7 +3081,7 @@ export function App(): ReactElement {
         settings={settings}
         generalPreferences={generalPreferences}
         focusSignal={composerFocusSignal}
-        placeholder={variant === "hero" ? t("composer.heroPlaceholder") : undefined}
+        placeholder={variant === "hero" ? heroComposerPlaceholder : undefined}
         submitSignal={composerSubmitSignal}
         variant={variant}
         onCancelTask={cancelActiveThread}

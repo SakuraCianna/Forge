@@ -178,6 +178,8 @@ export const messages = {
     "settings.tone.friendly": "亲和",
     "settings.tone.concise": "简洁",
     "settings.tone.technical": "技术细节",
+    "settings.contextSuggestions": "上下文感知建议",
+    "settings.contextSuggestionsDescription": "根据当前项目, Git 改动和待审查修改调整首页建议与输入提示",
     "settings.customInstructions": "自定义指令",
     "settings.customInstructionsDescription": "补充你的项目规范, 代码风格或回答偏好",
     "settings.customInstructionsPlaceholder": "例如: 优先给出可执行步骤, 修改前先解释风险, TypeScript 代码保持严格类型"
@@ -358,6 +360,8 @@ export const messages = {
     "settings.tone.friendly": "Friendly",
     "settings.tone.concise": "Concise",
     "settings.tone.technical": "Technical",
+    "settings.contextSuggestions": "Context-aware suggestions",
+    "settings.contextSuggestionsDescription": "Adapt home suggestions and input hints from the current project, Git changes, and pending reviews",
     "settings.customInstructions": "Custom instructions",
     "settings.customInstructionsDescription": "Add your project rules, coding style, or response preferences",
     "settings.customInstructionsPlaceholder": "Example: prefer actionable steps, explain risk before edits, keep TypeScript strictly typed"
