@@ -6,6 +6,7 @@ import type {
   AgentFileChangeResult,
   AgentAskStreamChunk,
   AgentAskResult,
+  AgentPlanStreamChunk,
   AgentPlanResult,
   GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
@@ -51,6 +52,12 @@ declare global {
       };
       agent: {
         generatePlan: (request: GenerateAgentPlanRequest) => Promise<AgentPlanResult>;
+        generatePlanStream: (
+          requestId: string,
+          request: GenerateAgentPlanRequest
+        ) => Promise<AgentPlanResult>;
+        cancelPlanStream: (requestId: string) => Promise<{ ok: boolean; requestId: string }>;
+        onPlanStreamChunk: (listener: (chunk: AgentPlanStreamChunk) => void) => () => void;
         generateFileChange: (
           request: GenerateAgentFileChangeRequest
         ) => Promise<AgentFileChangeResult>;

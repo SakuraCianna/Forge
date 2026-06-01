@@ -69,7 +69,7 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     commandSafetyRules: [],
     fullAccess: false,
     readOnly: false,
-    telemetry: false
+    telemetry: true
   };
 }
 

@@ -88,6 +88,11 @@ export type AgentPlanResult = {
   usage?: TokenUsage;
 };
 
+export type AgentPlanStreamChunk =
+  | { requestId: string; type: "delta"; delta: string }
+  | { requestId: string; type: "done"; result: AgentPlanResult }
+  | { requestId: string; type: "error"; message: string };
+
 export type AgentFileChangeResult = {
   providerId: string;
   modelId: string;

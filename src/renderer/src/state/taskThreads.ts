@@ -269,6 +269,54 @@ export function appendThreadResultDelta(
   });
 }
 
+// 合并计划生成阶段的流式文本, 这类内部输出默认会折叠进 compact 的“已处理”
+export function appendThreadPlanDelta(
+  threads: TaskThread[],
+  threadId: string,
+  delta: {
+    eventId: string;
+    createdAt: string;
+    completedAt?: string;
+    delta: string;
+    done: boolean;
+    finalText?: string;
+  }
+): TaskThread[] {
+  return threads.map((thread) => {
+    if (thread.id !== threadId) {
+      return thread;
+    }
+
+    const existingEvent = thread.events.find((event) => event.id === delta.eventId);
+    const events = existingEvent
+      ? thread.events.map((event) =>
+          event.id === delta.eventId
+            ? {
+                ...event,
+                message: delta.finalText ?? `${event.message}${delta.delta}`,
+                completedAt: delta.completedAt ?? event.completedAt
+              }
+            : event
+        )
+      : [
+          ...thread.events,
+          {
+            id: delta.eventId,
+            kind: "plan" as const,
+            message: delta.finalText ?? delta.delta,
+            createdAt: delta.createdAt,
+            completedAt: delta.completedAt
+          }
+        ];
+
+    return {
+      ...thread,
+      status: "running",
+      events
+    };
+  });
+}
+
 // 把命令实时 stdout 和 stderr 拼回对应事件, 供终端面板持续刷新
 export function appendCommandRunOutput(
   threads: TaskThread[],
