@@ -49,6 +49,13 @@ import {
   type AgentConfirmationItemKind
 } from "@/agent/agentConfirmationQueue";
 import {
+  formatActionDuration,
+  formatActionTimestamp,
+  formatAgentActionContextForClipboard,
+  formatAgentActionRunStatus,
+  formatCommandResultForClipboard
+} from "@/agent/agentActionDetails";
+import {
   getFailureRecoveryAttemptsForAction,
   type FailureRecoveryAttemptView
 } from "@/agent/failureRecoveryAttempts";
@@ -56,7 +63,6 @@ import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
 import type {
-  AgentActionRunRecord,
   CommandRunResult,
   TaskThread,
   TaskThreadEvent
@@ -4585,154 +4591,6 @@ function getAssistantResponseActionCopy(language: Language): {
     like: "Like response",
     dislike: "Dislike response"
   };
-}
-
-// 复制动作详情时保留动作元数据和最近输出, 方便用户把单步上下文交给模型继续分析
-function formatAgentActionContextForClipboard(
-  action: AgentAction,
-  statusLabel: string,
-  nextStep: string,
-  commandResult: CommandRunResult | null,
-  toolResult: TaskThreadEvent | null,
-  actionRun: AgentActionRunRecord | null,
-  recoveryAttempts: FailureRecoveryAttemptView[] = []
-): string {
-  const metadata = [
-    `Action: ${action.label}`,
-    `Kind: ${action.kind}`,
-    `Status: ${statusLabel}`,
-    action.target ? `Target: ${action.target}` : null,
-    action.command ? `Command: ${action.command}` : null,
-    `Next step: ${nextStep}`
-  ].filter((line): line is string => Boolean(line));
-  const sections = [...metadata];
-
-  if (commandResult) {
-    sections.push(`Command result:\n${formatCommandResultForClipboard(commandResult)}`);
-  }
-
-  if (actionRun) {
-    sections.push(`Execution record:\n${formatAgentActionRunForClipboard(actionRun)}`);
-  }
-
-  if (recoveryAttempts.length > 0) {
-    sections.push(
-      `Recovery history:\n${recoveryAttempts
-        .map(formatFailureRecoveryAttemptForClipboard)
-        .join("\n")}`
-    );
-  }
-
-  if (toolResult) {
-    sections.push(`Tool result:\n${toolResult.message.trim()}`);
-  }
-
-  return sections.join("\n");
-}
-
-function formatFailureRecoveryAttemptForClipboard(
-  attempt: FailureRecoveryAttemptView
-): string {
-  return [
-    `Source: ${attempt.source}`,
-    attempt.attempt === undefined
-      ? null
-      : `Attempt: ${attempt.attempt}${attempt.limit === undefined ? "" : ` / ${attempt.limit}`}`,
-    attempt.createdAt ? `Created: ${attempt.createdAt}` : null
-  ]
-    .filter((line): line is string => Boolean(line))
-    .join(", ");
-}
-
-// 把结构化动作执行记录整理成可粘贴文本, 方便继续排查单步行为
-function formatAgentActionRunForClipboard(actionRun: AgentActionRunRecord): string {
-  return [
-    `Status: ${actionRun.status}`,
-    actionRun.startedAt ? `Started: ${actionRun.startedAt}` : null,
-    actionRun.completedAt ? `Completed: ${actionRun.completedAt}` : null,
-    typeof actionRun.durationMs === "number"
-      ? `Duration: ${formatActionDuration(actionRun.durationMs)}`
-      : null,
-    actionRun.reason ? `Reason: ${actionRun.reason}` : null
-  ]
-    .filter((line): line is string => Boolean(line))
-    .join("\n");
-}
-
-// 本地化动作执行状态, 避免直接把内部状态枚举暴露给用户
-function formatAgentActionRunStatus(status: AgentActionRunRecord["status"], language: Language): string {
-  if (language === "zh-CN") {
-    return {
-      started: "已开始",
-      completed: "已完成",
-      failed: "失败",
-      waiting: "等待继续",
-      confirmed: "已确认",
-      skipped: "已跳过"
-    }[status];
-  }
-
-  return {
-    started: "Started",
-    completed: "Completed",
-    failed: "Failed",
-    waiting: "Waiting",
-    confirmed: "Confirmed",
-    skipped: "Skipped"
-  }[status];
-}
-
-// 动作详情只需要短时间戳, 避免完整 ISO 时间挤占侧栏
-function formatActionTimestamp(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  });
-}
-
-// 用短格式展示动作耗时, 与 App 侧时间线文案保持一致
-function formatActionDuration(durationMs: number): string {
-  if (durationMs < 1000) {
-    return `${durationMs} ms`;
-  }
-
-  return `${(durationMs / 1000).toFixed(1)} s`;
-}
-
-// 压缩命令输出片段, 错误恢复提示只需要最后几行
-// 复制命令历史时保留命令, 目录, 状态和 stdout/stderr, 方便粘贴给模型继续排错
-function formatCommandResultForClipboard(result: CommandRunResult): string {
-  const metadata = [`$ ${result.command}`];
-  const outputSections: string[] = [];
-
-  if (result.cwd) {
-    metadata.push(`cwd: ${result.cwd}`);
-  }
-
-  if (result.cancelled) {
-    metadata.push("cancelled");
-  } else if (result.timedOut) {
-    metadata.push("timed out");
-  } else {
-    metadata.push(`exit ${result.exitCode === null ? "null" : result.exitCode}`);
-  }
-
-  if (result.stdout.trim()) {
-    outputSections.push(`stdout:\n${result.stdout.trimEnd()}`);
-  }
-
-  if (result.stderr.trim()) {
-    outputSections.push(`stderr:\n${result.stderr.trimEnd()}`);
-  }
-
-  return [metadata.join("\n"), outputSections.join("\n\n")].filter(Boolean).join("\n\n");
 }
 
 // 压缩命令输出片段, 错误恢复提示只需要最后几行
