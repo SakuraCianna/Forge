@@ -79,6 +79,10 @@ type ParsedPlanStepDraft = {
   title?: string;
 };
 
+type AgentVerificationPolicy = NonNullable<
+  GenerateAgentPlanRequest["agentProfile"]
+>["verificationPolicy"];
+
 type StructuredToolHint =
   | "read"
   | "list-directory"
@@ -140,7 +144,7 @@ export async function generateAgentPlan({
     providerId: provider.id,
     modelId: request.model.id,
     text,
-    steps: parseAgentPlanSteps(text, getPlanStepLimit(request)),
+    steps: parseAgentPlanSteps(text, getPlanStepLimit(request), getVerificationPolicy(request)),
     createdAt: now(),
     usage
   };
@@ -200,7 +204,7 @@ export async function generateAgentPlanStream({
       providerId: provider.id,
       modelId: request.model.id,
       text,
-      steps: parseAgentPlanSteps(text, getPlanStepLimit(request)),
+      steps: parseAgentPlanSteps(text, getPlanStepLimit(request), getVerificationPolicy(request)),
       createdAt: now(),
       usage
     };
@@ -217,7 +221,7 @@ export async function generateAgentPlanStream({
     providerId: provider.id,
     modelId: request.model.id,
     text,
-    steps: parseAgentPlanSteps(text, getPlanStepLimit(request)),
+    steps: parseAgentPlanSteps(text, getPlanStepLimit(request), getVerificationPolicy(request)),
     createdAt: now(),
     usage: streamResult.usage
   };
@@ -452,6 +456,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
     "Keep the plan small and respect the Agent profile plan step limit from the request context.",
+    "Follow the Agent profile verification policy from the request context.",
     'Prefer a JSON object with a "steps" array. Each step must include "kind", "description", and optional "target".',
     'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "git_status", "bash", or "edit".',
     'For one step that edits multiple files, use a "files" string array so Forge can expand it into separate file actions.',
@@ -792,12 +797,14 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
   const memoryContext = formatAgentMemories(request.memories);
   const instructionContext = formatProjectInstructions(request.projectScan);
   const planStepLimit = getPlanStepLimit(request);
+  const verificationPolicy = getVerificationPolicy(request);
 
   return [
     `Task:\n${request.taskPrompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`,
     `Plan step limit:\nUse no more than ${planStepLimit} executable steps unless the user explicitly asks for a longer staged plan.`,
+    `Verification policy:\n${formatVerificationPolicyInstruction(verificationPolicy)}`,
     formatWorkModeContext(request.workMode),
     formatAgentRuntimeContext(request.agentRuntime),
     profileContext,
@@ -950,6 +957,7 @@ function formatAgentProfile(
     `Permission mode: ${agentProfile.permissionMode}`,
     `Context budget: ${agentProfile.contextBudget}`,
     `Plan step limit: ${agentProfile.planStepLimit}`,
+    `Verification policy: ${agentProfile.verificationPolicy}`,
     `Tools: ${agentProfile.enabledTools.length > 0 ? agentProfile.enabledTools.join(", ") : "none"}`,
     "Instructions:",
     agentProfile.instructions
@@ -1000,7 +1008,11 @@ function stripMarkdownCodeFence(value: string): string {
 }
 
 // 从模型文本里解析步骤列表, 失败时回退到单个说明步骤
-function parseAgentPlanSteps(text: string, stepLimit = 12): AgentPlanStep[] {
+function parseAgentPlanSteps(
+  text: string,
+  stepLimit = 12,
+  verificationPolicy: AgentVerificationPolicy = "suggest"
+): AgentPlanStep[] {
   const normalizedStepLimit = clampPlanStepLimit(stepLimit);
   const structuredSteps = parseStructuredAgentPlanSteps(text);
   const descriptions: ParsedPlanStepDraft[] =
@@ -1023,7 +1035,7 @@ function parseAgentPlanSteps(text: string, stepLimit = 12): AgentPlanStep[] {
           })
           .filter((step) => step.description);
 
-  return descriptions
+  const steps = descriptions
     .slice(0, normalizedStepLimit)
     .map((step, index) => {
       const kind = step.kind;
@@ -1038,10 +1050,74 @@ function parseAgentPlanSteps(text: string, stepLimit = 12): AgentPlanStep[] {
         ...(target ? { target } : {})
       };
     });
+
+  return applyVerificationPolicy(steps, normalizedStepLimit, verificationPolicy);
 }
 
 function getPlanStepLimit(request: GenerateAgentPlanRequest): number {
   return clampPlanStepLimit(request.agentProfile?.planStepLimit ?? 6);
+}
+
+function getVerificationPolicy(request: GenerateAgentPlanRequest): AgentVerificationPolicy {
+  return request.agentProfile?.verificationPolicy ?? "suggest";
+}
+
+function formatVerificationPolicyInstruction(policy: AgentVerificationPolicy): string {
+  if (policy === "require") {
+    return "require - include a verification step for plans that edit files or code. Prefer concrete tests, type checks, build commands, or git status checks.";
+  }
+
+  if (policy === "skip") {
+    return "skip - do not add a standalone verification step unless the user explicitly asks for one.";
+  }
+
+  return "suggest - include verification when it is clearly useful for the requested task.";
+}
+
+function applyVerificationPolicy(
+  steps: AgentPlanStep[],
+  stepLimit: number,
+  verificationPolicy: AgentVerificationPolicy
+): AgentPlanStep[] {
+  if (
+    verificationPolicy !== "require" ||
+    !steps.some((step) => step.kind === "edit") ||
+    steps.some((step) => step.kind === "verify")
+  ) {
+    return steps;
+  }
+
+  const verificationStep: AgentPlanStep = {
+    id: `step-${Math.max(1, Math.min(stepLimit, steps.length + 1))}`,
+    title: "Verify changes",
+    description: "Check the resulting project state before finishing.",
+    kind: "verify",
+    status: "pending",
+    target: "git status"
+  };
+
+  if (steps.length < stepLimit) {
+    return renumberPlanSteps([...steps, verificationStep]);
+  }
+
+  const removableIndex = findVerificationInsertionRemovalIndex(steps);
+  const nextSteps = steps.filter((_, index) => index !== removableIndex);
+
+  return renumberPlanSteps([...nextSteps, verificationStep]);
+}
+
+function findVerificationInsertionRemovalIndex(steps: AgentPlanStep[]): number {
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    if (steps[index].kind !== "edit") {
+      return index;
+    }
+  }
+
+  return Math.max(0, steps.length - 1);
+}
+
+function renumberPlanSteps(steps: AgentPlanStep[]): AgentPlanStep[] {
+  return steps.map((step, index) => ({ ...step, id: `step-${index + 1}` }));
 }
 
 function clampPlanStepLimit(value: number): number {

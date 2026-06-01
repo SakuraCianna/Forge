@@ -1370,7 +1370,7 @@ export function SettingsPanel({
                   />
                 </label>
 
-                <div className="grid gap-3 lg:grid-cols-3">
+                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
                   <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4">
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-[#202123]">
@@ -1389,6 +1389,28 @@ export function SettingsPanel({
                       ]}
                       onChange={(value) =>
                         onUpdateAgentProfile(selectedProfile.id, { permissionMode: value })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-[#202123]">
+                        {copy.verificationPolicy}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
+                        {copy.verificationPolicyDescription}
+                      </span>
+                    </span>
+                    <InlineSelectMenu<AgentProfile["verificationPolicy"]>
+                      ariaLabel={copy.verificationPolicy}
+                      value={selectedProfile.verificationPolicy}
+                      options={[
+                        { value: "suggest", label: copy.verificationSuggest },
+                        { value: "require", label: copy.verificationRequire },
+                        { value: "skip", label: copy.verificationSkip }
+                      ]}
+                      onChange={(value) =>
+                        onUpdateAgentProfile(selectedProfile.id, { verificationPolicy: value })
                       }
                     />
                   </div>
@@ -2391,6 +2413,11 @@ function getAgentProfilesCopy(language: Language): {
   title: string;
   tools: string;
   toolLabel: (tool: AgentProfileTool) => string;
+  verificationPolicy: string;
+  verificationPolicyDescription: string;
+  verificationRequire: string;
+  verificationSkip: string;
+  verificationSuggest: string;
 } {
   if (language === "zh-CN") {
     return {
@@ -2415,7 +2442,12 @@ function getAgentProfilesCopy(language: Language): {
           edit: "编辑文件",
           command: "运行命令",
           git: "Git 操作"
-        })[tool]
+        })[tool],
+      verificationPolicy: "验证策略",
+      verificationPolicyDescription: "控制计划是否需要包含测试、构建或检查步骤",
+      verificationRequire: "必须验证",
+      verificationSkip: "跳过验证",
+      verificationSuggest: "按需建议"
     };
   }
 
@@ -2441,7 +2473,12 @@ function getAgentProfilesCopy(language: Language): {
         edit: "Edit files",
         command: "Run commands",
         git: "Git operations"
-      })[tool]
+      })[tool],
+    verificationPolicy: "Verification policy",
+    verificationPolicyDescription: "Controls whether plans should include test, build, or check steps",
+    verificationRequire: "Require verification",
+    verificationSkip: "Skip verification",
+    verificationSuggest: "Suggest when useful"
   };
 }
 

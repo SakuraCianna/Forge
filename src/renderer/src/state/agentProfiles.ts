@@ -5,6 +5,7 @@ import type { Language } from "@shared/modelTypes";
 const agentProfileStorageKey = "forge.agentProfiles";
 
 type AgentProfilePermissionMode = "auto" | "full";
+type AgentProfileVerificationPolicy = "suggest" | "require" | "skip";
 export type AgentProfileTool = "read" | "edit" | "command" | "git";
 
 type AgentProfileTools = Record<AgentProfileTool, boolean>;
@@ -15,6 +16,7 @@ export type AgentProfile = {
   description: string;
   systemPrompt: string;
   permissionMode: AgentProfilePermissionMode;
+  verificationPolicy: AgentProfileVerificationPolicy;
   tools: AgentProfileTools;
   contextBudget: number;
   planStepLimit: number;
@@ -31,6 +33,7 @@ export type AgentProfilePatch = Partial<
     | "description"
     | "systemPrompt"
     | "permissionMode"
+    | "verificationPolicy"
     | "tools"
     | "contextBudget"
     | "planStepLimit"
@@ -92,6 +95,7 @@ const defaultProfiles: AgentProfile[] = [
     id: "build",
     ...builtInProfileText.build["zh-CN"],
     permissionMode: "auto",
+    verificationPolicy: "require",
     tools: {
       read: true,
       edit: true,
@@ -109,6 +113,7 @@ const defaultProfiles: AgentProfile[] = [
     id: "review",
     ...builtInProfileText.review["zh-CN"],
     permissionMode: "auto",
+    verificationPolicy: "suggest",
     tools: {
       read: true,
       edit: false,
@@ -126,6 +131,7 @@ const defaultProfiles: AgentProfile[] = [
     id: "docs",
     ...builtInProfileText.docs["zh-CN"],
     permissionMode: "auto",
+    verificationPolicy: "skip",
     tools: {
       read: true,
       edit: true,
@@ -277,7 +283,8 @@ export function getActiveAgentProfileContext(
     permissionMode: activeProfile.permissionMode,
     enabledTools: getEnabledAgentTools(activeProfile.tools),
     contextBudget: activeProfile.contextBudget,
-    planStepLimit: activeProfile.planStepLimit
+    planStepLimit: activeProfile.planStepLimit,
+    verificationPolicy: activeProfile.verificationPolicy
   };
 }
 
@@ -343,6 +350,7 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
     description: normalizeText(profile.description),
     systemPrompt: normalizeText(profile.systemPrompt),
     permissionMode: profile.permissionMode === "full" ? "full" : "auto",
+    verificationPolicy: normalizeVerificationPolicy(profile.verificationPolicy, profile.id),
     tools: normalizeTools(profile.tools),
     contextBudget,
     planStepLimit
@@ -427,6 +435,10 @@ function isPersistedAgentProfile(value: unknown): value is AgentProfile {
     typeof value.description === "string" &&
     typeof value.systemPrompt === "string" &&
     (value.permissionMode === "auto" || value.permissionMode === "full") &&
+    (!("verificationPolicy" in value) ||
+      value.verificationPolicy === "suggest" ||
+      value.verificationPolicy === "require" ||
+      value.verificationPolicy === "skip") &&
     isRecord(value.tools) &&
     typeof value.contextBudget === "number" &&
     (!("planStepLimit" in value) ||
@@ -440,6 +452,17 @@ function isPersistedAgentProfile(value: unknown): value is AgentProfile {
 
 function getDefaultPlanStepLimit(profileId: string): number {
   return defaultProfiles.find((profile) => profile.id === profileId)?.planStepLimit ?? 6;
+}
+
+function normalizeVerificationPolicy(
+  value: unknown,
+  profileId: string
+): AgentProfileVerificationPolicy {
+  if (value === "suggest" || value === "require" || value === "skip") {
+    return value;
+  }
+
+  return defaultProfiles.find((profile) => profile.id === profileId)?.verificationPolicy ?? "suggest";
 }
 
 // 将 unknown 缩窄成普通对象, 供字段校验复用

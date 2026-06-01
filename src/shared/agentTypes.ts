@@ -19,6 +19,7 @@ export type AgentProfileContext = {
   enabledTools: string[];
   contextBudget: number;
   planStepLimit: number;
+  verificationPolicy: "suggest" | "require" | "skip";
 };
 
 export type AgentWorkMode = "code" | "daily";
