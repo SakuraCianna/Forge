@@ -2,11 +2,34 @@
 import type { FailureRecoveryAttemptRecord } from "@/state/taskThreads";
 
 export type FailureRecoveryAttemptEvent = {
+  createdAt?: string;
   failureRecoveryAttempt?: Pick<
     FailureRecoveryAttemptRecord,
     "actionId" | "label" | "source" | "attempt" | "limit"
   >;
 };
+
+export type FailureRecoveryAttemptView = FailureRecoveryAttemptRecord & {
+  createdAt: string | null;
+};
+
+export function getFailureRecoveryAttemptsForAction(
+  events: FailureRecoveryAttemptEvent[],
+  actionId: string
+): FailureRecoveryAttemptView[] {
+  return events.flatMap((event) => {
+    if (event.failureRecoveryAttempt?.actionId !== actionId) {
+      return [];
+    }
+
+    return [
+      {
+        ...event.failureRecoveryAttempt,
+        createdAt: event.createdAt ?? null
+      }
+    ];
+  });
+}
 
 export function countAutoFailureRecoveryAttempts(
   events: FailureRecoveryAttemptEvent[],

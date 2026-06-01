@@ -48,6 +48,10 @@ import {
   type AgentConfirmationItem,
   type AgentConfirmationItemKind
 } from "@/agent/agentConfirmationQueue";
+import {
+  getFailureRecoveryAttemptsForAction,
+  type FailureRecoveryAttemptView
+} from "@/agent/failureRecoveryAttempts";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
@@ -1676,8 +1680,13 @@ export function ThreadWorkspace({
             selectAction: (label: string) => `选择动作 ${label}`,
             commandOutput: "最近命令输出",
             toolResult: "工具结果",
+            recoveryHistory: "恢复历史",
             copyContext: "复制动作上下文",
             executionRecord: "执行记录",
+            autoRecovery: "自动恢复",
+            manualRecovery: "手动恢复",
+            recoveryAttempt: (attempt: number, limit?: number) =>
+              limit === undefined ? `第 ${attempt} 次` : `第 ${attempt} / ${limit} 次`,
             startedAt: "开始",
             completedAt: "结束",
             duration: "耗时",
@@ -1706,8 +1715,13 @@ export function ThreadWorkspace({
             selectAction: (label: string) => `Select action ${label}`,
             commandOutput: "Last command output",
             toolResult: "Tool result",
+            recoveryHistory: "Recovery history",
             copyContext: "Copy action context",
             executionRecord: "Execution record",
+            autoRecovery: "Automatic recovery",
+            manualRecovery: "Manual recovery",
+            recoveryAttempt: (attempt: number, limit?: number) =>
+              limit === undefined ? `Attempt ${attempt}` : `Attempt ${attempt} / ${limit}`,
             startedAt: "Started",
             completedAt: "Completed",
             duration: "Duration",
@@ -1801,6 +1815,9 @@ export function ThreadWorkspace({
     const selectedActionRunEvent = selectedAgentAction
       ? findLatestAgentActionRunEvent(selectedThread?.events ?? [], selectedAgentAction)
       : null;
+    const selectedRecoveryAttempts = selectedAgentAction
+      ? getFailureRecoveryAttemptsForAction(selectedThread?.events ?? [], selectedAgentAction.id)
+      : [];
 
     // 读取命令动作的风险等级, 非命令动作不参与审批判断
     function getCommandRiskForAction(action: AgentAction): ReturnType<typeof resolveAgentCommandRisk> | null {
@@ -2115,12 +2132,29 @@ export function ThreadWorkspace({
       return controls.length > 0 ? <div className="mt-3 flex flex-wrap gap-2">{controls}</div> : null;
     }
 
+    function formatFailureRecoveryAttemptSource(attempt: FailureRecoveryAttemptView): string {
+      return attempt.source === "auto"
+        ? actionDetailsCopy.autoRecovery
+        : actionDetailsCopy.manualRecovery;
+    }
+
+    function formatFailureRecoveryAttemptProgress(attempt: FailureRecoveryAttemptView): string {
+      if (attempt.attempt === undefined) {
+        return attempt.source === "auto"
+          ? actionDetailsCopy.autoRecovery
+          : actionDetailsCopy.manualRecovery;
+      }
+
+      return actionDetailsCopy.recoveryAttempt(attempt.attempt, attempt.limit);
+    }
+
     // 展示单个动作的输入, 输出和恢复入口
     function renderAgentActionDetails(
       action: AgentAction,
       commandResult: CommandRunResult | null,
       toolResult: TaskThreadEvent | null,
-      actionRunEvent: TaskThreadEvent | null
+      actionRunEvent: TaskThreadEvent | null,
+      recoveryAttempts: FailureRecoveryAttemptView[]
     ): ReactElement {
       const detailRows = [
         { label: actionDetailsCopy.kind, value: action.kind },
@@ -2153,7 +2187,8 @@ export function ThreadWorkspace({
                       nextStep,
                       commandResult,
                       toolResult,
-                      actionRunEvent?.agentActionRun ?? null
+                      actionRunEvent?.agentActionRun ?? null,
+                      recoveryAttempts
                     )
                   )
                 }
@@ -2182,6 +2217,35 @@ export function ThreadWorkspace({
             <p className="mt-1 text-sm leading-5 text-[#202123]">{nextStep}</p>
           </div>
           {renderAgentActionDetailControls(action)}
+          {recoveryAttempts.length > 0 ? (
+            <div className="mt-3 border-t border-[#ececf1] pt-3">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+                {actionDetailsCopy.recoveryHistory}
+              </h3>
+              <div className="mt-2 grid gap-2">
+                {recoveryAttempts.map((attempt, index) => (
+                  <article
+                    key={`${attempt.actionId}-${attempt.source}-${attempt.createdAt ?? index}`}
+                    className="rounded-[12px] bg-[#fafafa] px-2.5 py-2 text-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-[#202123]">
+                        {formatFailureRecoveryAttemptSource(attempt)}
+                      </span>
+                      <span className="text-[#8e8ea0]">
+                        {formatFailureRecoveryAttemptProgress(attempt)}
+                      </span>
+                    </div>
+                    {attempt.createdAt ? (
+                      <p className="mt-1 text-[#565869]">
+                        {formatActionTimestamp(attempt.createdAt)}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {actionRunEvent?.agentActionRun ? (
             <div className="mt-3 border-t border-[#ececf1] pt-3">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
@@ -2829,7 +2893,8 @@ export function ThreadWorkspace({
                 selectedAgentAction,
                 selectedCommandResult,
                 selectedToolResult,
-                selectedActionRunEvent
+                selectedActionRunEvent,
+                selectedRecoveryAttempts
               )
             : null}
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
@@ -4529,7 +4594,8 @@ function formatAgentActionContextForClipboard(
   nextStep: string,
   commandResult: CommandRunResult | null,
   toolResult: TaskThreadEvent | null,
-  actionRun: AgentActionRunRecord | null
+  actionRun: AgentActionRunRecord | null,
+  recoveryAttempts: FailureRecoveryAttemptView[] = []
 ): string {
   const metadata = [
     `Action: ${action.label}`,
@@ -4549,11 +4615,33 @@ function formatAgentActionContextForClipboard(
     sections.push(`Execution record:\n${formatAgentActionRunForClipboard(actionRun)}`);
   }
 
+  if (recoveryAttempts.length > 0) {
+    sections.push(
+      `Recovery history:\n${recoveryAttempts
+        .map(formatFailureRecoveryAttemptForClipboard)
+        .join("\n")}`
+    );
+  }
+
   if (toolResult) {
     sections.push(`Tool result:\n${toolResult.message.trim()}`);
   }
 
   return sections.join("\n");
+}
+
+function formatFailureRecoveryAttemptForClipboard(
+  attempt: FailureRecoveryAttemptView
+): string {
+  return [
+    `Source: ${attempt.source}`,
+    attempt.attempt === undefined
+      ? null
+      : `Attempt: ${attempt.attempt}${attempt.limit === undefined ? "" : ` / ${attempt.limit}`}`,
+    attempt.createdAt ? `Created: ${attempt.createdAt}` : null
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join(", ");
 }
 
 // 把结构化动作执行记录整理成可粘贴文本, 方便继续排查单步行为
