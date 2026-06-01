@@ -1,5 +1,6 @@
 // 本文件说明: 推导 Agent 确认队列和队列控制状态, 供主视图复用和测试
 import type { AgentAction } from "@shared/agentExecutionPlan";
+import type { AgentProfileContext } from "@shared/agentTypes";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import {
   findNextPendingAgentAction,
@@ -17,6 +18,8 @@ export type AgentConfirmationItemKind =
   | "command-blocked"
   | "commit-gate";
 
+export type AgentFailureRecoveryPolicy = AgentProfileContext["failureRecoveryPolicy"];
+
 export type AgentConfirmationItem = {
   id: string;
   kind: AgentConfirmationItemKind;
@@ -29,6 +32,7 @@ export type AgentConfirmationItem = {
   pendingChangeCount?: number;
   previewPath?: string;
   riskReason?: string;
+  failureRecoveryPolicy?: AgentFailureRecoveryPolicy;
 };
 
 export type AgentQueueControlState = {
@@ -90,7 +94,8 @@ export function getAgentConfirmationItems({
   fullAccess,
   activeGateAction,
   projectPath,
-  queueBlockerAction
+  queueBlockerAction,
+  failureRecoveryPolicy
 }: {
   actions: AgentAction[];
   changePreviews: Pick<ProjectFileChangePreview, "relativePath">[];
@@ -99,6 +104,7 @@ export function getAgentConfirmationItems({
   activeGateAction: AgentAction | null;
   projectPath: string | null;
   queueBlockerAction: AgentAction | null;
+  failureRecoveryPolicy?: AgentFailureRecoveryPolicy | null;
 }): AgentConfirmationItem[] {
   const items: AgentConfirmationItem[] = [];
 
@@ -139,6 +145,8 @@ export function getAgentConfirmationItems({
         commandRisk?.level === "ask" || commandRisk?.level === "deny"
           ? commandRisk.reason
           : undefined,
+      failureRecoveryPolicy:
+        kind === "failed-action" ? (failureRecoveryPolicy ?? undefined) : undefined,
       active:
         changePreviews.length === 0 &&
         (activeGateAction?.id === action.id || queueBlockerAction?.id === action.id)

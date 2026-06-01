@@ -69,7 +69,8 @@ describe("agent confirmation queue", () => {
       fullAccess: false,
       activeGateAction: null,
       projectPath: "E:\\CodeHome\\Forge",
-      queueBlockerAction: failedAction
+      queueBlockerAction: failedAction,
+      failureRecoveryPolicy: "suggest"
     });
 
     expect(items).toHaveLength(2);
@@ -83,7 +84,8 @@ describe("agent confirmation queue", () => {
       kind: "failed-action",
       active: false,
       command: "npm test",
-      cwd: "E:\\CodeHome\\Forge"
+      cwd: "E:\\CodeHome\\Forge",
+      failureRecoveryPolicy: "suggest"
     });
   });
 

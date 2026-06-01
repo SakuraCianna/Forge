@@ -789,7 +789,8 @@ export function ThreadWorkspace({
       fullAccess,
       activeGateAction,
       projectPath: thread.projectPath ?? projectScan?.rootPath ?? null,
-      queueBlockerAction
+      queueBlockerAction,
+      failureRecoveryPolicy: thread.agentProfile?.failureRecoveryPolicy
     });
   }
 
@@ -1755,7 +1756,8 @@ export function ThreadWorkspace({
       fullAccess,
       activeGateAction,
       projectPath: selectedThread?.projectPath ?? projectScan?.rootPath ?? null,
-      queueBlockerAction
+      queueBlockerAction,
+      failureRecoveryPolicy: selectedThread?.agentProfile?.failureRecoveryPolicy
     });
     const agentRunStatus =
       hasPendingFileChanges
@@ -3432,7 +3434,7 @@ function getAgentConfirmationBody(
   }
 
   if (item.kind === "failed-action") {
-    return copy.failedActionBody;
+    return getFailedActionBody(item, copy);
   }
 
   const action = item.action;
@@ -3459,6 +3461,21 @@ function getAgentConfirmationBody(
   return copy.manualGateBody(action.label);
 }
 
+function getFailedActionBody(
+  item: AgentConfirmationItem,
+  copy: ReturnType<typeof getCompactAgentControlCopy>
+): string {
+  if (item.failureRecoveryPolicy === "suggest") {
+    return copy.failedActionSuggestBody;
+  }
+
+  if (item.failureRecoveryPolicy === "auto") {
+    return copy.failedActionAutoBody;
+  }
+
+  return copy.failedActionBody;
+}
+
 // 为确认项生成结构化上下文行, 保持 UI 和复制摘要使用同一份信息
 function getAgentConfirmationMetadataRows(
   item: AgentConfirmationItem,
@@ -3479,6 +3496,13 @@ function getAgentConfirmationMetadataRows(
     rows.push({
       label: copy.riskLabel,
       value: formatAgentCommandRiskReason(language, item.riskReason)
+    });
+  }
+
+  if (item.kind === "failed-action" && item.failureRecoveryPolicy) {
+    rows.push({
+      label: copy.failureRecoveryPolicyLabel,
+      value: getFailureRecoveryPolicyLabel(item.failureRecoveryPolicy, copy)
     });
   }
 
@@ -3520,6 +3544,21 @@ function formatAgentConfirmationSummary(
   return lines.join("\n");
 }
 
+function getFailureRecoveryPolicyLabel(
+  policy: NonNullable<AgentConfirmationItem["failureRecoveryPolicy"]>,
+  copy: ReturnType<typeof getCompactAgentControlCopy>
+): string {
+  if (policy === "auto") {
+    return copy.failureRecoveryAuto;
+  }
+
+  if (policy === "suggest") {
+    return copy.failureRecoverySuggest;
+  }
+
+  return copy.failureRecoveryManual;
+}
+
 // 提供 compact/full 确认面板共享的中英文文案
 function getCompactAgentControlCopy(language: Language) {
   if (language === "zh-CN") {
@@ -3540,6 +3579,8 @@ function getCompactAgentControlCopy(language: Language) {
         count > 1 ? `先处理 ${path} 等 ${count} 个修改, Forge 才会继续` : `先处理 ${path}, Forge 才会继续`,
       failedActionTitle: "失败动作",
       failedActionBody: "先重试、生成修复计划或跳过, 队列才会继续",
+      failedActionSuggestBody: "当前智能体建议先生成修复计划, 也可以重试或跳过该动作",
+      failedActionAutoBody: "当前智能体会按上限尝试自动生成修复计划, 也可以手动生成、重试或跳过",
       manualGateTitle: "人工确认",
       commandApprovalTitle: "命令批准",
       commandBlockedTitle: "命令被阻止",
@@ -3548,6 +3589,10 @@ function getCompactAgentControlCopy(language: Language) {
       commandLabel: "命令",
       cwdLabel: "目录",
       riskLabel: "风险",
+      failureRecoveryPolicyLabel: "恢复策略",
+      failureRecoveryManual: "手动处理",
+      failureRecoverySuggest: "提示修复",
+      failureRecoveryAuto: "自动恢复",
       afterApprovalLabel: "批准后",
       noNextQueuedAction: "没有后续队列动作",
       reviewQueuedChanges: "审查队列修改",
@@ -3623,6 +3668,10 @@ function getCompactAgentControlCopy(language: Language) {
         : `Review ${path} before Forge continues.`,
     failedActionTitle: "Failed action",
     failedActionBody: "Retry, generate a fix plan, or skip this action before the queue continues.",
+    failedActionSuggestBody:
+      "This agent suggests generating a fix plan first. You can also retry or skip the action.",
+    failedActionAutoBody:
+      "This agent can auto-generate a fix plan within its retry limit. You can still generate one manually, retry, or skip.",
     manualGateTitle: "Manual confirmation",
     commandApprovalTitle: "Command approval",
     commandBlockedTitle: "Blocked command",
@@ -3631,6 +3680,10 @@ function getCompactAgentControlCopy(language: Language) {
     commandLabel: "Command",
     cwdLabel: "cwd",
     riskLabel: "Risk",
+    failureRecoveryPolicyLabel: "Recovery",
+    failureRecoveryManual: "Manual",
+    failureRecoverySuggest: "Suggest fix",
+    failureRecoveryAuto: "Auto recovery",
     afterApprovalLabel: "After approval",
     noNextQueuedAction: "No later queued action",
     reviewQueuedChanges: "Review queued changes",
