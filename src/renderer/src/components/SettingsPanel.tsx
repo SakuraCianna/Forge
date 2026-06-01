@@ -2292,7 +2292,7 @@ function PriceInput({
       <input
         type="number"
         min="0"
-        step="0.01"
+        step="0.0001"
         value={value}
         onChange={(event) => onChange(Number(event.currentTarget.value) || 0)}
         className="h-9 w-full rounded-[12px] border border-[#d9d9e3] bg-white px-2 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
@@ -2579,7 +2579,7 @@ function getGeneralSettingsCopy(language: Language): {
       readOnlyDescription: "只允许读取项目和回答问题, 不生成修改, 不运行命令",
       recentProject: "最近项目",
       telemetry: "本地用量记录",
-      telemetryDescription: "开启后记录本地 token 用量和成本估算, 不会上传到远端",
+      telemetryDescription: "开启后记录本地 token 用量和成本估算, 不会上传到云端",
       terminalShell: "集成终端 Shell",
       terminalShellDescription: "选择真实命令执行使用的 Shell, Git Bash 需要 bash.exe 已加入 PATH",
       submitWithCtrlEnter: "Ctrl Enter 发送",
@@ -2660,7 +2660,7 @@ function getGeneralSettingsCopy(language: Language): {
     readOnlyDescription: "Allow reading and answers only, without edits, commands, or Git actions",
     recentProject: "Recent project",
     telemetry: "Local usage records",
-    telemetryDescription: "Record local token usage and cost estimates without uploading telemetry",
+    telemetryDescription: "Record local token usage and cost estimates without uploading to the cloud",
     terminalShell: "Integrated terminal shell",
     terminalShellDescription:
       "Choose the shell used for real command execution. Git Bash requires bash.exe on PATH.",

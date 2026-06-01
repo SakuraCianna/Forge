@@ -14,6 +14,7 @@ import type {
   AgentFileChangeResult,
   AgentAskStreamChunk,
   AgentAskResult,
+  AgentPlanStreamChunk,
   AgentPlanResult,
   GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
@@ -70,6 +71,19 @@ contextBridge.exposeInMainWorld("forge", {
   agent: {
     generatePlan: (request: GenerateAgentPlanRequest): Promise<AgentPlanResult> =>
       ipcRenderer.invoke(agentChannels.generatePlan, request),
+    generatePlanStream: (
+      requestId: string,
+      request: GenerateAgentPlanRequest
+    ): Promise<AgentPlanResult> =>
+      ipcRenderer.invoke(agentChannels.generatePlanStream, requestId, request),
+    cancelPlanStream: (requestId: string): Promise<{ ok: boolean; requestId: string }> =>
+      ipcRenderer.invoke(agentChannels.cancelPlanStream, requestId),
+    onPlanStreamChunk: (listener: (chunk: AgentPlanStreamChunk) => void) => {
+      const handler = (_event: IpcRendererEvent, chunk: AgentPlanStreamChunk) => listener(chunk);
+      ipcRenderer.on(agentChannels.planStreamChunk, handler);
+
+      return () => ipcRenderer.removeListener(agentChannels.planStreamChunk, handler);
+    },
     generateFileChange: (
       request: GenerateAgentFileChangeRequest
     ): Promise<AgentFileChangeResult> =>

@@ -12,6 +12,7 @@ import type {
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
+import type { TokenUsage } from "../shared/usageTypes.js";
 import { hydrateProviderFromCatalog } from "../shared/providerCatalog.js";
 import {
   buildTextGenerationRequest,
@@ -41,6 +42,11 @@ type GenerateAgentPlanOptions = {
   now?: () => string;
 };
 
+type GenerateAgentPlanStreamOptions = GenerateAgentPlanOptions & {
+  onDelta: (delta: string) => void;
+  signal?: AbortSignal;
+};
+
 type GenerateAgentFileChangeOptions = {
   request: GenerateAgentFileChangeRequest;
   keyVault: KeyReader;
@@ -63,6 +69,7 @@ type GenerateAgentAskStreamOptions = GenerateAgentAskOptions & {
 type StreamReadResult = {
   text: string;
   truncated: boolean;
+  usage?: TokenUsage;
 };
 
 type ParsedPlanStepDraft = {
@@ -136,6 +143,83 @@ export async function generateAgentPlan({
     steps: parseAgentPlanSteps(text),
     createdAt: now(),
     usage
+  };
+}
+
+// 生成流式计划, 让主屏在等待执行时能持续收到模型输出
+export async function generateAgentPlanStream({
+  request,
+  keyVault,
+  fetcher = fetch,
+  now = () => new Date().toISOString(),
+  onDelta,
+  signal
+}: GenerateAgentPlanStreamOptions): Promise<AgentPlanResult> {
+  const provider = hydrateProviderFromCatalog(request.provider);
+  const apiKey = await keyVault.readProviderKey(provider.id);
+
+  if (provider.requiresApiKey !== false && !apiKey) {
+    throw new Error(formatMissingApiKey(provider.label));
+  }
+
+  const generationRequest = maybeEnableTextGenerationStreaming(
+    provider,
+    buildTextGenerationRequest({
+      provider,
+      model: request.model,
+      apiKey: apiKey ?? "",
+      instructions: createAgentPlanInstructions(request.personalization),
+      input: createAgentPlanInput(request),
+      intelligence: request.intelligence,
+      speed: request.speed
+    })
+  );
+  const response = await fetcher(generationRequest.url, {
+    ...generationRequest.init,
+    signal
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      formatProviderHttpError(provider.label, "Agent 计划", response.status, response.statusText)
+    );
+  }
+
+  if (!isEventStreamResponse(response)) {
+    const body = await readJsonBody(provider.label, response);
+    const text = extractGeneratedText(provider.kind, body).trim();
+    const usage = extractTokenUsage(provider.kind, body);
+
+    if (!text) {
+      throw new Error(formatEmptyProviderResult(provider.label, "Agent 计划"));
+    }
+
+    onDelta(text);
+
+    return {
+      providerId: provider.id,
+      modelId: request.model.id,
+      text,
+      steps: parseAgentPlanSteps(text),
+      createdAt: now(),
+      usage
+    };
+  }
+
+  const streamResult = await readStreamingResponseText(response, provider.kind, onDelta);
+  const text = streamResult.text.trim();
+
+  if (!text) {
+    throw new Error(formatEmptyProviderResult(provider.label, "Agent 计划"));
+  }
+
+  return {
+    providerId: provider.id,
+    modelId: request.model.id,
+    text,
+    steps: parseAgentPlanSteps(text),
+    createdAt: now(),
+    usage: streamResult.usage
   };
 }
 
@@ -297,6 +381,7 @@ export async function generateAgentAskStream({
 
   let streamResult = await readStreamingResponseText(response, provider.kind, onDelta);
   let text = streamResult.text;
+  let usage = streamResult.usage;
 
   for (
     let continuationIndex = 0;
@@ -345,6 +430,7 @@ export async function generateAgentAskStream({
 
     streamResult = await readStreamingResponseText(continuationResponse, provider.kind, onDelta);
     text += streamResult.text;
+    usage = streamResult.usage ?? usage;
   }
 
   if (!text.trim()) {
@@ -355,7 +441,8 @@ export async function generateAgentAskStream({
     providerId: provider.id,
     modelId: request.model.id,
     text,
-    createdAt: now()
+    createdAt: now(),
+    usage
   };
 }
 
@@ -364,6 +451,7 @@ function createAgentPlanInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
+    "Keep the plan small: usually 3 to 6 steps, never more than 8 unless the task explicitly requires it.",
     'Prefer a JSON object with a "steps" array. Each step must include "kind", "description", and optional "target".',
     'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "git_status", "bash", or "edit".',
     'For one step that edits multiple files, use a "files" string array so Forge can expand it into separate file actions.',
@@ -372,6 +460,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "Do not use shell commands for directory listing, file globbing, text search, or git status/diff when a controlled tool can express the same step.",
     "If you cannot produce JSON, use a numbered list of concrete steps and mention target files or commands in backticks when known.",
     "If the user asks to create, write, or save a named file, include an edit step targeting that exact file path in backticks.",
+    "If a requested file does not exist and the user asked to write or create it, create it instead of treating the missing file as a failure.",
     "Do not reveal hidden chain-of-thought. Show only actionable engineering steps.",
     "Prefer Chinese when the user writes Chinese. Keep file paths exact when mentioned.",
     "Do not claim you changed files or ran commands. This response is planning only."
@@ -480,7 +569,7 @@ async function readStreamingResponseText(
 ): Promise<StreamReadResult> {
   const streamResult = await readEventStreamText(response.clone(), providerKind, onDelta);
 
-  if (streamResult.text || streamResult.truncated) {
+  if (streamResult.text || streamResult.truncated || streamResult.usage) {
     return streamResult;
   }
 
@@ -503,6 +592,7 @@ async function readEventStreamText(
   let buffer = "";
   let text = "";
   let truncated = false;
+  let usage: TokenUsage | undefined;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -522,8 +612,10 @@ async function readEventStreamText(
         truncated = true;
       }
 
+      usage = event.usage ?? usage;
+
       if (event.done) {
-        return { text, truncated };
+        return { text, truncated, usage };
       }
 
       if (event.delta) {
@@ -543,20 +635,22 @@ async function readEventStreamText(
       truncated = true;
     }
 
+    usage = event.usage ?? usage;
+
     if (event.delta && !event.done) {
       text += event.delta;
       onDelta(event.delta);
     }
   }
 
-  return { text, truncated };
+  return { text, truncated, usage };
 }
 
 // 读取单行 SSE 事件里的文本增量
 function readStreamEventDeltaLine(
   lineText: string,
   providerKind: ForgeProvider["kind"]
-): { delta: string | null; done: boolean; truncated: boolean } {
+): { delta: string | null; done: boolean; truncated: boolean; usage?: TokenUsage } {
   const line = lineText.trim();
 
   if (!line.startsWith("data:")) {
@@ -571,11 +665,13 @@ function readStreamEventDeltaLine(
 
   try {
     const event = JSON.parse(data) as unknown;
+    const usage = isRecord(event) ? extractTokenUsage(providerKind, event) : undefined;
 
     return {
       delta: extractStreamDelta(providerKind, event),
       done: false,
-      truncated: isStreamTruncated(providerKind, event)
+      truncated: isStreamTruncated(providerKind, event),
+      usage
     };
   } catch {
     return { delta: null, done: false, truncated: false };
@@ -590,6 +686,7 @@ function readEventStreamTextFromBody(
 ): StreamReadResult {
   let text = "";
   let truncated = false;
+  let usage: TokenUsage | undefined;
 
   for (const line of body.split(/\r?\n/)) {
     const event = readStreamEventDeltaLine(line, providerKind);
@@ -598,8 +695,10 @@ function readEventStreamTextFromBody(
       truncated = true;
     }
 
+    usage = event.usage ?? usage;
+
     if (event.done) {
-      return { text, truncated };
+      return { text, truncated, usage };
     }
 
     if (event.delta) {
@@ -608,7 +707,7 @@ function readEventStreamTextFromBody(
     }
   }
 
-  return { text, truncated };
+  return { text, truncated, usage };
 }
 
 // 从不同供应商的流式事件中提取文本片段

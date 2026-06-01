@@ -86,6 +86,7 @@ import {
   appendThreadEvents,
   appendThreadFollowUpPrompt,
   appendCommandRunOutput,
+  appendThreadPlanDelta,
   appendThreadResultDelta,
   archiveAllThreads,
   archiveProjectThreads,
@@ -321,6 +322,7 @@ export function App(): ReactElement {
   const [pausedThreadIds, setPausedThreadIds] = useState<Set<string>>(() => new Set());
   const { t } = useI18n(settings.language);
   const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
+  const activePlanStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
   const activeAskStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
   const activeAgentAutoRunKeysRef = useRef<Set<string>>(new Set());
   const activeAutoFailureFixKeysRef = useRef<Set<string>>(new Set());
@@ -1559,12 +1561,13 @@ export function App(): ReactElement {
     provider: ForgeProvider;
     projectScan: ProjectScanResult;
   }): Promise<void> {
+    const streamStartedAt = new Date().toISOString();
+    const streamEventId = `${threadId}-plan-stream-${Date.now()}`;
+    let unsubscribeStream: (() => void) | null = null;
+
     try {
       const memories = selectRelevantAgentMemories(agentMemories, projectScan.rootPath, 8, taskPrompt);
-
-      setThreads((current) => attachThreadMemoryContext(current, threadId, memories));
-
-      const plan = await window.forge.agent.generatePlan({
+      const request = {
         provider,
         model,
         intelligence: settings.intelligence,
@@ -1576,11 +1579,44 @@ export function App(): ReactElement {
         agentRuntime: generalPreferences.agentRuntime,
         taskPrompt,
         projectScan
+      };
+      let receivedDelta = false;
+
+      setThreads((current) => attachThreadMemoryContext(current, threadId, memories));
+      activePlanStreamRequestIdsRef.current.set(threadId, streamEventId);
+      unsubscribeStream = window.forge.agent.onPlanStreamChunk((chunk) => {
+        if (chunk.requestId !== streamEventId || chunk.type !== "delta") {
+          return;
+        }
+
+        receivedDelta = true;
+        setThreads((current) =>
+          appendThreadPlanDelta(current, threadId, {
+            eventId: streamEventId,
+            createdAt: streamStartedAt,
+            delta: chunk.delta,
+            done: false
+          })
+        );
       });
+      const plan = await window.forge.agent.generatePlanStream(streamEventId, request);
+      unsubscribeStream();
+      unsubscribeStream = null;
 
       if (cancelledThreadIdsRef.current.has(threadId)) {
         return;
       }
+
+      setThreads((current) =>
+        appendThreadPlanDelta(current, threadId, {
+          eventId: streamEventId,
+          createdAt: streamStartedAt,
+          completedAt: plan.createdAt,
+          delta: receivedDelta ? "" : plan.text,
+          done: true,
+          finalText: plan.text
+        })
+      );
 
       recordUsageEvent({
         kind: "plan",
@@ -1610,19 +1646,34 @@ export function App(): ReactElement {
           : settings.language === "zh-CN"
             ? "已生成执行计划, 但没有可执行步骤。"
             : "Execution plan created, but no executable steps were found.";
+      const planEvents = [
+        {
+          id: `${threadId}-plan-ready-${plan.createdAt}`,
+          kind: "plan" as const,
+          message: planMessage,
+          createdAt: plan.createdAt
+        },
+        ...(agentActions.length === 0
+          ? [
+              {
+                id: `${threadId}-plan-empty-summary-${plan.createdAt}`,
+                kind: "result" as const,
+                message:
+                  settings.language === "zh-CN"
+                    ? "已完成分析, 但没有生成可执行步骤。具体模型输出已折叠在“已处理”里。"
+                    : "Analysis finished, but no executable steps were generated. Model output is folded into Processed.",
+                createdAt: plan.createdAt,
+                completedAt: plan.createdAt
+              }
+            ]
+          : [])
+      ];
       setThreads((current) =>
         attachThreadAgentActions(
           appendThreadEvents(
             current,
             threadId,
-            [
-              {
-                id: `${threadId}-plan-ready-${plan.createdAt}`,
-                kind: "plan",
-                message: planMessage,
-                createdAt: plan.createdAt
-              }
-            ],
+            planEvents,
             runnableAgentActions.length > 0
               ? "planned"
               : agentActions.length > 0
@@ -1642,6 +1693,9 @@ export function App(): ReactElement {
         threadId,
         `模型计划生成失败: ${formatRemoteModelError(settings.language, error)}`
       );
+    } finally {
+      unsubscribeStream?.();
+      activePlanStreamRequestIdsRef.current.delete(threadId);
     }
   }
 
@@ -1952,7 +2006,12 @@ export function App(): ReactElement {
     }
 
     const createdAt = new Date().toISOString();
+    const activePlanStreamRequestId = activePlanStreamRequestIdsRef.current.get(selectedThreadId);
     const activeAskStreamRequestId = activeAskStreamRequestIdsRef.current.get(selectedThreadId);
+
+    if (activePlanStreamRequestId) {
+      void window.forge.agent.cancelPlanStream(activePlanStreamRequestId);
+    }
 
     if (activeAskStreamRequestId) {
       void window.forge.agent.cancelAskStream(activeAskStreamRequestId);
@@ -2291,7 +2350,57 @@ export function App(): ReactElement {
     }
 
     appendAgentActionOutcomeEvent(threadId, action, outcome, startedAt);
+    window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
     return outcome;
+  }
+
+  // 队列完成后只在正文留下简短总结, 具体执行细节继续折叠在“已处理”
+  function appendAgentCompletionSummaryIfDone(threadId: string): void {
+    const createdAt = new Date().toISOString();
+
+    setThreads((current) =>
+      current.map((thread) => {
+        if (thread.id !== threadId) {
+          return thread;
+        }
+
+        const actions = thread.agentActions ?? [];
+
+        if (
+          actions.length === 0 ||
+          thread.events.some((event) => event.id.startsWith(`${threadId}-agent-summary-`)) ||
+          actions.some((action) => action.status !== "completed" && action.status !== "skipped")
+        ) {
+          return thread;
+        }
+
+        const completed = actions.filter((action) => action.status === "completed").length;
+        const skipped = actions.filter((action) => action.status === "skipped").length;
+        const message =
+          settings.language === "zh-CN"
+            ? `已完成本次操作：完成 ${completed} 个步骤${
+                skipped > 0 ? `, 跳过 ${skipped} 个步骤` : ""
+              }。具体执行记录已折叠在“已处理”里。`
+            : `Done: completed ${completed} step${completed === 1 ? "" : "s"}${
+                skipped > 0 ? `, skipped ${skipped}` : ""
+              }. Detailed activity is folded into Processed.`;
+
+        return {
+          ...thread,
+          status: "completed",
+          events: [
+            ...thread.events,
+            {
+              id: `${threadId}-agent-summary-${createdAt}`,
+              kind: "result" as const,
+              message,
+              createdAt,
+              completedAt: createdAt
+            }
+          ]
+        };
+      })
+    );
   }
 
   // 阻止高风险命令继续执行, 并把原因写入线程时间线

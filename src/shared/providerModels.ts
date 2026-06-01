@@ -502,10 +502,14 @@ function readPricing(
   }
 
   return {
-    inputPerMillion,
-    outputPerMillion,
-    ...(cacheReadPerMillion !== undefined ? { cacheReadPerMillion } : {}),
-    ...(cacheWritePerMillion !== undefined ? { cacheWritePerMillion } : {}),
+    inputPerMillion: normalizePricePerMillion(inputPerMillion),
+    outputPerMillion: normalizePricePerMillion(outputPerMillion),
+    ...(cacheReadPerMillion !== undefined
+      ? { cacheReadPerMillion: normalizePricePerMillion(cacheReadPerMillion) }
+      : {}),
+    ...(cacheWritePerMillion !== undefined
+      ? { cacheWritePerMillion: normalizePricePerMillion(cacheWritePerMillion) }
+      : {}),
     source
   };
 }
@@ -541,6 +545,11 @@ function readPerTokenPricePerMillion(value: unknown): number | undefined {
   const perTokenPrice = readNumber(value);
 
   return perTokenPrice === undefined ? undefined : perTokenPrice * 1_000_000;
+}
+
+// OpenRouter 等模型列表会返回 token 级小数价格, 乘到 1M 后统一收敛到 4 位小数
+function normalizePricePerMillion(value: number): number {
+  return Number(value.toFixed(4));
 }
 
 // 从 unknown 中读取有限数字

@@ -112,6 +112,7 @@ type CompactProcessedSummary = {
   label: string;
   duration: string;
   hiddenEvents: TaskThreadEvent[];
+  livePreview?: string;
 };
 
 type AgentConfirmationItemKind =
@@ -1039,6 +1040,11 @@ export function ThreadWorkspace({
             }`}
           />
         </button>
+        {!compactProcessedExpanded && summary.livePreview ? (
+          <p className="mt-1 max-w-full truncate text-[12px] leading-5 text-[#8e8ea0]">
+            {summary.livePreview}
+          </p>
+        ) : null}
         {compactProcessedExpanded ? (
           <div className="mt-2 grid gap-1.5 rounded-[12px] bg-[#f7f7f8] p-2 text-[12px] text-[#6e6e80]">
             {summary.hiddenEvents.slice(-8).map((event) => (
@@ -3608,8 +3614,28 @@ function getCompactProcessedSummary(
   return {
     label: language === "zh-CN" ? "已处理" : "Processed",
     duration: formatCompactProcessedDuration(thread),
-    hiddenEvents
+    hiddenEvents,
+    livePreview: getCompactProcessedLivePreview(thread, hiddenEvents)
   };
+}
+
+function getCompactProcessedLivePreview(
+  thread: TaskThread,
+  hiddenEvents: TaskThreadEvent[]
+): string | undefined {
+  if (thread.status !== "running") {
+    return undefined;
+  }
+
+  const liveEvent = [...hiddenEvents]
+    .reverse()
+    .find((event) => !event.completedAt && event.message.trim());
+
+  if (!liveEvent) {
+    return undefined;
+  }
+
+  return liveEvent.message.trim().replace(/\s+/gu, " ").slice(0, 180);
 }
 
 // 计算已处理摘要的耗时, 运行中的线程使用当前时间保证用户看到持续反馈

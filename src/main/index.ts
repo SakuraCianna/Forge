@@ -6,7 +6,8 @@ import {
   generateAgentAsk,
   generateAgentAskStream,
   generateAgentFileChange,
-  generateAgentPlan
+  generateAgentPlan,
+  generateAgentPlanStream
 } from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
 import { cancelProjectCommand, runProjectCommand } from "./commandRunner.js";
@@ -165,7 +166,8 @@ void app.whenReady().then(() => {
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     },
-    (request, onDelta, signal) => generateAgentAskStream({ request, keyVault, onDelta, signal })
+    (request, onDelta, signal) => generateAgentAskStream({ request, keyVault, onDelta, signal }),
+    (request, onDelta, signal) => generateAgentPlanStream({ request, keyVault, onDelta, signal })
   );
 
   registerProjectHandlers(

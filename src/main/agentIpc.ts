@@ -3,6 +3,7 @@ import type {
   AgentFileChangeResult,
   AgentAskStreamChunk,
   AgentAskResult,
+  AgentPlanStreamChunk,
   AgentPlanResult,
   GenerateAgentAskRequest,
   GenerateAgentFileChangeRequest,
@@ -11,6 +12,12 @@ import type {
 import { agentChannels } from "../shared/ipcChannels.js";
 
 type AgentPlanGenerator = (request: GenerateAgentPlanRequest) => Promise<AgentPlanResult>;
+
+type AgentPlanStreamer = (
+  request: GenerateAgentPlanRequest,
+  onDelta: (delta: string) => void,
+  signal?: AbortSignal
+) => Promise<AgentPlanResult>;
 
 type AgentFileChangeGenerator = (
   request: GenerateAgentFileChangeRequest
@@ -36,7 +43,8 @@ export function registerAgentHandlers(
   generateFileChange: AgentFileChangeGenerator,
   generateAsk: AgentAskGenerator,
   registerHandler: RegisterHandler,
-  generateAskStream?: AgentAskStreamer
+  generateAskStream?: AgentAskStreamer,
+  generatePlanStream?: AgentPlanStreamer
 ): void {
   registerHandler(agentChannels.generatePlan, async (_event, request) =>
     generatePlan(assertGenerateAgentPlanRequest(request))
@@ -95,6 +103,58 @@ export function registerAgentHandlers(
       }
 
       controller.abort(new Error("已取消 Agent 问答流。"));
+
+      return { ok: true, requestId: normalizedRequestId };
+    });
+  }
+
+  if (generatePlanStream) {
+    const activePlanStreams = new Map<string, AbortController>();
+
+    registerHandler(agentChannels.generatePlanStream, async (event, requestId, request) => {
+      const normalizedRequestId = assertRequestId(requestId);
+      const normalizedRequest = assertGenerateAgentPlanRequest(request);
+      const controller = new AbortController();
+
+      activePlanStreams.set(normalizedRequestId, controller);
+
+      try {
+        const result = await generatePlanStream(normalizedRequest, (delta) => {
+          sendPlanStreamChunk(event, {
+            requestId: normalizedRequestId,
+            type: "delta",
+            delta
+          });
+        }, controller.signal);
+
+        sendPlanStreamChunk(event, {
+          requestId: normalizedRequestId,
+          type: "done",
+          result
+        });
+
+        return result;
+      } catch (error) {
+        sendPlanStreamChunk(event, {
+          requestId: normalizedRequestId,
+          type: "error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+        throw error;
+      } finally {
+        activePlanStreams.delete(normalizedRequestId);
+      }
+    });
+
+    registerHandler(agentChannels.cancelPlanStream, async (_event, requestId) => {
+      const normalizedRequestId = assertRequestId(requestId);
+      const controller = activePlanStreams.get(normalizedRequestId);
+
+      if (!controller) {
+        return { ok: false, requestId: normalizedRequestId };
+      }
+
+      controller.abort(new Error("已取消 Agent 计划流。"));
 
       return { ok: true, requestId: normalizedRequestId };
     });
@@ -160,6 +220,14 @@ function sendAskStreamChunk(event: unknown, chunk: AgentAskStreamChunk): void {
   }
 
   event.sender.send(agentChannels.askStreamChunk, chunk);
+}
+
+function sendPlanStreamChunk(event: unknown, chunk: AgentPlanStreamChunk): void {
+  if (!isRecord(event) || !isRecord(event.sender) || typeof event.sender.send !== "function") {
+    return;
+  }
+
+  event.sender.send(agentChannels.planStreamChunk, chunk);
 }
 
 // 将 unknown 缩窄成对象后再读取 IPC 请求字段
