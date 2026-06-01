@@ -32,6 +32,12 @@ import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
 } from "@/agent/failureFixPrompt";
+import {
+  createFailureRecoverySuggestionEventId,
+  formatFailureRecoverySuggestion,
+  getFailureRecoverySuggestionEventPrefix,
+  shouldSuggestFailureRecovery
+} from "@/agent/failureRecoveryPolicy";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
 import {
@@ -2182,6 +2188,44 @@ export function App(): ReactElement {
     );
   }
 
+  // 在 suggest 策略下补一条可见恢复建议, 让失败动作有清晰的下一步入口
+  function appendFailureRecoverySuggestionEvent(
+    threadId: string,
+    action: AgentAction,
+    status: AgentAction["status"],
+    createdAt: string
+  ): void {
+    const agentProfile = getThreadAgentProfileContext(threadId);
+
+    if (!shouldSuggestFailureRecovery(agentProfile, status)) {
+      return;
+    }
+
+    const eventPrefix = getFailureRecoverySuggestionEventPrefix(threadId, action.id);
+    const event: TaskThreadEvent = {
+      id: createFailureRecoverySuggestionEventId(threadId, action.id, createdAt),
+      kind: "plan",
+      message: formatFailureRecoverySuggestion(settings.language, action),
+      createdAt
+    };
+
+    setThreads((current) =>
+      current.map((thread) => {
+        if (
+          thread.id !== threadId ||
+          thread.events.some((threadEvent) => threadEvent.id.startsWith(eventPrefix))
+        ) {
+          return thread;
+        }
+
+        return {
+          ...thread,
+          events: [...thread.events, event]
+        };
+      })
+    );
+  }
+
   // 根据动作执行结果写入完成, 失败或等待记录, 供 UI 和后续计划复用
   function appendAgentActionOutcomeEvent(
     threadId: string,
@@ -2202,6 +2246,8 @@ export function App(): ReactElement {
       completedAt,
       durationMs
     });
+
+    appendFailureRecoverySuggestionEvent(threadId, action, status, completedAt);
   }
 
   // 用户确认或跳过门禁时写入时间线, 让队列推进有可审计记录
