@@ -3776,7 +3776,7 @@ function getThreadActivitySummary(
   };
 }
 
-// 生成 Codex 风格的已处理摘要, 把内部步骤默认折叠起来
+// 生成轻量已处理摘要, 把内部步骤默认折叠起来
 function getCompactProcessedSummary(
   thread: TaskThread,
   visibleEvents: TaskThreadEvent[],
@@ -4104,7 +4104,7 @@ function formatCompactProcessedDuration(thread: TaskThread, now: number): string
   return formatCompactDuration(Math.max(0, finishedAt - startedAt));
 }
 
-// 使用短耗时格式贴近 Codex 已处理行, 避免占用正文空间
+// 使用短耗时格式贴近主屏摘要, 避免占用正文空间
 function formatCompactDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);

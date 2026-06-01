@@ -24,7 +24,6 @@ const rootInstructionFilePaths = [
   ".cursorrules",
   ".windsurfrules",
   ".github/copilot-instructions.md",
-  ".codex/AGENTS.md",
   ".claude/CLAUDE.md"
 ] as const;
 

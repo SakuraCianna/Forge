@@ -30,7 +30,12 @@ import { useI18n } from "@/i18n/useI18n";
 import type { PersonalizationSettings } from "@/state/personalization";
 import type { TaskThread } from "@/state/taskThreads";
 import type { AgentMemoryEntry } from "@/state/agentMemory";
-import type { AgentProfile, AgentProfilePatch, AgentProfileTool } from "@/state/agentProfiles";
+import {
+  getAgentProfileDisplayText,
+  type AgentProfile,
+  type AgentProfilePatch,
+  type AgentProfileTool
+} from "@/state/agentProfiles";
 import {
   clampAutoRunBatchSize,
   clampCommandTimeoutSeconds,
@@ -168,6 +173,9 @@ export function SettingsPanel({
   const providerUsage = summarizeUsageByProvider(usageEvents, usageRates);
   const modelUsage = summarizeUsageByModel(usageEvents, usageRates);
   const activeAgentProfile = agentProfiles.find((profile) => profile.active) ?? agentProfiles[0] ?? null;
+  const activeAgentProfileText = activeAgentProfile
+    ? getAgentProfileDisplayText(activeAgentProfile, settings.language)
+    : null;
   const sectionItems: SectionItem[] = [
     {
       id: "general",
@@ -189,8 +197,8 @@ export function SettingsPanel({
     },
     {
       id: "agents",
-      label: settings.language === "zh-CN" ? "Agent 配置" : "Agent profiles",
-      description: activeAgentProfile?.name ?? (settings.language === "zh-CN" ? "暂无" : "None"),
+      label: settings.language === "zh-CN" ? "智能体配置" : "Agent profiles",
+      description: activeAgentProfileText?.name ?? (settings.language === "zh-CN" ? "暂无" : "None"),
       icon: Bot
     },
     {
@@ -1250,10 +1258,13 @@ export function SettingsPanel({
     );
   }
 
-  // 渲染 Agent 配置编辑器, 权限和工具能力在这里配置
+  // 渲染智能体配置编辑器, 权限和工具能力在这里配置
   function renderAgentProfilesSection(): ReactElement {
     const copy = getAgentProfilesCopy(settings.language);
     const selectedProfile = activeAgentProfile ?? agentProfiles[0] ?? null;
+    const selectedProfileText = selectedProfile
+      ? getAgentProfileDisplayText(selectedProfile, settings.language)
+      : null;
 
     return (
       <SectionFrame>
@@ -1272,27 +1283,31 @@ export function SettingsPanel({
               data-testid="agent-profile-list"
               className="grid self-start content-start gap-2 rounded-[18px] border border-[#ececf1] bg-[#f7f7f8] p-2"
             >
-              {agentProfiles.map((profile) => (
-                <button
-                  key={profile.id}
-                  type="button"
-                  aria-label={copy.selectProfile(profile.name)}
-                  onClick={() => onSelectAgentProfile(profile.id)}
-                  className={`grid min-h-[76px] grid-cols-[minmax(0,1fr)_18px] items-center gap-2 rounded-[14px] border px-3 py-3 text-left transition active:scale-[0.99] ${
-                    profile.active
-                      ? "border-[#d9d9e3] bg-white text-[#202123] shadow-[0_8px_22px_rgba(0,0,0,0.06)]"
-                      : "border-transparent text-[#565869] hover:bg-white hover:text-[#202123]"
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold">{profile.name}</span>
-                    <span className="mt-1 block truncate text-xs leading-5 text-[#8e8ea0]">
-                      {profile.description}
+              {agentProfiles.map((profile) => {
+                const profileText = getAgentProfileDisplayText(profile, settings.language);
+
+                return (
+                  <button
+                    key={profile.id}
+                    type="button"
+                    aria-label={copy.selectProfile(profileText.name)}
+                    onClick={() => onSelectAgentProfile(profile.id)}
+                    className={`grid min-h-[76px] grid-cols-[minmax(0,1fr)_18px] items-center gap-2 rounded-[14px] border px-3 py-3 text-left transition active:scale-[0.99] ${
+                      profile.active
+                        ? "border-[#d9d9e3] bg-white text-[#202123] shadow-[0_8px_22px_rgba(0,0,0,0.06)]"
+                        : "border-transparent text-[#565869] hover:bg-white hover:text-[#202123]"
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{profileText.name}</span>
+                      <span className="mt-1 block truncate text-xs leading-5 text-[#8e8ea0]">
+                        {profileText.description}
+                      </span>
                     </span>
-                  </span>
-                  {profile.active ? <Check className="h-4 w-4 text-[#202123]" /> : <span />}
-                </button>
-              ))}
+                    {profile.active ? <Check className="h-4 w-4 text-[#202123]" /> : <span />}
+                  </button>
+                );
+              })}
             </div>
 
             <div
@@ -1304,10 +1319,10 @@ export function SettingsPanel({
                   {copy.title}
                 </span>
                 <h3 className="mt-1 text-base font-semibold text-[#202123]">
-                  {selectedProfile.name}
+                  {selectedProfileText?.name}
                 </h3>
                 <p className="mt-1 text-xs leading-5 text-[#6e6e80]">
-                  {selectedProfile.description}
+                  {selectedProfileText?.description}
                 </p>
               </div>
 
@@ -1315,7 +1330,7 @@ export function SettingsPanel({
                 <label className="grid gap-1 text-xs text-[#6e6e80]">
                   {copy.name}
                   <input
-                    value={selectedProfile.name}
+                    value={selectedProfileText?.name ?? selectedProfile.name}
                     onChange={(event) =>
                       onUpdateAgentProfile(selectedProfile.id, { name: event.currentTarget.value })
                     }
@@ -1325,7 +1340,7 @@ export function SettingsPanel({
                 <label className="grid gap-1 text-xs text-[#6e6e80]">
                   {copy.descriptionLabel}
                   <input
-                    value={selectedProfile.description}
+                    value={selectedProfileText?.description ?? selectedProfile.description}
                     onChange={(event) =>
                       onUpdateAgentProfile(selectedProfile.id, {
                         description: event.currentTarget.value
@@ -1338,7 +1353,7 @@ export function SettingsPanel({
                   {copy.instructions}
                   <textarea
                     aria-label={copy.instructions}
-                    value={selectedProfile.systemPrompt}
+                    value={selectedProfileText?.systemPrompt ?? selectedProfile.systemPrompt}
                     onChange={(event) =>
                       onUpdateAgentProfile(selectedProfile.id, {
                         systemPrompt: event.currentTarget.value
@@ -1842,8 +1857,8 @@ export function SettingsPanel({
 
     if (section === "agents") {
       return settings.language === "zh-CN"
-        ? "配置可复用的子 Agent 提示词, 权限和工具能力"
-        : "Configure reusable sub-agent prompts, permissions, and tools";
+        ? "配置可复用的智能体指令、权限和工具能力"
+        : "Configure reusable agent instructions, permissions, and tools";
     }
 
     if (section === "usage") {
@@ -2379,7 +2394,7 @@ function getMemorySettingsCopy(language: Language): {
   };
 }
 
-// 返回 Agent 配置页文案, 内置配置显示也走这里
+// 返回智能体配置页文案, 内置配置显示也走这里
 function getAgentProfilesCopy(language: Language): {
   autoReview: string;
   contextBudget: string;
@@ -2400,16 +2415,16 @@ function getAgentProfilesCopy(language: Language): {
     return {
       autoReview: "自动审查",
       contextBudget: "上下文预算",
-      description: "配置 Forge 子 Agent 的系统提示词, 权限边界, 工具能力和上下文预算",
+      description: "配置 Forge 的智能体指令、权限、工具和上下文预算",
       descriptionLabel: "描述",
-      empty: "还没有 Agent 配置",
+      empty: "还没有智能体配置",
       fullAccess: "完全访问权限",
-      instructions: "Agent 指令",
+      instructions: "智能体指令",
       name: "名称",
-      permissionDescription: "控制这个 Agent 默认用什么权限模式运行",
+      permissionDescription: "控制这个智能体默认用什么权限模式运行",
       permissionMode: "权限模式",
       selectProfile: (name) => `选择 ${name}`,
-      title: "Agent 配置",
+      title: "智能体配置",
       tools: "工具能力",
       toolLabel: (tool) =>
         ({
@@ -2424,7 +2439,7 @@ function getAgentProfilesCopy(language: Language): {
   return {
     autoReview: "Auto review",
     contextBudget: "Context budget",
-    description: "Configure sub-agent prompts, permissions, tools, and context budgets for Forge",
+    description: "Tune reusable agent instructions, permissions, tool access, and context budgets",
     descriptionLabel: "Description",
     empty: "No agent profiles yet",
     fullAccess: "Full access",
@@ -2537,18 +2552,18 @@ function getGeneralSettingsCopy(language: Language): {
       composerSubmitShortcut: "发送快捷键",
       composerSubmitShortcutDescription: "控制输入框何时提交任务, 另一种按键保留换行",
       deleteCommandRule: "删除命令规则",
-      agentRuntime: "智能体环境",
-      agentRuntimeDescription: "控制命令执行环境, Windows 原生使用所选 Shell, WSL 使用 wsl.exe",
+      agentRuntime: "执行环境",
+      agentRuntimeDescription: "控制命令运行位置, Windows 原生使用所选 Shell, WSL 使用 wsl.exe",
       appBackground: "软件背景",
       appBackgroundDescription: "上传一张壁纸作为 Forge 的背景, 默认保持轻微透明避免影响阅读",
       autoReview: "自动审核",
       autoReviewDescription: "运行前自动审查潜在高风险操作",
-      autoGenerateFailureFixes: "失败时自动生成修复计划",
+      autoGenerateFailureFixes: "失败后生成恢复计划",
       autoGenerateFailureFixesDescription: "队列动作失败后自动生成一次恢复计划, 避免主屏停在沉默失败上",
       autoRunBatchSize: "每轮自动运行步数",
-      autoRunBatchSizeDescription: "限制一次自动推进的动作数量, 让长任务像 Codex 一样分批可感知地前进",
+      autoRunBatchSizeDescription: "限制单轮自动推进的动作数量, 让长任务分批、可感知地前进",
       autoRunBatchSizeUnit: "步",
-      autoRunSafeActions: "自动运行安全步骤",
+      autoRunSafeActions: "自动推进安全步骤",
       autoRunSafeActionsDescription: "生成计划后自动推进读取, 搜索和允许的命令, 遇到审查或风险门禁仍会停下",
       backgroundOpacity: "背景透明度",
       backgroundOpacityDescription: "控制壁纸的显示强度",
@@ -2565,15 +2580,15 @@ function getGeneralSettingsCopy(language: Language): {
       languageDescription: "应用 UI 语言",
       inputRunDescription: "调整输入框和命令执行的默认行为",
       inputRunTitle: "输入与运行",
-      outputDescription: "控制主对话区如何呈现 Agent 的内部执行反馈",
+      outputDescription: "控制主对话区如何呈现内部执行反馈",
       outputTitle: "输出体验",
       showActivityHeartbeat: "显示运行心跳",
       showActivityHeartbeatDescription: "在主对话区保留一条轻量状态行, 显示 Forge 正在处理的命令或动作",
       showProcessedSummary: "显示“已处理”摘要",
-      showProcessedSummaryDescription: "把读取文件, 命令和 Agent 事件折叠到一行轻量反馈里",
+      showProcessedSummaryDescription: "把读取文件、命令和执行事件折叠到一行轻量反馈里",
       expandProcessedSummary: "默认展开已处理详情",
-      expandProcessedSummaryDescription: "进入线程时直接展开最近内部步骤, 适合调试 Agent 稳定性",
-      permissionsDescription: "控制智能体默认能做什么, 高风险操作仍会保留明确反馈",
+      expandProcessedSummaryDescription: "进入线程时直接展开最近内部步骤, 适合调试运行稳定性",
+      permissionsDescription: "控制默认能执行哪些操作, 高风险操作仍会保留明确反馈",
       permissionsTitle: "权限",
       readOnly: "只读模式",
       readOnlyDescription: "只允许读取项目和回答问题, 不生成修改, 不运行命令",
@@ -2611,7 +2626,7 @@ function getGeneralSettingsCopy(language: Language): {
     composerSubmitShortcut: "Send shortcut",
     composerSubmitShortcutDescription: "Choose when the composer submits while the other key path keeps newlines",
     deleteCommandRule: "Delete command rule",
-    agentRuntime: "Agent runtime",
+    agentRuntime: "Execution runtime",
     agentRuntimeDescription:
       "Control command execution. Windows native uses the selected shell; WSL uses wsl.exe.",
     appBackground: "App background",
@@ -2619,14 +2634,14 @@ function getGeneralSettingsCopy(language: Language): {
       "Upload a wallpaper for Forge. The default opacity stays subtle so code remains readable.",
     autoReview: "Auto review",
     autoReviewDescription: "Review potentially risky operations before running",
-    autoGenerateFailureFixes: "Auto-generate failure fixes",
+    autoGenerateFailureFixes: "Generate recovery plans",
     autoGenerateFailureFixesDescription:
       "Generate one recovery plan after a queue action fails so the main screen does not stall silently",
     autoRunBatchSize: "Auto-run steps per pass",
     autoRunBatchSizeDescription:
       "Limit how many actions run in one automatic pass so long tasks keep moving in visible chunks",
     autoRunBatchSizeUnit: "steps",
-    autoRunSafeActions: "Auto-run safe steps",
+    autoRunSafeActions: "Run safe steps automatically",
     autoRunSafeActionsDescription:
       "After planning, run safe reads, searches, and allowed commands automatically while still stopping at gates",
     backgroundOpacity: "App background opacity",
@@ -2644,17 +2659,17 @@ function getGeneralSettingsCopy(language: Language): {
     languageDescription: "Application UI language",
     inputRunDescription: "Adjust composer and command execution defaults",
     inputRunTitle: "Input and run",
-    outputDescription: "Control how the main conversation presents internal agent activity",
+    outputDescription: "Control how the main conversation presents internal activity",
     outputTitle: "Output experience",
     showActivityHeartbeat: "Show activity heartbeat",
     showActivityHeartbeatDescription:
       "Keep one quiet status row in the main conversation while Forge runs commands or actions",
     showProcessedSummary: "Show processed summary",
-    showProcessedSummaryDescription: "Fold file reads, commands, and agent events into one quiet status row",
+    showProcessedSummaryDescription: "Fold file reads, commands, and execution events into one quiet status row",
     expandProcessedSummary: "Expand processed details by default",
     expandProcessedSummaryDescription:
-      "Open each thread with recent internal steps visible for agent debugging",
-    permissionsDescription: "Control what the agent can do by default",
+      "Open each thread with recent internal steps visible for debugging",
+    permissionsDescription: "Control which actions can run by default",
     permissionsTitle: "Permissions",
     readOnly: "Read only",
     readOnlyDescription: "Allow reading and answers only, without edits, commands, or Git actions",

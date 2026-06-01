@@ -65,14 +65,14 @@ export function formatAgentCommandNeedsApproval(
   return `Command requires full access confirmation: ${command} (${localizedReason})`;
 }
 
-// 生成 Agent 配置缺少工具权限时的可读提示
+// 生成智能体配置缺少工具权限时的可读提示
 export function formatAgentPermissionDenied(
   language: Language,
   profileName: string,
   tool: AgentToolPermission
 ): string {
   if (language === "zh-CN") {
-    return `Agent 配置 ${profileName} 不允许执行${agentToolLabels[tool].zh}`;
+    return `智能体配置 ${profileName} 不允许执行${agentToolLabels[tool].zh}`;
   }
 
   return `Agent profile ${profileName} does not allow ${agentToolLabels[tool].en} actions`;
