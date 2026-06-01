@@ -1,7 +1,7 @@
 // 本文件说明: 维护任务线程的生命周期, 流式输出, 命令回放和记忆快照
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
-import type { AgentMemoryContext } from "@shared/agentTypes";
+import type { AgentMemoryContext, AgentProfileContext } from "@shared/agentTypes";
 import type { CommandOutputChunk } from "@shared/commandTypes";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import { getEnabledModels } from "./modelSettings";
@@ -72,13 +72,15 @@ export type TaskThread = {
   archived?: boolean;
   projectPath?: string | null;
   contextMemories?: AgentMemoryContext[];
+  agentProfile?: AgentProfileContext;
   agentActions?: AgentAction[];
   events: TaskThreadEvent[];
 };
 
 type ThreadDeps = {
-  createId: () => string;
-  now: () => string;
+  createId?: () => string;
+  now?: () => string;
+  agentProfile?: AgentProfileContext;
 };
 
 type ThreadMemorySource = AgentMemoryContext & {
@@ -95,10 +97,7 @@ type CreateThreadResult =
 export function createThreadFromSettings(
   settings: ModelSettings,
   prompt: string,
-  deps: ThreadDeps = {
-    createId: () => crypto.randomUUID(),
-    now: () => new Date().toISOString()
-  }
+  deps: ThreadDeps = {}
 ): CreateThreadResult {
   const normalizedPrompt = prompt.trim();
 
@@ -114,8 +113,8 @@ export function createThreadFromSettings(
     return { ok: false, reason: "missing-model" };
   }
 
-  const id = deps.createId();
-  const createdAt = deps.now();
+  const id = deps.createId?.() ?? crypto.randomUUID();
+  const createdAt = deps.now?.() ?? new Date().toISOString();
 
   return {
     ok: true,
@@ -128,9 +127,17 @@ export function createThreadFromSettings(
       intelligence: settings.intelligence,
       speed: settings.speed,
       createdAt,
+      agentProfile: deps.agentProfile ? cloneAgentProfileContext(deps.agentProfile) : undefined,
       // 新线程不写入占位计划事件, 真实进度只来自模型输出和命令结果
       events: []
     }
+  };
+}
+
+function cloneAgentProfileContext(agentProfile: AgentProfileContext): AgentProfileContext {
+  return {
+    ...agentProfile,
+    enabledTools: [...agentProfile.enabledTools]
   };
 }
 

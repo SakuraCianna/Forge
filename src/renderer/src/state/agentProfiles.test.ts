@@ -17,18 +17,21 @@ describe("agent profiles", () => {
 
     expect(getActiveAgentProfileContext(profiles, "en-US").planStepLimit).toBe(6);
     expect(getActiveAgentProfileContext(profiles, "en-US").verificationPolicy).toBe("require");
+    expect(getActiveAgentProfileContext(profiles, "en-US").failureRecoveryPolicy).toBe("auto");
   });
 
-  it("clamps plan step limits and persists verification policy when updating a profile", () => {
+  it("clamps plan step limits and persists agent policies when updating a profile", () => {
     const profiles = updateAgentProfile(createDefaultAgentProfiles(), "build", {
       planStepLimit: 99,
-      verificationPolicy: "skip"
+      verificationPolicy: "skip",
+      failureRecoveryPolicy: "manual"
     });
 
     const buildProfile = profiles.find((profile) => profile.id === "build");
 
     expect(buildProfile?.planStepLimit).toBe(12);
     expect(buildProfile?.verificationPolicy).toBe("skip");
+    expect(buildProfile?.failureRecoveryPolicy).toBe("manual");
   });
 
   it("migrates older stored profiles without new agent control fields", () => {
@@ -36,8 +39,12 @@ describe("agent profiles", () => {
     const legacyProfile = {
       ...buildProfile,
       planStepLimit: undefined,
-      verificationPolicy: undefined
-    } as unknown as Omit<AgentProfile, "planStepLimit" | "verificationPolicy">;
+      verificationPolicy: undefined,
+      failureRecoveryPolicy: undefined
+    } as unknown as Omit<
+      AgentProfile,
+      "planStepLimit" | "verificationPolicy" | "failureRecoveryPolicy"
+    >;
 
     window.localStorage.setItem("forge.agentProfiles", JSON.stringify([legacyProfile]));
 
@@ -45,5 +52,6 @@ describe("agent profiles", () => {
 
     expect(migratedProfile.planStepLimit).toBe(6);
     expect(migratedProfile.verificationPolicy).toBe("require");
+    expect(migratedProfile.failureRecoveryPolicy).toBe("auto");
   });
 });

@@ -47,7 +47,8 @@ const baseRequest: GenerateAgentPlanRequest = {
     enabledTools: ["read", "edit", "command", "git"],
     contextBudget: 12000,
     planStepLimit: 2,
-    verificationPolicy: "require"
+    verificationPolicy: "require",
+    failureRecoveryPolicy: "auto"
   }
 };
 

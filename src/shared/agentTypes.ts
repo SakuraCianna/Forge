@@ -20,6 +20,7 @@ export type AgentProfileContext = {
   contextBudget: number;
   planStepLimit: number;
   verificationPolicy: "suggest" | "require" | "skip";
+  failureRecoveryPolicy: "manual" | "suggest" | "auto";
 };
 
 export type AgentWorkMode = "code" | "daily";

@@ -1370,7 +1370,7 @@ export function SettingsPanel({
                   />
                 </label>
 
-                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
                   <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4">
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-[#202123]">
@@ -1411,6 +1411,28 @@ export function SettingsPanel({
                       ]}
                       onChange={(value) =>
                         onUpdateAgentProfile(selectedProfile.id, { verificationPolicy: value })
+                      }
+                    />
+                  </div>
+                  <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-[#202123]">
+                        {copy.failureRecoveryPolicy}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
+                        {copy.failureRecoveryPolicyDescription}
+                      </span>
+                    </span>
+                    <InlineSelectMenu<AgentProfile["failureRecoveryPolicy"]>
+                      ariaLabel={copy.failureRecoveryPolicy}
+                      value={selectedProfile.failureRecoveryPolicy}
+                      options={[
+                        { value: "manual", label: copy.failureRecoveryManual },
+                        { value: "suggest", label: copy.failureRecoverySuggest },
+                        { value: "auto", label: copy.failureRecoveryAuto }
+                      ]}
+                      onChange={(value) =>
+                        onUpdateAgentProfile(selectedProfile.id, { failureRecoveryPolicy: value })
                       }
                     />
                   </div>
@@ -2402,6 +2424,11 @@ function getAgentProfilesCopy(language: Language): {
   description: string;
   descriptionLabel: string;
   empty: string;
+  failureRecoveryAuto: string;
+  failureRecoveryManual: string;
+  failureRecoveryPolicy: string;
+  failureRecoveryPolicyDescription: string;
+  failureRecoverySuggest: string;
   fullAccess: string;
   instructions: string;
   name: string;
@@ -2426,6 +2453,11 @@ function getAgentProfilesCopy(language: Language): {
       description: "配置 Forge 的智能体指令、权限、工具和上下文预算",
       descriptionLabel: "描述",
       empty: "还没有智能体配置",
+      failureRecoveryAuto: "自动生成",
+      failureRecoveryManual: "手动恢复",
+      failureRecoveryPolicy: "失败恢复",
+      failureRecoveryPolicyDescription: "控制动作失败后是否生成恢复计划",
+      failureRecoverySuggest: "建议恢复",
       fullAccess: "完全访问权限",
       instructions: "智能体指令",
       name: "名称",
@@ -2457,6 +2489,11 @@ function getAgentProfilesCopy(language: Language): {
     description: "Tune reusable agent instructions, permissions, tool access, and context budgets",
     descriptionLabel: "Description",
     empty: "No agent profiles yet",
+    failureRecoveryAuto: "Auto-generate",
+    failureRecoveryManual: "Manual only",
+    failureRecoveryPolicy: "Failure recovery",
+    failureRecoveryPolicyDescription: "Controls whether failed actions can generate recovery plans",
+    failureRecoverySuggest: "Suggest recovery",
     fullAccess: "Full access",
     instructions: "Agent instructions",
     name: "Name",

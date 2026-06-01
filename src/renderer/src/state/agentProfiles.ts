@@ -6,6 +6,7 @@ const agentProfileStorageKey = "forge.agentProfiles";
 
 type AgentProfilePermissionMode = "auto" | "full";
 type AgentProfileVerificationPolicy = "suggest" | "require" | "skip";
+type AgentProfileFailureRecoveryPolicy = "manual" | "suggest" | "auto";
 export type AgentProfileTool = "read" | "edit" | "command" | "git";
 
 type AgentProfileTools = Record<AgentProfileTool, boolean>;
@@ -17,6 +18,7 @@ export type AgentProfile = {
   systemPrompt: string;
   permissionMode: AgentProfilePermissionMode;
   verificationPolicy: AgentProfileVerificationPolicy;
+  failureRecoveryPolicy: AgentProfileFailureRecoveryPolicy;
   tools: AgentProfileTools;
   contextBudget: number;
   planStepLimit: number;
@@ -34,6 +36,7 @@ export type AgentProfilePatch = Partial<
     | "systemPrompt"
     | "permissionMode"
     | "verificationPolicy"
+    | "failureRecoveryPolicy"
     | "tools"
     | "contextBudget"
     | "planStepLimit"
@@ -96,6 +99,7 @@ const defaultProfiles: AgentProfile[] = [
     ...builtInProfileText.build["zh-CN"],
     permissionMode: "auto",
     verificationPolicy: "require",
+    failureRecoveryPolicy: "auto",
     tools: {
       read: true,
       edit: true,
@@ -114,6 +118,7 @@ const defaultProfiles: AgentProfile[] = [
     ...builtInProfileText.review["zh-CN"],
     permissionMode: "auto",
     verificationPolicy: "suggest",
+    failureRecoveryPolicy: "suggest",
     tools: {
       read: true,
       edit: false,
@@ -132,6 +137,7 @@ const defaultProfiles: AgentProfile[] = [
     ...builtInProfileText.docs["zh-CN"],
     permissionMode: "auto",
     verificationPolicy: "skip",
+    failureRecoveryPolicy: "manual",
     tools: {
       read: true,
       edit: true,
@@ -284,7 +290,8 @@ export function getActiveAgentProfileContext(
     enabledTools: getEnabledAgentTools(activeProfile.tools),
     contextBudget: activeProfile.contextBudget,
     planStepLimit: activeProfile.planStepLimit,
-    verificationPolicy: activeProfile.verificationPolicy
+    verificationPolicy: activeProfile.verificationPolicy,
+    failureRecoveryPolicy: activeProfile.failureRecoveryPolicy
   };
 }
 
@@ -351,6 +358,10 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
     systemPrompt: normalizeText(profile.systemPrompt),
     permissionMode: profile.permissionMode === "full" ? "full" : "auto",
     verificationPolicy: normalizeVerificationPolicy(profile.verificationPolicy, profile.id),
+    failureRecoveryPolicy: normalizeFailureRecoveryPolicy(
+      profile.failureRecoveryPolicy,
+      profile.id
+    ),
     tools: normalizeTools(profile.tools),
     contextBudget,
     planStepLimit
@@ -439,6 +450,10 @@ function isPersistedAgentProfile(value: unknown): value is AgentProfile {
       value.verificationPolicy === "suggest" ||
       value.verificationPolicy === "require" ||
       value.verificationPolicy === "skip") &&
+    (!("failureRecoveryPolicy" in value) ||
+      value.failureRecoveryPolicy === "manual" ||
+      value.failureRecoveryPolicy === "suggest" ||
+      value.failureRecoveryPolicy === "auto") &&
     isRecord(value.tools) &&
     typeof value.contextBudget === "number" &&
     (!("planStepLimit" in value) ||
@@ -463,6 +478,17 @@ function normalizeVerificationPolicy(
   }
 
   return defaultProfiles.find((profile) => profile.id === profileId)?.verificationPolicy ?? "suggest";
+}
+
+function normalizeFailureRecoveryPolicy(
+  value: unknown,
+  profileId: string
+): AgentProfileFailureRecoveryPolicy {
+  if (value === "manual" || value === "suggest" || value === "auto") {
+    return value;
+  }
+
+  return defaultProfiles.find((profile) => profile.id === profileId)?.failureRecoveryPolicy ?? "suggest";
 }
 
 // 将 unknown 缩窄成普通对象, 供字段校验复用

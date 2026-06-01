@@ -339,6 +339,17 @@ export function App(): ReactElement {
     return getLiveThread(threadId)?.agentActions?.find((action) => action.id === actionId) ?? null;
   }
 
+  function getThreadAgentProfileContext(threadId: string): AgentProfileContext {
+    return getLiveThread(threadId)?.agentProfile ?? activeAgentProfileContext;
+  }
+
+  function getThreadFullAccessMode(threadId: string): boolean {
+    const agentProfile = getThreadAgentProfileContext(threadId);
+
+    return !generalPreferences.readOnly &&
+      (generalPreferences.fullAccess || agentProfile.permissionMode === "full");
+  }
+
   function hasReservedAgentAction(threadId: string, actions: AgentAction[]): boolean {
     const reservedActionIds = activeAgentAutoRunActionIdsRef.current.get(threadId);
 
@@ -447,7 +458,7 @@ export function App(): ReactElement {
       }
 
       const runnableActions = getRunnablePendingAgentActions(thread.agentActions ?? [], {
-        fullAccess: fullAccessMode,
+        fullAccess: getThreadFullAccessMode(thread.id),
         rules: generalPreferences.commandSafetyRules
       });
       const runnableBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
@@ -460,7 +471,7 @@ export function App(): ReactElement {
     }
 
     const runnableActions = getRunnablePendingAgentActions(nextThread.agentActions ?? [], {
-      fullAccess: fullAccessMode,
+      fullAccess: getThreadFullAccessMode(nextThread.id),
       rules: generalPreferences.commandSafetyRules
     });
     const runnableActionBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
@@ -491,6 +502,10 @@ export function App(): ReactElement {
       }))
       .find(({ thread, failedAction }) => {
         if (!failedAction) {
+          return false;
+        }
+
+        if (getThreadAgentProfileContext(thread.id).failureRecoveryPolicy !== "auto") {
           return false;
         }
 
@@ -1276,7 +1291,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: selectedThread.intelligence,
-        agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
+        agentProfile: getThreadAgentProfileContext(selectedThread.id),
         memories,
         personalization: createPersonalizationPrompt(personalization),
         projectScan: projectScanResult,
@@ -1374,7 +1389,9 @@ export function App(): ReactElement {
       : null;
 
     if (isDirectAnswerPrompt(prompt)) {
-      const result = createThreadFromSettings(settings, prompt);
+      const result = createThreadFromSettings(settings, prompt, {
+        agentProfile: activeAgentProfileContext
+      });
 
       if (!result.ok) {
         setTaskNotice(
@@ -1472,7 +1489,9 @@ export function App(): ReactElement {
         ? activeThread
         : null;
 
-    const result = createThreadFromSettings(settings, prompt);
+    const result = createThreadFromSettings(settings, prompt, {
+      agentProfile: activeAgentProfileContext
+    });
 
     if (!result.ok) {
       setTaskNotice(
@@ -1567,7 +1586,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: settings.intelligence,
-        agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
+        agentProfile: getThreadAgentProfileContext(threadId),
         memories,
         personalization: createPersonalizationPrompt(personalization),
         speed: settings.speed,
@@ -1636,7 +1655,7 @@ export function App(): ReactElement {
       });
       const agentActions = createAgentActionsFromPlanSteps(plan.steps ?? []);
       const runnableAgentActions = getRunnablePendingAgentActions(agentActions, {
-        fullAccess: fullAccessMode,
+        fullAccess: getThreadFullAccessMode(threadId),
         rules: generalPreferences.commandSafetyRules
       });
       const planMessage =
@@ -1926,7 +1945,7 @@ export function App(): ReactElement {
       provider,
       model,
       intelligence: settings.intelligence,
-      agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
+      agentProfile: getThreadAgentProfileContext(threadId),
       memories,
       personalization: createPersonalizationPrompt(personalization),
       conversation,
@@ -2285,7 +2304,8 @@ export function App(): ReactElement {
     }
 
     const actionToRun = liveAction ?? action;
-    const activeAgentProfile = activeAgentProfileContext;
+    const activeAgentProfile = getThreadAgentProfileContext(threadId);
+    const threadFullAccessMode = getThreadFullAccessMode(threadId);
     const permission = resolveAgentActionPermission(actionToRun, activeAgentProfile);
 
     if (!permission.ok) {
@@ -2357,7 +2377,7 @@ export function App(): ReactElement {
         outcome = await generateAgentFileChangeAction(threadId, actionToRun, execution.relativePath);
       } else if (execution.kind === "run-command") {
         const commandRisk = resolveAgentCommandRisk(execution.command, {
-          fullAccess: fullAccessMode,
+          fullAccess: threadFullAccessMode,
           rules: generalPreferences.commandSafetyRules
         });
 
@@ -2371,7 +2391,7 @@ export function App(): ReactElement {
             ),
             "failed"
           );
-        } else if (commandRisk.level === "ask" && !fullAccessMode && !options.approvedCommand) {
+        } else if (commandRisk.level === "ask" && !threadFullAccessMode && !options.approvedCommand) {
           outcome = blockAgentCommandAction(
             threadId,
             actionToRun,
@@ -2496,7 +2516,7 @@ export function App(): ReactElement {
     if (action.kind === "run-command" && action.command) {
       const command = action.command;
       const commandRisk = resolveAgentCommandRisk(command, {
-        fullAccess: fullAccessMode,
+        fullAccess: getThreadFullAccessMode(threadId),
         rules: generalPreferences.commandSafetyRules
       });
 
@@ -2801,10 +2821,11 @@ export function App(): ReactElement {
 
       setPreviewFile(file);
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
+      const threadFullAccessMode = getThreadFullAccessMode(threadId);
 
       const generated = await generateProjectFileChange(file.relativePath, file.content, threadId, {
         action,
-        autoApply: fullAccessMode,
+        autoApply: threadFullAccessMode,
         source: {
           threadId,
           actionId: action.id,
@@ -2817,7 +2838,7 @@ export function App(): ReactElement {
         return "failed";
       }
 
-      if (fullAccessMode) {
+      if (threadFullAccessMode) {
         updateAgentActionStatus(threadId, action.id, "completed");
         return "completed";
       }

@@ -958,6 +958,7 @@ function formatAgentProfile(
     `Context budget: ${agentProfile.contextBudget}`,
     `Plan step limit: ${agentProfile.planStepLimit}`,
     `Verification policy: ${agentProfile.verificationPolicy}`,
+    `Failure recovery policy: ${agentProfile.failureRecoveryPolicy}`,
     `Tools: ${agentProfile.enabledTools.length > 0 ? agentProfile.enabledTools.join(", ") : "none"}`,
     "Instructions:",
     agentProfile.instructions
