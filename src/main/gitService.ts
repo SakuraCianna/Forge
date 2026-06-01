@@ -50,7 +50,7 @@ export async function getProjectGitStatus({
     };
   }
 
-  const status = await runGit(["status", "--porcelain"], cwd);
+  const status = await runGit(createGitUtf8PathArgs(["status", "--porcelain"]), cwd);
 
   if (status.exitCode !== 0) {
     throw new Error(status.stderr.trim() || "git status failed");
@@ -238,7 +238,10 @@ async function readGitDiff(
   runGit: GitRunner
 ): Promise<string> {
   if (entry.status === "??") {
-    const noIndexDiff = await runGit(["diff", "--no-index", "--", "/dev/null", entry.path], cwd);
+    const noIndexDiff = await runGit(
+      createGitUtf8PathArgs(["diff", "--no-index", "--", "/dev/null", entry.path]),
+      cwd
+    );
 
     if (noIndexDiff.exitCode === 0 || noIndexDiff.exitCode === 1) {
       return noIndexDiff.stdout;
@@ -247,8 +250,8 @@ async function readGitDiff(
     return noIndexDiff.stderr.trim();
   }
 
-  const stagedDiff = await runGit(["diff", "--cached", "--", entry.path], cwd);
-  const unstagedDiff = await runGit(["diff", "--", entry.path], cwd);
+  const stagedDiff = await runGit(createGitUtf8PathArgs(["diff", "--cached", "--", entry.path]), cwd);
+  const unstagedDiff = await runGit(createGitUtf8PathArgs(["diff", "--", entry.path]), cwd);
 
   return [stagedDiff.stdout, unstagedDiff.stdout].filter(Boolean).join("\n");
 }
@@ -261,10 +264,78 @@ function parseGitStatusEntries(output: string): Array<Omit<ProjectGitFileChange,
     .filter(Boolean)
     .map((line) => {
       const status = line.slice(0, 2).trim() || line.slice(0, 2);
-      const rawPath = line.slice(3).trim();
+      const rawPath = decodeGitStatusPath(line.slice(3).trim());
       const renameArrowIndex = rawPath.lastIndexOf(" -> ");
       const path = renameArrowIndex >= 0 ? rawPath.slice(renameArrowIndex + 4) : rawPath;
 
       return { path, status };
     });
+}
+
+function createGitUtf8PathArgs(args: string[]): string[] {
+  return ["-c", "core.quotepath=false", ...args];
+}
+
+function decodeGitStatusPath(path: string): string {
+  if (!path.startsWith("\"") || !path.endsWith("\"")) {
+    return path;
+  }
+
+  const decodedBytes: number[] = [];
+  const decodedText: string[] = [];
+
+  for (let index = 1; index < path.length - 1; index += 1) {
+    const char = path[index];
+
+    if (char !== "\\") {
+      flushDecodedBytes();
+      decodedText.push(char);
+      continue;
+    }
+
+    const next = path[index + 1];
+
+    if (next && /[0-7]/u.test(next)) {
+      const octal = path.slice(index + 1, index + 4);
+
+      if (/^[0-7]{3}$/u.test(octal)) {
+        decodedBytes.push(Number.parseInt(octal, 8));
+        index += 3;
+        continue;
+      }
+    }
+
+    flushDecodedBytes();
+    decodedText.push(decodeGitEscapedCharacter(next ?? ""));
+    index += 1;
+  }
+
+  flushDecodedBytes();
+
+  return decodedText.join("");
+
+  function flushDecodedBytes(): void {
+    if (decodedBytes.length === 0) {
+      return;
+    }
+
+    decodedText.push(Buffer.from(decodedBytes).toString("utf8"));
+    decodedBytes.length = 0;
+  }
+}
+
+function decodeGitEscapedCharacter(value: string): string {
+  return (
+    {
+      a: "\u0007",
+      b: "\b",
+      f: "\f",
+      n: "\n",
+      r: "\r",
+      t: "\t",
+      v: "\v",
+      "\\": "\\",
+      "\"": "\""
+    }[value] ?? value
+  );
 }

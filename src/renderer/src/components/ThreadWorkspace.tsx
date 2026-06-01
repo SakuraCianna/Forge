@@ -125,8 +125,6 @@ type ThreadActivitySummary = {
 };
 
 type CompactProcessedSummary = {
-  label: string;
-  duration: string;
   hiddenEvents: TaskThreadEvent[];
   groups: CompactProcessedGroup[];
   sourceUrls: string[];
@@ -256,9 +254,9 @@ export function ThreadWorkspace({
   const compactProcessedSummary = useMemo(
     () =>
       showProcessedSummary && selectedThread
-        ? getCompactProcessedSummary(selectedThread, visibleCompactEvents, language, liveNow)
+        ? getCompactProcessedSummary(selectedThread, visibleCompactEvents, language)
         : null,
-    [language, liveNow, selectedThread, showProcessedSummary, visibleCompactEvents.length]
+    [language, selectedThread, showProcessedSummary, visibleCompactEvents.length]
   );
   const duration = useMemo(() => {
     if (!selectedThread) {
@@ -1113,7 +1111,7 @@ export function ThreadWorkspace({
           <div className="mt-1">
             {event.kind === "result" && !runningCommand && !result ? (
               <>
-                <MarkdownPreview compact content={event.message} />
+                <MarkdownPreview compact content={stripAssistantSourceBlock(event.message)} />
                 {renderAssistantSourceLinks(event.message)}
               </>
             ) : (
@@ -1257,23 +1255,31 @@ export function ThreadWorkspace({
       <section className="mx-auto w-full max-w-[680px] border-b border-[#ececf1] pb-2">
         <button
           type="button"
+          aria-label={language === "zh-CN" ? "查看已处理详情" : "View processed details"}
           aria-expanded={compactProcessedExpanded}
           onClick={() => setCompactProcessedExpanded((expanded) => !expanded)}
           className="flex min-h-7 w-full flex-wrap items-center gap-x-2 gap-y-1 text-left text-sm font-medium text-[#8e8ea0] transition hover:text-[#565869]"
         >
-          <span className="shrink-0">{summary.label}</span>
-          <span className="shrink-0">{summary.duration}</span>
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            {summary.groups.slice(0, 4).map((group) => {
-              const Icon = getCompactProcessedGroupIcon(group.kind);
+            {summary.groups.length > 0
+              ? summary.groups.slice(0, 4).map((group) => {
+                  const Icon = getCompactProcessedGroupIcon(group.kind);
 
-              return (
-                <span key={group.kind} className="inline-flex min-w-0 items-center gap-1 text-[12px] font-normal">
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{group.summaryLabel}</span>
+                  return (
+                    <span
+                      key={group.kind}
+                      className="inline-flex min-w-0 items-center gap-1 text-[12px] font-normal"
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{group.summaryLabel}</span>
+                    </span>
+                  );
+                })
+              : (
+                <span className="truncate text-[12px] font-normal">
+                  {summary.livePreview ?? (language === "zh-CN" ? "处理详情" : "Processed details")}
                 </span>
-              );
-            })}
+              )}
           </span>
           <ChevronDown
             className={`h-3.5 w-3.5 shrink-0 transition ${
@@ -1391,7 +1397,11 @@ export function ThreadWorkspace({
     }
 
     return (
-      <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
+        <span className="inline-flex items-center gap-1 text-[#8e8ea0]">
+          <Globe className="h-3.5 w-3.5" />
+          {language === "zh-CN" ? "参考资料" : "Sources"}
+        </span>
         {urls.slice(0, 6).map((url) => (
           <a
             key={url}
@@ -3726,8 +3736,7 @@ function getThreadActivitySummary(
 function getCompactProcessedSummary(
   thread: TaskThread,
   visibleEvents: TaskThreadEvent[],
-  language: Language,
-  now: number
+  language: Language
 ): CompactProcessedSummary | null {
   const visibleEventIds = new Set(visibleEvents.map((event) => event.id));
   const hiddenEvents = thread.events.filter((event) => !visibleEventIds.has(event.id));
@@ -3741,8 +3750,6 @@ function getCompactProcessedSummary(
   }
 
   return {
-    label: language === "zh-CN" ? "已处理" : "Processed",
-    duration: formatCompactProcessedDuration(thread, now),
     hiddenEvents,
     groups: buildCompactProcessedGroups(hiddenEvents, language),
     sourceUrls: extractSourceUrlsFromEvents(hiddenEvents),
@@ -3993,6 +4000,15 @@ function extractSourceUrlsFromEvents(events: TaskThreadEvent[]): string[] {
   return mergeUniqueStrings(events.flatMap((event) => extractSourceUrls(event.message)));
 }
 
+function stripAssistantSourceBlock(message: string): string {
+  return message
+    .replace(
+      /\n{2,}(?:参考来源|参考资料|Sources):\s*\n(?:[-*]\s+https?:\/\/[^\n]+\n?)+\s*$/iu,
+      ""
+    )
+    .trim();
+}
+
 function extractSourceUrls(value: string): string[] {
   const matches = value.match(/https?:\/\/[^\s<>)\]]+/giu) ?? [];
 
@@ -4032,35 +4048,6 @@ function getCompactProcessedLivePreview(
   }
 
   return liveEvent.message.trim().replace(/\s+/gu, " ").slice(0, 180);
-}
-
-// 计算已处理摘要的耗时, 运行中的线程使用当前时间保证用户看到持续反馈
-function formatCompactProcessedDuration(thread: TaskThread, now: number): string {
-  const startedAt = Date.parse(thread.events[0]?.createdAt ?? thread.createdAt);
-  const lastEvent = thread.events.at(-1);
-  const finishedAt =
-    thread.status === "running" || thread.status === "planned"
-      ? now
-      : Date.parse(lastEvent?.completedAt ?? lastEvent?.createdAt ?? thread.createdAt);
-
-  if (Number.isNaN(startedAt) || Number.isNaN(finishedAt)) {
-    return "";
-  }
-
-  return formatCompactDuration(Math.max(0, finishedAt - startedAt));
-}
-
-// 使用短耗时格式贴近主屏摘要, 避免占用正文空间
-function formatCompactDuration(durationMs: number): string {
-  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes <= 0) {
-    return `${seconds}s`;
-  }
-
-  return `${minutes}m ${seconds}s`;
 }
 
 // 把事件类型压成短标签, 避免对话区出现内部术语
