@@ -33,6 +33,7 @@ export type AgentConfirmationItem = {
   previewPath?: string;
   riskReason?: string;
   failureRecoveryPolicy?: AgentFailureRecoveryPolicy;
+  maxFailureRecoveryAttempts?: number;
 };
 
 export type AgentQueueControlState = {
@@ -95,7 +96,8 @@ export function getAgentConfirmationItems({
   activeGateAction,
   projectPath,
   queueBlockerAction,
-  failureRecoveryPolicy
+  failureRecoveryPolicy,
+  maxFailureRecoveryAttempts
 }: {
   actions: AgentAction[];
   changePreviews: Pick<ProjectFileChangePreview, "relativePath">[];
@@ -105,6 +107,7 @@ export function getAgentConfirmationItems({
   projectPath: string | null;
   queueBlockerAction: AgentAction | null;
   failureRecoveryPolicy?: AgentFailureRecoveryPolicy | null;
+  maxFailureRecoveryAttempts?: number | null;
 }): AgentConfirmationItem[] {
   const items: AgentConfirmationItem[] = [];
 
@@ -147,6 +150,8 @@ export function getAgentConfirmationItems({
           : undefined,
       failureRecoveryPolicy:
         kind === "failed-action" ? (failureRecoveryPolicy ?? undefined) : undefined,
+      maxFailureRecoveryAttempts:
+        kind === "failed-action" ? (maxFailureRecoveryAttempts ?? undefined) : undefined,
       active:
         changePreviews.length === 0 &&
         (activeGateAction?.id === action.id || queueBlockerAction?.id === action.id)

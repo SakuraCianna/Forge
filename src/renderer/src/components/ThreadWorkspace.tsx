@@ -790,7 +790,8 @@ export function ThreadWorkspace({
       activeGateAction,
       projectPath: thread.projectPath ?? projectScan?.rootPath ?? null,
       queueBlockerAction,
-      failureRecoveryPolicy: thread.agentProfile?.failureRecoveryPolicy
+      failureRecoveryPolicy: thread.agentProfile?.failureRecoveryPolicy,
+      maxFailureRecoveryAttempts: thread.agentProfile?.maxFailureRecoveryAttempts
     });
   }
 
@@ -1757,7 +1758,8 @@ export function ThreadWorkspace({
       activeGateAction,
       projectPath: selectedThread?.projectPath ?? projectScan?.rootPath ?? null,
       queueBlockerAction,
-      failureRecoveryPolicy: selectedThread?.agentProfile?.failureRecoveryPolicy
+      failureRecoveryPolicy: selectedThread?.agentProfile?.failureRecoveryPolicy,
+      maxFailureRecoveryAttempts: selectedThread?.agentProfile?.maxFailureRecoveryAttempts
     });
     const agentRunStatus =
       hasPendingFileChanges
@@ -3470,7 +3472,7 @@ function getFailedActionBody(
   }
 
   if (item.failureRecoveryPolicy === "auto") {
-    return copy.failedActionAutoBody;
+    return copy.failedActionAutoBody(item.maxFailureRecoveryAttempts);
   }
 
   return copy.failedActionBody;
@@ -3504,6 +3506,13 @@ function getAgentConfirmationMetadataRows(
       label: copy.failureRecoveryPolicyLabel,
       value: getFailureRecoveryPolicyLabel(item.failureRecoveryPolicy, copy)
     });
+
+    if (item.failureRecoveryPolicy === "auto" && item.maxFailureRecoveryAttempts !== undefined) {
+      rows.push({
+        label: copy.failureRecoveryAttemptLimitLabel,
+        value: copy.failureRecoveryAttemptLimit(item.maxFailureRecoveryAttempts)
+      });
+    }
   }
 
   if (item.active) {
@@ -3580,7 +3589,10 @@ function getCompactAgentControlCopy(language: Language) {
       failedActionTitle: "失败动作",
       failedActionBody: "先重试、生成修复计划或跳过, 队列才会继续",
       failedActionSuggestBody: "当前智能体建议先生成修复计划, 也可以重试或跳过该动作",
-      failedActionAutoBody: "当前智能体会按上限尝试自动生成修复计划, 也可以手动生成、重试或跳过",
+      failedActionAutoBody: (count?: number) =>
+        count === undefined
+          ? "当前智能体会按上限尝试自动生成修复计划, 也可以手动生成、重试或跳过"
+          : `当前智能体最多会自动生成 ${count} 次修复计划, 也可以手动生成、重试或跳过`,
       manualGateTitle: "人工确认",
       commandApprovalTitle: "命令批准",
       commandBlockedTitle: "命令被阻止",
@@ -3590,9 +3602,11 @@ function getCompactAgentControlCopy(language: Language) {
       cwdLabel: "目录",
       riskLabel: "风险",
       failureRecoveryPolicyLabel: "恢复策略",
+      failureRecoveryAttemptLimitLabel: "自动上限",
       failureRecoveryManual: "手动处理",
       failureRecoverySuggest: "提示修复",
       failureRecoveryAuto: "自动恢复",
+      failureRecoveryAttemptLimit: (count: number) => `${count} 次`,
       afterApprovalLabel: "批准后",
       noNextQueuedAction: "没有后续队列动作",
       reviewQueuedChanges: "审查队列修改",
@@ -3670,8 +3684,10 @@ function getCompactAgentControlCopy(language: Language) {
     failedActionBody: "Retry, generate a fix plan, or skip this action before the queue continues.",
     failedActionSuggestBody:
       "This agent suggests generating a fix plan first. You can also retry or skip the action.",
-    failedActionAutoBody:
-      "This agent can auto-generate a fix plan within its retry limit. You can still generate one manually, retry, or skip.",
+    failedActionAutoBody: (count?: number) =>
+      count === undefined
+        ? "This agent can auto-generate a fix plan within its retry limit. You can still generate one manually, retry, or skip."
+        : `This agent can auto-generate up to ${count} fix ${count === 1 ? "plan" : "plans"}. You can still generate one manually, retry, or skip.`,
     manualGateTitle: "Manual confirmation",
     commandApprovalTitle: "Command approval",
     commandBlockedTitle: "Blocked command",
@@ -3681,9 +3697,12 @@ function getCompactAgentControlCopy(language: Language) {
     cwdLabel: "cwd",
     riskLabel: "Risk",
     failureRecoveryPolicyLabel: "Recovery",
+    failureRecoveryAttemptLimitLabel: "Auto limit",
     failureRecoveryManual: "Manual",
     failureRecoverySuggest: "Suggest fix",
     failureRecoveryAuto: "Auto recovery",
+    failureRecoveryAttemptLimit: (count: number) =>
+      `${count} automatic ${count === 1 ? "attempt" : "attempts"}`,
     afterApprovalLabel: "After approval",
     noNextQueuedAction: "No later queued action",
     reviewQueuedChanges: "Review queued changes",
