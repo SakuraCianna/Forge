@@ -1,6 +1,6 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
@@ -14,12 +14,16 @@ import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
-import { FilePreviewRenderer } from "@/components/FilePreviewRenderer";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
+import { LazyPanelFallback } from "@/components/LazyPanelFallback";
+import {
+  LazyFilePreviewRenderer,
+  LazySettingsPanel,
+  LazyThreadWorkspace
+} from "@/components/lazyWorkbenchComponents";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
-import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
+import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
-import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import {
   resolveAgentCommandRisk,
   resolveAgentActionPermission,
@@ -3125,60 +3129,62 @@ export function App(): ReactElement {
       hasContinuableAgentActions(selectedThread);
 
     return (
-      <ThreadWorkspace
-        compact
-        language={settings.language}
-        hasProject={Boolean(currentProject) || Boolean(selectedThread)}
-        selectedThreadId={selectedThreadId}
-        threads={visibleWorkspaceThreads}
-        commandSafetyRules={generalPreferences.commandSafetyRules}
-        fullAccess={fullAccessMode}
-        agentPaused={agentPaused}
-        showActivityHeartbeat={generalPreferences.showActivityHeartbeat}
-        showProcessedSummary={generalPreferences.showProcessedSummary}
-        defaultExpandProcessedSummary={generalPreferences.expandProcessedSummary}
-        projectScan={projectScanResult}
-        previewFile={previewFile}
-        changePreview={
-          previewFile
-            ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
-            : null
-        }
-        changePreviews={changePreviews}
-        onSelectThread={setSelectedThreadId}
-        onPickProject={() => void pickProject()}
-        onOpenRecentProject={openMostRecentProject}
-        onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
-        onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
-        onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
-        onAllowAgentCommand={(threadId, action) => void allowAgentCommandAction(threadId, action)}
-        onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
-        onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
-        onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
-        onCompleteAgentAction={completeAgentAction}
-        onSkipAgentAction={skipAgentAction}
-        onResumeAgent={resumeAgentThread}
-        onOpenSourceControl={() => setActiveView("source")}
-        onOpenFiles={() => setActiveView("files")}
-        onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
-        onCancelCommand={(threadId, runId) => void cancelThreadCommand(threadId, runId)}
-        onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
-        onPreviewChange={(relativePath, nextContent) =>
-          void previewProjectFileChange(relativePath, nextContent)
-        }
-        onApplyChange={(relativePath, nextContent) =>
-          void applyProjectFileChange(relativePath, nextContent)
-        }
-        onDiscardChange={discardProjectFileChange}
-        onApplyAllChanges={() => void applyAllProjectFileChanges()}
-        onDiscardAllChanges={discardAllProjectFileChanges}
-        onGenerateFileChange={(relativePath, currentContent) =>
-          void generateProjectFileChange(relativePath, currentContent)
-        }
-        onGenerateSelectedFileChanges={(relativePaths) =>
-          void generateSelectedProjectFileChanges(relativePaths)
-        }
-      />
+      <Suspense fallback={<LazyPanelFallback language={settings.language} />}>
+        <LazyThreadWorkspace
+          compact
+          language={settings.language}
+          hasProject={Boolean(currentProject) || Boolean(selectedThread)}
+          selectedThreadId={selectedThreadId}
+          threads={visibleWorkspaceThreads}
+          commandSafetyRules={generalPreferences.commandSafetyRules}
+          fullAccess={fullAccessMode}
+          agentPaused={agentPaused}
+          showActivityHeartbeat={generalPreferences.showActivityHeartbeat}
+          showProcessedSummary={generalPreferences.showProcessedSummary}
+          defaultExpandProcessedSummary={generalPreferences.expandProcessedSummary}
+          projectScan={projectScanResult}
+          previewFile={previewFile}
+          changePreview={
+            previewFile
+              ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
+              : null
+          }
+          changePreviews={changePreviews}
+          onSelectThread={setSelectedThreadId}
+          onPickProject={() => void pickProject()}
+          onOpenRecentProject={openMostRecentProject}
+          onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
+          onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
+          onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
+          onAllowAgentCommand={(threadId, action) => void allowAgentCommandAction(threadId, action)}
+          onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
+          onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
+          onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
+          onCompleteAgentAction={completeAgentAction}
+          onSkipAgentAction={skipAgentAction}
+          onResumeAgent={resumeAgentThread}
+          onOpenSourceControl={() => setActiveView("source")}
+          onOpenFiles={() => setActiveView("files")}
+          onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
+          onCancelCommand={(threadId, runId) => void cancelThreadCommand(threadId, runId)}
+          onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
+          onPreviewChange={(relativePath, nextContent) =>
+            void previewProjectFileChange(relativePath, nextContent)
+          }
+          onApplyChange={(relativePath, nextContent) =>
+            void applyProjectFileChange(relativePath, nextContent)
+          }
+          onDiscardChange={discardProjectFileChange}
+          onApplyAllChanges={() => void applyAllProjectFileChanges()}
+          onDiscardAllChanges={discardAllProjectFileChanges}
+          onGenerateFileChange={(relativePath, currentContent) =>
+            void generateProjectFileChange(relativePath, currentContent)
+          }
+          onGenerateSelectedFileChanges={(relativePaths) =>
+            void generateSelectedProjectFileChanges(relativePaths)
+          }
+        />
+      </Suspense>
     );
   }
 
@@ -3260,11 +3266,13 @@ export function App(): ReactElement {
                       </label>
                     ) : null}
                   </div>
-                  <FilePreviewRenderer
-                    content={previewContent}
-                    mode={fileFormatterMode}
-                    path={previewFile.relativePath}
-                  />
+                  <Suspense fallback={<LazyPanelFallback language={settings.language} compact />}>
+                    <LazyFilePreviewRenderer
+                      content={previewContent}
+                      mode={fileFormatterMode}
+                      path={previewFile.relativePath}
+                    />
+                  </Suspense>
                 </>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-[#6e6e80]">
@@ -3426,66 +3434,68 @@ export function App(): ReactElement {
   function renderSettingsView(): ReactElement {
     return (
       <div className="h-full min-h-0 p-5">
-        <SettingsPanel
-          settings={settings}
-          agentMemories={agentMemories}
-          agentProfiles={agentProfiles}
-          generalPreferences={generalPreferences}
-          keyStatuses={keyStatuses}
-          archivedThreads={threads.filter((thread) => thread.archived)}
-          onClearAgentMemories={() => setAgentMemories([])}
-          onDeleteAgentMemory={(memoryId) =>
-            setAgentMemories((current) => deleteAgentMemory(current, memoryId))
-          }
-          onSelectAgentProfile={(profileId) =>
-            setAgentProfiles((current) => selectAgentProfile(current, profileId))
-          }
-          onUpdateAgentProfile={(profileId, patch) =>
-            setAgentProfiles((current) => updateAgentProfile(current, profileId, patch))
-          }
-          onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
-          onFetchModels={(providerId, apiKey) => void fetchModels(providerId, apiKey)}
-          onAddManualModel={(providerId, modelName, apiKey) =>
-            void addManualProviderModel(providerId, modelName, apiKey)
-          }
-          onAddProvider={(label, baseUrl) =>
-            setSettings((current) => addCustomProvider(current, label, baseUrl))
-          }
-          onDeleteProvider={(providerId) => {
-            setSettings((current) => deleteCustomProvider(current, providerId));
-            void deleteProviderKey(providerId);
-          }}
-          onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
-          onSetLanguage={setInterfaceLanguage}
-          onUpdateGeneralPreferences={setGeneralPreferences}
-          onToggleModelEnabled={(modelId, enabled) =>
-            setSettings((current) => updateModelEnabled(current, modelId, enabled))
-          }
-          onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
-          onUpdateProviderBaseUrl={(providerId, baseUrl) =>
-            setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
-          }
-          onUpdateProviderLabel={(providerId, label) =>
-            setSettings((current) => updateProviderLabel(current, providerId, label))
-          }
-          onRestoreArchivedThread={(threadId) => {
-            setThreads((current) => restoreThread(current, threadId));
-            setSelectedThreadId(threadId);
-            setActiveView("workspace");
-          }}
-          personalization={personalization}
-          providerFetchStates={providerFetchStates}
-          usageEvents={usageEvents}
-          usageRates={usageRates}
-          onClearUsage={() => setUsageEvents([])}
-          onUpdatePersonalization={(nextPersonalization) => setPersonalization(nextPersonalization)}
-          onUpdateUsageRate={(providerId, rate) =>
-            setUsageRates((current) => ({
-              ...current,
-              [providerId]: { ...rate, source: "manual" }
-            }))
-          }
-        />
+        <Suspense fallback={<LazyPanelFallback language={settings.language} />}>
+          <LazySettingsPanel
+            settings={settings}
+            agentMemories={agentMemories}
+            agentProfiles={agentProfiles}
+            generalPreferences={generalPreferences}
+            keyStatuses={keyStatuses}
+            archivedThreads={threads.filter((thread) => thread.archived)}
+            onClearAgentMemories={() => setAgentMemories([])}
+            onDeleteAgentMemory={(memoryId) =>
+              setAgentMemories((current) => deleteAgentMemory(current, memoryId))
+            }
+            onSelectAgentProfile={(profileId) =>
+              setAgentProfiles((current) => selectAgentProfile(current, profileId))
+            }
+            onUpdateAgentProfile={(profileId, patch) =>
+              setAgentProfiles((current) => updateAgentProfile(current, profileId, patch))
+            }
+            onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
+            onFetchModels={(providerId, apiKey) => void fetchModels(providerId, apiKey)}
+            onAddManualModel={(providerId, modelName, apiKey) =>
+              void addManualProviderModel(providerId, modelName, apiKey)
+            }
+            onAddProvider={(label, baseUrl) =>
+              setSettings((current) => addCustomProvider(current, label, baseUrl))
+            }
+            onDeleteProvider={(providerId) => {
+              setSettings((current) => deleteCustomProvider(current, providerId));
+              void deleteProviderKey(providerId);
+            }}
+            onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
+            onSetLanguage={setInterfaceLanguage}
+            onUpdateGeneralPreferences={setGeneralPreferences}
+            onToggleModelEnabled={(modelId, enabled) =>
+              setSettings((current) => updateModelEnabled(current, modelId, enabled))
+            }
+            onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
+            onUpdateProviderBaseUrl={(providerId, baseUrl) =>
+              setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
+            }
+            onUpdateProviderLabel={(providerId, label) =>
+              setSettings((current) => updateProviderLabel(current, providerId, label))
+            }
+            onRestoreArchivedThread={(threadId) => {
+              setThreads((current) => restoreThread(current, threadId));
+              setSelectedThreadId(threadId);
+              setActiveView("workspace");
+            }}
+            personalization={personalization}
+            providerFetchStates={providerFetchStates}
+            usageEvents={usageEvents}
+            usageRates={usageRates}
+            onClearUsage={() => setUsageEvents([])}
+            onUpdatePersonalization={(nextPersonalization) => setPersonalization(nextPersonalization)}
+            onUpdateUsageRate={(providerId, rate) =>
+              setUsageRates((current) => ({
+                ...current,
+                [providerId]: { ...rate, source: "manual" }
+              }))
+            }
+          />
+        </Suspense>
       </div>
     );
   }
