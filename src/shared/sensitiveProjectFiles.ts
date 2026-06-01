@@ -39,7 +39,7 @@ const privateKeyFileNames = new Set([
 
 const privateKeyExtensions = [".key", ".p12", ".pem", ".pfx"];
 
-// 判断项目相对路径是否命中敏感文件策略, 返回用户可读原因
+// 判断项目相对路径是否命中敏感文件策略, 返回稳定英文原因
 export function getSensitiveProjectPathReason(relativePath: string): string | null {
   const normalizedPath = normalizeProjectPathForPolicy(relativePath);
 
@@ -51,23 +51,23 @@ export function getSensitiveProjectPathReason(relativePath: string): string | nu
   const fileName = segments.at(-1) ?? "";
 
   if (segments.some((segment) => sensitiveDirectoryNames.has(segment))) {
-    return "路径位于密钥或配置目录";
+    return "path is inside a secret or config directory";
   }
 
   if (isEnvironmentFileName(fileName)) {
-    return "环境变量文件可能包含密钥";
+    return "environment files may contain secrets";
   }
 
   if (sensitiveExactFileNames.has(fileName)) {
-    return "凭据文件可能包含令牌";
+    return "credential files may contain tokens";
   }
 
   if (privateKeyFileNames.has(fileName) || privateKeyExtensions.some((extension) => fileName.endsWith(extension))) {
-    return "私钥文件不能交给 Agent 处理";
+    return "private key files are blocked";
   }
 
   if (/service[-_]?account.*\.json$/u.test(fileName)) {
-    return "服务账号文件可能包含私钥";
+    return "service account files may contain private keys";
   }
 
   return null;
@@ -86,7 +86,7 @@ export function assertProjectPathNotSensitive(relativePath: string): void {
     return;
   }
 
-  throw new Error(`文件路径被安全策略保护, Forge 不会读取或修改: ${relativePath} (${reason})`);
+  throw new Error(`File path is protected by safety policy: ${relativePath} (${reason})`);
 }
 
 // 识别 .env 类文件, 但允许常见模板文件进入上下文

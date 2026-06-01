@@ -85,7 +85,7 @@ export function registerProjectFileHandlers(
 // 校验项目目录列表请求, 路径可省略但必须由服务层归一化
 function assertListDirectoryRequest(value: unknown): ProjectDirectoryListRequest {
   if (!isRecord(value) || typeof value.projectRoot !== "string") {
-    throw new Error("无效的目录列表请求。");
+    throw new Error("Invalid directory list request");
   }
 
   return {
@@ -102,7 +102,7 @@ function assertGlobRequest(value: unknown): ProjectFileGlobRequest {
     typeof value.projectRoot !== "string" ||
     typeof value.pattern !== "string"
   ) {
-    throw new Error("无效的文件匹配请求。");
+    throw new Error("Invalid file glob request");
   }
 
   return {
@@ -119,7 +119,7 @@ function assertSearchRequest(value: unknown): ProjectTextSearchRequest {
     typeof value.projectRoot !== "string" ||
     typeof value.query !== "string"
   ) {
-    throw new Error("无效的文件搜索请求。");
+    throw new Error("Invalid file search request");
   }
 
   return {
@@ -137,7 +137,7 @@ function assertReadRequest(value: unknown): ReadProjectTextFileRequest {
     typeof value.projectRoot !== "string" ||
     typeof value.relativePath !== "string"
   ) {
-    throw new Error("无效的文件读取请求。");
+    throw new Error("Invalid file read request");
   }
 
   return {
@@ -152,7 +152,7 @@ function assertUpdateRequest(value: unknown): UpdateProjectTextFileRequest {
   const readRequest = assertReadRequest(value);
 
   if (!isRecord(value) || typeof value.nextContent !== "string") {
-    throw new Error("无效的文件更新请求。");
+    throw new Error("Invalid file update request");
   }
 
   return {

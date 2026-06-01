@@ -102,7 +102,7 @@ export function registerAgentHandlers(
         return { ok: false, requestId: normalizedRequestId };
       }
 
-      controller.abort(new Error("已取消 Agent 问答流。"));
+      controller.abort(new Error("Agent ask stream cancelled"));
 
       return { ok: true, requestId: normalizedRequestId };
     });
@@ -154,7 +154,7 @@ export function registerAgentHandlers(
         return { ok: false, requestId: normalizedRequestId };
       }
 
-      controller.abort(new Error("已取消 Agent 计划流。"));
+      controller.abort(new Error("Agent plan stream cancelled"));
 
       return { ok: true, requestId: normalizedRequestId };
     });
@@ -164,11 +164,11 @@ export function registerAgentHandlers(
 // 校验生成计划请求的最小结构, 防止渲染层传入脏数据
 function assertGenerateAgentPlanRequest(value: unknown): GenerateAgentPlanRequest {
   if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.model)) {
-    throw new Error("无效的 Agent 计划请求。");
+    throw new Error("Invalid agent plan request");
   }
 
   if (typeof value.taskPrompt !== "string" || !isRecord(value.projectScan)) {
-    throw new Error("无效的 Agent 计划请求。");
+    throw new Error("Invalid agent plan request");
   }
 
   return value as GenerateAgentPlanRequest;
@@ -177,7 +177,7 @@ function assertGenerateAgentPlanRequest(value: unknown): GenerateAgentPlanReques
 // 校验文件修改请求, 确保模型只拿到明确的项目文件内容
 function assertGenerateAgentFileChangeRequest(value: unknown): GenerateAgentFileChangeRequest {
   if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.model)) {
-    throw new Error("无效的 Agent 文件修改请求。");
+    throw new Error("Invalid agent file change request");
   }
 
   if (
@@ -185,7 +185,7 @@ function assertGenerateAgentFileChangeRequest(value: unknown): GenerateAgentFile
     typeof value.relativePath !== "string" ||
     typeof value.currentContent !== "string"
   ) {
-    throw new Error("无效的 Agent 文件修改请求。");
+    throw new Error("Invalid agent file change request");
   }
 
   return value as GenerateAgentFileChangeRequest;
@@ -194,11 +194,11 @@ function assertGenerateAgentFileChangeRequest(value: unknown): GenerateAgentFile
 // 校验问答请求, conversation 必须保持数组结构才能拼接上下文
 function assertGenerateAgentAskRequest(value: unknown): GenerateAgentAskRequest {
   if (!isRecord(value) || !isRecord(value.provider) || !isRecord(value.model)) {
-    throw new Error("无效的 Agent 问答请求。");
+    throw new Error("Invalid agent ask request");
   }
 
   if (typeof value.prompt !== "string") {
-    throw new Error("无效的 Agent 问答请求。");
+    throw new Error("Invalid agent ask request");
   }
 
   return value as GenerateAgentAskRequest;
@@ -207,7 +207,7 @@ function assertGenerateAgentAskRequest(value: unknown): GenerateAgentAskRequest 
 // 校验流式请求 id, 取消和分片事件都依赖这个稳定标识
 function assertRequestId(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error("无效的 Agent 问答流请求 ID。");
+    throw new Error("Invalid agent stream request ID");
   }
 
   return value;

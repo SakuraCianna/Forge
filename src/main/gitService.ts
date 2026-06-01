@@ -53,7 +53,7 @@ export async function getProjectGitStatus({
   const status = await runGit(["status", "--porcelain"], cwd);
 
   if (status.exitCode !== 0) {
-    throw new Error(status.stderr.trim() || "git status 执行失败。");
+    throw new Error(status.stderr.trim() || "git status failed");
   }
 
   const changes = await readGitChanges(status.stdout, cwd, runGit);
@@ -75,18 +75,18 @@ export async function commitProjectChanges({
   const normalizedMessage = message.trim();
 
   if (!normalizedMessage) {
-    throw new Error("请输入提交信息。");
+    throw new Error("Commit message is required");
   }
 
   const cwd = await realpath(projectRoot);
   const status = await getProjectGitStatus({ projectRoot: cwd, runGit });
 
   if (!status.isRepo) {
-    throw new Error("当前项目不是 Git 仓库。");
+    throw new Error("Selected project is not a Git repository");
   }
 
   if (status.changedFiles.length === 0) {
-    throw new Error("没有可提交的改动。");
+    throw new Error("No changes to commit");
   }
 
   await runGitOrThrow(["add", "-A"], cwd);
@@ -103,7 +103,7 @@ export async function commitProjectChanges({
     const result = await runGit(args, commandCwd);
 
     if (result.exitCode !== 0) {
-      throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args[0]} 执行失败。`);
+      throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args[0]} failed`);
     }
 
     return result;
@@ -120,20 +120,20 @@ export async function createProjectWorktree({
   const slug = normalizeWorktreeName(name);
 
   if (!slug) {
-    throw new Error("请输入工作树名称。");
+    throw new Error("Git worktree name is required");
   }
 
   const cwd = await realpath(projectRoot);
   const revParse = await runGit(["rev-parse", "--is-inside-work-tree"], cwd);
 
   if (revParse.exitCode !== 0) {
-    throw new Error("当前项目不是 Git 仓库。");
+    throw new Error("Selected project is not a Git repository");
   }
 
   const root = await runGit(["rev-parse", "--show-toplevel"], cwd);
 
   if (root.exitCode !== 0) {
-    throw new Error(root.stderr.trim() || "无法读取 Git 仓库根目录。");
+    throw new Error(root.stderr.trim() || "Could not read Git repository root");
   }
 
   const repoRoot = root.stdout.trim() || cwd;
@@ -141,14 +141,14 @@ export async function createProjectWorktree({
   const targetPath = resolve(dirname(repoRoot), `${repoName}-${slug}`);
 
   if (await pathExists(targetPath)) {
-    throw new Error(`工作树目录已存在：${targetPath}`);
+    throw new Error(`Git worktree directory already exists: ${targetPath}`);
   }
 
   const branch = `forge/${slug}`;
   const result = await runGit(["worktree", "add", "-b", branch, targetPath, "HEAD"], repoRoot);
 
   if (result.exitCode !== 0) {
-    throw new Error(result.stderr.trim() || result.stdout.trim() || "git worktree 创建失败。");
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "git worktree create failed");
   }
 
   return {

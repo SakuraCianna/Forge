@@ -36,7 +36,10 @@ import {
 } from "@/agent/failureFixPrompt";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
-import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
+import {
+  formatAgentCommandDenied,
+  formatAgentCommandNeedsApproval
+} from "@/i18n/agentMessages";
 import { formatRemoteModelError, formatRuntimeError } from "@/i18n/runtimeErrors";
 import { useI18n } from "@/i18n/useI18n";
 import {
@@ -2330,7 +2333,7 @@ export function App(): ReactElement {
           action,
           formatAgentCommandDenied(
             settings.language,
-            formatAgentCommandRiskReason(settings.language, commandRisk.reason)
+            commandRisk.reason
           ),
           "failed"
         );
@@ -2341,7 +2344,7 @@ export function App(): ReactElement {
           formatAgentCommandNeedsApproval(
             settings.language,
             execution.command,
-            formatAgentCommandRiskReason(settings.language, commandRisk.reason)
+            commandRisk.reason
           ),
           "pending"
         );
@@ -3643,28 +3646,6 @@ function extractSourceUrlsFromText(value: string): string[] {
 
 function mergeUniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)));
-}
-
-// 将命令风险提示转成用户可读文案
-function formatAgentCommandDenied(language: Language, reason: string): string {
-  if (language === "zh-CN") {
-    return `命令已被安全策略拒绝: ${reason}`;
-  }
-
-  return `Command denied by safety policy: ${reason}`;
-}
-
-// 将需要确认的命令提示转成用户可读文案
-function formatAgentCommandNeedsApproval(
-  language: Language,
-  command: string,
-  reason: string
-): string {
-  if (language === "zh-CN") {
-    return `命令需要完全访问权限确认: ${command} (${reason})`;
-  }
-
-  return `Command requires full access confirmation: ${command} (${reason})`;
 }
 
 // 把动作执行记录转成用户可读消息, 同时保留结构化 agentActionRun 字段供 UI 使用

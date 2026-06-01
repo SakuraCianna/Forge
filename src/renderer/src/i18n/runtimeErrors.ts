@@ -137,17 +137,62 @@ function translateKnownEnglishError(message: string): string | null {
     return `项目路径不是目录：${projectPathNotDirectory[1]}`;
   }
 
+  const protectedFilePath = message.match(/^File path is protected by safety policy: (.+)$/u);
+  if (protectedFilePath) {
+    return `文件路径被安全策略保护, Forge 不会读取或修改: ${translateSensitivePathDetail(
+      protectedFilePath[1]
+    )}`;
+  }
+
+  const existingWorktreePath = message.match(/^Git worktree directory already exists: (.+)$/u);
+  if (existingWorktreePath) {
+    return `工作树目录已存在：${existingWorktreePath[1]}`;
+  }
+
+  const gitCommandFailed = message.match(/^git (.+) failed$/u);
+  if (gitCommandFailed) {
+    return `git ${gitCommandFailed[1]} 执行失败。`;
+  }
+
   const exactMessages: Record<string, string> = {
+    "Agent ask stream cancelled": "已取消 Agent 问答流。",
+    "Agent plan stream cancelled": "已取消 Agent 计划流。",
     "Command cwd must stay inside the selected project": "命令工作目录必须位于当前项目内。",
     "Command run id is already active": "该命令运行 ID 已在执行中。",
     "Commit message is required": "请输入提交信息。",
+    "Could not read Git repository root": "无法读取 Git 仓库根目录。",
+    "Directory path cannot contain parent segments": "目录路径不能包含上级目录。",
+    "Directory path must point to a folder": "目录路径必须指向文件夹。",
+    "Directory path must stay inside the selected project": "目录路径必须位于当前项目内。",
+    "File glob pattern cannot contain parent segments": "文件匹配模式不能包含上级目录。",
+    "File glob pattern is required": "文件匹配模式不能为空。",
     "Selected project is not a Git repository": "当前项目不是 Git 仓库。",
     "No changes to commit": "没有可提交的改动。",
     "File path must stay inside the selected project": "文件路径必须位于当前项目内。",
     "File is too large to preview": "文件过大，无法预览。",
+    "Git worktree name is required": "请输入工作树名称。",
+    "Invalid agent ask request": "无效的 Agent 问答请求。",
+    "Invalid agent file change request": "无效的 Agent 文件修改请求。",
+    "Invalid agent plan request": "无效的 Agent 计划请求。",
+    "Invalid agent stream request ID": "无效的 Agent 流式请求 ID。",
+    "Invalid command cancellation request": "无效的命令取消请求。",
+    "Invalid command request": "无效的命令请求。",
+    "Invalid directory list request": "无效的目录列表请求。",
+    "Invalid file glob request": "无效的文件匹配请求。",
+    "Invalid file read request": "无效的文件读取请求。",
+    "Invalid file search request": "无效的文件搜索请求。",
+    "Invalid file update request": "无效的文件更新请求。",
+    "Invalid Git commit request": "无效的 Git 提交请求。",
+    "Invalid Git status request": "无效的 Git 状态请求。",
+    "Invalid Git worktree request": "无效的 Git 工作树请求。",
+    "Invalid IPC argument": "无效的 IPC 参数。",
+    "Invalid model provider argument": "无效的模型提供商参数。",
+    "Invalid project path argument": "无效的项目路径参数。",
+    "git status failed": "git status 执行失败。",
+    "git worktree create failed": "git worktree 创建失败。",
+    "Search query is required": "搜索关键词不能为空。",
     "Secure storage is not available on this system": "当前系统不可用安全存储，无法保存 API Key。",
-    "Streaming response body is not available": "流式响应体不可用，请检查当前运行环境或供应商是否支持流式返回。",
-    "Agent ask stream cancelled": "已取消 Agent 问答流。"
+    "Streaming response body is not available": "流式响应体不可用，请检查当前运行环境或供应商是否支持流式返回。"
   };
 
   return exactMessages[message] ?? null;
@@ -166,4 +211,23 @@ function translateShellRecoveryHint(hint: string): string {
   };
 
   return hints[hint] ?? hint;
+}
+
+function translateSensitivePathDetail(detail: string): string {
+  const reasonMatch = detail.match(/^(.*) \((.*)\)$/u);
+
+  if (!reasonMatch) {
+    return detail;
+  }
+
+  const [, path, reason] = reasonMatch;
+  const reasons: Record<string, string> = {
+    "credential files may contain tokens": "凭据文件可能包含令牌",
+    "environment files may contain secrets": "环境变量文件可能包含密钥",
+    "path is inside a secret or config directory": "路径位于密钥或配置目录",
+    "private key files are blocked": "私钥文件不能交给 Agent 处理",
+    "service account files may contain private keys": "服务账号文件可能包含私钥"
+  };
+
+  return `${path} (${reasons[reason] ?? reason})`;
 }

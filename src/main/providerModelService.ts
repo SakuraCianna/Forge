@@ -233,9 +233,9 @@ async function readJsonBody(providerLabel: string, response: Response): Promise<
     return JSON.parse(trimmedText) as unknown;
   } catch {
     if (trimmedText.startsWith("<")) {
-      throw new Error(formatHtmlInsteadOfJson(providerLabel, "模型 API 兼容性"));
+      throw new Error(formatHtmlInsteadOfJson(providerLabel, "model API compatibility"));
     }
 
-    throw new Error(formatInvalidJson(providerLabel, "模型 API 兼容性"));
+    throw new Error(formatInvalidJson(providerLabel, "model API compatibility"));
   }
 }

@@ -8,7 +8,8 @@ const builtInCommandReasonTranslations: Record<string, string> = {
   "command may change dependencies or project state": "命令会修改依赖或项目状态",
   "command may change Git history or remote state": "命令会修改 Git 历史或远端状态",
   "command can delete files or rewrite history": "命令可能删除文件或重写历史",
-  "command is not in the safe allowlist": "命令不在安全自动执行白名单中"
+  "command is not in the safe allowlist": "命令不在安全自动执行白名单中",
+  "command may write files through shell redirection": "命令可能通过 shell 重定向写入文件"
 };
 
 const agentToolLabels: Record<AgentToolPermission, { zh: string; en: string }> = {

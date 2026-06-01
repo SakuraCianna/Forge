@@ -44,19 +44,19 @@ export async function readProjectTextFile({
   const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
 
   if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
-    throw new Error("文件路径必须位于当前项目内。");
+    throw new Error("File path must stay inside the selected project");
   }
 
   const resolvedFilePath = await realpath(absoluteFilePath);
 
   if (!isPathInside(resolvedFilePath, resolvedProjectRoot)) {
-    throw new Error("文件路径必须位于当前项目内。");
+    throw new Error("File path must stay inside the selected project");
   }
 
   const fileStat = await stat(resolvedFilePath);
 
   if (fileStat.size > maxBytes) {
-    throw new Error("文件过大，无法预览。");
+    throw new Error("File is too large to preview");
   }
 
   return {
@@ -104,19 +104,19 @@ export async function listProjectDirectory({
   );
 
   if (!isPathInside(absoluteDirectoryPath, resolvedProjectRoot)) {
-    throw new Error("目录路径必须位于当前项目内。");
+    throw new Error("Directory path must stay inside the selected project");
   }
 
   const resolvedDirectoryPath = await realpath(absoluteDirectoryPath);
 
   if (!isPathInside(resolvedDirectoryPath, resolvedProjectRoot)) {
-    throw new Error("目录路径必须位于当前项目内。");
+    throw new Error("Directory path must stay inside the selected project");
   }
 
   const directoryStat = await stat(resolvedDirectoryPath);
 
   if (!directoryStat.isDirectory()) {
-    throw new Error("目录路径必须指向文件夹。");
+    throw new Error("Directory path must point to a folder");
   }
 
   const entries: ProjectDirectoryEntry[] = [];
@@ -323,20 +323,20 @@ export async function writeProjectTextFile({
   const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
 
   if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
-    throw new Error("文件路径必须位于当前项目内。");
+    throw new Error("File path must stay inside the selected project");
   }
 
   const existingResolvedFilePath = await resolveExistingFilePath(absoluteFilePath);
 
   if (existingResolvedFilePath && !isPathInside(existingResolvedFilePath, resolvedProjectRoot)) {
-    throw new Error("文件路径必须位于当前项目内。");
+    throw new Error("File path must stay inside the selected project");
   }
 
   await mkdir(dirname(absoluteFilePath), { recursive: true });
   const resolvedParentPath = await realpath(dirname(absoluteFilePath));
 
   if (!isPathInside(resolvedParentPath, resolvedProjectRoot)) {
-    throw new Error("文件路径必须位于当前项目内。");
+    throw new Error("File path must stay inside the selected project");
   }
 
   await writeFile(existingResolvedFilePath ?? absoluteFilePath, nextContent, "utf8");
@@ -365,7 +365,7 @@ async function readProjectTextFileOrEmpty({
     const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
 
     if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
-      throw new Error("文件路径必须位于当前项目内。", { cause: error });
+      throw new Error("File path must stay inside the selected project", { cause: error });
     }
 
     return {
@@ -409,7 +409,7 @@ function normalizeDirectoryRelativePath(relativePath: string): string {
   }
 
   if (normalized.split("/").includes("..")) {
-    throw new Error("目录路径不能包含上级目录。");
+    throw new Error("Directory path cannot contain parent segments");
   }
 
   return normalized;
@@ -422,11 +422,11 @@ function normalizeGlobPattern(pattern: string): string {
     .slice(0, 220);
 
   if (!normalized) {
-    throw new Error("文件匹配模式不能为空。");
+    throw new Error("File glob pattern is required");
   }
 
   if (normalized.split("/").includes("..")) {
-    throw new Error("文件匹配模式不能包含上级目录。");
+    throw new Error("File glob pattern cannot contain parent segments");
   }
 
   return normalized.includes("/") ? normalized : `**/${normalized}`;
@@ -478,7 +478,7 @@ function normalizeSearchQuery(query: string): string {
   const normalized = query.trim().slice(0, 160);
 
   if (!normalized) {
-    throw new Error("搜索关键词不能为空。");
+    throw new Error("Search query is required");
   }
 
   return normalized;

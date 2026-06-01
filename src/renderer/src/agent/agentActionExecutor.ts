@@ -33,7 +33,7 @@ const dependencyChangeReason = "command may change dependencies or project state
 const gitMutationReason = "command may change Git history or remote state";
 const destructiveCommandReason = "command can delete files or rewrite history";
 const unknownCommandReason = "command is not in the safe allowlist";
-const shellOutputRedirectionReason = "命令可能通过 shell 重定向写入文件";
+const shellOutputRedirectionReason = "command may write files through shell redirection";
 
 // 根据动作类型决定执行方式, 不能自动执行的动作返回阻塞原因
 export function resolveAgentActionExecution(action: AgentAction): AgentActionExecution {
