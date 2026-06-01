@@ -37,6 +37,14 @@ type CommandApprovalRecord = {
   approvedAt: string;
 };
 
+export type FailureRecoveryAttemptRecord = {
+  actionId: string;
+  label: string;
+  source: "manual" | "auto";
+  attempt?: number;
+  limit?: number;
+};
+
 export type AgentActionRunRecord = {
   actionId: string;
   label: string;
@@ -57,6 +65,7 @@ export type TaskThreadEvent = {
   commandResult?: CommandRunResult;
   commandApproval?: CommandApprovalRecord;
   agentActionRun?: AgentActionRunRecord;
+  failureRecoveryAttempt?: FailureRecoveryAttemptRecord;
 };
 
 export type TaskThread = {

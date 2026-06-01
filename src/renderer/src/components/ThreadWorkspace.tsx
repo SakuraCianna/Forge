@@ -791,7 +791,8 @@ export function ThreadWorkspace({
       projectPath: thread.projectPath ?? projectScan?.rootPath ?? null,
       queueBlockerAction,
       failureRecoveryPolicy: thread.agentProfile?.failureRecoveryPolicy,
-      maxFailureRecoveryAttempts: thread.agentProfile?.maxFailureRecoveryAttempts
+      maxFailureRecoveryAttempts: thread.agentProfile?.maxFailureRecoveryAttempts,
+      events: thread.events
     });
   }
 
@@ -1759,7 +1760,8 @@ export function ThreadWorkspace({
       projectPath: selectedThread?.projectPath ?? projectScan?.rootPath ?? null,
       queueBlockerAction,
       failureRecoveryPolicy: selectedThread?.agentProfile?.failureRecoveryPolicy,
-      maxFailureRecoveryAttempts: selectedThread?.agentProfile?.maxFailureRecoveryAttempts
+      maxFailureRecoveryAttempts: selectedThread?.agentProfile?.maxFailureRecoveryAttempts,
+      events: selectedThread?.events
     });
     const agentRunStatus =
       hasPendingFileChanges
@@ -3472,7 +3474,10 @@ function getFailedActionBody(
   }
 
   if (item.failureRecoveryPolicy === "auto") {
-    return copy.failedActionAutoBody(item.maxFailureRecoveryAttempts);
+    return copy.failedActionAutoBody(
+      item.maxFailureRecoveryAttempts,
+      item.autoFailureRecoveryAttemptsUsed
+    );
   }
 
   return copy.failedActionBody;
@@ -3511,6 +3516,13 @@ function getAgentConfirmationMetadataRows(
       rows.push({
         label: copy.failureRecoveryAttemptLimitLabel,
         value: copy.failureRecoveryAttemptLimit(item.maxFailureRecoveryAttempts)
+      });
+      rows.push({
+        label: copy.failureRecoveryAttemptProgressLabel,
+        value: copy.failureRecoveryAttemptProgress(
+          item.autoFailureRecoveryAttemptsUsed ?? 0,
+          item.maxFailureRecoveryAttempts
+        )
       });
     }
   }
@@ -3589,10 +3601,10 @@ function getCompactAgentControlCopy(language: Language) {
       failedActionTitle: "失败动作",
       failedActionBody: "先重试、生成修复计划或跳过, 队列才会继续",
       failedActionSuggestBody: "当前智能体建议先生成修复计划, 也可以重试或跳过该动作",
-      failedActionAutoBody: (count?: number) =>
+      failedActionAutoBody: (count?: number, used = 0) =>
         count === undefined
           ? "当前智能体会按上限尝试自动生成修复计划, 也可以手动生成、重试或跳过"
-          : `当前智能体最多会自动生成 ${count} 次修复计划, 也可以手动生成、重试或跳过`,
+          : `当前智能体已自动尝试 ${used} / ${count} 次修复计划, 也可以手动生成、重试或跳过`,
       manualGateTitle: "人工确认",
       commandApprovalTitle: "命令批准",
       commandBlockedTitle: "命令被阻止",
@@ -3603,10 +3615,12 @@ function getCompactAgentControlCopy(language: Language) {
       riskLabel: "风险",
       failureRecoveryPolicyLabel: "恢复策略",
       failureRecoveryAttemptLimitLabel: "自动上限",
+      failureRecoveryAttemptProgressLabel: "已尝试",
       failureRecoveryManual: "手动处理",
       failureRecoverySuggest: "提示修复",
       failureRecoveryAuto: "自动恢复",
       failureRecoveryAttemptLimit: (count: number) => `${count} 次`,
+      failureRecoveryAttemptProgress: (used: number, count: number) => `${used} / ${count} 次`,
       afterApprovalLabel: "批准后",
       noNextQueuedAction: "没有后续队列动作",
       reviewQueuedChanges: "审查队列修改",
@@ -3684,10 +3698,10 @@ function getCompactAgentControlCopy(language: Language) {
     failedActionBody: "Retry, generate a fix plan, or skip this action before the queue continues.",
     failedActionSuggestBody:
       "This agent suggests generating a fix plan first. You can also retry or skip the action.",
-    failedActionAutoBody: (count?: number) =>
+    failedActionAutoBody: (count?: number, used = 0) =>
       count === undefined
         ? "This agent can auto-generate a fix plan within its retry limit. You can still generate one manually, retry, or skip."
-        : `This agent can auto-generate up to ${count} fix ${count === 1 ? "plan" : "plans"}. You can still generate one manually, retry, or skip.`,
+        : `This agent has auto-generated ${used} / ${count} fix ${count === 1 ? "plan" : "plans"}. You can still generate one manually, retry, or skip.`,
     manualGateTitle: "Manual confirmation",
     commandApprovalTitle: "Command approval",
     commandBlockedTitle: "Blocked command",
@@ -3698,11 +3712,13 @@ function getCompactAgentControlCopy(language: Language) {
     riskLabel: "Risk",
     failureRecoveryPolicyLabel: "Recovery",
     failureRecoveryAttemptLimitLabel: "Auto limit",
+    failureRecoveryAttemptProgressLabel: "Attempted",
     failureRecoveryManual: "Manual",
     failureRecoverySuggest: "Suggest fix",
     failureRecoveryAuto: "Auto recovery",
     failureRecoveryAttemptLimit: (count: number) =>
       `${count} automatic ${count === 1 ? "attempt" : "attempts"}`,
+    failureRecoveryAttemptProgress: (used: number, count: number) => `${used} / ${count}`,
     afterApprovalLabel: "After approval",
     noNextQueuedAction: "No later queued action",
     reviewQueuedChanges: "Review queued changes",

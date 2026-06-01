@@ -6,6 +6,7 @@ import {
   getQueueBlockerAction,
   getQueueStats
 } from "./agentConfirmationQueue";
+import { countAutoFailureRecoveryAttempts } from "./failureRecoveryAttempts";
 
 const inspectAction: AgentAction = {
   id: "action-1",
@@ -71,7 +72,18 @@ describe("agent confirmation queue", () => {
       projectPath: "E:\\CodeHome\\Forge",
       queueBlockerAction: failedAction,
       failureRecoveryPolicy: "suggest",
-      maxFailureRecoveryAttempts: 2
+      maxFailureRecoveryAttempts: 2,
+      events: [
+        {
+          failureRecoveryAttempt: {
+            actionId: failedAction.id,
+            label: failedAction.label,
+            source: "auto",
+            attempt: 1,
+            limit: 2
+          }
+        }
+      ]
     });
 
     expect(items).toHaveLength(2);
@@ -87,7 +99,8 @@ describe("agent confirmation queue", () => {
       command: "npm test",
       cwd: "E:\\CodeHome\\Forge",
       failureRecoveryPolicy: "suggest",
-      maxFailureRecoveryAttempts: 2
+      maxFailureRecoveryAttempts: 2,
+      autoFailureRecoveryAttemptsUsed: 1
     });
   });
 
@@ -138,5 +151,24 @@ describe("agent confirmation queue", () => {
     expect(getQueueBlockerAction([{ ...inspectAction, status: "completed" }, failedAction])?.id).toBe(
       failedAction.id
     );
+  });
+
+  it("counts only automatic recovery attempts for the matching action", () => {
+    expect(
+      countAutoFailureRecoveryAttempts(
+        [
+          { failureRecoveryAttempt: { actionId: failedAction.id, label: "manual", source: "manual" } },
+          { failureRecoveryAttempt: { actionId: failedAction.id, label: "auto", source: "auto" } },
+          { failureRecoveryAttempt: { actionId: "other", label: "auto", source: "auto" } }
+        ],
+        failedAction.id
+      )
+    ).toBe(1);
+    expect(
+      countAutoFailureRecoveryAttempts([
+        { failureRecoveryAttempt: { actionId: failedAction.id, label: "auto", source: "auto" } },
+        { failureRecoveryAttempt: { actionId: "other", label: "auto", source: "auto" } }
+      ])
+    ).toBe(2);
   });
 });

@@ -28,6 +28,7 @@ import {
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
+import { countAutoFailureRecoveryAttempts } from "@/agent/failureRecoveryAttempts";
 import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
@@ -120,6 +121,7 @@ import {
   updateThreadAgentActionStatus,
   type AgentActionRunRecord,
   type CommandRunResult,
+  type FailureRecoveryAttemptRecord,
   type TaskThread,
   type TaskThreadEvent
 } from "@/state/taskThreads";
@@ -172,6 +174,11 @@ type ProviderKeyStatus = {
   hasKey: boolean;
   last4: string | null;
 };
+
+type FailureFixPlanOptions = Pick<
+  FailureRecoveryAttemptRecord,
+  "source" | "attempt" | "limit"
+>;
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
@@ -530,12 +537,17 @@ export function App(): ReactElement {
         }
 
         const key = createAutoFailureFixKey(thread.id, failedAction.id);
-        const count = autoFailureFixCountsRef.current.get(thread.id) ?? 0;
+        const count = Math.max(
+          autoFailureFixCountsRef.current.get(thread.id) ?? 0,
+          countAutoFailureRecoveryAttempts(thread.events)
+        );
+        const actionAutoAttempted = countAutoFailureRecoveryAttempts(thread.events, failedAction.id) > 0;
 
         return (
           count < getThreadFailureRecoveryLimit(thread.id) &&
           !activeAutoFailureFixKeysRef.current.has(key) &&
-          !autoFailureFixAttemptedKeysRef.current.has(key)
+          !autoFailureFixAttemptedKeysRef.current.has(key) &&
+          !actionAutoAttempted
         );
       });
 
@@ -544,11 +556,19 @@ export function App(): ReactElement {
     }
 
     const key = createAutoFailureFixKey(candidate.thread.id, candidate.failedAction.id);
-    const currentCount = autoFailureFixCountsRef.current.get(candidate.thread.id) ?? 0;
+    const limit = getThreadFailureRecoveryLimit(candidate.thread.id);
+    const currentCount = Math.max(
+      autoFailureFixCountsRef.current.get(candidate.thread.id) ?? 0,
+      countAutoFailureRecoveryAttempts(candidate.thread.events)
+    );
     activeAutoFailureFixKeysRef.current.add(key);
     autoFailureFixAttemptedKeysRef.current.add(key);
     autoFailureFixCountsRef.current.set(candidate.thread.id, currentCount + 1);
-    void generateFailureFixPlan(candidate.thread.id, candidate.failedAction).finally(() => {
+    void generateFailureFixPlan(candidate.thread.id, candidate.failedAction, null, {
+      source: "auto",
+      attempt: currentCount + 1,
+      limit
+    }).finally(() => {
       activeAutoFailureFixKeysRef.current.delete(key);
     });
   }, [
@@ -1754,7 +1774,8 @@ export function App(): ReactElement {
   async function generateFailureFixPlan(
     threadId: string,
     action: AgentAction,
-    commandResultOverride: CommandRunResult | null = null
+    commandResultOverride: CommandRunResult | null = null,
+    options: FailureFixPlanOptions = { source: "manual" }
   ): Promise<void> {
     const thread = threads.find((candidate) => candidate.id === threadId);
 
@@ -1789,6 +1810,13 @@ export function App(): ReactElement {
     }
 
     const createdAt = new Date().toISOString();
+    const failureRecoveryAttempt: FailureRecoveryAttemptRecord = {
+      actionId: action.id,
+      label: action.label,
+      source: options.source,
+      ...(options.attempt === undefined ? {} : { attempt: options.attempt }),
+      ...(options.limit === undefined ? {} : { limit: options.limit })
+    };
     setTaskNotice(null);
     setThreads((current) =>
       appendThreadEvents(
@@ -1798,11 +1826,13 @@ export function App(): ReactElement {
           {
             id: `${threadId}-failure-fix-${action.id}-${createdAt}`,
             kind: "plan",
-            message:
-              settings.language === "zh-CN"
-                ? `正在根据失败动作生成修复计划: ${action.label}`
-                : `Generating a fix plan for failed action: ${action.label}`,
-            createdAt
+            message: formatFailureFixPlanStartMessage(
+              settings.language,
+              action,
+              failureRecoveryAttempt
+            ),
+            createdAt,
+            failureRecoveryAttempt
           }
         ],
         "running"
@@ -3834,6 +3864,32 @@ function formatAgentActionRunMessage(
   }
 
   return `Confirmed agent action: ${action.label}`;
+}
+
+function formatFailureFixPlanStartMessage(
+  language: Language,
+  action: AgentAction,
+  attempt: FailureRecoveryAttemptRecord
+): string {
+  if (language === "zh-CN") {
+    if (attempt.source === "auto") {
+      const limit = attempt.limit === undefined ? "" : ` / ${attempt.limit}`;
+      const count = attempt.attempt === undefined ? "" : ` ${attempt.attempt}${limit}`;
+
+      return `正在自动生成失败修复计划${count}: ${action.label}`;
+    }
+
+    return `正在根据失败动作生成修复计划: ${action.label}`;
+  }
+
+  if (attempt.source === "auto") {
+    const limit = attempt.limit === undefined ? "" : ` / ${attempt.limit}`;
+    const count = attempt.attempt === undefined ? "" : ` ${attempt.attempt}${limit}`;
+
+    return `Auto-generating failure fix plan${count}: ${action.label}`;
+  }
+
+  return `Generating a fix plan for failed action: ${action.label}`;
 }
 
 // 用短格式显示动作耗时, 保持详情面板和时间线易扫读

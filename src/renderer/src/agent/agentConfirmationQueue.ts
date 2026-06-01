@@ -9,6 +9,10 @@ import {
   resolveAgentCommandRisk,
   type AgentCommandSafetyPolicy
 } from "@/agent/agentActionExecutor";
+import {
+  countAutoFailureRecoveryAttempts,
+  type FailureRecoveryAttemptEvent
+} from "@/agent/failureRecoveryAttempts";
 
 export type AgentConfirmationItemKind =
   | "pending-changes"
@@ -34,6 +38,7 @@ export type AgentConfirmationItem = {
   riskReason?: string;
   failureRecoveryPolicy?: AgentFailureRecoveryPolicy;
   maxFailureRecoveryAttempts?: number;
+  autoFailureRecoveryAttemptsUsed?: number;
 };
 
 export type AgentQueueControlState = {
@@ -97,7 +102,8 @@ export function getAgentConfirmationItems({
   projectPath,
   queueBlockerAction,
   failureRecoveryPolicy,
-  maxFailureRecoveryAttempts
+  maxFailureRecoveryAttempts,
+  events = []
 }: {
   actions: AgentAction[];
   changePreviews: Pick<ProjectFileChangePreview, "relativePath">[];
@@ -108,6 +114,7 @@ export function getAgentConfirmationItems({
   queueBlockerAction: AgentAction | null;
   failureRecoveryPolicy?: AgentFailureRecoveryPolicy | null;
   maxFailureRecoveryAttempts?: number | null;
+  events?: FailureRecoveryAttemptEvent[];
 }): AgentConfirmationItem[] {
   const items: AgentConfirmationItem[] = [];
 
@@ -152,6 +159,8 @@ export function getAgentConfirmationItems({
         kind === "failed-action" ? (failureRecoveryPolicy ?? undefined) : undefined,
       maxFailureRecoveryAttempts:
         kind === "failed-action" ? (maxFailureRecoveryAttempts ?? undefined) : undefined,
+      autoFailureRecoveryAttemptsUsed:
+        kind === "failed-action" ? countAutoFailureRecoveryAttempts(events) : undefined,
       active:
         changePreviews.length === 0 &&
         (activeGateAction?.id === action.id || queueBlockerAction?.id === action.id)
