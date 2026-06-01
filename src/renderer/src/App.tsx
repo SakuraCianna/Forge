@@ -162,6 +162,7 @@ import {
   type AgentMemoryEntry
 } from "@/state/agentMemory";
 import {
+  createDefaultAgentProfiles,
   getActiveAgentProfileContext,
   loadAgentProfiles,
   saveAgentProfiles,
@@ -798,6 +799,69 @@ export function App(): ReactElement {
     await window.forge.secrets.deleteProviderKey(providerId);
     setSettings((current) => removeProviderModels(current, providerId));
     await refreshProviderKeyStatus(providerId);
+  }
+
+  // 隐私清理入口: 主进程密钥与渲染层本地状态一起重置, 但不触碰用户项目文件
+  async function clearAllLocalData(): Promise<void> {
+    const activePlanRequestIds = [...activePlanStreamRequestIdsRef.current.values()];
+    const activeAskRequestIds = [...activeAskStreamRequestIdsRef.current.values()];
+
+    for (const thread of threadsRef.current) {
+      cancelledThreadIdsRef.current.add(thread.id);
+    }
+
+    await Promise.allSettled([
+      ...activePlanRequestIds.map((requestId) => window.forge.agent.cancelPlanStream(requestId)),
+      ...activeAskRequestIds.map((requestId) => window.forge.agent.cancelAskStream(requestId))
+    ]);
+    await window.forge.secrets.clearAllProviderKeys();
+
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+
+    activePlanStreamRequestIdsRef.current.clear();
+    activeAskStreamRequestIdsRef.current.clear();
+    activeAgentAutoRunActionIdsRef.current.clear();
+    activeAutoFailureFixKeysRef.current.clear();
+    autoFailureFixAttemptedKeysRef.current.clear();
+    autoFailureFixCountsRef.current.clear();
+    recentAgentToolResultsRef.current.clear();
+
+    setSettings(createDefaultModelSettings());
+    setKeyStatuses({});
+    setRecentProjects([]);
+    setCurrentProject(null);
+    setProjectScanResult(null);
+    setPreviewFile(null);
+    setFilePreview(null);
+    setExpandedFileTreeFolders([]);
+    setFileFormatterMode("raw");
+    setFormattedPreview(null);
+    setMissingProjectPath(null);
+    setChangePreviews([]);
+    setGitStatus(null);
+    setSelectedGitPath(null);
+    setGitNotice(null);
+    setCommitMessage("");
+    setCommitBranch("");
+    setCreateCommitBranch(false);
+    setPushAfterCommit(false);
+    setGitRemote("origin");
+    threadsRef.current = [];
+    setThreads([]);
+    setSelectedThreadId(null);
+    setTaskNotice(null);
+    setProviderFetchStates({});
+    setUsageEvents([]);
+    setUsageRates({});
+    setPersonalization(createDefaultPersonalizationSettings());
+    setGeneralPreferences(createDefaultGeneralPreferences());
+    setAgentMemories([]);
+    setAgentProfiles(createDefaultAgentProfiles());
+    setComposerFocusSignal((current) => current + 1);
+    setComposerSubmitSignal(0);
+    setHeroPromptIndex(0);
+    setPausedThreadIds(new Set());
   }
 
   // 先保存当前配置再拉取模型, 自定义 Base URL 和 Key 都以最新输入为准
@@ -3912,7 +3976,18 @@ export function App(): ReactElement {
             generalPreferences={generalPreferences}
             keyStatuses={keyStatuses}
             archivedThreads={threads.filter((thread) => thread.archived)}
+            localDataSummary={{
+              apiKeyCount: Object.values(keyStatuses).filter((status) => status.hasKey).length,
+              archivedThreadCount: threads.filter((thread) => thread.archived).length,
+              commandRuleCount: generalPreferences.commandSafetyRules.length,
+              conversationCount: threads.length,
+              customProviderCount: settings.providers.filter((provider) => provider.custom).length,
+              memoryCount: agentMemories.length,
+              recentProjectCount: recentProjects.length,
+              usageEventCount: usageEvents.length
+            }}
             onClearAgentMemories={() => setAgentMemories([])}
+            onClearAllLocalData={clearAllLocalData}
             onDeleteAgentMemory={(memoryId) =>
               setAgentMemories((current) => deleteAgentMemory(current, memoryId))
             }

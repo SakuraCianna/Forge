@@ -20,6 +20,7 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
   Terminal,
   Trash2
@@ -69,6 +70,17 @@ export type ProviderFetchState = {
   message?: string;
 };
 
+type LocalDataSummary = {
+  apiKeyCount: number;
+  archivedThreadCount: number;
+  commandRuleCount: number;
+  conversationCount: number;
+  customProviderCount: number;
+  memoryCount: number;
+  recentProjectCount: number;
+  usageEventCount: number;
+};
+
 type SettingsPanelProps = {
   settings: ModelSettings;
   keyStatuses: Record<string, { hasKey: boolean; last4: string | null }>;
@@ -76,7 +88,9 @@ type SettingsPanelProps = {
   agentMemories: AgentMemoryEntry[];
   agentProfiles: AgentProfile[];
   generalPreferences: GeneralPreferences;
+  localDataSummary: LocalDataSummary;
   onClearAgentMemories: () => void;
+  onClearAllLocalData: () => Promise<void> | void;
   onDeleteProviderKey: (providerId: string) => void;
   onDeleteAgentMemory: (memoryId: string) => void;
   onSelectAgentProfile: (profileId: string) => void;
@@ -104,6 +118,7 @@ type SettingsPanelProps = {
 
 type SettingsSection =
   | "general"
+  | "privacy"
   | "models"
   | "providers"
   | "agents"
@@ -127,7 +142,9 @@ export function SettingsPanel({
   agentMemories,
   agentProfiles,
   generalPreferences,
+  localDataSummary,
   onClearAgentMemories,
+  onClearAllLocalData,
   onDeleteAgentMemory,
   onDeleteProviderKey,
   onSelectAgentProfile,
@@ -163,6 +180,9 @@ export function SettingsPanel({
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState("");
   const [modelSearchQuery, setModelSearchQuery] = useState("");
   const [expandedUsageProviders, setExpandedUsageProviders] = useState<Record<string, boolean>>({});
+  const [clearDataConfirming, setClearDataConfirming] = useState(false);
+  const [isClearingData, setIsClearingData] = useState(false);
+  const [clearDataNotice, setClearDataNotice] = useState<string | null>(null);
   const backgroundFileInputRef = useRef<HTMLInputElement | null>(null);
   const availableModels = getModelsForDisplay(settings);
   const filteredAvailableModels = availableModels.filter((model) =>
@@ -181,12 +201,19 @@ export function SettingsPanel({
   const activeAgentProfileText = activeAgentProfile
     ? getAgentProfileDisplayText(activeAgentProfile, settings.language)
     : null;
+  const privacyCopy = getPrivacySettingsCopy(settings.language);
   const sectionItems: SectionItem[] = [
     {
       id: "general",
       label: t("settings.general"),
       description: t("settings.language"),
       icon: SlidersHorizontal
+    },
+    {
+      id: "privacy",
+      label: privacyCopy.menuLabel,
+      description: privacyCopy.menuDescription,
+      icon: ShieldCheck
     },
     {
       id: "models",
@@ -280,6 +307,7 @@ export function SettingsPanel({
 
           <main className="min-h-0 overflow-auto px-6 py-5">
             {activeSection === "general" ? renderGeneralSection() : null}
+            {activeSection === "privacy" ? renderPrivacySection() : null}
             {activeSection === "models" ? renderModelsSection() : null}
             {activeSection === "providers" ? renderProvidersSection() : null}
             {activeSection === "agents" ? renderAgentProfilesSection() : null}
@@ -353,6 +381,126 @@ export function SettingsPanel({
       ...generalPreferences,
       commandSafetyRules
     });
+  }
+
+  // 执行一键清理时给用户明确的二次确认和结果反馈
+  async function confirmClearAllLocalData(): Promise<void> {
+    setIsClearingData(true);
+    setClearDataNotice(null);
+
+    try {
+      await Promise.resolve(onClearAllLocalData());
+      setClearDataConfirming(false);
+      setClearDataNotice(privacyCopy.clearedNotice);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setClearDataNotice(`${privacyCopy.failedNotice}: ${message}`);
+    } finally {
+      setIsClearingData(false);
+    }
+  }
+
+  function renderPrivacySection(): ReactElement {
+    const dataItems = [
+      { label: privacyCopy.apiKeys, value: localDataSummary.apiKeyCount },
+      { label: privacyCopy.conversations, value: localDataSummary.conversationCount },
+      { label: privacyCopy.archivedConversations, value: localDataSummary.archivedThreadCount },
+      { label: privacyCopy.recentProjects, value: localDataSummary.recentProjectCount },
+      { label: privacyCopy.memories, value: localDataSummary.memoryCount },
+      { label: privacyCopy.usageEvents, value: localDataSummary.usageEventCount },
+      { label: privacyCopy.customProviders, value: localDataSummary.customProviderCount },
+      { label: privacyCopy.commandRules, value: localDataSummary.commandRuleCount }
+    ];
+
+    return (
+      <SectionFrame>
+        <div className="grid gap-5">
+          <div className="rounded-[16px] border border-[#ececf1] bg-white p-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#202123]" />
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[#202123]">{privacyCopy.title}</h2>
+                <p className="mt-1 text-xs leading-5 text-[#6e6e80]">{privacyCopy.description}</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {dataItems.map((item) => (
+                <div key={item.label} className="rounded-[12px] border border-[#ececf1] bg-[#f7f7f8] p-3">
+                  <div className="text-xs text-[#6e6e80]">{item.label}</div>
+                  <div className="mt-1 text-sm font-semibold text-[#202123]">
+                    {formatInteger(item.value)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[16px] border border-[#f1c6bf] bg-[#fffaf9] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[#8a1f11]">{privacyCopy.clearTitle}</h2>
+                <p className="mt-1 max-w-[720px] text-xs leading-5 text-[#6e6e80]">
+                  {privacyCopy.clearDescription}
+                </p>
+              </div>
+              <Trash2 className="h-5 w-5 shrink-0 text-[#8a1f11]" />
+            </div>
+
+            <div className="mt-4 grid gap-2 text-xs leading-5 text-[#565869] md:grid-cols-2">
+              {privacyCopy.clears.map((item) => (
+                <div key={item} className="rounded-[12px] border border-[#f3d8d3] bg-white px-3 py-2">
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <p className="mt-3 text-xs leading-5 text-[#6e6e80]">{privacyCopy.keepProjectFiles}</p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {clearDataConfirming ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={isClearingData}
+                    onClick={() => void confirmClearAllLocalData()}
+                    className="inline-flex h-9 items-center justify-center rounded-[12px] bg-[#8a1f11] px-3 text-sm font-medium text-white transition hover:bg-[#70180d] disabled:cursor-not-allowed disabled:bg-[#d9d9e3]"
+                  >
+                    {isClearingData ? privacyCopy.clearing : privacyCopy.confirmClear}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isClearingData}
+                    onClick={() => setClearDataConfirming(false)}
+                    className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] transition hover:bg-[#f7f7f8] disabled:cursor-not-allowed disabled:text-[#8e8ea0]"
+                  >
+                    {privacyCopy.cancel}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClearDataConfirming(true);
+                    setClearDataNotice(null);
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-[12px] border border-[#f1c6bf] bg-white px-3 text-sm font-medium text-[#8a1f11] transition hover:bg-[#fff3f0]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {privacyCopy.clearButton}
+                </button>
+              )}
+            </div>
+
+            {clearDataConfirming ? (
+              <p className="mt-3 text-xs leading-5 text-[#8a1f11]">{privacyCopy.confirmHint}</p>
+            ) : null}
+            {clearDataNotice ? (
+              <p className="mt-3 text-xs leading-5 text-[#565869]">{clearDataNotice}</p>
+            ) : null}
+          </div>
+        </div>
+      </SectionFrame>
+    );
   }
 
   // 渲染通用设置, 包含工作模式, 语言和命令安全规则
@@ -1936,6 +2084,10 @@ export function SettingsPanel({
       return t("settings.modelsAutoDescription");
     }
 
+    if (section === "privacy") {
+      return privacyCopy.pageDescription;
+    }
+
     if (section === "providers") {
       return t("settings.providerProfilesDescription");
     }
@@ -2438,6 +2590,106 @@ function getTokenBreakdownLabels(language: Language): {
         cacheRead: "Cache hit",
         cacheWrite: "Cache write"
       };
+}
+
+// 返回隐私与数据分区文案, 让清理范围和保留范围都能被用户确认
+function getPrivacySettingsCopy(language: Language): {
+  apiKeys: string;
+  archivedConversations: string;
+  cancel: string;
+  clearedNotice: string;
+  clearing: string;
+  clearButton: string;
+  clearDescription: string;
+  clearTitle: string;
+  clears: string[];
+  commandRules: string;
+  confirmClear: string;
+  confirmHint: string;
+  conversations: string;
+  customProviders: string;
+  description: string;
+  failedNotice: string;
+  keepProjectFiles: string;
+  memories: string;
+  menuDescription: string;
+  menuLabel: string;
+  pageDescription: string;
+  recentProjects: string;
+  title: string;
+  usageEvents: string;
+} {
+  if (language === "zh-CN") {
+    return {
+      apiKeys: "API Key",
+      archivedConversations: "已归档对话",
+      cancel: "取消",
+      clearedNotice: "已清理所有本地应用数据。默认配置会自动重建，项目文件没有被删除。",
+      clearing: "正在清理...",
+      clearButton: "清理所有本地数据",
+      clearDescription:
+        "清理后 Forge 会回到初始状态。这个操作无法撤销，请确认不再需要本机保存的配置和历史。",
+      clearTitle: "一键清理",
+      clears: [
+        "删除所有已保存 API Key",
+        "清空模型/API 配置、手动模型和价格记录",
+        "清空最近项目、对话、归档对话和执行状态",
+        "清空 Agent 记忆、智能体配置、命令规则和个性化设置",
+        "清空本地 token 用量统计与费用估算",
+        "清空界面偏好、背景图和临时会话缓存"
+      ],
+      commandRules: "命令规则",
+      confirmClear: "确认清理",
+      confirmHint: "再次点击“确认清理”会立即删除本机应用数据。",
+      conversations: "对话",
+      customProviders: "自定义 API 配置",
+      description: "这些数据只保存在本机。你可以随时查看规模，并一键回到干净状态。",
+      failedNotice: "清理失败",
+      keepProjectFiles: "不会删除任何本地项目文件、Git 仓库、工作区代码或系统凭据。",
+      memories: "Agent 记忆",
+      menuDescription: "清理本机数据",
+      menuLabel: "隐私与数据",
+      pageDescription: "查看本机保存的数据，并一键清理 API Key、历史和偏好",
+      recentProjects: "最近项目",
+      title: "本机数据概览",
+      usageEvents: "用量记录"
+    };
+  }
+
+  return {
+    apiKeys: "API keys",
+    archivedConversations: "Archived chats",
+    cancel: "Cancel",
+    clearedNotice: "All local app data was cleared. Default settings were rebuilt; project files were not deleted.",
+    clearing: "Clearing...",
+    clearButton: "Clear all local data",
+    clearDescription:
+      "Forge will return to a fresh state. This cannot be undone, so make sure you no longer need local settings or history.",
+    clearTitle: "One-click cleanup",
+    clears: [
+      "Delete every saved API key",
+      "Clear model/API profiles, manual models, and price records",
+      "Clear recent projects, chats, archived chats, and run state",
+      "Clear agent memories, agent profiles, command rules, and personalization",
+      "Clear local token usage and cost estimates",
+      "Clear interface preferences, wallpaper, and temporary session cache"
+    ],
+    commandRules: "Command rules",
+    confirmClear: "Confirm cleanup",
+    confirmHint: "Click Confirm cleanup again to delete local app data immediately.",
+    conversations: "Chats",
+    customProviders: "Custom API profiles",
+    description: "This data stays on this machine. Review the footprint and reset Forge at any time.",
+    failedNotice: "Cleanup failed",
+    keepProjectFiles: "This never deletes local project files, Git repositories, workspace code, or system credentials.",
+    memories: "Agent memories",
+    menuDescription: "Clean local data",
+    menuLabel: "Privacy and data",
+    pageDescription: "Review locally saved data and clear API keys, history, and preferences in one action",
+    recentProjects: "Recent projects",
+    title: "Local data overview",
+    usageEvents: "Usage records"
+  };
 }
 
 // 返回记忆设置文案, 后续扩展记忆类型时集中维护

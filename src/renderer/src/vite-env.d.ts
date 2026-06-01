@@ -48,6 +48,7 @@ declare global {
           providerId: string
         ) => Promise<{ hasKey: boolean; last4: string | null }>;
         deleteProviderKey: (providerId: string) => Promise<void>;
+        clearAllProviderKeys: () => Promise<void>;
       };
       models: {
         fetchProviderModels: (provider: ForgeProvider) => Promise<ForgeModel[]>;

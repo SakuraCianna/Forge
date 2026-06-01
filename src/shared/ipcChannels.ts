@@ -2,7 +2,8 @@
 export const keyVaultChannels = {
   save: "forge:provider-key:save",
   status: "forge:provider-key:status",
-  delete: "forge:provider-key:delete"
+  delete: "forge:provider-key:delete",
+  clearAll: "forge:provider-key:clear-all"
 } as const;
 
 export const providerModelChannels = {

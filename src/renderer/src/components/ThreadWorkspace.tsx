@@ -633,10 +633,10 @@ export function ThreadWorkspace({
     }
 
     return (
-      <section className="mx-auto flex min-h-10 w-full max-w-[680px] items-center gap-2 border-b border-[#ececf1] pb-2 text-sm text-[#565869]">
+      <section className="mx-auto flex min-h-10 w-full max-w-[880px] items-start gap-2 border-b border-[#ececf1] pb-2 text-sm text-[#565869]">
         <CheckCircle2 className="h-4 w-4 shrink-0 text-[#9a3412]" />
         <span className="shrink-0 font-medium text-[#8e8ea0]">{copy.currentApproval}</span>
-        <span className="min-w-0 flex-1 truncate font-medium text-[#202123]">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-medium leading-5 text-[#202123]">
           {getAgentConfirmationTitle(item, copy)}
         </span>
         <span className="hidden shrink-0 text-[12px] text-[#8e8ea0] sm:inline">
@@ -1228,7 +1228,7 @@ export function ThreadWorkspace({
       <section
         role="status"
         aria-live="polite"
-        className={`mx-auto flex w-full max-w-[680px] items-center gap-2 rounded-[12px] border px-3 py-2 text-[12px] ${
+        className={`mx-auto flex w-full max-w-[880px] items-start gap-2 rounded-[12px] border px-3 py-2 text-[12px] ${
           isRunning
             ? "border-[#dbeafe] bg-[#eff6ff] text-[#1d4ed8]"
             : "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
@@ -1241,7 +1241,9 @@ export function ThreadWorkspace({
           }`}
         />
         <span className="shrink-0 font-medium">{summary.label}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{summary.command}</span>
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-5">
+          {summary.command}
+        </span>
         {summary.meta ? <span className="shrink-0 opacity-80">{summary.meta}</span> : null}
       </section>
     );
@@ -1252,7 +1254,7 @@ export function ThreadWorkspace({
     const sourceCopy = language === "zh-CN" ? "来源" : "Sources";
 
     return (
-      <section className="mx-auto w-full max-w-[680px] border-b border-[#ececf1] pb-2">
+      <section className="mx-auto w-full max-w-[880px] border-b border-[#ececf1] pb-2">
         <button
           type="button"
           aria-label={language === "zh-CN" ? "查看已处理详情" : "View processed details"}
@@ -1288,7 +1290,7 @@ export function ThreadWorkspace({
           />
         </button>
         {!compactProcessedExpanded && summary.livePreview ? (
-          <p className="mt-1 max-w-full truncate text-[12px] leading-5 text-[#8e8ea0]">
+          <p className="mt-1 max-w-full whitespace-pre-wrap break-words text-[12px] leading-5 text-[#8e8ea0]">
             {summary.livePreview}
           </p>
         ) : null}
@@ -1357,9 +1359,11 @@ export function ThreadWorkspace({
             <div key={item.id} className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
               <span className="text-[#8e8ea0]">{formatEventTimestamp(item.createdAt)}</span>
               <div className="min-w-0">
-                <div className="truncate font-medium text-[#565869]">{item.label}</div>
+                <div className="whitespace-pre-wrap break-words font-medium leading-5 text-[#565869]">
+                  {item.label}
+                </div>
                 <p
-                  className={`mt-0.5 truncate ${
+                  className={`mt-0.5 whitespace-pre-wrap break-words leading-5 ${
                     item.kind === "command" ? "font-mono text-[11px]" : ""
                   }`}
                 >

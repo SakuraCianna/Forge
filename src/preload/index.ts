@@ -63,7 +63,8 @@ contextBridge.exposeInMainWorld("forge", {
       ipcRenderer.invoke(keyVaultChannels.save, providerId, apiKey),
     getProviderKeyStatus: (providerId: string) =>
       ipcRenderer.invoke(keyVaultChannels.status, providerId),
-    deleteProviderKey: (providerId: string) => ipcRenderer.invoke(keyVaultChannels.delete, providerId)
+    deleteProviderKey: (providerId: string) => ipcRenderer.invoke(keyVaultChannels.delete, providerId),
+    clearAllProviderKeys: () => ipcRenderer.invoke(keyVaultChannels.clearAll)
   },
   models: {
     fetchProviderModels: (provider: ForgeProvider) =>
