@@ -43,6 +43,10 @@ import {
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
 import {
+  collectInvalidTargetRecoveryCandidates,
+  formatInvalidTargetRecoveryMessage
+} from "@/agent/invalidTargetRecovery";
+import {
   formatGitStatus,
   formatProjectDirectoryListResultMessage,
   formatProjectFileReadResultMessage,
@@ -2813,10 +2817,11 @@ export function App(): ReactElement {
     reason: string
   ): AgentAction["status"] {
     const createdAt = new Date().toISOString();
-    const message =
-      settings.language === "zh-CN"
-        ? `Agent 动作目标不是可执行的项目相对路径，已停止以避免误改文件。${reason}`
-        : `Agent action target is not an executable project-relative path, so Forge stopped before touching files. ${reason}`;
+    const candidates = collectInvalidTargetRecoveryCandidates(
+      [action.label, action.target, reason].filter(Boolean).join("\n"),
+      projectScanResult?.files ?? []
+    );
+    const message = formatInvalidTargetRecoveryMessage(settings.language, reason, candidates);
 
     updateAgentActionStatus(threadId, action.id, "failed");
     setTaskNotice(message);
