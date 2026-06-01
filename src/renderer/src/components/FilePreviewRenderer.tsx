@@ -1,4 +1,9 @@
-// 本文件说明: 渲染代码和 Markdown 文件预览, 支持轻量语法高亮
+// 本文件说明: 渲染代码和 Markdown 文件预览, 代码块使用 Shiki 语法高亮
+import { useEffect, useState } from "react";
+import { createHighlighterCore } from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import lightPlusTheme from "shiki/themes/light-plus.mjs";
+import type { HighlighterCore, LanguageInput } from "shiki/core";
 import type { ReactElement, ReactNode } from "react";
 import type { CodeFormatterMode } from "@/state/codeFormatting";
 
@@ -17,8 +22,45 @@ type MarkdownBlock =
   | { kind: "code"; language: string; content: string }
   | { kind: "rule" };
 
-const keywordPattern =
-  /^(?:abstract|async|await|break|case|catch|class|const|continue|default|do|else|enum|export|extends|finally|for|from|function|if|import|in|interface|let|new|of|return|switch|throw|try|type|var|while|with|yield)$/;
+type ShikiPreviewLanguage =
+  | "bash"
+  | "bat"
+  | "cmd"
+  | "css"
+  | "diff"
+  | "dockerfile"
+  | "dotenv"
+  | "git-commit"
+  | "html"
+  | "javascript"
+  | "json"
+  | "jsonc"
+  | "jsx"
+  | "less"
+  | "make"
+  | "markdown"
+  | "mdx"
+  | "powershell"
+  | "python"
+  | "scss"
+  | "sql"
+  | "text"
+  | "tsx"
+  | "typescript"
+  | "yaml";
+
+type LoadableShikiLanguage = Exclude<ShikiPreviewLanguage, "text">;
+
+type CodeHighlightState =
+  | { kind: "fallback" }
+  | { kind: "loading" }
+  | { html: string; kind: "ready" };
+
+const codePreviewTheme = "light-plus";
+const loadedShikiLanguages = new Set<ShikiPreviewLanguage>(["text"]);
+const shikiLanguageLoadPromises = new Map<LoadableShikiLanguage, Promise<void>>();
+
+let shikiHighlighterPromise: Promise<HighlighterCore> | null = null;
 
 // 根据预览模式选择 Markdown 渲染或代码渲染
 export function FilePreviewRenderer({
@@ -165,7 +207,7 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number): ReactElement 
   );
 }
 
-// 渲染代码块并按行做轻量高亮
+// 渲染代码块, 异步切换到 Shiki 生成的编辑器风格高亮 HTML
 function CodePreview({
   compact = false,
   content,
@@ -175,78 +217,194 @@ function CodePreview({
   content: string;
   path: string;
 }): ReactElement {
-  const lines = content.split("\n");
+  const [highlightState, setHighlightState] = useState<CodeHighlightState>({ kind: "loading" });
+  const containerClassName = `min-h-0 overflow-auto rounded-[14px] border border-[#ececf1] bg-white font-mono text-[12px] leading-6 text-[#202123] ${
+    compact ? "p-3" : "p-4"
+  }`;
+
+  useEffect(() => {
+    let didCancel = false;
+
+    setHighlightState({ kind: "loading" });
+    void renderCodeWithShiki(content, path)
+      .then((html) => {
+        if (!didCancel) {
+          setHighlightState({ html, kind: "ready" });
+        }
+      })
+      .catch(() => {
+        if (!didCancel) {
+          setHighlightState({ kind: "fallback" });
+        }
+      });
+
+    return () => {
+      didCancel = true;
+    };
+  }, [content, path]);
+
+  if (highlightState.kind === "ready") {
+    return (
+      <div
+        className={`${containerClassName} shiki-code-preview [&_code]:block [&_code]:font-mono [&_code]:text-[12px] [&_code]:leading-6 [&_pre]:m-0 [&_pre]:min-w-max [&_pre]:!bg-transparent [&_pre]:p-0`}
+        dangerouslySetInnerHTML={{ __html: highlightState.html }}
+      />
+    );
+  }
 
   return (
     <pre
-      className={`min-h-0 overflow-auto whitespace-pre rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] font-mono text-[12px] leading-6 text-[#202123] ${
-        compact ? "p-3" : "p-4"
-      }`}
+      aria-busy={highlightState.kind === "loading"}
+      className={`${containerClassName} whitespace-pre`}
     >
-      <code>
-        {lines.map((line, index) => (
-          <span key={`${path}-${index}`} className="block min-h-6">
-            {highlightCodeLine(line)}
-          </span>
-        ))}
-      </code>
+      <code>{content}</code>
     </pre>
   );
 }
 
-// 将一行代码拆成 token, 保持高亮简单且可控
-function highlightCodeLine(line: string): ReactNode[] {
-  const tokens: ReactNode[] = [];
-  const tokenPattern =
-    /(\/\/.*$|\/\*.*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b[A-Za-z_$][\w$]*\b|\b\d+(?:\.\d+)?\b|[{}()[\].,:;])/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
+// 使用 Shiki 统一渲染代码块, 避免维护自定义正则 token 高亮
+async function renderCodeWithShiki(content: string, path: string): Promise<string> {
+  const language = getCodePreviewLanguage(path);
+  const highlighter = await getShikiHighlighter();
 
-  while ((match = tokenPattern.exec(line)) !== null) {
-    if (match.index > cursor) {
-      tokens.push(line.slice(cursor, match.index));
-    }
+  await loadShikiLanguage(highlighter, language);
 
-    const token = match[0];
-    tokens.push(
-      <span key={`${match.index}-${token}`} className={getCodeTokenClassName(token)}>
-        {token}
-      </span>
-    );
-    cursor = match.index + token.length;
-  }
-
-  if (cursor < line.length) {
-    tokens.push(line.slice(cursor));
-  }
-
-  return tokens.length > 0 ? tokens : [line];
+  return highlighter.codeToHtml(content, {
+    lang: language,
+    theme: codePreviewTheme
+  });
 }
 
-// 根据 token 类型返回高亮 className
-function getCodeTokenClassName(token: string): string {
-  if (token.startsWith("//") || token.startsWith("/*")) {
-    return "text-[#6e6e80]";
+function getShikiHighlighter(): Promise<HighlighterCore> {
+  if (!shikiHighlighterPromise) {
+    shikiHighlighterPromise = createHighlighterCore({
+      engine: createJavaScriptRegexEngine(),
+      langs: [],
+      themes: [lightPlusTheme]
+    });
   }
 
-  if (/^["'`]/.test(token)) {
-    return "text-[#047857]";
-  }
-
-  if (/^\d/.test(token) || token === "true" || token === "false" || token === "null") {
-    return "text-[#b45309]";
-  }
-
-  if (keywordPattern.test(token)) {
-    return "text-[#8b5cf6]";
-  }
-
-  if (/^[{}()[\].,:;]$/.test(token)) {
-    return "text-[#6e6e80]";
-  }
-
-  return "text-[#202123]";
+  return shikiHighlighterPromise;
 }
+
+async function loadShikiLanguage(
+  highlighter: HighlighterCore,
+  language: ShikiPreviewLanguage
+): Promise<void> {
+  if (language === "text" || loadedShikiLanguages.has(language)) {
+    return;
+  }
+
+  const loadableLanguage: LoadableShikiLanguage = language;
+  const languageLoader = shikiLanguageRegistry[loadableLanguage];
+
+  if (!languageLoader) {
+    loadedShikiLanguages.add(loadableLanguage);
+    return;
+  }
+
+  const existingLoader = shikiLanguageLoadPromises.get(loadableLanguage);
+
+  if (existingLoader) {
+    await existingLoader;
+    return;
+  }
+
+  const loader = languageLoader()
+    .then((languageRegistration: LanguageInput) => highlighter.loadLanguage(languageRegistration))
+    .then(() => {
+      loadedShikiLanguages.add(loadableLanguage);
+    })
+    .finally(() => {
+      shikiLanguageLoadPromises.delete(loadableLanguage);
+    });
+
+  shikiLanguageLoadPromises.set(loadableLanguage, loader);
+  await loader;
+}
+
+function getCodePreviewLanguage(path: string): ShikiPreviewLanguage {
+  const normalizedPath = path.replace(/\\/g, "/").toLowerCase();
+  const fileName = normalizedPath.split("/").pop() ?? "";
+
+  if (fileName === "dockerfile") {
+    return "dockerfile";
+  }
+
+  if (fileName === "makefile") {
+    return "make";
+  }
+
+  if (fileName.endsWith(".config.ts") || fileName.endsWith(".config.mts")) {
+    return "typescript";
+  }
+
+  if (fileName.endsWith(".config.js") || fileName.endsWith(".config.mjs")) {
+    return "javascript";
+  }
+
+  const extension = fileName.match(/\.([^.]+)$/u)?.[1] ?? fileName;
+
+  return shikiLanguageByExtension[extension] ?? "text";
+}
+
+const shikiLanguageByExtension: Partial<Record<string, ShikiPreviewLanguage>> = {
+  bat: "bat",
+  cjs: "javascript",
+  cmd: "cmd",
+  css: "css",
+  diff: "diff",
+  env: "dotenv",
+  gitignore: "git-commit",
+  htm: "html",
+  html: "html",
+  js: "javascript",
+  json: "json",
+  jsonc: "jsonc",
+  jsx: "jsx",
+  less: "less",
+  md: "markdown",
+  mdx: "mdx",
+  mjs: "javascript",
+  mts: "typescript",
+  ps1: "powershell",
+  py: "python",
+  scss: "scss",
+  sh: "bash",
+  sql: "sql",
+  ts: "typescript",
+  tsx: "tsx",
+  txt: "text",
+  yaml: "yaml",
+  yml: "yaml"
+};
+
+const shikiLanguageRegistry: Partial<Record<LoadableShikiLanguage, () => Promise<LanguageInput>>> = {
+  bash: () => import("shiki/langs/bash.mjs").then((module) => module.default),
+  bat: () => import("shiki/langs/bat.mjs").then((module) => module.default),
+  cmd: () => import("shiki/langs/cmd.mjs").then((module) => module.default),
+  css: () => import("shiki/langs/css.mjs").then((module) => module.default),
+  diff: () => import("shiki/langs/diff.mjs").then((module) => module.default),
+  dockerfile: () => import("shiki/langs/dockerfile.mjs").then((module) => module.default),
+  dotenv: () => import("shiki/langs/dotenv.mjs").then((module) => module.default),
+  "git-commit": () => import("shiki/langs/git-commit.mjs").then((module) => module.default),
+  html: () => import("shiki/langs/html.mjs").then((module) => module.default),
+  javascript: () => import("shiki/langs/javascript.mjs").then((module) => module.default),
+  json: () => import("shiki/langs/json.mjs").then((module) => module.default),
+  jsonc: () => import("shiki/langs/jsonc.mjs").then((module) => module.default),
+  jsx: () => import("shiki/langs/jsx.mjs").then((module) => module.default),
+  less: () => import("shiki/langs/less.mjs").then((module) => module.default),
+  make: () => import("shiki/langs/make.mjs").then((module) => module.default),
+  markdown: () => import("shiki/langs/markdown.mjs").then((module) => module.default),
+  mdx: () => import("shiki/langs/mdx.mjs").then((module) => module.default),
+  powershell: () => import("shiki/langs/powershell.mjs").then((module) => module.default),
+  python: () => import("shiki/langs/python.mjs").then((module) => module.default),
+  scss: () => import("shiki/langs/scss.mjs").then((module) => module.default),
+  sql: () => import("shiki/langs/sql.mjs").then((module) => module.default),
+  tsx: () => import("shiki/langs/tsx.mjs").then((module) => module.default),
+  typescript: () => import("shiki/langs/typescript.mjs").then((module) => module.default),
+  yaml: () => import("shiki/langs/yaml.mjs").then((module) => module.default)
+};
 
 // 用轻量解析器拆分 Markdown 块, 避免引入重型运行时依赖
 function parseMarkdownBlocks(content: string): MarkdownBlock[] {
