@@ -23,6 +23,7 @@ import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
 import {
+  deleteProjectFile,
   globProjectFiles,
   listProjectDirectory,
   previewProjectFile,
@@ -207,6 +208,7 @@ void app.whenReady().then(() => {
     (request) => previewProjectFile(request),
     (request) => previewProjectTextFileUpdate(request),
     (request) => writeProjectTextFile(request),
+    (request) => deleteProjectFile(request),
     (request) => listProjectDirectory(request),
     (request) => globProjectFiles(request),
     (request) => searchProjectTextFiles(request),

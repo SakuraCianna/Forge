@@ -6,6 +6,7 @@ import type {
   ProviderKind,
   SpeedMode
 } from "./modelTypes.js";
+import type { AgentImageAttachment } from "./agentTypes.js";
 import { assertHeaderValue, normalizeApiKeyForHeader } from "./providerModels.js";
 import type { TokenUsage } from "./usageTypes.js";
 import { formatMissingBaseUrl } from "./userFacingErrors.js";
@@ -16,6 +17,7 @@ type TextGenerationRequestOptions = {
   apiKey: string;
   instructions: string;
   input: string;
+  attachments?: AgentImageAttachment[];
   intelligence: IntelligenceLevel;
   speed?: SpeedMode;
 };
@@ -47,6 +49,41 @@ const thinkingBudgetByLevel: Record<IntelligenceLevel, number> = {
 
 const defaultOutputTokenLimit = 8192;
 
+type NormalizedImageAttachment = {
+  mediaType: string;
+  data: string;
+  dataUrl: string;
+};
+
+function normalizeImageAttachments(
+  model: ForgeModel,
+  attachments: AgentImageAttachment[] | undefined
+): NormalizedImageAttachment[] {
+  if (model.capabilities.vision !== true || !attachments?.length) {
+    return [];
+  }
+
+  return attachments
+    .flatMap((attachment): NormalizedImageAttachment[] => {
+      const match = /^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/iu.exec(attachment.dataUrl);
+      const mediaType = match?.[1] ?? attachment.mediaType;
+      const data = match?.[2] ?? "";
+
+      if (!data || !/^image\//iu.test(mediaType)) {
+        return [];
+      }
+
+      return [
+        {
+          mediaType,
+          data,
+          dataUrl: attachment.dataUrl
+        }
+      ];
+    })
+    .slice(0, 6);
+}
+
 // 根据供应商 kind 选择请求构造器, 调用方不用关心 API 差异
 export function buildTextGenerationRequest({
   provider,
@@ -54,6 +91,7 @@ export function buildTextGenerationRequest({
   apiKey,
   instructions,
   input,
+  attachments,
   intelligence,
   speed = "balanced"
 }: TextGenerationRequestOptions): BuiltTextGenerationRequest {
@@ -71,6 +109,7 @@ export function buildTextGenerationRequest({
       apiKey,
       instructions,
       input,
+      attachments,
       intelligence,
       speed,
       requestHeaders: provider.requestHeaders,
@@ -88,6 +127,7 @@ export function buildTextGenerationRequest({
       apiKey,
       instructions,
       input,
+      attachments,
       intelligence,
       speed,
       requestHeaders: provider.requestHeaders
@@ -102,6 +142,7 @@ export function buildTextGenerationRequest({
       apiKey,
       instructions,
       input,
+      attachments,
       intelligence,
       speed
     });
@@ -114,6 +155,7 @@ export function buildTextGenerationRequest({
     apiKey,
     instructions,
     input,
+    attachments,
     intelligence,
     speed,
     requestHeaders: provider.requestHeaders,
@@ -172,16 +214,29 @@ function buildOpenAIRequest({
   apiKey,
   instructions,
   input,
+  attachments,
   intelligence,
   speed,
   requestHeaders,
   requiresApiKey,
   authHeader
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
+  const images = normalizeImageAttachments(model, attachments);
   const body: Record<string, unknown> = {
     model: model.modelName,
     instructions,
-    input,
+    input:
+      images.length > 0
+        ? [
+            {
+              role: "user",
+              content: [
+                { type: "input_text", text: input },
+                ...images.map((image) => ({ type: "input_image", image_url: image.dataUrl }))
+              ]
+            }
+          ]
+        : input,
     max_output_tokens: defaultOutputTokenLimit,
     store: false
   };
@@ -207,14 +262,34 @@ function buildAnthropicRequest({
   apiKey,
   instructions,
   input,
+  attachments,
   intelligence,
   speed,
   requestHeaders
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
+  const images = normalizeImageAttachments(model, attachments);
   const body: Record<string, unknown> = {
     model: model.modelName,
     system: instructions,
-    messages: [{ role: "user", content: input }],
+    messages: [
+      {
+        role: "user",
+        content:
+          images.length > 0
+            ? [
+                { type: "text", text: input },
+                ...images.map((image) => ({
+                  type: "image",
+                  source: {
+                    type: "base64",
+                    media_type: image.mediaType,
+                    data: image.data
+                  }
+                }))
+              ]
+            : input
+      }
+    ],
     max_tokens: defaultOutputTokenLimit
   };
 
@@ -257,11 +332,26 @@ function buildGeminiRequest({
   apiKey,
   instructions,
   input,
+  attachments,
   intelligence
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
+  const images = normalizeImageAttachments(model, attachments);
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: instructions }] },
-    contents: [{ role: "user", parts: [{ text: input }] }],
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: input },
+          ...images.map((image) => ({
+            inlineData: {
+              mimeType: image.mediaType,
+              data: image.data
+            }
+          }))
+        ]
+      }
+    ],
     generationConfig: {
       maxOutputTokens: defaultOutputTokenLimit
     }
@@ -295,6 +385,7 @@ function buildOpenAICompatibleRequest({
   apiKey,
   instructions,
   input,
+  attachments,
   intelligence,
   speed,
   requestHeaders,
@@ -303,11 +394,24 @@ function buildOpenAICompatibleRequest({
   providerId,
   reasoningStyle
 }: ProviderTextGenerationRequestOptions): BuiltTextGenerationRequest {
+  const images = normalizeImageAttachments(model, attachments);
   const body: Record<string, unknown> = {
     model: model.modelName,
     messages: [
       { role: "system", content: instructions },
-      { role: "user", content: input }
+      {
+        role: "user",
+        content:
+          images.length > 0
+            ? [
+                { type: "text", text: input },
+                ...images.map((image) => ({
+                  type: "image_url",
+                  image_url: { url: image.dataUrl }
+                }))
+              ]
+            : input
+      }
     ],
     max_tokens: defaultOutputTokenLimit,
     stream: false

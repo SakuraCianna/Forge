@@ -28,6 +28,14 @@ export type AgentProfileContext = {
 export type AgentWorkMode = "code" | "daily";
 export type AgentRuntime = "windows-native" | "wsl";
 
+export type AgentImageAttachment = {
+  id: string;
+  mediaType: string;
+  dataUrl: string;
+  name?: string;
+  size?: number;
+};
+
 export type GenerateAgentPlanRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
@@ -40,6 +48,7 @@ export type GenerateAgentPlanRequest = {
   agentRuntime?: AgentRuntime;
   taskPrompt: string;
   projectScan: ProjectScanResult;
+  attachments?: AgentImageAttachment[];
 };
 
 export type GenerateAgentFileChangeRequest = {
@@ -56,6 +65,7 @@ export type GenerateAgentFileChangeRequest = {
   taskPrompt: string;
   relativePath: string;
   currentContent: string;
+  attachments?: AgentImageAttachment[];
 };
 
 export type GenerateAgentAskRequest = {
@@ -71,6 +81,7 @@ export type GenerateAgentAskRequest = {
   workMode?: AgentWorkMode;
   agentRuntime?: AgentRuntime;
   prompt: string;
+  attachments?: AgentImageAttachment[];
 };
 
 export type AgentPlanStepKind = "inspect" | "edit" | "verify" | "commit" | "other";

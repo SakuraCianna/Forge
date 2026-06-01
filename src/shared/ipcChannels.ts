@@ -48,7 +48,8 @@ export const fileChannels = {
   globFiles: "forge:file:glob-files",
   searchText: "forge:file:search-text",
   previewTextUpdate: "forge:file:preview-text-update",
-  writeText: "forge:file:write-text"
+  writeText: "forge:file:write-text",
+  deleteFile: "forge:file:delete-file"
 } as const;
 
 export const windowChannels = {

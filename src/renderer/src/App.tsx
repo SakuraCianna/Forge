@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, File as FileIcon, Folder } from "lucide-react";
 import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
-import type { AgentProfileContext } from "@shared/agentTypes";
+import type { AgentImageAttachment, AgentProfileContext } from "@shared/agentTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectFile, ProjectScanResult } from "@shared/projectTypes";
@@ -40,6 +40,10 @@ import {
   getFailureRecoverySuggestionEventPrefix,
   shouldSuggestFailureRecovery
 } from "@/agent/failureRecoveryPolicy";
+import {
+  createAgentCompletionSummaryMessage,
+  getAgentCompletionWorkStartedAt
+} from "@/agent/agentCompletionSummary";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
 import {
@@ -1369,7 +1373,13 @@ export function App(): ReactElement {
           id: `${eventThreadId}-file-write-${createdAt}`,
           kind: "file",
           message: `已应用文件修改: ${file.relativePath}`,
-          createdAt
+          createdAt,
+          fileChange: pendingPreview
+            ? {
+                relativePath: pendingPreview.relativePath,
+                changeKind: pendingPreview.changeKind
+              }
+            : undefined
         }
       ]);
 
@@ -1418,6 +1428,65 @@ export function App(): ReactElement {
   }
 
   // 按顺序应用全部变更, 任一失败都停下并提示用户
+  // 删除项目内文件并记录结构化 delete 事件, 让最终总结区分真实删除和空写入
+  async function deleteProjectFile(relativePath: string): Promise<void> {
+    if (!currentProject) {
+      return;
+    }
+
+    const confirmed =
+      typeof window === "undefined" ||
+      window.confirm(
+        settings.language === "zh-CN"
+          ? `确认删除 ${relativePath}？此操作会修改项目文件。`
+          : `Delete ${relativePath}? This will modify project files.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const result = await window.forge.files.delete({
+        projectRoot: currentProject.path,
+        relativePath
+      });
+      const nextScan = await window.forge.projects.scan(currentProject.path);
+      const createdAt = new Date().toISOString();
+
+      setProjectScanResult(nextScan);
+      setPreviewFile((current) => (current?.relativePath === result.relativePath ? null : current));
+      setFilePreview((current) => (current?.relativePath === result.relativePath ? null : current));
+      setFormattedPreview(null);
+      setChangePreviews((current) => removeFileChangePreview(current, result.relativePath));
+      void refreshProjectGitStatus();
+
+      if (!selectedThreadId) {
+        return;
+      }
+
+      setThreads((current) =>
+        appendThreadEvents(current, selectedThreadId, [
+          {
+            id: `${selectedThreadId}-file-delete-${createdAt}`,
+            kind: "file",
+            message:
+              settings.language === "zh-CN"
+                ? `已删除文件: ${result.relativePath}`
+                : `Deleted file: ${result.relativePath}`,
+            createdAt,
+            fileChange: {
+              relativePath: result.relativePath,
+              changeKind: "delete"
+            }
+          }
+        ])
+      );
+    } catch (error) {
+      setTaskNotice(formatRuntimeError(settings.language, error));
+    }
+  }
+
   async function applyAllProjectFileChanges(): Promise<void> {
     if (!currentProject || changePreviews.length === 0) {
       return;
@@ -1462,7 +1531,11 @@ export function App(): ReactElement {
               settings.language === "zh-CN"
                 ? `已应用文件修改: ${preview.relativePath}`
                 : `Applied file change: ${preview.relativePath}`,
-            createdAt
+            createdAt,
+            fileChange: {
+              relativePath: preview.relativePath,
+              changeKind: preview.changeKind
+            }
           }
         ]);
 
@@ -1634,7 +1707,11 @@ export function App(): ReactElement {
               id: `${selectedThread.id}-agent-file-applied-${result.createdAt}`,
               kind: "file",
               message: `已自动应用文件修改: ${writtenFile.relativePath}`,
-              createdAt: result.createdAt
+              createdAt: result.createdAt,
+              fileChange: {
+                relativePath: sourcedPreview.relativePath,
+                changeKind: sourcedPreview.changeKind
+              }
             }
           ])
         );
@@ -1679,14 +1756,19 @@ export function App(): ReactElement {
   }
 
   // 创建或续写会话, 普通问答和项目任务统一进入同一线程
-  function submitTask(prompt: string): void {
+  function submitTask(prompt: string, attachments?: AgentImageAttachment[]): void {
     const activeThread = selectedThreadId
       ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
       : null;
+    const submittedAttachments = resolveVisionAttachments(
+      settings.models.find((model) => model.id === settings.currentModelId) ?? null,
+      attachments
+    );
 
     if (isDirectAnswerPrompt(prompt)) {
       const result = createThreadFromSettings(settings, prompt, {
-        agentProfile: activeAgentProfileContext
+        agentProfile: activeAgentProfileContext,
+        attachments: submittedAttachments
       });
 
       if (!result.ok) {
@@ -1732,6 +1814,7 @@ export function App(): ReactElement {
           prompt,
           model: selectedModel,
           provider: selectedProvider,
+          attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
           projectScan: getProjectScanForThread(activeThread),
           conversation: createThreadConversation(activeThread)
         });
@@ -1765,6 +1848,7 @@ export function App(): ReactElement {
         prompt: result.thread.prompt,
         model: selectedModel,
         provider: selectedProvider,
+        attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
         projectScan: currentProject ? projectScanResult : null
       });
       return;
@@ -1786,7 +1870,8 @@ export function App(): ReactElement {
         : null;
 
     const result = createThreadFromSettings(settings, prompt, {
-      agentProfile: activeAgentProfileContext
+      agentProfile: activeAgentProfileContext,
+      attachments: submittedAttachments
     });
 
     if (!result.ok) {
@@ -1823,6 +1908,7 @@ export function App(): ReactElement {
         taskPrompt: prompt,
         model: selectedModel,
         provider: selectedProvider,
+        attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
         projectScan: projectScanResult
       });
       return;
@@ -1854,6 +1940,7 @@ export function App(): ReactElement {
       taskPrompt: projectThread.prompt,
       model: selectedModel,
       provider: selectedProvider,
+      attachments: resolveVisionAttachments(selectedModel, projectThread.attachments),
       projectScan: projectScanResult
     });
   }
@@ -1864,12 +1951,14 @@ export function App(): ReactElement {
     taskPrompt,
     model,
     provider,
+    attachments,
     projectScan
   }: {
     threadId: string;
     taskPrompt: string;
     model: ForgeModel;
     provider: ForgeProvider;
+    attachments?: AgentImageAttachment[];
     projectScan: ProjectScanResult;
   }): Promise<void> {
     const streamStartedAt = new Date().toISOString();
@@ -1889,6 +1978,7 @@ export function App(): ReactElement {
         workMode: generalPreferences.workMode,
         agentRuntime: generalPreferences.agentRuntime,
         taskPrompt,
+        attachments: resolveVisionAttachments(model, attachments),
         projectScan
       };
       let receivedDelta = false;
@@ -2104,6 +2194,7 @@ export function App(): ReactElement {
       ),
       model,
       provider,
+      attachments: resolveVisionAttachments(model, thread.attachments),
       projectScan: projectScanResult
     });
   }
@@ -2186,6 +2277,7 @@ export function App(): ReactElement {
       taskPrompt: createContinuationPlanTaskPrompt(thread),
       model,
       provider,
+      attachments: resolveVisionAttachments(model, thread.attachments),
       projectScan: projectScanResult
     });
   }
@@ -2236,6 +2328,7 @@ export function App(): ReactElement {
     prompt,
     model,
     provider,
+    attachments,
     projectScan,
     conversation
   }: {
@@ -2243,6 +2336,7 @@ export function App(): ReactElement {
     prompt: string;
     model: ForgeModel;
     provider: ForgeProvider;
+    attachments?: AgentImageAttachment[];
     projectScan?: ProjectScanResult | null;
     conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   }): Promise<void> {
@@ -2259,7 +2353,8 @@ export function App(): ReactElement {
       speed: settings.speed,
       workMode: generalPreferences.workMode,
       agentRuntime: generalPreferences.agentRuntime,
-      prompt
+      prompt,
+      attachments: resolveVisionAttachments(model, attachments)
     };
     const streamStartedAt = new Date().toISOString();
     const streamEventId = `${threadId}-ask-stream-${Date.now()}`;
@@ -2821,21 +2916,17 @@ export function App(): ReactElement {
           return thread;
         }
 
-        const completed = actions.filter((action) => action.status === "completed").length;
-        const skipped = actions.filter((action) => action.status === "skipped").length;
-        const baseMessage =
-          settings.language === "zh-CN"
-            ? `已完成本次操作：完成 ${completed} 个步骤${
-                skipped > 0 ? `, 跳过 ${skipped} 个步骤` : ""
-              }。具体执行记录已折叠在“已处理”里。`
-            : `Done: completed ${completed} step${completed === 1 ? "" : "s"}${
-                skipped > 0 ? `, skipped ${skipped}` : ""
-              }. Detailed activity is folded into Processed.`;
+        const baseMessage = createAgentCompletionSummaryMessage(
+          thread,
+          settings.language,
+          createdAt
+        );
         const message = appendSourceUrlsToAgentSummary(
           baseMessage,
           extractSourceUrlsFromThreadEvents(thread.events),
           settings.language
         );
+        const workStartedAt = getAgentCompletionWorkStartedAt(thread);
 
         return {
           ...thread,
@@ -2846,7 +2937,7 @@ export function App(): ReactElement {
               id: `${threadId}-agent-summary-${createdAt}`,
               kind: "result" as const,
               message,
-              createdAt,
+              createdAt: workStartedAt,
               completedAt: createdAt
             }
           ]
@@ -3582,6 +3673,7 @@ export function App(): ReactElement {
           onGenerateSelectedFileChanges={(relativePaths) =>
             void generateSelectedProjectFileChanges(relativePaths)
           }
+          onDeleteFile={(relativePath) => void deleteProjectFile(relativePath)}
         />
       </Suspense>
     );
@@ -4188,6 +4280,17 @@ function createThreadConversation(
 }
 
 // 找到当前线程中等待用户处理的提交门禁动作
+function resolveVisionAttachments(
+  model: ForgeModel | null,
+  attachments: AgentImageAttachment[] | undefined
+): AgentImageAttachment[] | undefined {
+  if (model?.capabilities.vision !== true || !attachments?.length) {
+    return undefined;
+  }
+
+  return attachments;
+}
+
 function findPendingAgentCommitAction(thread: TaskThread | null): AgentAction | null {
   return thread?.agentActions?.find((action) => action.kind === "commit" && action.status === "pending") ?? null;
 }

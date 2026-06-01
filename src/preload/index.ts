@@ -25,6 +25,7 @@ import type { CommandOutputChunk } from "../shared/commandTypes.js";
 import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
+  ProjectFileDeleteResult,
   ProjectFileGlobResult,
   ProjectFilePreview,
   ProjectTextFile,
@@ -184,6 +185,11 @@ contextBridge.exposeInMainWorld("forge", {
       relativePath: string;
       nextContent: string;
       maxBytes?: number;
-    }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.writeText, request)
+    }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.writeText, request),
+    delete: (request: {
+      projectRoot: string;
+      relativePath: string;
+      maxBytes?: number;
+    }): Promise<ProjectFileDeleteResult> => ipcRenderer.invoke(fileChannels.deleteFile, request)
   }
 });

@@ -1,6 +1,6 @@
 // 本文件说明: 在项目根目录内安全读取, 预览和写入文本文件
 import type { Dirent, Stats } from "node:fs";
-import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import type {
   ProjectDirectoryEntry,
@@ -9,6 +9,7 @@ import type {
   ProjectFileGlobMatch,
   ProjectFileGlobRequest,
   ProjectFileGlobResult,
+  ProjectFileDeleteResult,
   ProjectFilePreview,
   ProjectFileChangePreview,
   ProjectTextFile,
@@ -27,6 +28,10 @@ type ReadProjectTextFileOptions = {
   projectRoot: string;
   relativePath: string;
   maxBytes?: number;
+};
+
+type ProjectTextFileSnapshot = ProjectTextFile & {
+  exists: boolean;
 };
 
 const maxSearchPreviewChars = 240;
@@ -154,7 +159,8 @@ export async function previewProjectTextFileUpdate({
     relativePath: currentFile.relativePath,
     currentContent: currentFile.content,
     nextContent,
-    diff: createLineDiff(currentFile.content, nextContent)
+    diff: createLineDiff(currentFile.content, nextContent),
+    changeKind: classifyProjectTextFileChange(currentFile, nextContent)
   };
 }
 
@@ -420,17 +426,58 @@ export async function writeProjectTextFile({
 }
 
 // 新文件预览使用空内容作为旧版本, 让 Agent 可以先生成再审查
+// 安全删除项目内的单个普通文件, 让删除也能进入文件变更统计和最终总结
+export async function deleteProjectFile({
+  projectRoot,
+  relativePath
+}: Pick<ReadProjectTextFileOptions, "projectRoot" | "relativePath">): Promise<ProjectFileDeleteResult> {
+  const resolvedProjectRoot = await realpath(projectRoot);
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+
+  assertProjectPathNotSensitive(normalizedRelativePath);
+
+  const absoluteFilePath = resolve(resolvedProjectRoot, normalizedRelativePath);
+
+  if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
+    throw new Error("File path must stay inside the selected project");
+  }
+
+  const resolvedFilePath = await realpath(absoluteFilePath);
+
+  if (!isPathInside(resolvedFilePath, resolvedProjectRoot)) {
+    throw new Error("File path must stay inside the selected project");
+  }
+
+  const fileStat = await lstat(absoluteFilePath);
+
+  if (!fileStat.isFile()) {
+    throw new Error("File path must point to a file");
+  }
+
+  await unlink(absoluteFilePath);
+
+  return {
+    relativePath: normalizedRelativePath,
+    size: fileStat.size
+  };
+}
+
 async function readProjectTextFileOrEmpty({
   projectRoot,
   relativePath,
   maxBytes
-}: ReadProjectTextFileOptions): Promise<ProjectTextFile> {
+}: ReadProjectTextFileOptions): Promise<ProjectTextFileSnapshot> {
   const normalizedRelativePath = normalizeRelativePath(relativePath);
 
   assertProjectPathNotSensitive(normalizedRelativePath);
 
   try {
-    return await readProjectTextFile({ projectRoot, relativePath: normalizedRelativePath, maxBytes });
+    const file = await readProjectTextFile({ projectRoot, relativePath: normalizedRelativePath, maxBytes });
+
+    return {
+      ...file,
+      exists: true
+    };
   } catch (error) {
     if (!isFileNotFoundError(error)) {
       throw error;
@@ -446,9 +493,21 @@ async function readProjectTextFileOrEmpty({
     return {
       relativePath: normalizedRelativePath,
       content: "",
-      size: 0
+      size: 0,
+      exists: false
     };
   }
+}
+
+function classifyProjectTextFileChange(
+  currentFile: ProjectTextFileSnapshot,
+  _nextContent: string
+): ProjectFileChangePreview["changeKind"] {
+  if (!currentFile.exists) {
+    return "create";
+  }
+
+  return "edit";
 }
 
 // 文件预览辅助: 统一路径校验和轻量 MIME 分类
