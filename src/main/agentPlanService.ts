@@ -140,7 +140,7 @@ export async function generateAgentPlan({
     providerId: provider.id,
     modelId: request.model.id,
     text,
-    steps: parseAgentPlanSteps(text),
+    steps: parseAgentPlanSteps(text, getPlanStepLimit(request)),
     createdAt: now(),
     usage
   };
@@ -200,7 +200,7 @@ export async function generateAgentPlanStream({
       providerId: provider.id,
       modelId: request.model.id,
       text,
-      steps: parseAgentPlanSteps(text),
+      steps: parseAgentPlanSteps(text, getPlanStepLimit(request)),
       createdAt: now(),
       usage
     };
@@ -217,7 +217,7 @@ export async function generateAgentPlanStream({
     providerId: provider.id,
     modelId: request.model.id,
     text,
-    steps: parseAgentPlanSteps(text),
+    steps: parseAgentPlanSteps(text, getPlanStepLimit(request)),
     createdAt: now(),
     usage: streamResult.usage
   };
@@ -451,7 +451,7 @@ function createAgentPlanInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
-    "Keep the plan small: usually 3 to 6 steps, never more than 8 unless the task explicitly requires it.",
+    "Keep the plan small and respect the Agent profile plan step limit from the request context.",
     'Prefer a JSON object with a "steps" array. Each step must include "kind", "description", and optional "target".',
     'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "git_status", "bash", or "edit".',
     'For one step that edits multiple files, use a "files" string array so Forge can expand it into separate file actions.',
@@ -791,11 +791,13 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
   const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
   const instructionContext = formatProjectInstructions(request.projectScan);
+  const planStepLimit = getPlanStepLimit(request);
 
   return [
     `Task:\n${request.taskPrompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
     `Speed mode:\n${request.speed}`,
+    `Plan step limit:\nUse no more than ${planStepLimit} executable steps unless the user explicitly asks for a longer staged plan.`,
     formatWorkModeContext(request.workMode),
     formatAgentRuntimeContext(request.agentRuntime),
     profileContext,
@@ -947,6 +949,7 @@ function formatAgentProfile(
     `Description: ${agentProfile.description}`,
     `Permission mode: ${agentProfile.permissionMode}`,
     `Context budget: ${agentProfile.contextBudget}`,
+    `Plan step limit: ${agentProfile.planStepLimit}`,
     `Tools: ${agentProfile.enabledTools.length > 0 ? agentProfile.enabledTools.join(", ") : "none"}`,
     "Instructions:",
     agentProfile.instructions
@@ -997,7 +1000,8 @@ function stripMarkdownCodeFence(value: string): string {
 }
 
 // 从模型文本里解析步骤列表, 失败时回退到单个说明步骤
-function parseAgentPlanSteps(text: string): AgentPlanStep[] {
+function parseAgentPlanSteps(text: string, stepLimit = 12): AgentPlanStep[] {
+  const normalizedStepLimit = clampPlanStepLimit(stepLimit);
   const structuredSteps = parseStructuredAgentPlanSteps(text);
   const descriptions: ParsedPlanStepDraft[] =
     structuredSteps.length > 0
@@ -1020,7 +1024,7 @@ function parseAgentPlanSteps(text: string): AgentPlanStep[] {
           .filter((step) => step.description);
 
   return descriptions
-    .slice(0, 12)
+    .slice(0, normalizedStepLimit)
     .map((step, index) => {
       const kind = step.kind;
       const target = step.target ?? readStepTarget(step.description, kind);
@@ -1034,6 +1038,18 @@ function parseAgentPlanSteps(text: string): AgentPlanStep[] {
         ...(target ? { target } : {})
       };
     });
+}
+
+function getPlanStepLimit(request: GenerateAgentPlanRequest): number {
+  return clampPlanStepLimit(request.agentProfile?.planStepLimit ?? 6);
+}
+
+function clampPlanStepLimit(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 6;
+  }
+
+  return Math.min(12, Math.max(2, Math.round(value)));
 }
 
 // 优先解析模型输出的结构化 JSON steps, 失败时让自然语言列表解析接管

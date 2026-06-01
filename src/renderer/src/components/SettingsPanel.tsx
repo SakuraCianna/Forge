@@ -1370,7 +1370,7 @@ export function SettingsPanel({
                   />
                 </label>
 
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3 lg:grid-cols-3">
                   <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4">
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-[#202123]">
@@ -1410,6 +1410,29 @@ export function SettingsPanel({
                       onChange={(event) =>
                         onUpdateAgentProfile(selectedProfile.id, {
                           contextBudget: Number(event.currentTarget.value) || selectedProfile.contextBudget
+                        })
+                      }
+                      className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
+                    />
+                  </label>
+                  <label className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4 text-xs text-[#6e6e80]">
+                    <span>
+                      <span className="block text-sm font-medium text-[#202123]">
+                        {copy.planStepLimit}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
+                        {copy.planStepLimitDescription}
+                      </span>
+                    </span>
+                    <input
+                      type="number"
+                      min="2"
+                      max="12"
+                      step="1"
+                      value={selectedProfile.planStepLimit}
+                      onChange={(event) =>
+                        onUpdateAgentProfile(selectedProfile.id, {
+                          planStepLimit: Number(event.currentTarget.value) || selectedProfile.planStepLimit
                         })
                       }
                       className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
@@ -2362,6 +2385,8 @@ function getAgentProfilesCopy(language: Language): {
   name: string;
   permissionDescription: string;
   permissionMode: string;
+  planStepLimit: string;
+  planStepLimitDescription: string;
   selectProfile: (name: string) => string;
   title: string;
   tools: string;
@@ -2379,6 +2404,8 @@ function getAgentProfilesCopy(language: Language): {
       name: "名称",
       permissionDescription: "控制这个智能体默认用什么权限模式运行",
       permissionMode: "权限模式",
+      planStepLimit: "计划步数上限",
+      planStepLimitDescription: "2 - 12 步, 限制单次 Agent 计划的可执行动作数量",
       selectProfile: (name) => `选择 ${name}`,
       title: "智能体配置",
       tools: "工具能力",
@@ -2403,6 +2430,8 @@ function getAgentProfilesCopy(language: Language): {
     name: "Name",
     permissionDescription: "Controls the default permission mode for this agent",
     permissionMode: "Permission mode",
+    planStepLimit: "Plan step limit",
+    planStepLimitDescription: "2 - 12 steps, limits executable actions in one agent plan",
     selectProfile: (name) => `Select ${name}`,
     title: "Agent profiles",
     tools: "Tool access",

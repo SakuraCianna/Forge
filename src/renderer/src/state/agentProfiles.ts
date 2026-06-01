@@ -17,6 +17,7 @@ export type AgentProfile = {
   permissionMode: AgentProfilePermissionMode;
   tools: AgentProfileTools;
   contextBudget: number;
+  planStepLimit: number;
   active: boolean;
   builtIn?: boolean;
   createdAt: string;
@@ -24,7 +25,16 @@ export type AgentProfile = {
 };
 
 export type AgentProfilePatch = Partial<
-  Pick<AgentProfile, "name" | "description" | "systemPrompt" | "permissionMode" | "tools" | "contextBudget">
+  Pick<
+    AgentProfile,
+    | "name"
+    | "description"
+    | "systemPrompt"
+    | "permissionMode"
+    | "tools"
+    | "contextBudget"
+    | "planStepLimit"
+  >
 >;
 
 const defaultProfileTimestamp = "2026-05-30T00:00:00.000Z";
@@ -89,6 +99,7 @@ const defaultProfiles: AgentProfile[] = [
       git: true
     },
     contextBudget: 12000,
+    planStepLimit: 6,
     active: true,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -105,6 +116,7 @@ const defaultProfiles: AgentProfile[] = [
       git: true
     },
     contextBudget: 16000,
+    planStepLimit: 4,
     active: false,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -121,6 +133,7 @@ const defaultProfiles: AgentProfile[] = [
       git: false
     },
     contextBudget: 10000,
+    planStepLimit: 5,
     active: false,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -263,7 +276,8 @@ export function getActiveAgentProfileContext(
     instructions: displayText.systemPrompt,
     permissionMode: activeProfile.permissionMode,
     enabledTools: getEnabledAgentTools(activeProfile.tools),
-    contextBudget: activeProfile.contextBudget
+    contextBudget: activeProfile.contextBudget,
+    planStepLimit: activeProfile.planStepLimit
   };
 }
 
@@ -319,6 +333,9 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
   const contextBudget = Number.isFinite(profile.contextBudget)
     ? Math.min(64000, Math.max(2000, Math.round(profile.contextBudget)))
     : 12000;
+  const planStepLimit = Number.isFinite(profile.planStepLimit)
+    ? Math.min(12, Math.max(2, Math.round(profile.planStepLimit)))
+    : getDefaultPlanStepLimit(profile.id);
 
   return {
     ...profile,
@@ -327,7 +344,8 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
     systemPrompt: normalizeText(profile.systemPrompt),
     permissionMode: profile.permissionMode === "full" ? "full" : "auto",
     tools: normalizeTools(profile.tools),
-    contextBudget
+    contextBudget,
+    planStepLimit
   };
 }
 
@@ -411,11 +429,17 @@ function isPersistedAgentProfile(value: unknown): value is AgentProfile {
     (value.permissionMode === "auto" || value.permissionMode === "full") &&
     isRecord(value.tools) &&
     typeof value.contextBudget === "number" &&
+    (!("planStepLimit" in value) ||
+      (typeof value.planStepLimit === "number" && Number.isFinite(value.planStepLimit))) &&
     typeof value.active === "boolean" &&
     typeof value.createdAt === "string" &&
     typeof value.updatedAt === "string" &&
     (!("builtIn" in value) || typeof value.builtIn === "boolean")
   );
+}
+
+function getDefaultPlanStepLimit(profileId: string): number {
+  return defaultProfiles.find((profile) => profile.id === profileId)?.planStepLimit ?? 6;
 }
 
 // 将 unknown 缩窄成普通对象, 供字段校验复用

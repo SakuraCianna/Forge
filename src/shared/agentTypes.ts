@@ -18,6 +18,7 @@ export type AgentProfileContext = {
   permissionMode: "auto" | "full";
   enabledTools: string[];
   contextBudget: number;
+  planStepLimit: number;
 };
 
 export type AgentWorkMode = "code" | "daily";
