@@ -72,7 +72,7 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
   return { kind: "complete" };
 }
 
-// 将 Agent 配置里的工具开关变成执行前硬边界, 避免只停留在提示词层
+// 将智能体配置里的工具开关变成执行前硬边界, 避免只停留在提示词层
 export function resolveAgentActionPermission(
   action: AgentAction,
   agentProfile?: AgentProfileContext
@@ -331,7 +331,7 @@ export function isRunnableAgentAction(
   return false;
 }
 
-// 将队列动作映射到 Agent 配置中的工具名
+// 将队列动作映射到智能体配置中的工具名
 function getRequiredToolForAction(action: AgentAction): AgentToolPermission | null {
   if (
     action.kind === "inspect-file" ||

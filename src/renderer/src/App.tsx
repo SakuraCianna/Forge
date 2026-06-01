@@ -334,7 +334,7 @@ export function App(): ReactElement {
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
   const activeAgentProfileContext = applyGeneralPermissionModeToAgentProfile(
-    getActiveAgentProfileContext(agentProfiles),
+    getActiveAgentProfileContext(agentProfiles, settings.language),
     generalPreferences
   );
   const fullAccessMode =
@@ -1281,7 +1281,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: selectedThread.intelligence,
-        agentProfile: getActiveAgentProfileContext(agentProfiles),
+        agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
         memories,
         personalization: createPersonalizationPrompt(personalization),
         projectScan: projectScanResult,
@@ -1572,7 +1572,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: settings.intelligence,
-        agentProfile: getActiveAgentProfileContext(agentProfiles),
+        agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
         memories,
         personalization: createPersonalizationPrompt(personalization),
         speed: settings.speed,
@@ -1918,7 +1918,7 @@ export function App(): ReactElement {
       provider,
       model,
       intelligence: settings.intelligence,
-      agentProfile: getActiveAgentProfileContext(agentProfiles),
+      agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
       memories,
       personalization: createPersonalizationPrompt(personalization),
       conversation,
@@ -2989,7 +2989,7 @@ export function App(): ReactElement {
     );
   }
 
-  // 渲染无会话首页, 保持 Codex 风格的轻量输入入口
+  // 渲染无会话首页, 保持 Forge 的轻量输入入口
   function renderNewConversationView(): ReactElement {
     return (
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
@@ -3603,7 +3603,7 @@ function formatAgentPermissionDenied(
       git: "Git 操作"
     }[tool];
 
-    return `Agent 配置 ${profileName} 未允许${toolLabel}`;
+    return `智能体配置 ${profileName} 未允许${toolLabel}`;
   }
 
   return `Agent profile ${profileName} does not allow ${tool} actions`;
@@ -4039,7 +4039,7 @@ function createAutoFailureFixKey(threadId: string, actionId: string): string {
   return `${threadId}:${actionId}`;
 }
 
-// 将全局权限模式叠加到当前 Agent 配置, 只读模式必须在运行时硬拦截写操作
+// 将全局权限模式叠加到当前智能体配置, 只读模式必须在运行时硬拦截写操作
 function applyGeneralPermissionModeToAgentProfile(
   agentProfile: AgentProfileContext,
   generalPreferences: GeneralPreferences

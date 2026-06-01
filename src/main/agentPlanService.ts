@@ -905,7 +905,7 @@ function formatAgentMemories(
   return ["Relevant memories:", ...lines.map((line) => `- ${line}`)].join("\n");
 }
 
-// 把 Agent 配置转成模型可读约束, 控制权限和工具边界
+// 把智能体配置转成模型可读约束, 控制权限和工具边界
 function formatWorkModeContext(workMode: AgentWorkMode = "code"): string {
   if (workMode === "daily") {
     return [
@@ -1179,7 +1179,7 @@ function readStringField(value: Record<string, unknown>, keys: string[]): string
   return undefined;
 }
 
-// 兼容编码 Agent 常见的 files/targets/paths 数组输出, 让一个结构化 step 能展开成多个文件动作
+// 兼容编码智能体常见的 files/targets/paths 数组输出, 让一个结构化 step 能展开成多个文件动作
 function readStringArrayField(value: Record<string, unknown>, keys: string[]): string[] {
   const targets: string[] = [];
 
