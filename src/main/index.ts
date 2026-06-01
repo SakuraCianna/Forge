@@ -12,7 +12,12 @@ import {
 import { registerCommandHandlers } from "./commandIpc.js";
 import { cancelProjectCommand, runProjectCommand } from "./commandRunner.js";
 import { registerGitHandlers } from "./gitIpc.js";
-import { commitProjectChanges, createProjectWorktree, getProjectGitStatus } from "./gitService.js";
+import {
+  commitProjectChanges,
+  createProjectWorktree,
+  getProjectGitStatus,
+  pushProjectBranch
+} from "./gitService.js";
 import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerProjectHandlers } from "./projectIpc.js";
@@ -189,6 +194,7 @@ void app.whenReady().then(() => {
   registerGitHandlers(
     (request) => getProjectGitStatus(request),
     (request) => commitProjectChanges(request),
+    (request) => pushProjectBranch(request),
     (request) => createProjectWorktree(request),
     (channel, handler) => {
       ipcMain.handle(channel, handler);

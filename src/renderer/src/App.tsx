@@ -229,6 +229,10 @@ export function App(): ReactElement {
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
   const [gitNotice, setGitNotice] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
+  const [commitBranch, setCommitBranch] = useState("");
+  const [createCommitBranch, setCreateCommitBranch] = useState(false);
+  const [pushAfterCommit, setPushAfterCommit] = useState(false);
+  const [gitRemote, setGitRemote] = useState("origin");
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
@@ -646,6 +650,12 @@ export function App(): ReactElement {
   }, [gitStatus, selectedGitPath]);
 
   useEffect(() => {
+    setCommitBranch(gitStatus?.currentBranch ?? "");
+    setCreateCommitBranch(false);
+    setGitRemote(gitStatus?.remotes[0] ?? "origin");
+  }, [currentProject?.path, gitStatus?.currentBranch, gitStatus?.remotes]);
+
+  useEffect(() => {
     for (const provider of settings.providers) {
       void refreshProviderKeyStatus(provider.id);
     }
@@ -1022,13 +1032,25 @@ export function App(): ReactElement {
     }
 
     try {
+      const targetBranch = commitBranch.trim() || gitStatus?.currentBranch || undefined;
+      const targetRemote = gitRemote.trim() || "origin";
       const result = await window.forge.git.commit({
         projectRoot: currentProject.path,
-        message: normalizedMessage
+        message: normalizedMessage,
+        branch: targetBranch,
+        createBranch: createCommitBranch,
+        push: pushAfterCommit,
+        remote: targetRemote
       });
       setGitStatus(result.status);
       setCommitMessage("");
-      setGitNotice(t("projects.commitDone"));
+      setGitNotice(
+        createGitOperationNotice(settings.language, {
+          type: pushAfterCommit ? "commit-push" : "commit",
+          branch: result.branch ?? targetBranch ?? null,
+          remote: targetRemote
+        })
+      );
       if (selectedThreadId && pendingCommitAction) {
         const createdAt = new Date().toISOString();
 
@@ -1056,6 +1078,33 @@ export function App(): ReactElement {
   }
 
   // 按路径读取项目文件并生成可阅读预览
+  async function pushCurrentProjectBranch(): Promise<void> {
+    if (!currentProject || !gitStatus?.isRepo) {
+      return;
+    }
+
+    const targetBranch = commitBranch.trim() || gitStatus.currentBranch || undefined;
+    const targetRemote = gitRemote.trim() || "origin";
+
+    try {
+      const result = await window.forge.git.push({
+        projectRoot: currentProject.path,
+        branch: targetBranch,
+        remote: targetRemote
+      });
+      setGitStatus(result.status);
+      setGitNotice(
+        createGitOperationNotice(settings.language, {
+          type: "push",
+          branch: result.branch,
+          remote: result.remote
+        })
+      );
+    } catch (error) {
+      setGitNotice(formatRuntimeError(settings.language, error));
+    }
+  }
+
   async function previewProjectFile(relativePath: string): Promise<ProjectTextFile | null> {
     if (!currentProject) {
       return null;
@@ -3411,6 +3460,32 @@ export function App(): ReactElement {
             body: "From the current task thread commit step",
             use: "Use agent commit suggestion"
           };
+    const gitOperationCopy =
+      settings.language === "zh-CN"
+        ? {
+            currentBranch: "当前分支",
+            detached: "detached HEAD",
+            commitBranch: "提交分支",
+            commitBranchHint: "选择已有分支，或输入新分支名",
+            createBranch: "创建新分支后提交",
+            remote: "远端",
+            pushAfterCommit: "提交后推送",
+            pushBranch: "推送分支"
+          }
+        : {
+            currentBranch: "Current branch",
+            detached: "detached HEAD",
+            commitBranch: "Commit branch",
+            commitBranchHint: "Choose an existing branch or type a new one",
+            createBranch: "Create new branch before commit",
+            remote: "Remote",
+            pushAfterCommit: "Push after commit",
+            pushBranch: "Push branch"
+          };
+    const branchOptions = gitStatus?.branches ?? [];
+    const remoteOptions = gitStatus?.remotes ?? [];
+    const selectedRemote = gitRemote.trim() || remoteOptions[0] || "origin";
+    const targetBranch = commitBranch.trim() || gitStatus?.currentBranch || "";
 
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -3497,13 +3572,83 @@ export function App(): ReactElement {
                     className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
                   />
                 </label>
+                <div className="mt-3 space-y-2 rounded-[14px] border border-[#ececf1] bg-[#fafafa] p-3">
+                  <p className="text-[11px] text-[#6e6e80]">
+                    {gitOperationCopy.currentBranch}:{" "}
+                    <span className="font-mono text-[#202123]">
+                      {gitStatus?.currentBranch ?? gitOperationCopy.detached}
+                    </span>
+                  </p>
+                  <label className="grid gap-1.5 text-[12px] text-[#6e6e80]">
+                    {gitOperationCopy.commitBranch}
+                    <input
+                      value={commitBranch}
+                      list="forge-git-branches"
+                      placeholder={gitOperationCopy.commitBranchHint}
+                      onChange={(event) => setCommitBranch(event.currentTarget.value)}
+                      className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2.5 font-mono text-[12px] text-[#202123] outline-none transition focus:border-[#202123]"
+                    />
+                  </label>
+                  <datalist id="forge-git-branches">
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch} />
+                    ))}
+                  </datalist>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <label className="grid gap-1.5 text-[12px] text-[#6e6e80]">
+                      {gitOperationCopy.remote}
+                      <input
+                        value={gitRemote}
+                        list="forge-git-remotes"
+                        onChange={(event) => setGitRemote(event.currentTarget.value)}
+                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2.5 font-mono text-[12px] text-[#202123] outline-none transition focus:border-[#202123]"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void pushCurrentProjectBranch()}
+                      disabled={!gitStatus?.isRepo || !targetBranch}
+                      className="h-9 self-end rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] disabled:cursor-not-allowed disabled:bg-[#ececf1] disabled:text-[#8e8ea0]"
+                    >
+                      {gitOperationCopy.pushBranch}
+                    </button>
+                  </div>
+                  <datalist id="forge-git-remotes">
+                    {remoteOptions.map((remote) => (
+                      <option key={remote} value={remote} />
+                    ))}
+                  </datalist>
+                  <label className="flex items-center gap-2 text-[12px] text-[#565869]">
+                    <input
+                      type="checkbox"
+                      checked={createCommitBranch}
+                      onChange={(event) => setCreateCommitBranch(event.currentTarget.checked)}
+                      className="h-4 w-4 rounded border-[#d9d9e3]"
+                    />
+                    {gitOperationCopy.createBranch}
+                  </label>
+                  <label className="flex items-center gap-2 text-[12px] text-[#565869]">
+                    <input
+                      type="checkbox"
+                      checked={pushAfterCommit}
+                      onChange={(event) => setPushAfterCommit(event.currentTarget.checked)}
+                      className="h-4 w-4 rounded border-[#d9d9e3]"
+                    />
+                    {gitOperationCopy.pushAfterCommit}{" "}
+                    <span className="font-mono text-[#8e8ea0]">{selectedRemote}</span>
+                  </label>
+                </div>
                 <button
                   type="button"
                   onClick={() => void commitCurrentProject(commitMessage)}
                   disabled={!gitStatus?.isRepo || changedFiles.length === 0}
                   className="mt-3 h-10 w-full rounded-[14px] bg-[#202123] text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-[#ececf1] disabled:text-[#8e8ea0]"
                 >
-                  {t("projects.commit")}
+                  {pushAfterCommit
+                    ? settings.language === "zh-CN"
+                      ? "提交并推送"
+                      : "Commit and push"
+                    : t("projects.commit")}
                 </button>
                 {gitNotice ? <p className="mt-3 text-sm text-[#b45309]">{gitNotice}</p> : null}
               </div>
@@ -3517,7 +3662,7 @@ export function App(): ReactElement {
                 </p>
               </div>
               {selectedChange && selectedChange.diff.trim() ? (
-                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[10px] leading-5 text-[#202123]">
+                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-6 text-[#202123]">
                   {renderDiffPreview(selectedChange.diff)}
                 </pre>
               ) : (
@@ -3935,6 +4080,31 @@ function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPa
 }
 
 // 把文本 diff 渲染成逐行预览, 供文件页和审查面板复用
+function createGitOperationNotice(
+  language: Language,
+  options: {
+    type: "commit" | "commit-push" | "push";
+    branch: string | null;
+    remote: string;
+  }
+): string {
+  const branch = options.branch || (language === "zh-CN" ? "当前分支" : "current branch");
+
+  if (options.type === "commit-push") {
+    return language === "zh-CN"
+      ? `已创建 Git 提交并推送到 ${options.remote}/${branch}`
+      : `Created Git commit and pushed to ${options.remote}/${branch}`;
+  }
+
+  if (options.type === "push") {
+    return language === "zh-CN"
+      ? `已推送分支 ${branch} 到 ${options.remote}`
+      : `Pushed branch ${branch} to ${options.remote}`;
+  }
+
+  return language === "zh-CN" ? `已在 ${branch} 创建 Git 提交` : `Created Git commit on ${branch}`;
+}
+
 function renderDiffPreview(diff: string): ReactElement[] {
   const lines = diff.split(/\r?\n/);
   const visibleLines = lines.slice(0, 600);

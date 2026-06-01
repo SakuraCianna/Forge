@@ -36,6 +36,7 @@ export const commandChannels = {
 export const gitChannels = {
   status: "forge:git:status",
   commit: "forge:git:commit",
+  push: "forge:git:push",
   createWorktree: "forge:git:create-worktree"
 } as const;
 

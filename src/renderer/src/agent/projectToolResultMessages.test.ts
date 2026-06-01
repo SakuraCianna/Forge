@@ -34,6 +34,9 @@ describe("project tool result messages", () => {
   it("formats git status without exposing raw shell output", () => {
     const message = formatProjectGitStatusMessage("en-US", {
       isRepo: true,
+      currentBranch: "codex/Forge",
+      branches: ["codex/Forge"],
+      remotes: ["origin"],
       changedFiles: ["src/App.tsx"],
       changes: [
         {

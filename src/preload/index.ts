@@ -32,6 +32,8 @@ import type {
 import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
+  ProjectGitPushRequest,
+  ProjectGitPushResult,
   ProjectGitStatus,
   ProjectGitStatusRequest,
   ProjectGitWorktreeRequest,
@@ -133,6 +135,8 @@ contextBridge.exposeInMainWorld("forge", {
       ipcRenderer.invoke(gitChannels.status, request),
     commit: (request: ProjectGitCommitRequest): Promise<ProjectGitCommitResult> =>
       ipcRenderer.invoke(gitChannels.commit, request),
+    push: (request: ProjectGitPushRequest): Promise<ProjectGitPushResult> =>
+      ipcRenderer.invoke(gitChannels.push, request),
     createWorktree: (
       request: ProjectGitWorktreeRequest
     ): Promise<ProjectGitWorktreeResult> =>

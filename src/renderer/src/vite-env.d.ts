@@ -23,6 +23,8 @@ import type {
 import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
+  ProjectGitPushRequest,
+  ProjectGitPushResult,
   ProjectGitStatus,
   ProjectGitStatusRequest,
   ProjectGitWorktreeRequest,
@@ -99,6 +101,7 @@ declare global {
       git: {
         status: (request: ProjectGitStatusRequest) => Promise<ProjectGitStatus>;
         commit: (request: ProjectGitCommitRequest) => Promise<ProjectGitCommitResult>;
+        push: (request: ProjectGitPushRequest) => Promise<ProjectGitPushResult>;
         createWorktree: (
           request: ProjectGitWorktreeRequest
         ) => Promise<ProjectGitWorktreeResult>;
