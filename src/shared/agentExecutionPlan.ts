@@ -84,7 +84,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     };
   }
 
-  if (step.kind === "inspect" && normalizedTarget && isLikelyDirectoryPath(normalizedTarget)) {
+  if (step.kind === "inspect" && normalizedTarget && isLikelyAgentProjectDirectoryPath(normalizedTarget)) {
     return {
       stepId: step.id,
       kind: "list-directory",
@@ -94,7 +94,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     };
   }
 
-  if (step.kind === "inspect" && normalizedTarget && isLikelyFilePath(normalizedTarget)) {
+  if (step.kind === "inspect" && normalizedTarget && isLikelyAgentProjectFilePath(normalizedTarget)) {
     return {
       stepId: step.id,
       kind: "inspect-file",
@@ -114,7 +114,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     };
   }
 
-  if (step.kind === "edit" && normalizedTarget && isLikelyFilePath(normalizedTarget)) {
+  if (step.kind === "edit" && normalizedTarget && isLikelyAgentProjectFilePath(normalizedTarget)) {
     return {
       stepId: step.id,
       kind: "edit-file",
@@ -124,7 +124,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     };
   }
 
-  if (step.kind === "verify" && normalizedTarget && isLikelyFilePath(normalizedTarget)) {
+  if (step.kind === "verify" && normalizedTarget && isLikelyAgentProjectFilePath(normalizedTarget)) {
     return {
       stepId: step.id,
       kind: "edit-file",
@@ -188,7 +188,7 @@ function splitMultiFileTarget(target: string | undefined): string[] {
     .map((segment) => normalizeActionTarget(segment))
     .filter((segment): segment is string => Boolean(segment));
 
-  if (segments.length <= 1 || !segments.every(isLikelyFilePath)) {
+  if (segments.length <= 1 || !segments.every(isLikelyAgentProjectFilePath)) {
     return [target];
   }
 
@@ -219,7 +219,7 @@ function isGitStatusTarget(target: string): boolean {
 }
 
 // 目录目标走 LS 类工具, 避免把文件夹当成文本文件读取
-function isLikelyDirectoryPath(target: string): boolean {
+export function isLikelyAgentProjectDirectoryPath(target: string): boolean {
   const normalizedTarget = target.trim().replace(/\\/g, "/");
   const lastSegment = normalizedTarget.split("/").filter(Boolean).at(-1) ?? normalizedTarget;
 
@@ -236,7 +236,7 @@ function isLikelyDirectoryPath(target: string): boolean {
 }
 
 // 用轻量规则判断目标是否像文件路径, 避免误把普通说明当文件
-function isLikelyFilePath(target: string): boolean {
+export function isLikelyAgentProjectFilePath(target: string): boolean {
   const normalizedTarget = target.trim().replace(/\\/g, "/");
 
   if (!isCleanProjectPathTarget(normalizedTarget)) {

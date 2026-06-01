@@ -2629,16 +2629,30 @@ export function App(): ReactElement {
     }
 
     const liveAction = getLiveAgentAction(threadId, action.id);
+    const retryingFailedAction = liveAction?.status === "failed" && action.status === "failed";
 
     if (liveAction && liveAction.status !== "pending") {
-      if (liveAction.status === "completed" || liveAction.status === "skipped") {
+      if (retryingFailedAction) {
+        appendAgentActionRetryEvent(threadId, liveAction);
+        updateAgentActionStatus(threadId, liveAction.id, "pending");
+      } else if (liveAction.status === "completed" || liveAction.status === "skipped") {
+        return { status: "completed", continueBatch: true };
+      } else {
+        return { status: liveAction.status, continueBatch: false };
+      }
+    }
+
+    const actionToRun =
+      liveAction && retryingFailedAction ? { ...liveAction, status: "pending" as const } : (liveAction ?? action);
+
+    if (actionToRun.status !== "pending") {
+      if (actionToRun.status === "completed" || actionToRun.status === "skipped") {
         return { status: "completed", continueBatch: true };
       }
 
-      return { status: liveAction.status, continueBatch: false };
+      return { status: actionToRun.status, continueBatch: false };
     }
 
-    const actionToRun = liveAction ?? action;
     const activeAgentProfile = getThreadAgentProfileContext(threadId);
     const threadFullAccessMode = getThreadFullAccessMode(threadId);
     const permission = resolveAgentActionPermission(actionToRun, activeAgentProfile);
@@ -2741,8 +2755,12 @@ export function App(): ReactElement {
           outcome = await runThreadCommand(threadId, execution.command, actionToRun.id);
         }
       } else {
-        updateAgentActionStatus(threadId, actionToRun.id, "completed");
-        outcome = "completed";
+        if (execution.kind === "invalid-target") {
+          outcome = blockAgentInvalidTargetAction(threadId, actionToRun, execution.reason);
+        } else {
+          updateAgentActionStatus(threadId, actionToRun.id, "completed");
+          outcome = "completed";
+        }
       }
     } catch (error) {
       updateAgentActionStatus(threadId, actionToRun.id, "failed");
@@ -2760,6 +2778,60 @@ export function App(): ReactElement {
     appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, startedAt);
     window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
     return outcome;
+  }
+
+  // 记录用户显式重试失败动作, 避免重试按钮看起来有反馈但执行器被 failed 状态短路
+  function appendAgentActionRetryEvent(threadId: string, action: AgentAction): void {
+    const createdAt = new Date().toISOString();
+
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        {
+          id: `${threadId}-agent-action-retry-${action.id}-${createdAt}`,
+          kind: "plan",
+          message:
+            settings.language === "zh-CN"
+              ? `正在重试失败动作: ${action.label}`
+              : `Retrying failed action: ${action.label}`,
+          createdAt,
+          agentActionRun: {
+            actionId: action.id,
+            label: action.label,
+            status: "started",
+            startedAt: createdAt,
+            reason: "retry"
+          }
+        }
+      ])
+    );
+  }
+
+  // 运行前再次校验文件/目录目标, 让旧线程里的坏 target 不会绕过新的计划解析规则
+  function blockAgentInvalidTargetAction(
+    threadId: string,
+    action: AgentAction,
+    reason: string
+  ): AgentAction["status"] {
+    const createdAt = new Date().toISOString();
+    const message =
+      settings.language === "zh-CN"
+        ? `Agent 动作目标不是可执行的项目相对路径，已停止以避免误改文件。${reason}`
+        : `Agent action target is not an executable project-relative path, so Forge stopped before touching files. ${reason}`;
+
+    updateAgentActionStatus(threadId, action.id, "failed");
+    setTaskNotice(message);
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        {
+          id: `${threadId}-invalid-action-target-${action.id}-${createdAt}`,
+          kind: "error",
+          message,
+          createdAt
+        }
+      ], "blocked")
+    );
+
+    return "failed";
   }
 
   // 队列完成后只在正文留下简短总结, 具体执行细节继续折叠在“已处理”
