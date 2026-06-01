@@ -2,6 +2,8 @@
 import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
+  ProjectGitPushRequest,
+  ProjectGitPushResult,
   ProjectGitStatus,
   ProjectGitStatusRequest,
   ProjectGitWorktreeRequest,
@@ -12,6 +14,8 @@ import { gitChannels } from "../shared/ipcChannels.js";
 type GitStatusReader = (request: ProjectGitStatusRequest) => Promise<ProjectGitStatus>;
 
 type GitCommitter = (request: ProjectGitCommitRequest) => Promise<ProjectGitCommitResult>;
+
+type GitPusher = (request: ProjectGitPushRequest) => Promise<ProjectGitPushResult>;
 
 type GitWorktreeCreator = (
   request: ProjectGitWorktreeRequest
@@ -27,6 +31,7 @@ export { gitChannels };
 export function registerGitHandlers(
   getStatus: GitStatusReader,
   commit: GitCommitter,
+  push: GitPusher,
   createWorktree: GitWorktreeCreator,
   registerHandler: RegisterHandler
 ): void {
@@ -36,6 +41,7 @@ export function registerGitHandlers(
   registerHandler(gitChannels.commit, async (_event, request) =>
     commit(assertCommitRequest(request))
   );
+  registerHandler(gitChannels.push, async (_event, request) => push(assertPushRequest(request)));
   registerHandler(gitChannels.createWorktree, async (_event, request) =>
     createWorktree(assertWorktreeRequest(request))
   );
@@ -56,7 +62,27 @@ function assertCommitRequest(value: unknown): ProjectGitCommitRequest {
     throw new Error("Invalid Git commit request");
   }
 
-  return { projectRoot: value.projectRoot, message: value.message };
+  return {
+    projectRoot: value.projectRoot,
+    message: value.message,
+    branch: readOptionalString(value.branch),
+    createBranch: readOptionalBoolean(value.createBranch),
+    push: readOptionalBoolean(value.push),
+    remote: readOptionalString(value.remote)
+  };
+}
+
+// 校验 Git 推送请求，允许渲染层选择远端和分支，但不允许传入任意命令片段。
+function assertPushRequest(value: unknown): ProjectGitPushRequest {
+  if (!isRecord(value) || typeof value.projectRoot !== "string") {
+    throw new Error("Invalid Git push request");
+  }
+
+  return {
+    projectRoot: value.projectRoot,
+    branch: readOptionalString(value.branch),
+    remote: readOptionalString(value.remote)
+  };
 }
 
 // 校验工作树创建请求, 名称由服务层继续归一化成安全分支和目录片段
@@ -71,4 +97,12 @@ function assertWorktreeRequest(value: unknown): ProjectGitWorktreeRequest {
 // 将 unknown 转成可检查对象, 避免 IPC 参数直接信任
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function readOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
 }

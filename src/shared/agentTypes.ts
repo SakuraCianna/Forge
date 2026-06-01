@@ -18,6 +18,11 @@ export type AgentProfileContext = {
   permissionMode: "auto" | "full";
   enabledTools: string[];
   contextBudget: number;
+  planStepLimit: number;
+  autoRunBatchSize: number;
+  verificationPolicy: "suggest" | "require" | "skip";
+  failureRecoveryPolicy: "manual" | "suggest" | "auto";
+  maxFailureRecoveryAttempts: number;
 };
 
 export type AgentWorkMode = "code" | "daily";

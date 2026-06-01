@@ -3,8 +3,14 @@ import type { AgentProfileContext } from "@shared/agentTypes";
 import type { Language } from "@shared/modelTypes";
 
 const agentProfileStorageKey = "forge.agentProfiles";
+export const minAgentAutoRunBatchSize = 1;
+export const maxAgentAutoRunBatchSize = 8;
+export const minAgentFailureRecoveryAttempts = 0;
+export const maxAgentFailureRecoveryAttempts = 5;
 
 type AgentProfilePermissionMode = "auto" | "full";
+type AgentProfileVerificationPolicy = "suggest" | "require" | "skip";
+type AgentProfileFailureRecoveryPolicy = "manual" | "suggest" | "auto";
 export type AgentProfileTool = "read" | "edit" | "command" | "git";
 
 type AgentProfileTools = Record<AgentProfileTool, boolean>;
@@ -15,8 +21,13 @@ export type AgentProfile = {
   description: string;
   systemPrompt: string;
   permissionMode: AgentProfilePermissionMode;
+  verificationPolicy: AgentProfileVerificationPolicy;
+  failureRecoveryPolicy: AgentProfileFailureRecoveryPolicy;
   tools: AgentProfileTools;
   contextBudget: number;
+  planStepLimit: number;
+  autoRunBatchSize: number;
+  maxFailureRecoveryAttempts: number;
   active: boolean;
   builtIn?: boolean;
   createdAt: string;
@@ -24,7 +35,20 @@ export type AgentProfile = {
 };
 
 export type AgentProfilePatch = Partial<
-  Pick<AgentProfile, "name" | "description" | "systemPrompt" | "permissionMode" | "tools" | "contextBudget">
+  Pick<
+    AgentProfile,
+    | "name"
+    | "description"
+    | "systemPrompt"
+    | "permissionMode"
+    | "verificationPolicy"
+    | "failureRecoveryPolicy"
+    | "tools"
+    | "contextBudget"
+    | "planStepLimit"
+    | "autoRunBatchSize"
+    | "maxFailureRecoveryAttempts"
+  >
 >;
 
 const defaultProfileTimestamp = "2026-05-30T00:00:00.000Z";
@@ -82,6 +106,8 @@ const defaultProfiles: AgentProfile[] = [
     id: "build",
     ...builtInProfileText.build["zh-CN"],
     permissionMode: "auto",
+    verificationPolicy: "require",
+    failureRecoveryPolicy: "auto",
     tools: {
       read: true,
       edit: true,
@@ -89,6 +115,9 @@ const defaultProfiles: AgentProfile[] = [
       git: true
     },
     contextBudget: 12000,
+    planStepLimit: 6,
+    autoRunBatchSize: 3,
+    maxFailureRecoveryAttempts: 2,
     active: true,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -98,6 +127,8 @@ const defaultProfiles: AgentProfile[] = [
     id: "review",
     ...builtInProfileText.review["zh-CN"],
     permissionMode: "auto",
+    verificationPolicy: "suggest",
+    failureRecoveryPolicy: "suggest",
     tools: {
       read: true,
       edit: false,
@@ -105,6 +136,9 @@ const defaultProfiles: AgentProfile[] = [
       git: true
     },
     contextBudget: 16000,
+    planStepLimit: 4,
+    autoRunBatchSize: 1,
+    maxFailureRecoveryAttempts: 1,
     active: false,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -114,6 +148,8 @@ const defaultProfiles: AgentProfile[] = [
     id: "docs",
     ...builtInProfileText.docs["zh-CN"],
     permissionMode: "auto",
+    verificationPolicy: "skip",
+    failureRecoveryPolicy: "manual",
     tools: {
       read: true,
       edit: true,
@@ -121,6 +157,9 @@ const defaultProfiles: AgentProfile[] = [
       git: false
     },
     contextBudget: 10000,
+    planStepLimit: 5,
+    autoRunBatchSize: 2,
+    maxFailureRecoveryAttempts: 0,
     active: false,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -263,7 +302,12 @@ export function getActiveAgentProfileContext(
     instructions: displayText.systemPrompt,
     permissionMode: activeProfile.permissionMode,
     enabledTools: getEnabledAgentTools(activeProfile.tools),
-    contextBudget: activeProfile.contextBudget
+    contextBudget: activeProfile.contextBudget,
+    planStepLimit: activeProfile.planStepLimit,
+    autoRunBatchSize: activeProfile.autoRunBatchSize,
+    verificationPolicy: activeProfile.verificationPolicy,
+    failureRecoveryPolicy: activeProfile.failureRecoveryPolicy,
+    maxFailureRecoveryAttempts: activeProfile.maxFailureRecoveryAttempts
   };
 }
 
@@ -319,6 +363,24 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
   const contextBudget = Number.isFinite(profile.contextBudget)
     ? Math.min(64000, Math.max(2000, Math.round(profile.contextBudget)))
     : 12000;
+  const planStepLimit = Number.isFinite(profile.planStepLimit)
+    ? Math.min(12, Math.max(2, Math.round(profile.planStepLimit)))
+    : getDefaultPlanStepLimit(profile.id);
+  const autoRunBatchSize = Number.isFinite(profile.autoRunBatchSize)
+    ? Math.min(
+        maxAgentAutoRunBatchSize,
+        Math.max(minAgentAutoRunBatchSize, Math.round(profile.autoRunBatchSize))
+      )
+    : getDefaultAutoRunBatchSize(profile.id);
+  const maxFailureRecoveryAttempts = Number.isFinite(profile.maxFailureRecoveryAttempts)
+    ? Math.min(
+        maxAgentFailureRecoveryAttempts,
+        Math.max(
+          minAgentFailureRecoveryAttempts,
+          Math.round(profile.maxFailureRecoveryAttempts)
+        )
+      )
+    : getDefaultFailureRecoveryAttempts(profile.id);
 
   return {
     ...profile,
@@ -326,8 +388,16 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
     description: normalizeText(profile.description),
     systemPrompt: normalizeText(profile.systemPrompt),
     permissionMode: profile.permissionMode === "full" ? "full" : "auto",
+    verificationPolicy: normalizeVerificationPolicy(profile.verificationPolicy, profile.id),
+    failureRecoveryPolicy: normalizeFailureRecoveryPolicy(
+      profile.failureRecoveryPolicy,
+      profile.id
+    ),
     tools: normalizeTools(profile.tools),
-    contextBudget
+    contextBudget,
+    planStepLimit,
+    autoRunBatchSize,
+    maxFailureRecoveryAttempts
   };
 }
 
@@ -409,13 +479,62 @@ function isPersistedAgentProfile(value: unknown): value is AgentProfile {
     typeof value.description === "string" &&
     typeof value.systemPrompt === "string" &&
     (value.permissionMode === "auto" || value.permissionMode === "full") &&
+    (!("verificationPolicy" in value) ||
+      value.verificationPolicy === "suggest" ||
+      value.verificationPolicy === "require" ||
+      value.verificationPolicy === "skip") &&
+    (!("failureRecoveryPolicy" in value) ||
+      value.failureRecoveryPolicy === "manual" ||
+      value.failureRecoveryPolicy === "suggest" ||
+      value.failureRecoveryPolicy === "auto") &&
     isRecord(value.tools) &&
     typeof value.contextBudget === "number" &&
+    (!("planStepLimit" in value) ||
+      (typeof value.planStepLimit === "number" && Number.isFinite(value.planStepLimit))) &&
+    (!("autoRunBatchSize" in value) ||
+      (typeof value.autoRunBatchSize === "number" && Number.isFinite(value.autoRunBatchSize))) &&
+    (!("maxFailureRecoveryAttempts" in value) ||
+      (typeof value.maxFailureRecoveryAttempts === "number" &&
+        Number.isFinite(value.maxFailureRecoveryAttempts))) &&
     typeof value.active === "boolean" &&
     typeof value.createdAt === "string" &&
     typeof value.updatedAt === "string" &&
     (!("builtIn" in value) || typeof value.builtIn === "boolean")
   );
+}
+
+function getDefaultPlanStepLimit(profileId: string): number {
+  return defaultProfiles.find((profile) => profile.id === profileId)?.planStepLimit ?? 6;
+}
+
+function getDefaultAutoRunBatchSize(profileId: string): number {
+  return defaultProfiles.find((profile) => profile.id === profileId)?.autoRunBatchSize ?? 3;
+}
+
+function getDefaultFailureRecoveryAttempts(profileId: string): number {
+  return defaultProfiles.find((profile) => profile.id === profileId)?.maxFailureRecoveryAttempts ?? 1;
+}
+
+function normalizeVerificationPolicy(
+  value: unknown,
+  profileId: string
+): AgentProfileVerificationPolicy {
+  if (value === "suggest" || value === "require" || value === "skip") {
+    return value;
+  }
+
+  return defaultProfiles.find((profile) => profile.id === profileId)?.verificationPolicy ?? "suggest";
+}
+
+function normalizeFailureRecoveryPolicy(
+  value: unknown,
+  profileId: string
+): AgentProfileFailureRecoveryPolicy {
+  if (value === "manual" || value === "suggest" || value === "auto") {
+    return value;
+  }
+
+  return defaultProfiles.find((profile) => profile.id === profileId)?.failureRecoveryPolicy ?? "suggest";
 }
 
 // 将 unknown 缩窄成普通对象, 供字段校验复用

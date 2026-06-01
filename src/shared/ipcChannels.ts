@@ -2,7 +2,8 @@
 export const keyVaultChannels = {
   save: "forge:provider-key:save",
   status: "forge:provider-key:status",
-  delete: "forge:provider-key:delete"
+  delete: "forge:provider-key:delete",
+  clearAll: "forge:provider-key:clear-all"
 } as const;
 
 export const providerModelChannels = {
@@ -36,11 +37,13 @@ export const commandChannels = {
 export const gitChannels = {
   status: "forge:git:status",
   commit: "forge:git:commit",
+  push: "forge:git:push",
   createWorktree: "forge:git:create-worktree"
 } as const;
 
 export const fileChannels = {
   readText: "forge:file:read-text",
+  preview: "forge:file:preview",
   listDirectory: "forge:file:list-directory",
   globFiles: "forge:file:glob-files",
   searchText: "forge:file:search-text",

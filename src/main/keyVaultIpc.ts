@@ -6,6 +6,7 @@ type KeyVault = {
   saveProviderKey: (providerId: string, apiKey: string) => Promise<void>;
   getProviderKeyStatus: (providerId: string) => Promise<ProviderKeyStatus>;
   deleteProviderKey: (providerId: string) => Promise<void>;
+  clearProviderKeys: () => Promise<void>;
   readProviderKey: (providerId: string) => Promise<string | null>;
 };
 
@@ -27,6 +28,10 @@ export function registerKeyVaultHandlers(vault: KeyVault, registerHandler: Regis
 
   registerHandler(keyVaultChannels.delete, async (_event, providerId) => {
     await vault.deleteProviderKey(assertString(providerId));
+  });
+
+  registerHandler(keyVaultChannels.clearAll, async () => {
+    await vault.clearProviderKeys();
   });
 }
 

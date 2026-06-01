@@ -1,25 +1,24 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
-import { useEffect, useRef, useState } from "react";
-import type {
-  ProjectDirectoryListResult,
-  ProjectFileChangePreview,
-  ProjectFileGlobResult,
-  ProjectTextFile,
-  ProjectTextSearchResult
-} from "@shared/fileTypes";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, File as FileIcon, Folder } from "lucide-react";
+import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { AgentProfileContext } from "@shared/agentTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
-import type { ProjectScanResult } from "@shared/projectTypes";
+import type { ProjectFile, ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
-import { FilePreviewRenderer } from "@/components/FilePreviewRenderer";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
+import { LazyPanelFallback } from "@/components/LazyPanelFallback";
+import {
+  LazyFilePreviewRenderer,
+  LazySettingsPanel,
+  LazyThreadWorkspace
+} from "@/components/lazyWorkbenchComponents";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
-import { SettingsPanel, type ProviderFetchState } from "@/components/SettingsPanel";
+import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
-import { ThreadWorkspace } from "@/components/ThreadWorkspace";
 import {
   resolveAgentCommandRisk,
   resolveAgentActionPermission,
@@ -30,12 +29,27 @@ import {
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
+import { countAutoFailureRecoveryAttempts } from "@/agent/failureRecoveryAttempts";
 import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
 } from "@/agent/failureFixPrompt";
+import {
+  createFailureRecoverySuggestionEventId,
+  formatFailureRecoverySuggestion,
+  getFailureRecoverySuggestionEventPrefix,
+  shouldSuggestFailureRecovery
+} from "@/agent/failureRecoveryPolicy";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
+import {
+  formatGitStatus,
+  formatProjectDirectoryListResultMessage,
+  formatProjectFileReadResultMessage,
+  formatProjectGitStatusMessage,
+  formatProjectGlobResultMessage,
+  formatProjectSearchResultMessage
+} from "@/agent/projectToolResultMessages";
 import {
   formatAgentCommandDenied,
   formatAgentCommandNeedsApproval
@@ -75,6 +89,10 @@ import {
   type PersonalizationSettings
 } from "@/state/personalization";
 import {
+  createHeroComposerPlaceholder,
+  createHeroPromptSuggestions
+} from "@/state/contextSuggestions";
+import {
   addRecentProject,
   createProjectFromPath,
   loadRecentProjects,
@@ -104,6 +122,7 @@ import {
   updateThreadAgentActionStatus,
   type AgentActionRunRecord,
   type CommandRunResult,
+  type FailureRecoveryAttemptRecord,
   type TaskThread,
   type TaskThreadEvent
 } from "@/state/taskThreads";
@@ -143,6 +162,7 @@ import {
   type AgentMemoryEntry
 } from "@/state/agentMemory";
 import {
+  createDefaultAgentProfiles,
   getActiveAgentProfileContext,
   loadAgentProfiles,
   saveAgentProfiles,
@@ -157,75 +177,13 @@ type ProviderKeyStatus = {
   last4: string | null;
 };
 
-const zhHeroPrompts = [
-  "我们该做什么？",
-  "要修复哪个问题？",
-  "想实现什么功能？",
-  "需要解释哪段代码？",
-  "今天要锻造哪个想法？",
-  "要把哪个报错处理掉？",
-  "想让 Forge 先读哪里？",
-  "需要补哪一组测试？",
-  "要重构哪个模块？",
-  "想检查哪次变更？",
-  "要生成什么实现计划？",
-  "想优化哪个页面？",
-  "要排查哪个接口？",
-  "需要整理哪段逻辑？",
-  "想让代码更清晰吗？",
-  "要给项目加什么能力？",
-  "今天从哪个文件开始？",
-  "想验证哪个命令？",
-  "要修复构建还是类型？",
-  "需要写一份变更说明吗？",
-  "想比较哪两种方案？",
-  "要找出性能瓶颈吗？",
-  "需要生成提交信息吗？",
-  "要检查 Git 改动吗？",
-  "想让 Forge 先规划吗？",
-  "要把需求拆小吗？",
-  "需要补充文档吗？",
-  "想处理哪个 TODO？",
-  "要让界面更顺手吗？",
-  "准备锻造下一步了吗？"
-];
-
-const enHeroPrompts = [
-  "What should we build?",
-  "What should we fix?",
-  "What feature is next?",
-  "What code should we explain?",
-  "What idea should we forge today?",
-  "Which error should we clear?",
-  "Where should Forge read first?",
-  "Which tests should we add?",
-  "Which module needs refactoring?",
-  "Which change should we review?",
-  "What plan should we generate?",
-  "Which screen should we improve?",
-  "Which API should we debug?",
-  "Which logic needs cleanup?",
-  "Should we make this code clearer?",
-  "What capability should this project gain?",
-  "Which file should we start with?",
-  "Which command should we verify?",
-  "Build issue or type issue?",
-  "Need a change summary?",
-  "Which two approaches should we compare?",
-  "Should we look for a performance bottleneck?",
-  "Need a commit message?",
-  "Should we inspect Git changes?",
-  "Should Forge plan first?",
-  "Should we break this down?",
-  "Need documentation updates?",
-  "Which TODO should we handle?",
-  "Should we make the UI smoother?",
-  "Ready to forge the next step?"
-];
+type FailureFixPlanOptions = Pick<
+  FailureRecoveryAttemptRecord,
+  "source" | "attempt" | "limit"
+>;
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
-const maxAutoFailureFixesPerThread = 2;
 
 function selectInitialProjectFromPreferences(
   projects: ForgeProject[],
@@ -241,6 +199,109 @@ function selectInitialProjectFromPreferences(
 }
 
 // 根组件集中持有持久化状态和跨视图动作, 子组件只接收明确回调
+type ProjectFileTreeNode =
+  | {
+      children: ProjectFileTreeNode[];
+      kind: "directory";
+      name: string;
+      relativePath: string;
+    }
+  | {
+      kind: "file";
+      name: string;
+      relativePath: string;
+      size: number;
+    };
+
+function buildProjectFileTree(files: ProjectFile[]): ProjectFileTreeNode[] {
+  const rootNodes: ProjectFileTreeNode[] = [];
+
+  for (const file of files) {
+    const parts = file.relativePath.split("/").filter(Boolean);
+
+    if (parts.length === 0) {
+      continue;
+    }
+
+    let currentNodes = rootNodes;
+    let currentPath = "";
+
+    for (const [index, part] of parts.entries()) {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+      if (index === parts.length - 1) {
+        if (!currentNodes.some((node) => node.kind === "file" && node.relativePath === file.relativePath)) {
+          currentNodes.push({
+            kind: "file",
+            name: part,
+            relativePath: file.relativePath,
+            size: file.size
+          });
+        }
+
+        continue;
+      }
+
+      let directoryNode = currentNodes.find(
+        (node): node is Extract<ProjectFileTreeNode, { kind: "directory" }> =>
+          node.kind === "directory" && node.relativePath === currentPath
+      );
+
+      if (!directoryNode) {
+        directoryNode = {
+          children: [],
+          kind: "directory",
+          name: part,
+          relativePath: currentPath
+        };
+        currentNodes.push(directoryNode);
+      }
+
+      currentNodes = directoryNode.children;
+    }
+  }
+
+  return sortProjectFileTreeNodes(rootNodes);
+}
+
+function sortProjectFileTreeNodes(nodes: ProjectFileTreeNode[]): ProjectFileTreeNode[] {
+  return nodes
+    .map((node) =>
+      node.kind === "directory"
+        ? {
+            ...node,
+            children: sortProjectFileTreeNodes(node.children)
+          }
+        : node
+    )
+    .sort((left, right) => {
+      if (left.kind !== right.kind) {
+        return left.kind === "directory" ? -1 : 1;
+      }
+
+      return left.name.localeCompare(right.name);
+    });
+}
+
+function getProjectFileParentPaths(relativePath: string): string[] {
+  const parts = relativePath.split("/").filter(Boolean);
+  const parentPaths: string[] = [];
+
+  for (let index = 1; index < parts.length; index += 1) {
+    parentPaths.push(parts.slice(0, index).join("/"));
+  }
+
+  return parentPaths;
+}
+
+function createTextFilePreview(file: ProjectTextFile): ProjectFilePreview {
+  return {
+    ...file,
+    kind: "text",
+    mediaType: "text/plain; charset=utf-8"
+  };
+}
+
 export function App(): ReactElement {
   const [settings, setSettings] = useState(() => {
     if (typeof window === "undefined") {
@@ -265,6 +326,8 @@ export function App(): ReactElement {
   );
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
+  const [filePreview, setFilePreview] = useState<ProjectFilePreview | null>(null);
+  const [expandedFileTreeFolders, setExpandedFileTreeFolders] = useState<string[]>([]);
   const [fileFormatterMode, setFileFormatterMode] = useState<CodeFormatterMode>("raw");
   const [formattedPreview, setFormattedPreview] = useState<CodeFormatResult | null>(null);
   const [missingProjectPath, setMissingProjectPath] = useState<string | null>(null);
@@ -273,6 +336,10 @@ export function App(): ReactElement {
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
   const [gitNotice, setGitNotice] = useState<string | null>(null);
   const [commitMessage, setCommitMessage] = useState("");
+  const [commitBranch, setCommitBranch] = useState("");
+  const [createCommitBranch, setCreateCommitBranch] = useState(false);
+  const [pushAfterCommit, setPushAfterCommit] = useState(false);
+  const [gitRemote, setGitRemote] = useState("origin");
   const [threads, setThreads] = useState<TaskThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
@@ -335,9 +402,34 @@ export function App(): ReactElement {
   const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
   const recentAgentToolResultsRef = useRef<Map<string, string[]>>(new Map());
   threadsRef.current = threads;
-  const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
+  const heroSuggestionInput = {
+    language: settings.language,
+    contextSuggestionsEnabled: personalization.contextSuggestionsEnabled,
+    projectName: currentProject?.name ?? null,
+    indexedFileCount: projectScanResult?.files.length ?? 0,
+    changedFileCount: gitStatus?.changedFiles.length ?? 0,
+    pendingChangeCount: changePreviews.length,
+    hasRunningThread: threads.some((thread) => !thread.archived && thread.status === "running"),
+    hasBlockedThread: threads.some((thread) => !thread.archived && thread.status === "blocked"),
+    missingProject: currentProjectMissing
+  };
+  const activeHeroPrompts = createHeroPromptSuggestions(heroSuggestionInput);
+  const activeHeroPrompt =
+    activeHeroPrompts[heroPromptIndex % activeHeroPrompts.length] ?? activeHeroPrompts[0];
+  const projectFileTree = useMemo(
+    () => buildProjectFileTree(projectScanResult?.files ?? []),
+    [projectScanResult?.files]
+  );
+  const expandedFileTreeFolderSet = useMemo(
+    () => new Set(expandedFileTreeFolders),
+    [expandedFileTreeFolders]
+  );
+  const heroComposerPlaceholder = createHeroComposerPlaceholder(
+    heroSuggestionInput,
+    t("composer.heroPlaceholder")
+  );
   const activeAgentProfileContext = applyGeneralPermissionModeToAgentProfile(
     getActiveAgentProfileContext(agentProfiles, settings.language),
     generalPreferences
@@ -380,6 +472,28 @@ export function App(): ReactElement {
 
   function getLiveAgentAction(threadId: string, actionId: string): AgentAction | null {
     return getLiveThread(threadId)?.agentActions?.find((action) => action.id === actionId) ?? null;
+  }
+
+  function getThreadAgentProfileContext(threadId: string): AgentProfileContext {
+    return getLiveThread(threadId)?.agentProfile ?? activeAgentProfileContext;
+  }
+
+  function getThreadFullAccessMode(threadId: string): boolean {
+    const agentProfile = getThreadAgentProfileContext(threadId);
+
+    return !generalPreferences.readOnly &&
+      (generalPreferences.fullAccess || agentProfile.permissionMode === "full");
+  }
+
+  function getThreadAutoRunBatchSize(threadId: string): number {
+    return Math.min(
+      generalPreferences.autoRunBatchSize,
+      getThreadAgentProfileContext(threadId).autoRunBatchSize
+    );
+  }
+
+  function getThreadFailureRecoveryLimit(threadId: string): number {
+    return getThreadAgentProfileContext(threadId).maxFailureRecoveryAttempts;
   }
 
   function hasReservedAgentAction(threadId: string, actions: AgentAction[]): boolean {
@@ -490,10 +604,10 @@ export function App(): ReactElement {
       }
 
       const runnableActions = getRunnablePendingAgentActions(thread.agentActions ?? [], {
-        fullAccess: fullAccessMode,
+        fullAccess: getThreadFullAccessMode(thread.id),
         rules: generalPreferences.commandSafetyRules
       });
-      const runnableBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
+      const runnableBatch = runnableActions.slice(0, getThreadAutoRunBatchSize(thread.id));
 
       return runnableBatch.length > 0 && !hasReservedAgentAction(thread.id, runnableBatch);
     });
@@ -503,10 +617,10 @@ export function App(): ReactElement {
     }
 
     const runnableActions = getRunnablePendingAgentActions(nextThread.agentActions ?? [], {
-      fullAccess: fullAccessMode,
+      fullAccess: getThreadFullAccessMode(nextThread.id),
       rules: generalPreferences.commandSafetyRules
     });
-    const runnableActionBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
+    const runnableActionBatch = runnableActions.slice(0, getThreadAutoRunBatchSize(nextThread.id));
     void runAgentActions(nextThread.id, runnableActionBatch);
   }, [
     changePreviews.length,
@@ -537,13 +651,24 @@ export function App(): ReactElement {
           return false;
         }
 
+        const agentProfile = getThreadAgentProfileContext(thread.id);
+
+        if (agentProfile.failureRecoveryPolicy !== "auto") {
+          return false;
+        }
+
         const key = createAutoFailureFixKey(thread.id, failedAction.id);
-        const count = autoFailureFixCountsRef.current.get(thread.id) ?? 0;
+        const count = Math.max(
+          autoFailureFixCountsRef.current.get(thread.id) ?? 0,
+          countAutoFailureRecoveryAttempts(thread.events)
+        );
+        const actionAutoAttempted = countAutoFailureRecoveryAttempts(thread.events, failedAction.id) > 0;
 
         return (
-          count < maxAutoFailureFixesPerThread &&
+          count < getThreadFailureRecoveryLimit(thread.id) &&
           !activeAutoFailureFixKeysRef.current.has(key) &&
-          !autoFailureFixAttemptedKeysRef.current.has(key)
+          !autoFailureFixAttemptedKeysRef.current.has(key) &&
+          !actionAutoAttempted
         );
       });
 
@@ -552,11 +677,19 @@ export function App(): ReactElement {
     }
 
     const key = createAutoFailureFixKey(candidate.thread.id, candidate.failedAction.id);
-    const currentCount = autoFailureFixCountsRef.current.get(candidate.thread.id) ?? 0;
+    const limit = getThreadFailureRecoveryLimit(candidate.thread.id);
+    const currentCount = Math.max(
+      autoFailureFixCountsRef.current.get(candidate.thread.id) ?? 0,
+      countAutoFailureRecoveryAttempts(candidate.thread.events)
+    );
     activeAutoFailureFixKeysRef.current.add(key);
     autoFailureFixAttemptedKeysRef.current.add(key);
     autoFailureFixCountsRef.current.set(candidate.thread.id, currentCount + 1);
-    void generateFailureFixPlan(candidate.thread.id, candidate.failedAction).finally(() => {
+    void generateFailureFixPlan(candidate.thread.id, candidate.failedAction, null, {
+      source: "auto",
+      attempt: currentCount + 1,
+      limit
+    }).finally(() => {
       activeAutoFailureFixKeysRef.current.delete(key);
     });
   }, [
@@ -579,6 +712,8 @@ export function App(): ReactElement {
     if (!currentProject) {
       setProjectScanResult(null);
       setPreviewFile(null);
+      setFilePreview(null);
+      setExpandedFileTreeFolders([]);
       setFormattedPreview(null);
       setMissingProjectPath(null);
       setChangePreviews([]);
@@ -632,6 +767,12 @@ export function App(): ReactElement {
   }, [gitStatus, selectedGitPath]);
 
   useEffect(() => {
+    setCommitBranch(gitStatus?.currentBranch ?? "");
+    setCreateCommitBranch(false);
+    setGitRemote(gitStatus?.remotes[0] ?? "origin");
+  }, [currentProject?.path, gitStatus?.currentBranch, gitStatus?.remotes]);
+
+  useEffect(() => {
     for (const provider of settings.providers) {
       void refreshProviderKeyStatus(provider.id);
     }
@@ -658,6 +799,69 @@ export function App(): ReactElement {
     await window.forge.secrets.deleteProviderKey(providerId);
     setSettings((current) => removeProviderModels(current, providerId));
     await refreshProviderKeyStatus(providerId);
+  }
+
+  // 隐私清理入口: 主进程密钥与渲染层本地状态一起重置, 但不触碰用户项目文件
+  async function clearAllLocalData(): Promise<void> {
+    const activePlanRequestIds = [...activePlanStreamRequestIdsRef.current.values()];
+    const activeAskRequestIds = [...activeAskStreamRequestIdsRef.current.values()];
+
+    for (const thread of threadsRef.current) {
+      cancelledThreadIdsRef.current.add(thread.id);
+    }
+
+    await Promise.allSettled([
+      ...activePlanRequestIds.map((requestId) => window.forge.agent.cancelPlanStream(requestId)),
+      ...activeAskRequestIds.map((requestId) => window.forge.agent.cancelAskStream(requestId))
+    ]);
+    await window.forge.secrets.clearAllProviderKeys();
+
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+
+    activePlanStreamRequestIdsRef.current.clear();
+    activeAskStreamRequestIdsRef.current.clear();
+    activeAgentAutoRunActionIdsRef.current.clear();
+    activeAutoFailureFixKeysRef.current.clear();
+    autoFailureFixAttemptedKeysRef.current.clear();
+    autoFailureFixCountsRef.current.clear();
+    recentAgentToolResultsRef.current.clear();
+
+    setSettings(createDefaultModelSettings());
+    setKeyStatuses({});
+    setRecentProjects([]);
+    setCurrentProject(null);
+    setProjectScanResult(null);
+    setPreviewFile(null);
+    setFilePreview(null);
+    setExpandedFileTreeFolders([]);
+    setFileFormatterMode("raw");
+    setFormattedPreview(null);
+    setMissingProjectPath(null);
+    setChangePreviews([]);
+    setGitStatus(null);
+    setSelectedGitPath(null);
+    setGitNotice(null);
+    setCommitMessage("");
+    setCommitBranch("");
+    setCreateCommitBranch(false);
+    setPushAfterCommit(false);
+    setGitRemote("origin");
+    threadsRef.current = [];
+    setThreads([]);
+    setSelectedThreadId(null);
+    setTaskNotice(null);
+    setProviderFetchStates({});
+    setUsageEvents([]);
+    setUsageRates({});
+    setPersonalization(createDefaultPersonalizationSettings());
+    setGeneralPreferences(createDefaultGeneralPreferences());
+    setAgentMemories([]);
+    setAgentProfiles(createDefaultAgentProfiles());
+    setComposerFocusSignal((current) => current + 1);
+    setComposerSubmitSignal(0);
+    setHeroPromptIndex(0);
+    setPausedThreadIds(new Set());
   }
 
   // 先保存当前配置再拉取模型, 自定义 Base URL 和 Key 都以最新输入为准
@@ -953,6 +1157,8 @@ export function App(): ReactElement {
       const result = await window.forge.projects.scan(projectPath);
       setProjectScanResult(result);
       setPreviewFile(null);
+      setFilePreview(null);
+      setExpandedFileTreeFolders([]);
       setFormattedPreview(null);
       setMissingProjectPath(null);
       setChangePreviews([]);
@@ -960,6 +1166,8 @@ export function App(): ReactElement {
     } catch (error) {
       setProjectScanResult(null);
       setPreviewFile(null);
+      setFilePreview(null);
+      setExpandedFileTreeFolders([]);
       setFormattedPreview(null);
       setChangePreviews([]);
       setGitStatus(null);
@@ -1008,13 +1216,26 @@ export function App(): ReactElement {
     }
 
     try {
+      const targetBranch =
+        commitBranch.trim() || gitStatus?.currentBranch || gitStatus?.branches[0] || undefined;
+      const targetRemote = gitRemote.trim() || "origin";
       const result = await window.forge.git.commit({
         projectRoot: currentProject.path,
-        message: normalizedMessage
+        message: normalizedMessage,
+        branch: targetBranch,
+        createBranch: createCommitBranch,
+        push: pushAfterCommit,
+        remote: targetRemote
       });
       setGitStatus(result.status);
       setCommitMessage("");
-      setGitNotice(t("projects.commitDone"));
+      setGitNotice(
+        createGitOperationNotice(settings.language, {
+          type: pushAfterCommit ? "commit-push" : "commit",
+          branch: result.branch ?? targetBranch ?? null,
+          remote: targetRemote
+        })
+      );
       if (selectedThreadId && pendingCommitAction) {
         const createdAt = new Date().toISOString();
 
@@ -1042,15 +1263,62 @@ export function App(): ReactElement {
   }
 
   // 按路径读取项目文件并生成可阅读预览
+  async function pushCurrentProjectBranch(): Promise<void> {
+    if (!currentProject || !gitStatus?.isRepo) {
+      return;
+    }
+
+    const targetBranch =
+      commitBranch.trim() || gitStatus.currentBranch || gitStatus.branches[0] || undefined;
+    const targetRemote = gitRemote.trim() || "origin";
+
+    try {
+      const result = await window.forge.git.push({
+        projectRoot: currentProject.path,
+        branch: targetBranch,
+        remote: targetRemote
+      });
+      setGitStatus(result.status);
+      setGitNotice(
+        createGitOperationNotice(settings.language, {
+          type: "push",
+          branch: result.branch,
+          remote: result.remote
+        })
+      );
+    } catch (error) {
+      setGitNotice(formatRuntimeError(settings.language, error));
+    }
+  }
+
   async function previewProjectFile(relativePath: string): Promise<ProjectTextFile | null> {
     if (!currentProject) {
       return null;
     }
 
-    const file = await window.forge.files.readText({
+    setExpandedFileTreeFolders((current) => [
+      ...new Set([...current, ...getProjectFileParentPaths(relativePath)])
+    ]);
+
+    const projectFilePreview = await window.forge.files.preview({
       projectRoot: currentProject.path,
       relativePath
     });
+    setFilePreview(projectFilePreview);
+
+    if (projectFilePreview.kind !== "text") {
+      setPreviewFile(null);
+      setFormattedPreview(null);
+      setFileFormatterMode("raw");
+      return null;
+    }
+
+    const file: ProjectTextFile = {
+      relativePath: projectFilePreview.relativePath,
+      content: projectFilePreview.content,
+      size: projectFilePreview.size
+    };
+
     setPreviewFile(file);
     setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
 
@@ -1087,6 +1355,7 @@ export function App(): ReactElement {
       nextContent
     });
     setPreviewFile(file);
+    setFilePreview(createTextFilePreview(file));
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
     void refreshProjectGitStatus();
 
@@ -1174,6 +1443,7 @@ export function App(): ReactElement {
 
     if (nextPreviewFile) {
       setPreviewFile(nextPreviewFile);
+      setFilePreview(createTextFilePreview(nextPreviewFile));
     }
 
     setChangePreviews([]);
@@ -1319,7 +1589,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: selectedThread.intelligence,
-        agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
+        agentProfile: getThreadAgentProfileContext(selectedThread.id),
         memories,
         personalization: createPersonalizationPrompt(personalization),
         projectScan: projectScanResult,
@@ -1358,6 +1628,7 @@ export function App(): ReactElement {
         });
 
         setPreviewFile(writtenFile);
+        setFilePreview(createTextFilePreview(writtenFile));
         setChangePreviews((current) => removeFileChangePreview(current, sourcedPreview.relativePath));
         void refreshProjectGitStatus();
         setThreads((current) =>
@@ -1417,7 +1688,9 @@ export function App(): ReactElement {
       : null;
 
     if (isDirectAnswerPrompt(prompt)) {
-      const result = createThreadFromSettings(settings, prompt);
+      const result = createThreadFromSettings(settings, prompt, {
+        agentProfile: activeAgentProfileContext
+      });
 
       if (!result.ok) {
         setTaskNotice(
@@ -1515,7 +1788,9 @@ export function App(): ReactElement {
         ? activeThread
         : null;
 
-    const result = createThreadFromSettings(settings, prompt);
+    const result = createThreadFromSettings(settings, prompt, {
+      agentProfile: activeAgentProfileContext
+    });
 
     if (!result.ok) {
       setTaskNotice(
@@ -1610,7 +1885,7 @@ export function App(): ReactElement {
         provider,
         model,
         intelligence: settings.intelligence,
-        agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
+        agentProfile: getThreadAgentProfileContext(threadId),
         memories,
         personalization: createPersonalizationPrompt(personalization),
         speed: settings.speed,
@@ -1679,7 +1954,7 @@ export function App(): ReactElement {
       });
       const agentActions = createAgentActionsFromPlanSteps(plan.steps ?? []);
       const runnableAgentActions = getRunnablePendingAgentActions(agentActions, {
-        fullAccess: fullAccessMode,
+        fullAccess: getThreadFullAccessMode(threadId),
         rules: generalPreferences.commandSafetyRules
       });
       const planMessage =
@@ -1758,7 +2033,8 @@ export function App(): ReactElement {
   async function generateFailureFixPlan(
     threadId: string,
     action: AgentAction,
-    commandResultOverride: CommandRunResult | null = null
+    commandResultOverride: CommandRunResult | null = null,
+    options: FailureFixPlanOptions = { source: "manual" }
   ): Promise<void> {
     const thread = threads.find((candidate) => candidate.id === threadId);
 
@@ -1793,6 +2069,13 @@ export function App(): ReactElement {
     }
 
     const createdAt = new Date().toISOString();
+    const failureRecoveryAttempt: FailureRecoveryAttemptRecord = {
+      actionId: action.id,
+      label: action.label,
+      source: options.source,
+      ...(options.attempt === undefined ? {} : { attempt: options.attempt }),
+      ...(options.limit === undefined ? {} : { limit: options.limit })
+    };
     setTaskNotice(null);
     setThreads((current) =>
       appendThreadEvents(
@@ -1802,11 +2085,13 @@ export function App(): ReactElement {
           {
             id: `${threadId}-failure-fix-${action.id}-${createdAt}`,
             kind: "plan",
-            message:
-              settings.language === "zh-CN"
-                ? `正在根据失败动作生成修复计划: ${action.label}`
-                : `Generating a fix plan for failed action: ${action.label}`,
-            createdAt
+            message: formatFailureFixPlanStartMessage(
+              settings.language,
+              action,
+              failureRecoveryAttempt
+            ),
+            createdAt,
+            failureRecoveryAttempt
           }
         ],
         "running"
@@ -1969,7 +2254,7 @@ export function App(): ReactElement {
       provider,
       model,
       intelligence: settings.intelligence,
-      agentProfile: getActiveAgentProfileContext(agentProfiles, settings.language),
+      agentProfile: getThreadAgentProfileContext(threadId),
       memories,
       personalization: createPersonalizationPrompt(personalization),
       conversation,
@@ -2192,6 +2477,44 @@ export function App(): ReactElement {
     );
   }
 
+  // 在 suggest 策略下补一条可见恢复建议, 让失败动作有清晰的下一步入口
+  function appendFailureRecoverySuggestionEvent(
+    threadId: string,
+    action: AgentAction,
+    status: AgentAction["status"],
+    createdAt: string
+  ): void {
+    const agentProfile = getThreadAgentProfileContext(threadId);
+
+    if (!shouldSuggestFailureRecovery(agentProfile, status)) {
+      return;
+    }
+
+    const eventPrefix = getFailureRecoverySuggestionEventPrefix(threadId, action.id);
+    const event: TaskThreadEvent = {
+      id: createFailureRecoverySuggestionEventId(threadId, action.id, createdAt),
+      kind: "plan",
+      message: formatFailureRecoverySuggestion(settings.language, action),
+      createdAt
+    };
+
+    setThreads((current) =>
+      current.map((thread) => {
+        if (
+          thread.id !== threadId ||
+          thread.events.some((threadEvent) => threadEvent.id.startsWith(eventPrefix))
+        ) {
+          return thread;
+        }
+
+        return {
+          ...thread,
+          events: [...thread.events, event]
+        };
+      })
+    );
+  }
+
   // 根据动作执行结果写入完成, 失败或等待记录, 供 UI 和后续计划复用
   function appendAgentActionOutcomeEvent(
     threadId: string,
@@ -2212,6 +2535,8 @@ export function App(): ReactElement {
       completedAt,
       durationMs
     });
+
+    appendFailureRecoverySuggestionEvent(threadId, action, status, completedAt);
   }
 
   // 用户确认或跳过门禁时写入时间线, 让队列推进有可审计记录
@@ -2276,20 +2601,6 @@ export function App(): ReactElement {
     return recentAgentToolResultsRef.current.get(threadId) ?? [];
   }
 
-  // 文件读取动作只记录有限摘要, 让后续编辑有上下文但不把超长文件塞进提示
-  function formatProjectFileReadResultMessage(language: Language, file: ProjectTextFile): string {
-    const content = file.content.trim();
-    const preview = content ? content.split(/\r?\n/u).slice(0, 80).join("\n").slice(0, 5000) : "";
-    const header =
-      language === "zh-CN"
-        ? `文件读取完成: ${file.relativePath} (${file.size} bytes${preview.length < content.length ? ", 已截断" : ""})`
-        : `File read complete: ${file.relativePath} (${file.size} bytes${preview.length < content.length ? ", truncated" : ""})`;
-
-    return preview
-      ? [header, "Content preview:", preview].join("\n")
-      : `${header}\n${language === "zh-CN" ? "文件为空。" : "File is empty."}`;
-  }
-
   // 执行单个 Agent 动作, 失败时保留可恢复的结果说明
   async function runAgentAction(
     threadId: string,
@@ -2328,7 +2639,8 @@ export function App(): ReactElement {
     }
 
     const actionToRun = liveAction ?? action;
-    const activeAgentProfile = activeAgentProfileContext;
+    const activeAgentProfile = getThreadAgentProfileContext(threadId);
+    const threadFullAccessMode = getThreadFullAccessMode(threadId);
     const permission = resolveAgentActionPermission(actionToRun, activeAgentProfile);
 
     if (!permission.ok) {
@@ -2400,7 +2712,7 @@ export function App(): ReactElement {
         outcome = await generateAgentFileChangeAction(threadId, actionToRun, execution.relativePath);
       } else if (execution.kind === "run-command") {
         const commandRisk = resolveAgentCommandRisk(execution.command, {
-          fullAccess: fullAccessMode,
+          fullAccess: threadFullAccessMode,
           rules: generalPreferences.commandSafetyRules
         });
 
@@ -2414,7 +2726,7 @@ export function App(): ReactElement {
             ),
             "failed"
           );
-        } else if (commandRisk.level === "ask" && !fullAccessMode && !options.approvedCommand) {
+        } else if (commandRisk.level === "ask" && !threadFullAccessMode && !options.approvedCommand) {
           outcome = blockAgentCommandAction(
             threadId,
             actionToRun,
@@ -2539,7 +2851,7 @@ export function App(): ReactElement {
     if (action.kind === "run-command" && action.command) {
       const command = action.command;
       const commandRisk = resolveAgentCommandRisk(command, {
-        fullAccess: fullAccessMode,
+        fullAccess: getThreadFullAccessMode(threadId),
         rules: generalPreferences.commandSafetyRules
       });
 
@@ -2843,11 +3155,13 @@ export function App(): ReactElement {
       }
 
       setPreviewFile(file);
+      setFilePreview(createTextFilePreview(file));
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
+      const threadFullAccessMode = getThreadFullAccessMode(threadId);
 
       const generated = await generateProjectFileChange(file.relativePath, file.content, threadId, {
         action,
-        autoApply: fullAccessMode,
+        autoApply: threadFullAccessMode,
         source: {
           threadId,
           actionId: action.id,
@@ -2860,7 +3174,7 @@ export function App(): ReactElement {
         return "failed";
       }
 
-      if (fullAccessMode) {
+      if (threadFullAccessMode) {
         updateAgentActionStatus(threadId, action.id, "completed");
         return "completed";
       }
@@ -2928,6 +3242,7 @@ export function App(): ReactElement {
         const createdAt = new Date().toISOString();
 
         setPreviewFile(file);
+        setFilePreview(createTextFilePreview(file));
         setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
         updateAgentActionStatus(threadId, action.id, "completed");
         setThreads((current) =>
@@ -3097,8 +3412,11 @@ export function App(): ReactElement {
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
         <div className="w-full max-w-[760px] -translate-y-[5vh]">
           <h1 className="mb-5 overflow-visible whitespace-nowrap pb-2 text-center text-[22px] font-medium leading-[1.28] tracking-normal text-[#202123] md:text-[24px]">
-            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_900ms_ease-in-out] truncate align-baseline">
-              {activeHeroPrompts[heroPromptIndex]}
+            <span
+              key={heroPromptIndex}
+              className="inline-block max-w-full animate-[forge-title-swap_900ms_ease-in-out] truncate align-baseline"
+            >
+              {activeHeroPrompt}
             </span>
           </h1>
           {currentProjectMissing ? (
@@ -3128,7 +3446,7 @@ export function App(): ReactElement {
         settings={settings}
         generalPreferences={generalPreferences}
         focusSignal={composerFocusSignal}
-        placeholder={variant === "hero" ? t("composer.heroPlaceholder") : undefined}
+        placeholder={variant === "hero" ? heroComposerPlaceholder : undefined}
         submitSignal={composerSubmitSignal}
         variant={variant}
         onCancelTask={cancelActiveThread}
@@ -3172,74 +3490,147 @@ export function App(): ReactElement {
       hasContinuableAgentActions(selectedThread);
 
     return (
-      <ThreadWorkspace
-        compact
-        language={settings.language}
-        hasProject={Boolean(currentProject) || Boolean(selectedThread)}
-        selectedThreadId={selectedThreadId}
-        threads={visibleWorkspaceThreads}
-        commandSafetyRules={generalPreferences.commandSafetyRules}
-        fullAccess={fullAccessMode}
-        agentPaused={agentPaused}
-        showActivityHeartbeat={generalPreferences.showActivityHeartbeat}
-        showProcessedSummary={generalPreferences.showProcessedSummary}
-        defaultExpandProcessedSummary={generalPreferences.expandProcessedSummary}
-        projectScan={projectScanResult}
-        previewFile={previewFile}
-        changePreview={
-          previewFile
-            ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
-            : null
-        }
-        changePreviews={changePreviews}
-        onSelectThread={setSelectedThreadId}
-        onPickProject={() => void pickProject()}
-        onOpenRecentProject={openMostRecentProject}
-        onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
-        onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
-        onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
-        onAllowAgentCommand={(threadId, action) => void allowAgentCommandAction(threadId, action)}
-        onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
-        onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
-        onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
-        onCompleteAgentAction={completeAgentAction}
-        onSkipAgentAction={skipAgentAction}
-        onResumeAgent={resumeAgentThread}
-        onOpenSourceControl={() => setActiveView("source")}
-        onOpenFiles={() => setActiveView("files")}
-        onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
-        onCancelCommand={(threadId, runId) => void cancelThreadCommand(threadId, runId)}
-        onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
-        onPreviewChange={(relativePath, nextContent) =>
-          void previewProjectFileChange(relativePath, nextContent)
-        }
-        onApplyChange={(relativePath, nextContent) =>
-          void applyProjectFileChange(relativePath, nextContent)
-        }
-        onDiscardChange={discardProjectFileChange}
-        onApplyAllChanges={() => void applyAllProjectFileChanges()}
-        onDiscardAllChanges={discardAllProjectFileChanges}
-        onGenerateFileChange={(relativePath, currentContent) =>
-          void generateProjectFileChange(relativePath, currentContent)
-        }
-        onGenerateSelectedFileChanges={(relativePaths) =>
-          void generateSelectedProjectFileChanges(relativePaths)
-        }
-      />
+      <Suspense fallback={<LazyPanelFallback language={settings.language} />}>
+        <LazyThreadWorkspace
+          compact
+          language={settings.language}
+          hasProject={Boolean(currentProject) || Boolean(selectedThread)}
+          selectedThreadId={selectedThreadId}
+          threads={visibleWorkspaceThreads}
+          commandSafetyRules={generalPreferences.commandSafetyRules}
+          fullAccess={fullAccessMode}
+          agentPaused={agentPaused}
+          showActivityHeartbeat={generalPreferences.showActivityHeartbeat}
+          showProcessedSummary={generalPreferences.showProcessedSummary}
+          defaultExpandProcessedSummary={generalPreferences.expandProcessedSummary}
+          projectScan={projectScanResult}
+          previewFile={previewFile}
+          changePreview={
+            previewFile
+              ? (changePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ?? null)
+              : null
+          }
+          changePreviews={changePreviews}
+          onSelectThread={setSelectedThreadId}
+          onPickProject={() => void pickProject()}
+          onOpenRecentProject={openMostRecentProject}
+          onRunAgentAction={(threadId, action) => void runAgentAction(threadId, action)}
+          onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
+          onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
+          onAllowAgentCommand={(threadId, action) => void allowAgentCommandAction(threadId, action)}
+          onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
+          onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
+          onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
+          onCompleteAgentAction={completeAgentAction}
+          onSkipAgentAction={skipAgentAction}
+          onResumeAgent={resumeAgentThread}
+          onOpenSourceControl={() => setActiveView("source")}
+          onOpenFiles={() => setActiveView("files")}
+          onRunCommand={(threadId, command) => void runThreadCommand(threadId, command)}
+          onCancelCommand={(threadId, runId) => void cancelThreadCommand(threadId, runId)}
+          onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
+          onPreviewChange={(relativePath, nextContent) =>
+            void previewProjectFileChange(relativePath, nextContent)
+          }
+          onApplyChange={(relativePath, nextContent) =>
+            void applyProjectFileChange(relativePath, nextContent)
+          }
+          onDiscardChange={discardProjectFileChange}
+          onApplyAllChanges={() => void applyAllProjectFileChanges()}
+          onDiscardAllChanges={discardAllProjectFileChanges}
+          onGenerateFileChange={(relativePath, currentContent) =>
+            void generateProjectFileChange(relativePath, currentContent)
+          }
+          onGenerateSelectedFileChanges={(relativePaths) =>
+            void generateSelectedProjectFileChanges(relativePaths)
+          }
+        />
+      </Suspense>
     );
   }
 
   // 渲染项目文件阅读页, 只有一种格式化模式时禁用下拉
+  function toggleFileTreeFolder(relativePath: string): void {
+    setExpandedFileTreeFolders((current) =>
+      current.includes(relativePath)
+        ? current.filter((path) => path !== relativePath)
+        : [...current, relativePath]
+    );
+  }
+
+  function renderFileTreeNodes(nodes: ProjectFileTreeNode[], depth = 0): ReactElement[] {
+    return nodes.flatMap((node) => {
+      const paddingLeft = 8 + depth * 14;
+
+      if (node.kind === "directory") {
+        const expanded = expandedFileTreeFolderSet.has(node.relativePath);
+
+        return [
+          <button
+            key={node.relativePath}
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => toggleFileTreeFolder(node.relativePath)}
+            className="flex w-full items-center gap-1.5 rounded-[10px] py-1.5 pr-2 text-left text-[12px] text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+            style={{ paddingLeft }}
+            title={node.relativePath}
+          >
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+            )}
+            <Folder className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 truncate">{node.name}</span>
+          </button>,
+          ...(expanded ? renderFileTreeNodes(node.children, depth + 1) : [])
+        ];
+      }
+
+      const selected = filePreview?.relativePath === node.relativePath;
+
+      return [
+        <button
+          key={node.relativePath}
+          type="button"
+          onClick={() => void previewProjectFile(node.relativePath)}
+          className={`flex w-full items-center gap-1.5 rounded-[10px] py-1.5 pr-2 text-left text-[12px] ${
+            selected
+              ? "bg-[#ececf1] text-[#202123]"
+              : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+          }`}
+          style={{ paddingLeft }}
+          title={node.relativePath}
+        >
+          <span className="h-3.5 w-3.5 shrink-0" />
+          <FileIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 truncate">{node.name}</span>
+        </button>
+      ];
+    });
+  }
+
   function renderFilesView(): ReactElement {
-    const previewContent = formattedPreview?.content ?? previewFile?.content ?? "";
+    const activeFilePreview = filePreview ?? (previewFile ? createTextFilePreview(previewFile) : null);
+    const activeTextPreview = activeFilePreview?.kind === "text" ? activeFilePreview : null;
+    const previewContent = activeTextPreview ? (formattedPreview?.content ?? activeTextPreview.content) : "";
     const formatterMessage =
       fileFormatterMode === "rendered"
         ? settings.language === "zh-CN"
           ? "Markdown 渲染预览"
           : "Rendered Markdown preview"
         : formatPreviewStatus(formattedPreview, settings.language);
-    const formatterOptions: Array<{ value: CodeFormatterMode; label: string }> = previewFile
-      ? getAvailableCodeFormatterModes(previewFile.relativePath).map((mode) => ({
+    const previewStatusMessage = activeFilePreview
+      ? activeFilePreview.kind === "text"
+        ? formatterMessage
+        : activeFilePreview.kind === "office"
+          ? settings.language === "zh-CN"
+            ? "文档文件"
+            : "Document file"
+          : activeFilePreview.mediaType
+      : "";
+    const formatterOptions: Array<{ value: CodeFormatterMode; label: string }> = activeTextPreview
+      ? getAvailableCodeFormatterModes(activeTextPreview.relativePath).map((mode) => ({
           value: mode,
           label:
             mode === "prettier"
@@ -3260,31 +3651,22 @@ export function App(): ReactElement {
         ) : (
           <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
             <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
-              {(projectScanResult?.files ?? []).map((file) => (
-                <button
-                  key={file.relativePath}
-                  type="button"
-                  onClick={() => void previewProjectFile(file.relativePath)}
-                  className={`block w-full truncate rounded-[12px] px-3 py-2 text-left text-[12px] ${
-                    previewFile?.relativePath === file.relativePath
-                      ? "bg-[#ececf1] text-[#202123]"
-                      : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
-                  }`}
-                >
-                  {file.relativePath}
-                </button>
-              ))}
+              {projectFileTree.length > 0 ? (
+                <div className="space-y-0.5">{renderFileTreeNodes(projectFileTree)}</div>
+              ) : (
+                <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">{t("files.pickFile")}</div>
+              )}
             </div>
             <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-4">
-              {previewFile ? (
+              {activeFilePreview ? (
                 <>
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <span className="min-w-0">
                       <span className="block truncate text-[14px] font-semibold text-[#202123]">
-                        {previewFile.relativePath}
+                        {activeFilePreview.relativePath}
                       </span>
                       <span className="mt-1 block truncate text-[12px] text-[#8e8ea0]">
-                        {formatterMessage}
+                        {previewStatusMessage}
                       </span>
                     </span>
                     {formatterOptions.length > 0 ? (
@@ -3307,11 +3689,14 @@ export function App(): ReactElement {
                       </label>
                     ) : null}
                   </div>
-                  <FilePreviewRenderer
-                    content={previewContent}
-                    mode={fileFormatterMode}
-                    path={previewFile.relativePath}
-                  />
+                  <Suspense fallback={<LazyPanelFallback language={settings.language} compact />}>
+                    <LazyFilePreviewRenderer
+                      content={previewContent}
+                      filePreview={activeFilePreview}
+                      mode={fileFormatterMode}
+                      path={activeFilePreview.relativePath}
+                    />
+                  </Suspense>
                 </>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-[#6e6e80]">
@@ -3348,6 +3733,34 @@ export function App(): ReactElement {
             body: "From the current task thread commit step",
             use: "Use agent commit suggestion"
           };
+    const gitOperationCopy =
+      settings.language === "zh-CN"
+        ? {
+            currentBranch: "当前分支",
+            detached: "detached HEAD",
+            commitBranch: "提交分支",
+            commitBranchHint: "选择已有分支，或输入新分支名",
+            createBranch: "创建新分支后提交",
+            remote: "远端",
+            pushAfterCommit: "提交后推送",
+            pushBranch: "推送分支"
+          }
+        : {
+            currentBranch: "Current branch",
+            detached: "detached HEAD",
+            commitBranch: "Commit branch",
+            commitBranchHint: "Choose an existing branch or type a new one",
+            createBranch: "Create new branch before commit",
+            remote: "Remote",
+            pushAfterCommit: "Push after commit",
+            pushBranch: "Push branch"
+          };
+    const branchOptions = gitStatus?.branches ?? [];
+    const remoteOptions = gitStatus?.remotes ?? [];
+    const selectedRemote = gitRemote.trim() || remoteOptions[0] || "origin";
+    const targetBranch = commitBranch.trim() || gitStatus?.currentBranch || branchOptions[0] || "";
+    const branchSelectOptions = branchOptions.map((branch) => ({ value: branch, label: branch }));
+    const remoteSelectOptions = remoteOptions.map((remote) => ({ value: remote, label: remote }));
 
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -3434,13 +3847,95 @@ export function App(): ReactElement {
                     className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
                   />
                 </label>
+                <div className="mt-3 space-y-2 rounded-[14px] border border-[#ececf1] bg-[#fafafa] p-3">
+                  <p className="text-[11px] text-[#6e6e80]">
+                    {gitOperationCopy.currentBranch}:{" "}
+                    <span className="font-mono text-[#202123]">
+                      {gitStatus?.currentBranch ?? gitOperationCopy.detached}
+                    </span>
+                  </p>
+                  <label className="grid gap-1.5 text-[12px] text-[#6e6e80]">
+                    {gitOperationCopy.commitBranch}
+                    {createCommitBranch || branchSelectOptions.length === 0 ? (
+                      <input
+                        value={commitBranch}
+                        placeholder={gitOperationCopy.commitBranchHint}
+                        onChange={(event) => setCommitBranch(event.currentTarget.value)}
+                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2.5 font-mono text-[12px] text-[#202123] outline-none transition focus:border-[#202123]"
+                      />
+                    ) : (
+                      <InlineSelectMenu
+                        align="start"
+                        ariaLabel={gitOperationCopy.commitBranch}
+                        value={targetBranch}
+                        options={branchSelectOptions}
+                        onChange={setCommitBranch}
+                        triggerClassName="w-full justify-between font-mono text-[12px]"
+                        contentClassName="max-h-64 overflow-auto font-mono text-[12px]"
+                      />
+                    )}
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <label className="grid gap-1.5 text-[12px] text-[#6e6e80]">
+                      {gitOperationCopy.remote}
+                      {remoteSelectOptions.length > 0 ? (
+                        <InlineSelectMenu
+                          align="start"
+                          ariaLabel={gitOperationCopy.remote}
+                          value={selectedRemote}
+                          options={remoteSelectOptions}
+                          onChange={setGitRemote}
+                          triggerClassName="w-full justify-between font-mono text-[12px]"
+                          contentClassName="font-mono text-[12px]"
+                        />
+                      ) : (
+                        <input
+                          value={gitRemote}
+                          onChange={(event) => setGitRemote(event.currentTarget.value)}
+                          className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2.5 font-mono text-[12px] text-[#202123] outline-none transition focus:border-[#202123]"
+                        />
+                      )}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void pushCurrentProjectBranch()}
+                      disabled={!gitStatus?.isRepo || !targetBranch}
+                      className="h-9 self-end rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] disabled:cursor-not-allowed disabled:bg-[#ececf1] disabled:text-[#8e8ea0]"
+                    >
+                      {gitOperationCopy.pushBranch}
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-2 text-[12px] text-[#565869]">
+                    <input
+                      type="checkbox"
+                      checked={createCommitBranch}
+                      onChange={(event) => setCreateCommitBranch(event.currentTarget.checked)}
+                      className="h-4 w-4 rounded border-[#d9d9e3]"
+                    />
+                    {gitOperationCopy.createBranch}
+                  </label>
+                  <label className="flex items-center gap-2 text-[12px] text-[#565869]">
+                    <input
+                      type="checkbox"
+                      checked={pushAfterCommit}
+                      onChange={(event) => setPushAfterCommit(event.currentTarget.checked)}
+                      className="h-4 w-4 rounded border-[#d9d9e3]"
+                    />
+                    {gitOperationCopy.pushAfterCommit}{" "}
+                    <span className="font-mono text-[#8e8ea0]">{selectedRemote}</span>
+                  </label>
+                </div>
                 <button
                   type="button"
                   onClick={() => void commitCurrentProject(commitMessage)}
                   disabled={!gitStatus?.isRepo || changedFiles.length === 0}
                   className="mt-3 h-10 w-full rounded-[14px] bg-[#202123] text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-[#ececf1] disabled:text-[#8e8ea0]"
                 >
-                  {t("projects.commit")}
+                  {pushAfterCommit
+                    ? settings.language === "zh-CN"
+                      ? "提交并推送"
+                      : "Commit and push"
+                    : t("projects.commit")}
                 </button>
                 {gitNotice ? <p className="mt-3 text-sm text-[#b45309]">{gitNotice}</p> : null}
               </div>
@@ -3454,7 +3949,7 @@ export function App(): ReactElement {
                 </p>
               </div>
               {selectedChange && selectedChange.diff.trim() ? (
-                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[10px] leading-5 text-[#202123]">
+                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-6 text-[#202123]">
                   {renderDiffPreview(selectedChange.diff)}
                 </pre>
               ) : (
@@ -3473,66 +3968,79 @@ export function App(): ReactElement {
   function renderSettingsView(): ReactElement {
     return (
       <div className="h-full min-h-0 p-5">
-        <SettingsPanel
-          settings={settings}
-          agentMemories={agentMemories}
-          agentProfiles={agentProfiles}
-          generalPreferences={generalPreferences}
-          keyStatuses={keyStatuses}
-          archivedThreads={threads.filter((thread) => thread.archived)}
-          onClearAgentMemories={() => setAgentMemories([])}
-          onDeleteAgentMemory={(memoryId) =>
-            setAgentMemories((current) => deleteAgentMemory(current, memoryId))
-          }
-          onSelectAgentProfile={(profileId) =>
-            setAgentProfiles((current) => selectAgentProfile(current, profileId))
-          }
-          onUpdateAgentProfile={(profileId, patch) =>
-            setAgentProfiles((current) => updateAgentProfile(current, profileId, patch))
-          }
-          onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
-          onFetchModels={(providerId, apiKey) => void fetchModels(providerId, apiKey)}
-          onAddManualModel={(providerId, modelName, apiKey) =>
-            void addManualProviderModel(providerId, modelName, apiKey)
-          }
-          onAddProvider={(label, baseUrl) =>
-            setSettings((current) => addCustomProvider(current, label, baseUrl))
-          }
-          onDeleteProvider={(providerId) => {
-            setSettings((current) => deleteCustomProvider(current, providerId));
-            void deleteProviderKey(providerId);
-          }}
-          onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
-          onSetLanguage={setInterfaceLanguage}
-          onUpdateGeneralPreferences={setGeneralPreferences}
-          onToggleModelEnabled={(modelId, enabled) =>
-            setSettings((current) => updateModelEnabled(current, modelId, enabled))
-          }
-          onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
-          onUpdateProviderBaseUrl={(providerId, baseUrl) =>
-            setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
-          }
-          onUpdateProviderLabel={(providerId, label) =>
-            setSettings((current) => updateProviderLabel(current, providerId, label))
-          }
-          onRestoreArchivedThread={(threadId) => {
-            setThreads((current) => restoreThread(current, threadId));
-            setSelectedThreadId(threadId);
-            setActiveView("workspace");
-          }}
-          personalization={personalization}
-          providerFetchStates={providerFetchStates}
-          usageEvents={usageEvents}
-          usageRates={usageRates}
-          onClearUsage={() => setUsageEvents([])}
-          onUpdatePersonalization={(nextPersonalization) => setPersonalization(nextPersonalization)}
-          onUpdateUsageRate={(providerId, rate) =>
-            setUsageRates((current) => ({
-              ...current,
-              [providerId]: { ...rate, source: "manual" }
-            }))
-          }
-        />
+        <Suspense fallback={<LazyPanelFallback language={settings.language} />}>
+          <LazySettingsPanel
+            settings={settings}
+            agentMemories={agentMemories}
+            agentProfiles={agentProfiles}
+            generalPreferences={generalPreferences}
+            keyStatuses={keyStatuses}
+            archivedThreads={threads.filter((thread) => thread.archived)}
+            localDataSummary={{
+              apiKeyCount: Object.values(keyStatuses).filter((status) => status.hasKey).length,
+              archivedThreadCount: threads.filter((thread) => thread.archived).length,
+              commandRuleCount: generalPreferences.commandSafetyRules.length,
+              conversationCount: threads.length,
+              customProviderCount: settings.providers.filter((provider) => provider.custom).length,
+              memoryCount: agentMemories.length,
+              recentProjectCount: recentProjects.length,
+              usageEventCount: usageEvents.length
+            }}
+            onClearAgentMemories={() => setAgentMemories([])}
+            onClearAllLocalData={clearAllLocalData}
+            onDeleteAgentMemory={(memoryId) =>
+              setAgentMemories((current) => deleteAgentMemory(current, memoryId))
+            }
+            onSelectAgentProfile={(profileId) =>
+              setAgentProfiles((current) => selectAgentProfile(current, profileId))
+            }
+            onUpdateAgentProfile={(profileId, patch) =>
+              setAgentProfiles((current) => updateAgentProfile(current, profileId, patch))
+            }
+            onDeleteProviderKey={(providerId) => void deleteProviderKey(providerId)}
+            onFetchModels={(providerId, apiKey) => void fetchModels(providerId, apiKey)}
+            onAddManualModel={(providerId, modelName, apiKey) =>
+              void addManualProviderModel(providerId, modelName, apiKey)
+            }
+            onAddProvider={(label, baseUrl) =>
+              setSettings((current) => addCustomProvider(current, label, baseUrl))
+            }
+            onDeleteProvider={(providerId) => {
+              setSettings((current) => deleteCustomProvider(current, providerId));
+              void deleteProviderKey(providerId);
+            }}
+            onSaveProviderKey={(providerId, apiKey) => void saveProviderKey(providerId, apiKey)}
+            onSetLanguage={setInterfaceLanguage}
+            onUpdateGeneralPreferences={setGeneralPreferences}
+            onToggleModelEnabled={(modelId, enabled) =>
+              setSettings((current) => updateModelEnabled(current, modelId, enabled))
+            }
+            onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
+            onUpdateProviderBaseUrl={(providerId, baseUrl) =>
+              setSettings((current) => updateProviderBaseUrl(current, providerId, baseUrl))
+            }
+            onUpdateProviderLabel={(providerId, label) =>
+              setSettings((current) => updateProviderLabel(current, providerId, label))
+            }
+            onRestoreArchivedThread={(threadId) => {
+              setThreads((current) => restoreThread(current, threadId));
+              setSelectedThreadId(threadId);
+              setActiveView("workspace");
+            }}
+            personalization={personalization}
+            providerFetchStates={providerFetchStates}
+            usageEvents={usageEvents}
+            usageRates={usageRates}
+            onClearUsage={() => setUsageEvents([])}
+            onUpdatePersonalization={(nextPersonalization) => setPersonalization(nextPersonalization)}
+            onUpdateUsageRate={(providerId, rate) =>
+              setUsageRates((current) => ({
+                ...current,
+                [providerId]: { ...rate, source: "manual" }
+              }))
+            }
+          />
+        </Suspense>
       </div>
     );
   }
@@ -3727,7 +4235,7 @@ function appendSourceUrlsToAgentSummary(
     return message;
   }
 
-  const heading = language === "zh-CN" ? "参考来源:" : "Sources:";
+  const heading = language === "zh-CN" ? "参考资料:" : "Sources:";
   const lines = urls.map((url) => `- ${url}`);
 
   return `${message}\n\n${heading}\n${lines.join("\n")}`;
@@ -3806,6 +4314,32 @@ function formatAgentActionRunMessage(
   return `Confirmed agent action: ${action.label}`;
 }
 
+function formatFailureFixPlanStartMessage(
+  language: Language,
+  action: AgentAction,
+  attempt: FailureRecoveryAttemptRecord
+): string {
+  if (language === "zh-CN") {
+    if (attempt.source === "auto") {
+      const limit = attempt.limit === undefined ? "" : ` / ${attempt.limit}`;
+      const count = attempt.attempt === undefined ? "" : ` ${attempt.attempt}${limit}`;
+
+      return `正在自动生成失败修复计划${count}: ${action.label}`;
+    }
+
+    return `正在根据失败动作生成修复计划: ${action.label}`;
+  }
+
+  if (attempt.source === "auto") {
+    const limit = attempt.limit === undefined ? "" : ` / ${attempt.limit}`;
+    const count = attempt.attempt === undefined ? "" : ` ${attempt.attempt}${limit}`;
+
+    return `Auto-generating failure fix plan${count}: ${action.label}`;
+  }
+
+  return `Generating a fix plan for failed action: ${action.label}`;
+}
+
 // 用短格式显示动作耗时, 保持详情面板和时间线易扫读
 function formatDurationMs(durationMs: number): string {
   if (durationMs < 1000) {
@@ -3844,6 +4378,31 @@ function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPa
 }
 
 // 把文本 diff 渲染成逐行预览, 供文件页和审查面板复用
+function createGitOperationNotice(
+  language: Language,
+  options: {
+    type: "commit" | "commit-push" | "push";
+    branch: string | null;
+    remote: string;
+  }
+): string {
+  const branch = options.branch || (language === "zh-CN" ? "当前分支" : "current branch");
+
+  if (options.type === "commit-push") {
+    return language === "zh-CN"
+      ? `已创建 Git 提交并推送到 ${options.remote}/${branch}`
+      : `Created Git commit and pushed to ${options.remote}/${branch}`;
+  }
+
+  if (options.type === "push") {
+    return language === "zh-CN"
+      ? `已推送分支 ${branch} 到 ${options.remote}`
+      : `Pushed branch ${branch} to ${options.remote}`;
+  }
+
+  return language === "zh-CN" ? `已在 ${branch} 创建 Git 提交` : `Created Git commit on ${branch}`;
+}
+
 function renderDiffPreview(diff: string): ReactElement[] {
   const lines = diff.split(/\r?\n/);
   const visibleLines = lines.slice(0, 600);
@@ -3884,27 +4443,6 @@ function getDiffLineClass(line: string): string {
   }
 
   return "text-[#565869]";
-}
-
-// 把 Git 状态字母翻译成中文状态
-function formatGitStatus(status: string, language: Language): string {
-  if (status === "??") {
-    return language === "zh-CN" ? "未跟踪" : "new";
-  }
-
-  if (status.includes("D")) {
-    return language === "zh-CN" ? "已删除" : "deleted";
-  }
-
-  if (status.includes("R")) {
-    return language === "zh-CN" ? "已重命名" : "renamed";
-  }
-
-  if (status.includes("A")) {
-    return language === "zh-CN" ? "已新增" : "added";
-  }
-
-  return language === "zh-CN" ? "已修改" : "modified";
 }
 
 // 合并索引和工作区状态字母, 空状态用占位符对齐
@@ -3977,132 +4515,6 @@ function formatPreviewStatus(
   }
 
   return language === "zh-CN" ? "原始内容" : "Raw content";
-}
-
-// 将项目搜索结果压缩成线程时间线里的可读摘要
-function formatProjectSearchResultMessage(
-  language: Language,
-  result: ProjectTextSearchResult
-): string {
-  const header =
-    language === "zh-CN"
-      ? `项目搜索完成: ${result.query} (${result.matches.length} 个结果${result.truncated ? ", 已截断" : ""})`
-      : `Project search complete: ${result.query} (${result.matches.length} ${result.matches.length === 1 ? "result" : "results"}${result.truncated ? ", truncated" : ""})`;
-
-  if (result.matches.length === 0) {
-    return `${header}\n${language === "zh-CN" ? "未找到匹配项。" : "No matches found."}`;
-  }
-
-  const lines = result.matches.slice(0, 12).map((match) => {
-    const location = `${match.relativePath}:${match.lineNumber}`;
-
-    return `- ${location} ${match.preview}`;
-  });
-  const remaining = result.matches.length - lines.length;
-
-  if (remaining > 0) {
-    lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个结果未显示` : `- ${remaining} more not shown`);
-  }
-
-  return [header, ...lines].join("\n");
-}
-
-// 将目录列表结果压缩成线程时间线里的可读摘要
-function formatProjectDirectoryListResultMessage(
-  language: Language,
-  result: ProjectDirectoryListResult
-): string {
-  const header =
-    language === "zh-CN"
-      ? `目录列表完成: ${result.relativePath} (${result.entries.length} 个条目${result.truncated ? ", 已截断" : ""})`
-      : `Directory list complete: ${result.relativePath} (${result.entries.length} ${result.entries.length === 1 ? "entry" : "entries"}${result.truncated ? ", truncated" : ""})`;
-
-  if (result.entries.length === 0) {
-    return `${header}\n${language === "zh-CN" ? "目录为空。" : "Directory is empty."}`;
-  }
-
-  const lines = result.entries.slice(0, 24).map((entry) => {
-    const label = entry.kind === "directory" ? "/" : ` ${entry.size ?? 0} bytes`;
-
-    return `- ${entry.relativePath}${label}`;
-  });
-  const remaining = result.entries.length - lines.length;
-
-  if (remaining > 0) {
-    lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个条目未显示` : `- ${remaining} more not shown`);
-  }
-
-  return [header, ...lines].join("\n");
-}
-
-// 将 Git 状态和 diff 片段压缩成 Agent 时间线摘要, 避免直接暴露 shell 输出
-function formatProjectGitStatusMessage(language: Language, status: ProjectGitStatus): string {
-  if (!status.isRepo) {
-    return language === "zh-CN"
-      ? "Git 状态完成: 当前项目不是 Git 仓库。"
-      : "Git status complete: current project is not a Git repository.";
-  }
-
-  if (status.changedFiles.length === 0) {
-    return language === "zh-CN"
-      ? "Git 状态完成: 工作区干净。"
-      : "Git status complete: working tree is clean.";
-  }
-
-  const header =
-    language === "zh-CN"
-      ? `Git 状态完成: ${status.changedFiles.length} 个文件有改动`
-      : `Git status complete: ${status.changedFiles.length} ${status.changedFiles.length === 1 ? "file" : "files"} changed`;
-  const fileLines = status.changes.slice(0, 12).map((change) =>
-    language === "zh-CN"
-      ? `- ${change.path} (${formatGitStatus(change.status, language)})`
-      : `- ${change.path} (${formatGitStatus(change.status, language)})`
-  );
-  const remaining = status.changedFiles.length - fileLines.length;
-  const diffLines = status.changes
-    .flatMap((change) => change.diff.split(/\r?\n/u).filter(Boolean).slice(0, 8))
-    .slice(0, 18)
-    .map((line) => `  ${line.slice(0, 180)}`);
-
-  if (remaining > 0) {
-    fileLines.push(language === "zh-CN" ? `- 还有 ${remaining} 个文件未显示` : `- ${remaining} more not shown`);
-  }
-
-  if (diffLines.length === 0) {
-    return [header, ...fileLines].join("\n");
-  }
-
-  return [
-    header,
-    ...fileLines,
-    "",
-    language === "zh-CN" ? "Diff 摘要:" : "Diff summary:",
-    ...diffLines
-  ].join("\n");
-}
-
-// 将 glob 文件匹配结果压缩成线程时间线里的可读摘要
-function formatProjectGlobResultMessage(
-  language: Language,
-  result: ProjectFileGlobResult
-): string {
-  const header =
-    language === "zh-CN"
-      ? `文件匹配完成: ${result.pattern} (${result.matches.length} 个文件${result.truncated ? ", 已截断" : ""})`
-      : `File glob complete: ${result.pattern} (${result.matches.length} ${result.matches.length === 1 ? "file" : "files"}${result.truncated ? ", truncated" : ""})`;
-
-  if (result.matches.length === 0) {
-    return `${header}\n${language === "zh-CN" ? "未找到匹配文件。" : "No matching files found."}`;
-  }
-
-  const lines = result.matches.slice(0, 20).map((match) => `- ${match.relativePath} (${match.size} bytes)`);
-  const remaining = result.matches.length - lines.length;
-
-  if (remaining > 0) {
-    lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个文件未显示` : `- ${remaining} more not shown`);
-  }
-
-  return [header, ...lines].join("\n");
 }
 
 // 找到队列中第一个失败阻塞点, 自动恢复只处理真正挡住后续步骤的动作

@@ -6,6 +6,8 @@ import type {
   ProjectGitFileChange,
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
+  ProjectGitPushRequest,
+  ProjectGitPushResult,
   ProjectGitStatus,
   ProjectGitStatusRequest,
   ProjectGitWorktreeRequest,
@@ -28,6 +30,10 @@ type ProjectGitCommitOptions = ProjectGitCommitRequest & {
   runGit?: GitRunner;
 };
 
+type ProjectGitPushOptions = ProjectGitPushRequest & {
+  runGit?: GitRunner;
+};
+
 type ProjectGitWorktreeOptions = ProjectGitWorktreeRequest & {
   runGit?: GitRunner;
   pathExists?: (targetPath: string) => Promise<boolean>;
@@ -44,13 +50,21 @@ export async function getProjectGitStatus({
   if (revParse.exitCode !== 0) {
     return {
       isRepo: false,
+      currentBranch: null,
+      branches: [],
+      remotes: [],
       changedFiles: [],
       changes: [],
       rawStatus: ""
     };
   }
 
-  const status = await runGit(["status", "--porcelain"], cwd);
+  const [status, currentBranch, branches, remotes] = await Promise.all([
+    runGit(createGitUtf8PathArgs(["status", "--porcelain"]), cwd),
+    readCurrentBranch(cwd, runGit),
+    readLocalBranches(cwd, runGit),
+    readGitRemotes(cwd, runGit)
+  ]);
 
   if (status.exitCode !== 0) {
     throw new Error(status.stderr.trim() || "git status failed");
@@ -60,6 +74,9 @@ export async function getProjectGitStatus({
 
   return {
     isRepo: true,
+    currentBranch,
+    branches,
+    remotes,
     changedFiles: changes.map((change) => change.path),
     changes,
     rawStatus: status.stdout
@@ -70,6 +87,10 @@ export async function getProjectGitStatus({
 export async function commitProjectChanges({
   projectRoot,
   message,
+  branch,
+  createBranch = false,
+  push = false,
+  remote,
   runGit = runGitCommand
 }: ProjectGitCommitOptions): Promise<ProjectGitCommitResult> {
   const normalizedMessage = message.trim();
@@ -79,35 +100,92 @@ export async function commitProjectChanges({
   }
 
   const cwd = await realpath(projectRoot);
-  const status = await getProjectGitStatus({ projectRoot: cwd, runGit });
+  const targetBranch = normalizeOptionalGitToken(branch);
+  const targetRemote = normalizeOptionalGitToken(remote) || "origin";
+
+  if (targetBranch) {
+    await assertValidBranchName(targetBranch, cwd, runGit);
+  }
+
+  assertSafeGitToken(targetRemote, "Git remote");
+
+  let status = await getProjectGitStatus({ projectRoot: cwd, runGit });
 
   if (!status.isRepo) {
     throw new Error("Selected project is not a Git repository");
+  }
+
+  if (targetBranch && targetBranch !== status.currentBranch) {
+    await runGitOrThrow(
+      createBranch ? ["switch", "-c", targetBranch] : ["switch", targetBranch],
+      cwd,
+      runGit
+    );
+    status = await getProjectGitStatus({ projectRoot: cwd, runGit });
   }
 
   if (status.changedFiles.length === 0) {
     throw new Error("No changes to commit");
   }
 
-  await runGitOrThrow(["add", "-A"], cwd);
-  const commit = await runGitOrThrow(["commit", "-m", normalizedMessage], cwd);
+  await runGitOrThrow(["add", "-A"], cwd, runGit);
+  const commit = await runGitOrThrow(["commit", "-m", normalizedMessage], cwd, runGit);
+  const committedBranch = status.currentBranch || targetBranch;
+  let pushOutput: string | undefined;
+
+  if (push) {
+    if (!committedBranch) {
+      throw new Error("Cannot push because Git is in detached HEAD state");
+    }
+
+    const pushResult = await runGitOrThrow(["push", "-u", targetRemote, committedBranch], cwd, runGit);
+    pushOutput = pushResult.stdout.trim() || pushResult.stderr.trim();
+  }
+
   const nextStatus = await getProjectGitStatus({ projectRoot: cwd, runGit });
 
   return {
     output: commit.stdout.trim() || commit.stderr.trim(),
+    branch: committedBranch ?? nextStatus.currentBranch,
+    pushed: push,
+    ...(pushOutput ? { pushOutput } : {}),
     status: nextStatus
   };
+}
 
-  // 执行 Git 命令并把失败包装成可读错误
-  async function runGitOrThrow(args: string[], commandCwd: string): Promise<GitCommandResult> {
-    const result = await runGit(args, commandCwd);
+// 将当前分支推送到远端，供源代码管理页在提交后或单独操作时复用。
+export async function pushProjectBranch({
+  projectRoot,
+  branch,
+  remote,
+  runGit = runGitCommand
+}: ProjectGitPushOptions): Promise<ProjectGitPushResult> {
+  const cwd = await realpath(projectRoot);
+  const status = await getProjectGitStatus({ projectRoot: cwd, runGit });
 
-    if (result.exitCode !== 0) {
-      throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args[0]} failed`);
-    }
-
-    return result;
+  if (!status.isRepo) {
+    throw new Error("Selected project is not a Git repository");
   }
+
+  const targetBranch = normalizeOptionalGitToken(branch) || status.currentBranch;
+  const targetRemote = normalizeOptionalGitToken(remote) || "origin";
+
+  if (!targetBranch) {
+    throw new Error("Cannot push because Git is in detached HEAD state");
+  }
+
+  await assertValidBranchName(targetBranch, cwd, runGit);
+  assertSafeGitToken(targetRemote, "Git remote");
+
+  const pushResult = await runGitOrThrow(["push", "-u", targetRemote, targetBranch], cwd, runGit);
+  const nextStatus = await getProjectGitStatus({ projectRoot: cwd, runGit });
+
+  return {
+    output: pushResult.stdout.trim() || pushResult.stderr.trim(),
+    branch: targetBranch,
+    remote: targetRemote,
+    status: nextStatus
+  };
 }
 
 // 在当前仓库旁创建永久 Git worktree, 新目录会自动加入最近项目
@@ -159,6 +237,89 @@ export async function createProjectWorktree({
 }
 
 // 以项目目录作为 cwd 运行 Git, stdout 和 stderr 都保留下来
+async function readCurrentBranch(cwd: string, runGit: GitRunner): Promise<string | null> {
+  const result = await runGit(["branch", "--show-current"], cwd);
+
+  if (result.exitCode !== 0) {
+    return null;
+  }
+
+  return result.stdout.trim() || null;
+}
+
+async function readLocalBranches(cwd: string, runGit: GitRunner): Promise<string[]> {
+  const result = await runGit(["branch", "--format=%(refname:short)"], cwd);
+
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  return result.stdout
+    .split(/\r?\n/u)
+    .map((branch) => branch.trim())
+    .filter(Boolean);
+}
+
+async function readGitRemotes(cwd: string, runGit: GitRunner): Promise<string[]> {
+  const result = await runGit(["remote"], cwd);
+
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  return result.stdout
+    .split(/\r?\n/u)
+    .map((remote) => remote.trim())
+    .filter(Boolean);
+}
+
+async function assertValidBranchName(
+  branch: string,
+  cwd: string,
+  runGit: GitRunner
+): Promise<void> {
+  assertSafeGitToken(branch, "Git branch");
+
+  const result = await runGit(["check-ref-format", "--branch", branch], cwd);
+
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "Invalid Git branch name");
+  }
+}
+
+function normalizeOptionalGitToken(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+
+  return normalized || undefined;
+}
+
+function assertSafeGitToken(value: string, label: string): void {
+  const hasUnsafeCharacter = Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+
+    return codePoint <= 31 || codePoint === 127 || /\s/u.test(character);
+  });
+
+  if (hasUnsafeCharacter || value.startsWith("-")) {
+    throw new Error(`${label} cannot contain whitespace, control characters or start with '-'`);
+  }
+}
+
+// 鎵ц Git 鍛戒护骞舵妸澶辫触鍖呰鎴愬彲璇婚敊璇?
+async function runGitOrThrow(
+  args: string[],
+  commandCwd: string,
+  runGit: GitRunner
+): Promise<GitCommandResult> {
+  const result = await runGit(args, commandCwd);
+
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || `git ${args[0]} failed`);
+  }
+
+  return result;
+}
+
 function runGitCommand(args: string[], cwd: string): Promise<GitCommandResult> {
   return new Promise((resolve) => {
     const child = spawn("git", args, {
@@ -238,7 +399,10 @@ async function readGitDiff(
   runGit: GitRunner
 ): Promise<string> {
   if (entry.status === "??") {
-    const noIndexDiff = await runGit(["diff", "--no-index", "--", "/dev/null", entry.path], cwd);
+    const noIndexDiff = await runGit(
+      createGitUtf8PathArgs(["diff", "--no-index", "--", "/dev/null", entry.path]),
+      cwd
+    );
 
     if (noIndexDiff.exitCode === 0 || noIndexDiff.exitCode === 1) {
       return noIndexDiff.stdout;
@@ -247,8 +411,8 @@ async function readGitDiff(
     return noIndexDiff.stderr.trim();
   }
 
-  const stagedDiff = await runGit(["diff", "--cached", "--", entry.path], cwd);
-  const unstagedDiff = await runGit(["diff", "--", entry.path], cwd);
+  const stagedDiff = await runGit(createGitUtf8PathArgs(["diff", "--cached", "--", entry.path]), cwd);
+  const unstagedDiff = await runGit(createGitUtf8PathArgs(["diff", "--", entry.path]), cwd);
 
   return [stagedDiff.stdout, unstagedDiff.stdout].filter(Boolean).join("\n");
 }
@@ -261,10 +425,78 @@ function parseGitStatusEntries(output: string): Array<Omit<ProjectGitFileChange,
     .filter(Boolean)
     .map((line) => {
       const status = line.slice(0, 2).trim() || line.slice(0, 2);
-      const rawPath = line.slice(3).trim();
+      const rawPath = decodeGitStatusPath(line.slice(3).trim());
       const renameArrowIndex = rawPath.lastIndexOf(" -> ");
       const path = renameArrowIndex >= 0 ? rawPath.slice(renameArrowIndex + 4) : rawPath;
 
       return { path, status };
     });
+}
+
+function createGitUtf8PathArgs(args: string[]): string[] {
+  return ["-c", "core.quotepath=false", ...args];
+}
+
+function decodeGitStatusPath(path: string): string {
+  if (!path.startsWith("\"") || !path.endsWith("\"")) {
+    return path;
+  }
+
+  const decodedBytes: number[] = [];
+  const decodedText: string[] = [];
+
+  for (let index = 1; index < path.length - 1; index += 1) {
+    const char = path[index];
+
+    if (char !== "\\") {
+      flushDecodedBytes();
+      decodedText.push(char);
+      continue;
+    }
+
+    const next = path[index + 1];
+
+    if (next && /[0-7]/u.test(next)) {
+      const octal = path.slice(index + 1, index + 4);
+
+      if (/^[0-7]{3}$/u.test(octal)) {
+        decodedBytes.push(Number.parseInt(octal, 8));
+        index += 3;
+        continue;
+      }
+    }
+
+    flushDecodedBytes();
+    decodedText.push(decodeGitEscapedCharacter(next ?? ""));
+    index += 1;
+  }
+
+  flushDecodedBytes();
+
+  return decodedText.join("");
+
+  function flushDecodedBytes(): void {
+    if (decodedBytes.length === 0) {
+      return;
+    }
+
+    decodedText.push(Buffer.from(decodedBytes).toString("utf8"));
+    decodedBytes.length = 0;
+  }
+}
+
+function decodeGitEscapedCharacter(value: string): string {
+  return (
+    {
+      a: "\u0007",
+      b: "\b",
+      f: "\f",
+      n: "\n",
+      r: "\r",
+      t: "\t",
+      v: "\v",
+      "\\": "\\",
+      "\"": "\""
+    }[value] ?? value
+  );
 }

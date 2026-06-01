@@ -32,6 +32,7 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
   readProviderKey: (providerId: string) => Promise<string | null>;
   getProviderKeyStatus: (providerId: string) => Promise<ProviderKeyStatus>;
   deleteProviderKey: (providerId: string) => Promise<void>;
+  clearProviderKeys: () => Promise<void>;
 } {
   const filePath = join(directory, "forge-secrets.json");
 
@@ -75,11 +76,17 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
     await writeSecretFile(directory, filePath, secrets);
   }
 
+  // 一键清理隐私数据时清空所有供应商密钥, 不保留历史 providerId 痕迹
+  async function clearProviderKeys(): Promise<void> {
+    await writeSecretFile(directory, filePath, { providerKeys: {} });
+  }
+
   return {
     saveProviderKey,
     readProviderKey,
     getProviderKeyStatus,
-    deleteProviderKey
+    deleteProviderKey,
+    clearProviderKeys
   };
 }
 

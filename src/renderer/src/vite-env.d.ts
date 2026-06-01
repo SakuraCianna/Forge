@@ -17,12 +17,15 @@ import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
   ProjectFileGlobResult,
+  ProjectFilePreview,
   ProjectTextFile,
   ProjectTextSearchResult
 } from "@shared/fileTypes";
 import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
+  ProjectGitPushRequest,
+  ProjectGitPushResult,
   ProjectGitStatus,
   ProjectGitStatusRequest,
   ProjectGitWorktreeRequest,
@@ -45,6 +48,7 @@ declare global {
           providerId: string
         ) => Promise<{ hasKey: boolean; last4: string | null }>;
         deleteProviderKey: (providerId: string) => Promise<void>;
+        clearAllProviderKeys: () => Promise<void>;
       };
       models: {
         fetchProviderModels: (provider: ForgeProvider) => Promise<ForgeModel[]>;
@@ -99,6 +103,7 @@ declare global {
       git: {
         status: (request: ProjectGitStatusRequest) => Promise<ProjectGitStatus>;
         commit: (request: ProjectGitCommitRequest) => Promise<ProjectGitCommitResult>;
+        push: (request: ProjectGitPushRequest) => Promise<ProjectGitPushResult>;
         createWorktree: (
           request: ProjectGitWorktreeRequest
         ) => Promise<ProjectGitWorktreeResult>;
@@ -109,6 +114,11 @@ declare global {
           relativePath: string;
           maxBytes?: number;
         }) => Promise<ProjectTextFile>;
+        preview: (request: {
+          projectRoot: string;
+          relativePath: string;
+          maxBytes?: number;
+        }) => Promise<ProjectFilePreview>;
         listDirectory: (request: {
           projectRoot: string;
           relativePath?: string;

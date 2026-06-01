@@ -37,21 +37,31 @@ import {
   type LineDiffHunkDecision
 } from "@shared/textDiff";
 import {
-  findNextPendingAgentAction,
-  getRunnablePendingAgentActions,
   isRunnableAgentAction,
   resolveAgentCommandRisk,
   type AgentCommandSafetyPolicy
 } from "@/agent/agentActionExecutor";
+import {
+  getAgentConfirmationItems,
+  getAgentQueueControlState,
+  getQueueStats,
+  type AgentConfirmationItem,
+  type AgentConfirmationItemKind
+} from "@/agent/agentConfirmationQueue";
+import {
+  formatCommandOutputSnippet,
+  formatCommandResultForClipboard
+} from "@/agent/agentActionDetails";
+import { getFailureRecoveryAttemptsForAction } from "@/agent/failureRecoveryAttempts";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
 import type {
-  AgentActionRunRecord,
   CommandRunResult,
   TaskThread,
   TaskThreadEvent
 } from "@/state/taskThreads";
+import { AgentActionDetailsPanel } from "./AgentActionDetailsPanel";
 import { MarkdownPreview } from "./FilePreviewRenderer";
 import { Tooltip } from "./Tooltip";
 
@@ -115,8 +125,6 @@ type ThreadActivitySummary = {
 };
 
 type CompactProcessedSummary = {
-  label: string;
-  duration: string;
   hiddenEvents: TaskThreadEvent[];
   groups: CompactProcessedGroup[];
   sourceUrls: string[];
@@ -148,28 +156,6 @@ type CompactProcessedGroup = {
   label: string;
   summaryLabel: string;
   items: CompactProcessedItem[];
-};
-
-type AgentConfirmationItemKind =
-  | "pending-changes"
-  | "failed-action"
-  | "manual-gate"
-  | "command-approval"
-  | "command-blocked"
-  | "commit-gate";
-
-type AgentConfirmationItem = {
-  id: string;
-  kind: AgentConfirmationItemKind;
-  label: string;
-  active: boolean;
-  action?: AgentAction;
-  afterApprovalActionLabel?: string;
-  command?: string;
-  cwd?: string | null;
-  pendingChangeCount?: number;
-  previewPath?: string;
-  riskReason?: string;
 };
 
 // 紧凑主屏只保留人能直接阅读的消息, 详细执行流水留在 Agent 详情视图里
@@ -268,9 +254,9 @@ export function ThreadWorkspace({
   const compactProcessedSummary = useMemo(
     () =>
       showProcessedSummary && selectedThread
-        ? getCompactProcessedSummary(selectedThread, visibleCompactEvents, language, liveNow)
+        ? getCompactProcessedSummary(selectedThread, visibleCompactEvents, language)
         : null,
-    [language, liveNow, selectedThread, showProcessedSummary, visibleCompactEvents.length]
+    [language, selectedThread, showProcessedSummary, visibleCompactEvents.length]
   );
   const duration = useMemo(() => {
     if (!selectedThread) {
@@ -647,10 +633,10 @@ export function ThreadWorkspace({
     }
 
     return (
-      <section className="mx-auto flex min-h-10 w-full max-w-[680px] items-center gap-2 border-b border-[#ececf1] pb-2 text-sm text-[#565869]">
+      <section className="mx-auto flex min-h-10 w-full max-w-[880px] items-start gap-2 border-b border-[#ececf1] pb-2 text-sm text-[#565869]">
         <CheckCircle2 className="h-4 w-4 shrink-0 text-[#9a3412]" />
         <span className="shrink-0 font-medium text-[#8e8ea0]">{copy.currentApproval}</span>
-        <span className="min-w-0 flex-1 truncate font-medium text-[#202123]">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-medium leading-5 text-[#202123]">
           {getAgentConfirmationTitle(item, copy)}
         </span>
         <span className="hidden shrink-0 text-[12px] text-[#8e8ea0] sm:inline">
@@ -792,21 +778,12 @@ export function ThreadWorkspace({
   function getCompactConfirmationItems(thread: TaskThread): AgentConfirmationItem[] {
     const actions = thread.agentActions ?? [];
     const hasPendingFileChanges = allChangePreviews.length > 0;
-    const queueBlockerAction = getQueueBlockerAction(actions, commandSafetyPolicy);
-    const queueBlocked =
-      agentPaused ||
-      hasPendingFileChanges ||
-      queueBlockerAction?.status === "failed" ||
-      queueBlockerAction?.status === "running";
-    const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(actions);
-    const runnablePendingActions = queueBlocked
-      ? []
-      : getRunnablePendingAgentActions(actions, commandSafetyPolicy);
-    const nextGateAction = getNextGateAction(actions, runnablePendingActions);
-    const activeGateAction =
-      nextPendingAction && !isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
-        ? nextPendingAction
-        : nextGateAction;
+    const { activeGateAction, queueBlockerAction } = getAgentQueueControlState({
+      actions,
+      commandSafetyPolicy,
+      agentPaused: Boolean(agentPaused),
+      hasPendingFileChanges
+    });
 
     return getAgentConfirmationItems({
       actions,
@@ -815,7 +792,10 @@ export function ThreadWorkspace({
       fullAccess,
       activeGateAction,
       projectPath: thread.projectPath ?? projectScan?.rootPath ?? null,
-      queueBlockerAction
+      queueBlockerAction,
+      failureRecoveryPolicy: thread.agentProfile?.failureRecoveryPolicy,
+      maxFailureRecoveryAttempts: thread.agentProfile?.maxFailureRecoveryAttempts,
+      events: thread.events
     });
   }
 
@@ -1131,7 +1111,7 @@ export function ThreadWorkspace({
           <div className="mt-1">
             {event.kind === "result" && !runningCommand && !result ? (
               <>
-                <MarkdownPreview compact content={event.message} />
+                <MarkdownPreview compact content={stripAssistantSourceBlock(event.message)} />
                 {renderAssistantSourceLinks(event.message)}
               </>
             ) : (
@@ -1248,7 +1228,7 @@ export function ThreadWorkspace({
       <section
         role="status"
         aria-live="polite"
-        className={`mx-auto flex w-full max-w-[680px] items-center gap-2 rounded-[12px] border px-3 py-2 text-[12px] ${
+        className={`mx-auto flex w-full max-w-[880px] items-start gap-2 rounded-[12px] border px-3 py-2 text-[12px] ${
           isRunning
             ? "border-[#dbeafe] bg-[#eff6ff] text-[#1d4ed8]"
             : "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
@@ -1261,7 +1241,9 @@ export function ThreadWorkspace({
           }`}
         />
         <span className="shrink-0 font-medium">{summary.label}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{summary.command}</span>
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-5">
+          {summary.command}
+        </span>
         {summary.meta ? <span className="shrink-0 opacity-80">{summary.meta}</span> : null}
       </section>
     );
@@ -1272,26 +1254,34 @@ export function ThreadWorkspace({
     const sourceCopy = language === "zh-CN" ? "来源" : "Sources";
 
     return (
-      <section className="mx-auto w-full max-w-[680px] border-b border-[#ececf1] pb-2">
+      <section className="mx-auto w-full max-w-[880px] border-b border-[#ececf1] pb-2">
         <button
           type="button"
+          aria-label={language === "zh-CN" ? "查看已处理详情" : "View processed details"}
           aria-expanded={compactProcessedExpanded}
           onClick={() => setCompactProcessedExpanded((expanded) => !expanded)}
           className="flex min-h-7 w-full flex-wrap items-center gap-x-2 gap-y-1 text-left text-sm font-medium text-[#8e8ea0] transition hover:text-[#565869]"
         >
-          <span className="shrink-0">{summary.label}</span>
-          <span className="shrink-0">{summary.duration}</span>
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            {summary.groups.slice(0, 4).map((group) => {
-              const Icon = getCompactProcessedGroupIcon(group.kind);
+            {summary.groups.length > 0
+              ? summary.groups.slice(0, 4).map((group) => {
+                  const Icon = getCompactProcessedGroupIcon(group.kind);
 
-              return (
-                <span key={group.kind} className="inline-flex min-w-0 items-center gap-1 text-[12px] font-normal">
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{group.summaryLabel}</span>
+                  return (
+                    <span
+                      key={group.kind}
+                      className="inline-flex min-w-0 items-center gap-1 text-[12px] font-normal"
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{group.summaryLabel}</span>
+                    </span>
+                  );
+                })
+              : (
+                <span className="truncate text-[12px] font-normal">
+                  {summary.livePreview ?? (language === "zh-CN" ? "处理详情" : "Processed details")}
                 </span>
-              );
-            })}
+              )}
           </span>
           <ChevronDown
             className={`h-3.5 w-3.5 shrink-0 transition ${
@@ -1300,7 +1290,7 @@ export function ThreadWorkspace({
           />
         </button>
         {!compactProcessedExpanded && summary.livePreview ? (
-          <p className="mt-1 max-w-full truncate text-[12px] leading-5 text-[#8e8ea0]">
+          <p className="mt-1 max-w-full whitespace-pre-wrap break-words text-[12px] leading-5 text-[#8e8ea0]">
             {summary.livePreview}
           </p>
         ) : null}
@@ -1369,9 +1359,11 @@ export function ThreadWorkspace({
             <div key={item.id} className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
               <span className="text-[#8e8ea0]">{formatEventTimestamp(item.createdAt)}</span>
               <div className="min-w-0">
-                <div className="truncate font-medium text-[#565869]">{item.label}</div>
+                <div className="whitespace-pre-wrap break-words font-medium leading-5 text-[#565869]">
+                  {item.label}
+                </div>
                 <p
-                  className={`mt-0.5 truncate ${
+                  className={`mt-0.5 whitespace-pre-wrap break-words leading-5 ${
                     item.kind === "command" ? "font-mono text-[11px]" : ""
                   }`}
                 >
@@ -1409,7 +1401,11 @@ export function ThreadWorkspace({
     }
 
     return (
-      <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
+        <span className="inline-flex items-center gap-1 text-[#8e8ea0]">
+          <Globe className="h-3.5 w-3.5" />
+          {language === "zh-CN" ? "参考资料" : "Sources"}
+        </span>
         {urls.slice(0, 6).map((url) => (
           <a
             key={url}
@@ -1699,8 +1695,13 @@ export function ThreadWorkspace({
             selectAction: (label: string) => `选择动作 ${label}`,
             commandOutput: "最近命令输出",
             toolResult: "工具结果",
+            recoveryHistory: "恢复历史",
             copyContext: "复制动作上下文",
             executionRecord: "执行记录",
+            autoRecovery: "自动恢复",
+            manualRecovery: "手动恢复",
+            recoveryAttempt: (attempt: number, limit?: number) =>
+              limit === undefined ? `第 ${attempt} 次` : `第 ${attempt} / ${limit} 次`,
             startedAt: "开始",
             completedAt: "结束",
             duration: "耗时",
@@ -1729,8 +1730,13 @@ export function ThreadWorkspace({
             selectAction: (label: string) => `Select action ${label}`,
             commandOutput: "Last command output",
             toolResult: "Tool result",
+            recoveryHistory: "Recovery history",
             copyContext: "Copy action context",
             executionRecord: "Execution record",
+            autoRecovery: "Automatic recovery",
+            manualRecovery: "Manual recovery",
+            recoveryAttempt: (attempt: number, limit?: number) =>
+              limit === undefined ? `Attempt ${attempt}` : `Attempt ${attempt} / ${limit}`,
             startedAt: "Started",
             completedAt: "Completed",
             duration: "Duration",
@@ -1751,25 +1757,19 @@ export function ThreadWorkspace({
     const queueStats = getQueueStats(agentActions);
     const pendingChangeCount = allChangePreviews.length;
     const hasPendingFileChanges = pendingChangeCount > 0;
-    const queueBlockerAction = getQueueBlockerAction(agentActions, commandSafetyPolicy);
-    const queueBlocked =
-      agentPaused ||
-      hasPendingFileChanges ||
-      queueBlockerAction?.status === "failed" ||
-      queueBlockerAction?.status === "running";
-    const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(agentActions);
-    const runnablePendingActions = queueBlocked
-      ? []
-      : getRunnablePendingAgentActions(agentActions, commandSafetyPolicy);
-    const nextRunnableAction =
-      nextPendingAction && isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
-        ? nextPendingAction
-        : null;
-    const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
-    const activeGateAction =
-      nextPendingAction && !isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
-        ? nextPendingAction
-        : nextGateAction;
+    const {
+      queueBlockerAction,
+      nextPendingAction,
+      runnablePendingActions,
+      nextRunnableAction,
+      nextGateAction,
+      activeGateAction
+    } = getAgentQueueControlState({
+      actions: agentActions,
+      commandSafetyPolicy,
+      agentPaused: Boolean(agentPaused),
+      hasPendingFileChanges
+    });
     const queueComplete = queueStats.total > 0 && queueStats.completed === queueStats.total;
     const canGenerateContinuationPlan =
       Boolean(onGenerateContinuationPlan && selectedThread) &&
@@ -1787,7 +1787,10 @@ export function ThreadWorkspace({
       fullAccess,
       activeGateAction,
       projectPath: selectedThread?.projectPath ?? projectScan?.rootPath ?? null,
-      queueBlockerAction
+      queueBlockerAction,
+      failureRecoveryPolicy: selectedThread?.agentProfile?.failureRecoveryPolicy,
+      maxFailureRecoveryAttempts: selectedThread?.agentProfile?.maxFailureRecoveryAttempts,
+      events: selectedThread?.events
     });
     const agentRunStatus =
       hasPendingFileChanges
@@ -1827,6 +1830,9 @@ export function ThreadWorkspace({
     const selectedActionRunEvent = selectedAgentAction
       ? findLatestAgentActionRunEvent(selectedThread?.events ?? [], selectedAgentAction)
       : null;
+    const selectedRecoveryAttempts = selectedAgentAction
+      ? getFailureRecoveryAttemptsForAction(selectedThread?.events ?? [], selectedAgentAction.id)
+      : [];
 
     // 读取命令动作的风险等级, 非命令动作不参与审批判断
     function getCommandRiskForAction(action: AgentAction): ReturnType<typeof resolveAgentCommandRisk> | null {
@@ -2146,7 +2152,8 @@ export function ThreadWorkspace({
       action: AgentAction,
       commandResult: CommandRunResult | null,
       toolResult: TaskThreadEvent | null,
-      actionRunEvent: TaskThreadEvent | null
+      actionRunEvent: TaskThreadEvent | null,
+      recoveryAttempts: ReturnType<typeof getFailureRecoveryAttemptsForAction>
     ): ReactElement {
       const detailRows = [
         { label: actionDetailsCopy.kind, value: action.kind },
@@ -2158,156 +2165,20 @@ export function ThreadWorkspace({
       const nextStep = getActionNextStep(action);
 
       return (
-        <section
-          aria-label={actionDetailsCopy.title}
-          className="rounded-[18px] border border-[#ececf1] bg-white p-4"
-        >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#202123]">
-              <Layers className="h-4 w-4 text-[#565869]" />
-              {actionDetailsCopy.title}
-            </h2>
-            <Tooltip label={actionDetailsCopy.copyContext}>
-              <button
-                type="button"
-                aria-label={actionDetailsCopy.copyContext}
-                onClick={() =>
-                  void navigator.clipboard?.writeText(
-                    formatAgentActionContextForClipboard(
-                      action,
-                      actionStatusLabel,
-                      nextStep,
-                      commandResult,
-                      toolResult,
-                      actionRunEvent?.agentActionRun ?? null
-                    )
-                  )
-                }
-                className="inline-flex h-7 w-7 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#6e6e80] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.99]"
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-            </Tooltip>
-          </div>
-          <p className="text-sm font-medium leading-5 text-[#202123]">{action.label}</p>
-          <dl className="mt-3 grid gap-2">
-            {detailRows.map((row) => (
-              <div
-                key={row.label}
-                className="grid grid-cols-[72px_minmax(0,1fr)] gap-2 rounded-[12px] bg-[#fafafa] px-2.5 py-2 text-xs"
-              >
-                <dt className="text-[#8e8ea0]">{row.label}</dt>
-                <dd className="min-w-0 break-words font-medium text-[#202123]">{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="mt-3 rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] px-3 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-              {actionDetailsCopy.nextStep}
-            </div>
-            <p className="mt-1 text-sm leading-5 text-[#202123]">{nextStep}</p>
-          </div>
-          {renderAgentActionDetailControls(action)}
-          {actionRunEvent?.agentActionRun ? (
-            <div className="mt-3 border-t border-[#ececf1] pt-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-                {actionDetailsCopy.executionRecord}
-              </h3>
-              <dl className="mt-2 grid gap-2 text-xs">
-                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.status}</dt>
-                  <dd className="font-medium text-[#202123]">
-                    {formatAgentActionRunStatus(actionRunEvent.agentActionRun.status, language)}
-                  </dd>
-                </div>
-                {actionRunEvent.agentActionRun.startedAt ? (
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.startedAt}</dt>
-                    <dd className="min-w-0 break-words font-medium text-[#202123]">
-                      {formatActionTimestamp(actionRunEvent.agentActionRun.startedAt)}
-                    </dd>
-                  </div>
-                ) : null}
-                {actionRunEvent.agentActionRun.completedAt ? (
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.completedAt}</dt>
-                    <dd className="min-w-0 break-words font-medium text-[#202123]">
-                      {formatActionTimestamp(actionRunEvent.agentActionRun.completedAt)}
-                    </dd>
-                  </div>
-                ) : null}
-                {typeof actionRunEvent.agentActionRun.durationMs === "number" ? (
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.duration}</dt>
-                    <dd className="font-medium text-[#202123]">
-                      {formatActionDuration(actionRunEvent.agentActionRun.durationMs)}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-              <p className="mt-2 rounded-[12px] bg-[#f7f7f8] px-2.5 py-2 text-xs leading-5 text-[#565869]">
-                {actionRunEvent.message}
-              </p>
-            </div>
-          ) : null}
-          {commandResult ? (
-            <div className="mt-3 border-t border-[#ececf1] pt-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-                {actionDetailsCopy.commandOutput}
-              </h3>
-              <dl className="mt-2 grid gap-2 text-xs">
-                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.exitCode}</dt>
-                  <dd className="font-medium text-[#202123]">
-                    {commandResult.exitCode === null ? "null" : commandResult.exitCode}
-                  </dd>
-                </div>
-                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.cwd}</dt>
-                  <dd className="min-w-0 break-words font-medium text-[#202123]">
-                    {commandResult.cwd}
-                  </dd>
-                </div>
-                {commandResult.timedOut ? (
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.timedOut}</dt>
-                    <dd className="font-medium text-[#9a3412]">true</dd>
-                  </div>
-                ) : null}
-              </dl>
-              {commandResult.stdout.trim() ? (
-                <div className="mt-2">
-                  <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
-                    {actionDetailsCopy.stdout}
-                  </div>
-                  <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-2 font-mono text-[11px] leading-4 text-[#f8fafc]">
-                    {formatCommandOutputSnippet(commandResult.stdout)}
-                  </pre>
-                </div>
-              ) : null}
-              {commandResult.stderr.trim() ? (
-                <div className="mt-2">
-                  <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
-                    {actionDetailsCopy.stderr}
-                  </div>
-                  <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-2 font-mono text-[11px] leading-4 text-[#9a3412]">
-                    {formatCommandOutputSnippet(commandResult.stderr)}
-                  </pre>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {toolResult ? (
-            <div className="mt-3 border-t border-[#ececf1] pt-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-                {actionDetailsCopy.toolResult}
-              </h3>
-              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#f7f7f8] p-2 font-mono text-[11px] leading-4 text-[#202123]">
-                {formatCommandOutputSnippet(toolResult.message)}
-              </pre>
-            </div>
-          ) : null}
-        </section>
+        <AgentActionDetailsPanel
+          action={action}
+          actionRun={actionRunEvent?.agentActionRun ?? null}
+          actionRunMessage={actionRunEvent?.message}
+          commandResult={commandResult}
+          controls={renderAgentActionDetailControls(action)}
+          copy={actionDetailsCopy}
+          detailRows={detailRows}
+          language={language}
+          nextStep={nextStep}
+          recoveryAttempts={recoveryAttempts}
+          statusLabel={actionStatusLabel}
+          toolResult={toolResult}
+        />
       );
     }
 
@@ -2855,7 +2726,8 @@ export function ThreadWorkspace({
                 selectedAgentAction,
                 selectedCommandResult,
                 selectedToolResult,
-                selectedActionRunEvent
+                selectedActionRunEvent,
+                selectedRecoveryAttempts
               )
             : null}
           <section className="rounded-[18px] border border-[#ececf1] bg-white p-4">
@@ -3411,109 +3283,6 @@ export function ThreadWorkspace({
   }
 }
 
-// 提供 compact Agent 操作面板的中英文文案
-// 汇总需要人处理的动作, 当前项给按钮, 后续项给可见停止点
-function getAgentConfirmationItems({
-  actions,
-  changePreviews,
-  commandSafetyPolicy,
-  fullAccess,
-  activeGateAction,
-  projectPath,
-  queueBlockerAction
-}: {
-  actions: AgentAction[];
-  changePreviews: ProjectFileChangePreview[];
-  commandSafetyPolicy: AgentCommandSafetyPolicy;
-  fullAccess: boolean;
-  activeGateAction: AgentAction | null;
-  projectPath: string | null;
-  queueBlockerAction: AgentAction | null;
-}): AgentConfirmationItem[] {
-  const items: AgentConfirmationItem[] = [];
-
-  if (changePreviews.length > 0) {
-    items.push({
-      id: "pending-changes",
-      kind: "pending-changes",
-      label: changePreviews[0]?.relativePath ?? "Pending changes",
-      active: true,
-      pendingChangeCount: changePreviews.length,
-      previewPath: changePreviews[0]?.relativePath
-    });
-  }
-
-  for (const action of actions) {
-    const kind = getAgentConfirmationKind(action, commandSafetyPolicy, fullAccess);
-
-    if (!kind) {
-      continue;
-    }
-    const actionIndex = actions.findIndex((candidate) => candidate.id === action.id);
-    const nextAction = findNextIncompleteActionAfterIndex(actions, actionIndex);
-    const commandRisk =
-      action.kind === "run-command" && action.command
-        ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
-        : null;
-
-    items.push({
-      id: `action-${action.id}`,
-      kind,
-      label: action.label,
-      action,
-      afterApprovalActionLabel: nextAction?.label,
-      command: action.command,
-      cwd: action.kind === "run-command" ? projectPath : null,
-      riskReason:
-        commandRisk?.level === "ask" || commandRisk?.level === "deny"
-          ? commandRisk.reason
-          : undefined,
-      active:
-        changePreviews.length === 0 &&
-        (activeGateAction?.id === action.id || queueBlockerAction?.id === action.id)
-    });
-  }
-
-  return items;
-}
-
-// 识别需要确认或恢复的动作类型, 过滤普通可自动执行步骤
-function getAgentConfirmationKind(
-  action: AgentAction,
-  commandSafetyPolicy: AgentCommandSafetyPolicy,
-  fullAccess: boolean
-): AgentConfirmationItemKind | null {
-  if (action.status === "failed") {
-    return "failed-action";
-  }
-
-  if (action.status !== "pending") {
-    return null;
-  }
-
-  if (action.kind === "manual") {
-    return "manual-gate";
-  }
-
-  if (action.kind === "commit") {
-    return "commit-gate";
-  }
-
-  if (action.kind === "run-command" && action.command) {
-    const commandRisk = resolveAgentCommandRisk(action.command, commandSafetyPolicy);
-
-    if (commandRisk.level === "deny") {
-      return "command-blocked";
-    }
-
-    if (commandRisk.level === "ask" && !fullAccess) {
-      return "command-approval";
-    }
-  }
-
-  return null;
-}
-
 // 把确认项类型转成短标签, 让队列可以快速扫读
 function getAgentConfirmationKindLabel(
   kind: AgentConfirmationItemKind,
@@ -3567,7 +3336,7 @@ function getAgentConfirmationBody(
   }
 
   if (item.kind === "failed-action") {
-    return copy.failedActionBody;
+    return getFailedActionBody(item, copy);
   }
 
   const action = item.action;
@@ -3594,20 +3363,22 @@ function getAgentConfirmationBody(
   return copy.manualGateBody(action.label);
 }
 
-// 找出批准当前项后队列会遇到的下一项, 用于说明审批影响
-function findNextIncompleteActionAfterIndex(
-  actions: AgentAction[],
-  actionIndex: number
-): AgentAction | null {
-  if (actionIndex < 0) {
-    return null;
+function getFailedActionBody(
+  item: AgentConfirmationItem,
+  copy: ReturnType<typeof getCompactAgentControlCopy>
+): string {
+  if (item.failureRecoveryPolicy === "suggest") {
+    return copy.failedActionSuggestBody;
   }
 
-  return (
-    actions
-      .slice(actionIndex + 1)
-      .find((action) => action.status !== "completed" && action.status !== "skipped") ?? null
-  );
+  if (item.failureRecoveryPolicy === "auto") {
+    return copy.failedActionAutoBody(
+      item.maxFailureRecoveryAttempts,
+      item.autoFailureRecoveryAttemptsUsed
+    );
+  }
+
+  return copy.failedActionBody;
 }
 
 // 为确认项生成结构化上下文行, 保持 UI 和复制摘要使用同一份信息
@@ -3631,6 +3402,27 @@ function getAgentConfirmationMetadataRows(
       label: copy.riskLabel,
       value: formatAgentCommandRiskReason(language, item.riskReason)
     });
+  }
+
+  if (item.kind === "failed-action" && item.failureRecoveryPolicy) {
+    rows.push({
+      label: copy.failureRecoveryPolicyLabel,
+      value: getFailureRecoveryPolicyLabel(item.failureRecoveryPolicy, copy)
+    });
+
+    if (item.failureRecoveryPolicy === "auto" && item.maxFailureRecoveryAttempts !== undefined) {
+      rows.push({
+        label: copy.failureRecoveryAttemptLimitLabel,
+        value: copy.failureRecoveryAttemptLimit(item.maxFailureRecoveryAttempts)
+      });
+      rows.push({
+        label: copy.failureRecoveryAttemptProgressLabel,
+        value: copy.failureRecoveryAttemptProgress(
+          item.autoFailureRecoveryAttemptsUsed ?? 0,
+          item.maxFailureRecoveryAttempts
+        )
+      });
+    }
   }
 
   if (item.active) {
@@ -3671,6 +3463,21 @@ function formatAgentConfirmationSummary(
   return lines.join("\n");
 }
 
+function getFailureRecoveryPolicyLabel(
+  policy: NonNullable<AgentConfirmationItem["failureRecoveryPolicy"]>,
+  copy: ReturnType<typeof getCompactAgentControlCopy>
+): string {
+  if (policy === "auto") {
+    return copy.failureRecoveryAuto;
+  }
+
+  if (policy === "suggest") {
+    return copy.failureRecoverySuggest;
+  }
+
+  return copy.failureRecoveryManual;
+}
+
 // 提供 compact/full 确认面板共享的中英文文案
 function getCompactAgentControlCopy(language: Language) {
   if (language === "zh-CN") {
@@ -3691,6 +3498,11 @@ function getCompactAgentControlCopy(language: Language) {
         count > 1 ? `先处理 ${path} 等 ${count} 个修改, Forge 才会继续` : `先处理 ${path}, Forge 才会继续`,
       failedActionTitle: "失败动作",
       failedActionBody: "先重试、生成修复计划或跳过, 队列才会继续",
+      failedActionSuggestBody: "当前智能体建议先生成修复计划, 也可以重试或跳过该动作",
+      failedActionAutoBody: (count?: number, used = 0) =>
+        count === undefined
+          ? "当前智能体会按上限尝试自动生成修复计划, 也可以手动生成、重试或跳过"
+          : `当前智能体已自动尝试 ${used} / ${count} 次修复计划, 也可以手动生成、重试或跳过`,
       manualGateTitle: "人工确认",
       commandApprovalTitle: "命令批准",
       commandBlockedTitle: "命令被阻止",
@@ -3699,6 +3511,14 @@ function getCompactAgentControlCopy(language: Language) {
       commandLabel: "命令",
       cwdLabel: "目录",
       riskLabel: "风险",
+      failureRecoveryPolicyLabel: "恢复策略",
+      failureRecoveryAttemptLimitLabel: "自动上限",
+      failureRecoveryAttemptProgressLabel: "已尝试",
+      failureRecoveryManual: "手动处理",
+      failureRecoverySuggest: "提示修复",
+      failureRecoveryAuto: "自动恢复",
+      failureRecoveryAttemptLimit: (count: number) => `${count} 次`,
+      failureRecoveryAttemptProgress: (used: number, count: number) => `${used} / ${count} 次`,
       afterApprovalLabel: "批准后",
       noNextQueuedAction: "没有后续队列动作",
       reviewQueuedChanges: "审查队列修改",
@@ -3774,6 +3594,12 @@ function getCompactAgentControlCopy(language: Language) {
         : `Review ${path} before Forge continues.`,
     failedActionTitle: "Failed action",
     failedActionBody: "Retry, generate a fix plan, or skip this action before the queue continues.",
+    failedActionSuggestBody:
+      "This agent suggests generating a fix plan first. You can also retry or skip the action.",
+    failedActionAutoBody: (count?: number, used = 0) =>
+      count === undefined
+        ? "This agent can auto-generate a fix plan within its retry limit. You can still generate one manually, retry, or skip."
+        : `This agent has auto-generated ${used} / ${count} fix ${count === 1 ? "plan" : "plans"}. You can still generate one manually, retry, or skip.`,
     manualGateTitle: "Manual confirmation",
     commandApprovalTitle: "Command approval",
     commandBlockedTitle: "Blocked command",
@@ -3782,6 +3608,15 @@ function getCompactAgentControlCopy(language: Language) {
     commandLabel: "Command",
     cwdLabel: "cwd",
     riskLabel: "Risk",
+    failureRecoveryPolicyLabel: "Recovery",
+    failureRecoveryAttemptLimitLabel: "Auto limit",
+    failureRecoveryAttemptProgressLabel: "Attempted",
+    failureRecoveryManual: "Manual",
+    failureRecoverySuggest: "Suggest fix",
+    failureRecoveryAuto: "Auto recovery",
+    failureRecoveryAttemptLimit: (count: number) =>
+      `${count} automatic ${count === 1 ? "attempt" : "attempts"}`,
+    failureRecoveryAttemptProgress: (used: number, count: number) => `${used} / ${count}`,
     afterApprovalLabel: "After approval",
     noNextQueuedAction: "No later queued action",
     reviewQueuedChanges: "Review queued changes",
@@ -3842,70 +3677,6 @@ function getCompactAgentControlCopy(language: Language) {
 // 用户可以显式跳过未完成动作, 但不能跳过正在运行或已经终态的动作
 function canSkipAgentAction(action: AgentAction): boolean {
   return action.status === "pending" || action.status === "failed";
-}
-
-// 找到当前阻塞队列推进的动作, 用于提示用户下一步
-function getNextGateAction(
-  actions: AgentAction[],
-  runnablePendingActions: AgentAction[]
-): AgentAction | null {
-  const lastRunnableAction = runnablePendingActions.at(-1);
-
-  if (!lastRunnableAction) {
-    return null;
-  }
-
-  const lastRunnableIndex = actions.findIndex((action) => action.id === lastRunnableAction.id);
-
-  if (lastRunnableIndex < 0) {
-    return null;
-  }
-
-  return (
-    actions
-      .slice(lastRunnableIndex + 1)
-      .find((action) => action.status === "pending") ?? null
-  );
-}
-
-// 统计动作队列完成度, 让顶部状态只显示简短数字
-function getQueueStats(actions: AgentAction[]): {
-  completed: number;
-  failed: number;
-  total: number;
-} {
-  return actions.reduce(
-    (stats, action) => ({
-      completed: stats.completed + (action.status === "completed" ? 1 : 0),
-      failed: stats.failed + (action.status === "failed" ? 1 : 0),
-      total: stats.total + 1
-    }),
-    { completed: 0, failed: 0, total: 0 }
-  );
-}
-
-// 找到第一个失败或待人工处理动作, 用于恢复提示
-function getQueueBlockerAction(
-  actions: AgentAction[],
-  policy: AgentCommandSafetyPolicy = {}
-): AgentAction | null {
-  for (const action of actions) {
-    if (action.status === "completed" || action.status === "skipped") {
-      continue;
-    }
-
-    if (action.status === "failed" || action.status === "running") {
-      return action;
-    }
-
-    if (action.status === "pending" && !isRunnableAgentAction(action, policy)) {
-      return action;
-    }
-
-    return null;
-  }
-
-  return null;
 }
 
 // 从事件和动作里生成一行活动摘要, 侧边栏和标题区共用
@@ -3969,8 +3740,7 @@ function getThreadActivitySummary(
 function getCompactProcessedSummary(
   thread: TaskThread,
   visibleEvents: TaskThreadEvent[],
-  language: Language,
-  now: number
+  language: Language
 ): CompactProcessedSummary | null {
   const visibleEventIds = new Set(visibleEvents.map((event) => event.id));
   const hiddenEvents = thread.events.filter((event) => !visibleEventIds.has(event.id));
@@ -3984,8 +3754,6 @@ function getCompactProcessedSummary(
   }
 
   return {
-    label: language === "zh-CN" ? "已处理" : "Processed",
-    duration: formatCompactProcessedDuration(thread, now),
     hiddenEvents,
     groups: buildCompactProcessedGroups(hiddenEvents, language),
     sourceUrls: extractSourceUrlsFromEvents(hiddenEvents),
@@ -4236,6 +4004,15 @@ function extractSourceUrlsFromEvents(events: TaskThreadEvent[]): string[] {
   return mergeUniqueStrings(events.flatMap((event) => extractSourceUrls(event.message)));
 }
 
+function stripAssistantSourceBlock(message: string): string {
+  return message
+    .replace(
+      /\n{2,}(?:参考来源|参考资料|Sources):\s*\n(?:[-*]\s+https?:\/\/[^\n]+\n?)+\s*$/iu,
+      ""
+    )
+    .trim();
+}
+
 function extractSourceUrls(value: string): string[] {
   const matches = value.match(/https?:\/\/[^\s<>)\]]+/giu) ?? [];
 
@@ -4275,35 +4052,6 @@ function getCompactProcessedLivePreview(
   }
 
   return liveEvent.message.trim().replace(/\s+/gu, " ").slice(0, 180);
-}
-
-// 计算已处理摘要的耗时, 运行中的线程使用当前时间保证用户看到持续反馈
-function formatCompactProcessedDuration(thread: TaskThread, now: number): string {
-  const startedAt = Date.parse(thread.events[0]?.createdAt ?? thread.createdAt);
-  const lastEvent = thread.events.at(-1);
-  const finishedAt =
-    thread.status === "running" || thread.status === "planned"
-      ? now
-      : Date.parse(lastEvent?.completedAt ?? lastEvent?.createdAt ?? thread.createdAt);
-
-  if (Number.isNaN(startedAt) || Number.isNaN(finishedAt)) {
-    return "";
-  }
-
-  return formatCompactDuration(Math.max(0, finishedAt - startedAt));
-}
-
-// 使用短耗时格式贴近主屏摘要, 避免占用正文空间
-function formatCompactDuration(durationMs: number): string {
-  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes <= 0) {
-    return `${seconds}s`;
-  }
-
-  return `${minutes}m ${seconds}s`;
 }
 
 // 把事件类型压成短标签, 避免对话区出现内部术语
@@ -4647,145 +4395,4 @@ function getAssistantResponseActionCopy(language: Language): {
     like: "Like response",
     dislike: "Dislike response"
   };
-}
-
-// 复制动作详情时保留动作元数据和最近输出, 方便用户把单步上下文交给模型继续分析
-function formatAgentActionContextForClipboard(
-  action: AgentAction,
-  statusLabel: string,
-  nextStep: string,
-  commandResult: CommandRunResult | null,
-  toolResult: TaskThreadEvent | null,
-  actionRun: AgentActionRunRecord | null
-): string {
-  const metadata = [
-    `Action: ${action.label}`,
-    `Kind: ${action.kind}`,
-    `Status: ${statusLabel}`,
-    action.target ? `Target: ${action.target}` : null,
-    action.command ? `Command: ${action.command}` : null,
-    `Next step: ${nextStep}`
-  ].filter((line): line is string => Boolean(line));
-  const sections = [...metadata];
-
-  if (commandResult) {
-    sections.push(`Command result:\n${formatCommandResultForClipboard(commandResult)}`);
-  }
-
-  if (actionRun) {
-    sections.push(`Execution record:\n${formatAgentActionRunForClipboard(actionRun)}`);
-  }
-
-  if (toolResult) {
-    sections.push(`Tool result:\n${toolResult.message.trim()}`);
-  }
-
-  return sections.join("\n");
-}
-
-// 把结构化动作执行记录整理成可粘贴文本, 方便继续排查单步行为
-function formatAgentActionRunForClipboard(actionRun: AgentActionRunRecord): string {
-  return [
-    `Status: ${actionRun.status}`,
-    actionRun.startedAt ? `Started: ${actionRun.startedAt}` : null,
-    actionRun.completedAt ? `Completed: ${actionRun.completedAt}` : null,
-    typeof actionRun.durationMs === "number"
-      ? `Duration: ${formatActionDuration(actionRun.durationMs)}`
-      : null,
-    actionRun.reason ? `Reason: ${actionRun.reason}` : null
-  ]
-    .filter((line): line is string => Boolean(line))
-    .join("\n");
-}
-
-// 本地化动作执行状态, 避免直接把内部状态枚举暴露给用户
-function formatAgentActionRunStatus(status: AgentActionRunRecord["status"], language: Language): string {
-  if (language === "zh-CN") {
-    return {
-      started: "已开始",
-      completed: "已完成",
-      failed: "失败",
-      waiting: "等待继续",
-      confirmed: "已确认",
-      skipped: "已跳过"
-    }[status];
-  }
-
-  return {
-    started: "Started",
-    completed: "Completed",
-    failed: "Failed",
-    waiting: "Waiting",
-    confirmed: "Confirmed",
-    skipped: "Skipped"
-  }[status];
-}
-
-// 动作详情只需要短时间戳, 避免完整 ISO 时间挤占侧栏
-function formatActionTimestamp(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  });
-}
-
-// 用短格式展示动作耗时, 与 App 侧时间线文案保持一致
-function formatActionDuration(durationMs: number): string {
-  if (durationMs < 1000) {
-    return `${durationMs} ms`;
-  }
-
-  return `${(durationMs / 1000).toFixed(1)} s`;
-}
-
-// 压缩命令输出片段, 错误恢复提示只需要最后几行
-// 复制命令历史时保留命令, 目录, 状态和 stdout/stderr, 方便粘贴给模型继续排错
-function formatCommandResultForClipboard(result: CommandRunResult): string {
-  const metadata = [`$ ${result.command}`];
-  const outputSections: string[] = [];
-
-  if (result.cwd) {
-    metadata.push(`cwd: ${result.cwd}`);
-  }
-
-  if (result.cancelled) {
-    metadata.push("cancelled");
-  } else if (result.timedOut) {
-    metadata.push("timed out");
-  } else {
-    metadata.push(`exit ${result.exitCode === null ? "null" : result.exitCode}`);
-  }
-
-  if (result.stdout.trim()) {
-    outputSections.push(`stdout:\n${result.stdout.trimEnd()}`);
-  }
-
-  if (result.stderr.trim()) {
-    outputSections.push(`stderr:\n${result.stderr.trimEnd()}`);
-  }
-
-  return [metadata.join("\n"), outputSections.join("\n\n")].filter(Boolean).join("\n\n");
-}
-
-// 压缩命令输出片段, 错误恢复提示只需要最后几行
-function formatCommandOutputSnippet(value: string): string {
-  const trimmed = value.trim();
-  const maxLength = 900;
-
-  if (trimmed.length <= maxLength) {
-    return trimmed;
-  }
-
-  const omittedMarker = "\n... output truncated, middle omitted ...\n";
-  const headLength = 360;
-  const tailLength = maxLength - omittedMarker.length - headLength;
-
-  return `${trimmed.slice(0, headLength)}${omittedMarker}${trimmed.slice(-tailLength)}`;
 }

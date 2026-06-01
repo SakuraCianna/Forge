@@ -165,7 +165,11 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
 
 // 清理动作目标文本, 空字符串统一变成 undefined
 function normalizeActionTarget(target: string | undefined): string | undefined {
-  const normalized = target?.trim().replace(/^`|`$/g, "");
+  const normalized = target
+    ?.trim()
+    .replace(/^`|`$/g, "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/[.,;:，。；：]+$/u, "");
 
   return normalized || undefined;
 }
@@ -219,6 +223,10 @@ function isLikelyDirectoryPath(target: string): boolean {
   const normalizedTarget = target.trim().replace(/\\/g, "/");
   const lastSegment = normalizedTarget.split("/").filter(Boolean).at(-1) ?? normalizedTarget;
 
+  if (normalizedTarget !== "." && !isCleanProjectPathTarget(normalizedTarget)) {
+    return false;
+  }
+
   return (
     normalizedTarget === "." ||
     /\/$/u.test(normalizedTarget) ||
@@ -229,14 +237,33 @@ function isLikelyDirectoryPath(target: string): boolean {
 
 // 用轻量规则判断目标是否像文件路径, 避免误把普通说明当文件
 function isLikelyFilePath(target: string): boolean {
-  if (/^[a-z]+(\s|$)/i.test(target)) {
+  const normalizedTarget = target.trim().replace(/\\/g, "/");
+
+  if (!isCleanProjectPathTarget(normalizedTarget)) {
     return false;
   }
 
-  return (
-    target.includes("/") ||
-    target.includes("\\") ||
-    /\.[a-z0-9]+$/i.test(target) ||
-    target.startsWith(".")
-  );
+  const lastSegment = normalizedTarget.split("/").filter(Boolean).at(-1) ?? normalizedTarget;
+
+  return isLikelyFileName(lastSegment);
+}
+
+function isCleanProjectPathTarget(target: string): boolean {
+  const normalizedTarget = target.trim().replace(/\\/g, "/").replace(/^\.\//u, "").replace(/\/+$/u, "");
+
+  if (!normalizedTarget || /^[a-z]+(\s|$)/iu.test(normalizedTarget)) {
+    return false;
+  }
+
+  if (/[\r\n<>:"|?*]/u.test(normalizedTarget) || /^(?:[a-z]:|\/)/iu.test(normalizedTarget)) {
+    return false;
+  }
+
+  const segments = normalizedTarget.split("/");
+
+  return segments.every((segment) => segment.trim() && segment !== "." && segment !== "..");
+}
+
+function isLikelyFileName(fileName: string): boolean {
+  return /^\.[A-Za-z0-9_.-]+$/u.test(fileName) || /\.[A-Za-z0-9][A-Za-z0-9_.-]{0,15}$/u.test(fileName);
 }

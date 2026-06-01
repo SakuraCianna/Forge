@@ -7,6 +7,9 @@ export type ProjectGitFileChange = {
 
 export type ProjectGitStatus = {
   isRepo: boolean;
+  currentBranch: string | null;
+  branches: string[];
+  remotes: string[];
   changedFiles: string[];
   changes: ProjectGitFileChange[];
   rawStatus: string;
@@ -19,10 +22,30 @@ export type ProjectGitStatusRequest = {
 export type ProjectGitCommitRequest = {
   projectRoot: string;
   message: string;
+  branch?: string;
+  createBranch?: boolean;
+  push?: boolean;
+  remote?: string;
 };
 
 export type ProjectGitCommitResult = {
   output: string;
+  branch: string | null;
+  pushed: boolean;
+  pushOutput?: string;
+  status: ProjectGitStatus;
+};
+
+export type ProjectGitPushRequest = {
+  projectRoot: string;
+  branch?: string;
+  remote?: string;
+};
+
+export type ProjectGitPushResult = {
+  output: string;
+  branch: string;
+  remote: string;
   status: ProjectGitStatus;
 };
 

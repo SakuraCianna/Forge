@@ -7,6 +7,32 @@ export type ProjectTextFile = {
   size: number;
 };
 
+export type ProjectTextFilePreview = ProjectTextFile & {
+  kind: "text";
+  mediaType: string;
+};
+
+export type ProjectInlineFilePreview = {
+  relativePath: string;
+  kind: "image" | "pdf" | "audio" | "video";
+  dataUrl: string;
+  mediaType: string;
+  size: number;
+};
+
+export type ProjectUnavailableFilePreview = {
+  relativePath: string;
+  kind: "office" | "unsupported";
+  mediaType: string;
+  reason: string;
+  size: number;
+};
+
+export type ProjectFilePreview =
+  | ProjectTextFilePreview
+  | ProjectInlineFilePreview
+  | ProjectUnavailableFilePreview;
+
 export type ProjectTextSearchRequest = {
   projectRoot: string;
   query: string;

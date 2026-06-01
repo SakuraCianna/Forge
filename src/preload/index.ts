@@ -26,12 +26,15 @@ import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
   ProjectFileGlobResult,
+  ProjectFilePreview,
   ProjectTextFile,
   ProjectTextSearchResult
 } from "../shared/fileTypes.js";
 import type {
   ProjectGitCommitRequest,
   ProjectGitCommitResult,
+  ProjectGitPushRequest,
+  ProjectGitPushResult,
   ProjectGitStatus,
   ProjectGitStatusRequest,
   ProjectGitWorktreeRequest,
@@ -60,7 +63,8 @@ contextBridge.exposeInMainWorld("forge", {
       ipcRenderer.invoke(keyVaultChannels.save, providerId, apiKey),
     getProviderKeyStatus: (providerId: string) =>
       ipcRenderer.invoke(keyVaultChannels.status, providerId),
-    deleteProviderKey: (providerId: string) => ipcRenderer.invoke(keyVaultChannels.delete, providerId)
+    deleteProviderKey: (providerId: string) => ipcRenderer.invoke(keyVaultChannels.delete, providerId),
+    clearAllProviderKeys: () => ipcRenderer.invoke(keyVaultChannels.clearAll)
   },
   models: {
     fetchProviderModels: (provider: ForgeProvider) =>
@@ -133,6 +137,8 @@ contextBridge.exposeInMainWorld("forge", {
       ipcRenderer.invoke(gitChannels.status, request),
     commit: (request: ProjectGitCommitRequest): Promise<ProjectGitCommitResult> =>
       ipcRenderer.invoke(gitChannels.commit, request),
+    push: (request: ProjectGitPushRequest): Promise<ProjectGitPushResult> =>
+      ipcRenderer.invoke(gitChannels.push, request),
     createWorktree: (
       request: ProjectGitWorktreeRequest
     ): Promise<ProjectGitWorktreeResult> =>
@@ -144,6 +150,11 @@ contextBridge.exposeInMainWorld("forge", {
       relativePath: string;
       maxBytes?: number;
     }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.readText, request),
+    preview: (request: {
+      projectRoot: string;
+      relativePath: string;
+      maxBytes?: number;
+    }): Promise<ProjectFilePreview> => ipcRenderer.invoke(fileChannels.preview, request),
     listDirectory: (request: {
       projectRoot: string;
       relativePath?: string;

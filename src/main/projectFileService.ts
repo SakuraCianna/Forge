@@ -1,5 +1,5 @@
 // 本文件说明: 在项目根目录内安全读取, 预览和写入文本文件
-import type { Dirent } from "node:fs";
+import type { Dirent, Stats } from "node:fs";
 import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import type {
@@ -9,6 +9,7 @@ import type {
   ProjectFileGlobMatch,
   ProjectFileGlobRequest,
   ProjectFileGlobResult,
+  ProjectFilePreview,
   ProjectFileChangePreview,
   ProjectTextFile,
   ProjectTextSearchMatch,
@@ -29,6 +30,7 @@ type ReadProjectTextFileOptions = {
 };
 
 const maxSearchPreviewChars = 240;
+const maxInlinePreviewBytes = 40 * 1024 * 1024;
 
 // 读取文本文件前检查路径边界和大小, 防止大文件拖慢预览
 export async function readProjectTextFile({
@@ -36,24 +38,10 @@ export async function readProjectTextFile({
   relativePath,
   maxBytes = 256000
 }: ReadProjectTextFileOptions): Promise<ProjectTextFile> {
-  const resolvedProjectRoot = await realpath(projectRoot);
-  const normalizedRelativePath = normalizeRelativePath(relativePath);
-
-  assertProjectPathNotSensitive(normalizedRelativePath);
-
-  const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
-
-  if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
-    throw new Error("File path must stay inside the selected project");
-  }
-
-  const resolvedFilePath = await realpath(absoluteFilePath);
-
-  if (!isPathInside(resolvedFilePath, resolvedProjectRoot)) {
-    throw new Error("File path must stay inside the selected project");
-  }
-
-  const fileStat = await stat(resolvedFilePath);
+  const { fileStat, normalizedRelativePath, resolvedFilePath } = await resolveProjectFileForRead(
+    projectRoot,
+    relativePath
+  );
 
   if (fileStat.size > maxBytes) {
     throw new Error("File is too large to preview");
@@ -62,6 +50,93 @@ export async function readProjectTextFile({
   return {
     relativePath: normalizedRelativePath,
     content: await readFile(resolvedFilePath, "utf8"),
+    size: fileStat.size
+  };
+}
+
+// 预览任意项目文件；文本保留源码高亮，二进制只为浏览器原生支持的类型生成内嵌 data URL
+export async function previewProjectFile({
+  projectRoot,
+  relativePath,
+  maxBytes = 256000
+}: ReadProjectTextFileOptions): Promise<ProjectFilePreview> {
+  const { fileStat, normalizedRelativePath, resolvedFilePath } = await resolveProjectFileForRead(
+    projectRoot,
+    relativePath
+  );
+  const media = resolvePreviewMedia(normalizedRelativePath);
+
+  if (media.kind === "text") {
+    if (fileStat.size > maxBytes) {
+      return createUnavailablePreview(
+        normalizedRelativePath,
+        fileStat.size,
+        media.mediaType,
+        "unsupported",
+        "Text file is too large to preview"
+      );
+    }
+
+    return {
+      relativePath: normalizedRelativePath,
+      content: await readFile(resolvedFilePath, "utf8"),
+      kind: "text",
+      mediaType: media.mediaType,
+      size: fileStat.size
+    };
+  }
+
+  if (media.kind === "unknown" && fileStat.size <= maxBytes) {
+    const content = await readFile(resolvedFilePath, "utf8");
+
+    if (!content.includes("\u0000")) {
+      return {
+        relativePath: normalizedRelativePath,
+        content,
+        kind: "text",
+        mediaType: "text/plain; charset=utf-8",
+        size: fileStat.size
+      };
+    }
+  }
+
+  if (media.kind === "office") {
+    return createUnavailablePreview(
+      normalizedRelativePath,
+      fileStat.size,
+      media.mediaType,
+      "office",
+      "Office document preview requires document conversion"
+    );
+  }
+
+  if (media.kind === "unknown") {
+    return createUnavailablePreview(
+      normalizedRelativePath,
+      fileStat.size,
+      media.mediaType,
+      "unsupported",
+      "File type is not supported for inline preview"
+    );
+  }
+
+  if (fileStat.size > maxInlinePreviewBytes) {
+    return createUnavailablePreview(
+      normalizedRelativePath,
+      fileStat.size,
+      media.mediaType,
+      "unsupported",
+      "File is too large for inline preview"
+    );
+  }
+
+  const buffer = await readFile(resolvedFilePath);
+
+  return {
+    relativePath: normalizedRelativePath,
+    dataUrl: `data:${media.mediaType};base64,${buffer.toString("base64")}`,
+    kind: media.kind,
+    mediaType: media.mediaType,
     size: fileStat.size
   };
 }
@@ -376,7 +451,191 @@ async function readProjectTextFileOrEmpty({
   }
 }
 
+// 文件预览辅助: 统一路径校验和轻量 MIME 分类
+type ResolvedProjectFileForRead = {
+  fileStat: Stats;
+  normalizedRelativePath: string;
+  resolvedFilePath: string;
+};
+
+type ProjectPreviewMedia =
+  | { kind: "text"; mediaType: string }
+  | { kind: "image" | "pdf" | "audio" | "video"; mediaType: string }
+  | { kind: "office"; mediaType: string }
+  | { kind: "unknown"; mediaType: string };
+
+async function resolveProjectFileForRead(
+  projectRoot: string,
+  relativePath: string
+): Promise<ResolvedProjectFileForRead> {
+  const resolvedProjectRoot = await realpath(projectRoot);
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+
+  assertProjectPathNotSensitive(normalizedRelativePath);
+
+  const absoluteFilePath = resolve(resolvedProjectRoot, relativePath);
+
+  if (!isPathInside(absoluteFilePath, resolvedProjectRoot)) {
+    throw new Error("File path must stay inside the selected project");
+  }
+
+  const resolvedFilePath = await realpath(absoluteFilePath);
+
+  if (!isPathInside(resolvedFilePath, resolvedProjectRoot)) {
+    throw new Error("File path must stay inside the selected project");
+  }
+
+  const fileStat = await stat(resolvedFilePath);
+
+  if (!fileStat.isFile()) {
+    throw new Error("File path must point to a file");
+  }
+
+  return {
+    fileStat,
+    normalizedRelativePath,
+    resolvedFilePath
+  };
+}
+
+function createUnavailablePreview(
+  relativePath: string,
+  size: number,
+  mediaType: string,
+  kind: "office" | "unsupported",
+  reason: string
+): ProjectFilePreview {
+  return {
+    relativePath,
+    kind,
+    mediaType,
+    reason,
+    size
+  };
+}
+
+function resolvePreviewMedia(relativePath: string): ProjectPreviewMedia {
+  const extension = getFileExtension(relativePath);
+
+  if (extension === "pdf") {
+    return { kind: "pdf", mediaType: "application/pdf" };
+  }
+
+  const imageMediaType = imageMediaTypeByExtension[extension];
+
+  if (imageMediaType) {
+    return { kind: "image", mediaType: imageMediaType };
+  }
+
+  const audioMediaType = audioMediaTypeByExtension[extension];
+
+  if (audioMediaType) {
+    return { kind: "audio", mediaType: audioMediaType };
+  }
+
+  const videoMediaType = videoMediaTypeByExtension[extension];
+
+  if (videoMediaType) {
+    return { kind: "video", mediaType: videoMediaType };
+  }
+
+  const officeMediaType = officeMediaTypeByExtension[extension];
+
+  if (officeMediaType) {
+    return { kind: "office", mediaType: officeMediaType };
+  }
+
+  const textMediaType = textMediaTypeByExtension[extension];
+
+  if (textMediaType) {
+    return { kind: "text", mediaType: textMediaType };
+  }
+
+  return { kind: "unknown", mediaType: "application/octet-stream" };
+}
+
+function getFileExtension(relativePath: string): string {
+  const fileName = normalizeRelativePath(relativePath).split("/").pop() ?? "";
+  const match = /\.([^.]+)$/u.exec(fileName);
+
+  return match?.[1]?.toLocaleLowerCase() ?? "";
+}
+
+const imageMediaTypeByExtension: Record<string, string> = {
+  avif: "image/avif",
+  bmp: "image/bmp",
+  gif: "image/gif",
+  ico: "image/x-icon",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
+  svg: "image/svg+xml",
+  webp: "image/webp"
+};
+
+const audioMediaTypeByExtension: Record<string, string> = {
+  aac: "audio/aac",
+  flac: "audio/flac",
+  m4a: "audio/mp4",
+  mp3: "audio/mpeg",
+  oga: "audio/ogg",
+  ogg: "audio/ogg",
+  opus: "audio/ogg",
+  wav: "audio/wav"
+};
+
+const videoMediaTypeByExtension: Record<string, string> = {
+  avi: "video/x-msvideo",
+  m4v: "video/mp4",
+  mkv: "video/x-matroska",
+  mov: "video/quicktime",
+  mp4: "video/mp4",
+  ogv: "video/ogg",
+  webm: "video/webm"
+};
+
+const officeMediaTypeByExtension: Record<string, string> = {
+  doc: "application/msword",
+  docm: "application/vnd.ms-word.document.macroenabled.12",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  dot: "application/msword",
+  dotx: "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+  odp: "application/vnd.oasis.opendocument.presentation",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+  odt: "application/vnd.oasis.opendocument.text",
+  potx: "application/vnd.openxmlformats-officedocument.presentationml.template",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  rtf: "application/rtf",
+  word: "application/msword",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+};
+
+const textMediaTypeByExtension: Record<string, string> = {
+  css: "text/css; charset=utf-8",
+  csv: "text/csv; charset=utf-8",
+  htm: "text/html; charset=utf-8",
+  html: "text/html; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  json: "application/json; charset=utf-8",
+  jsonc: "application/json; charset=utf-8",
+  jsonl: "application/jsonlines; charset=utf-8",
+  jsx: "text/javascript; charset=utf-8",
+  log: "text/plain; charset=utf-8",
+  md: "text/markdown; charset=utf-8",
+  mdx: "text/markdown; charset=utf-8",
+  mjs: "text/javascript; charset=utf-8",
+  ts: "text/typescript; charset=utf-8",
+  tsx: "text/typescript; charset=utf-8",
+  txt: "text/plain; charset=utf-8",
+  xml: "application/xml; charset=utf-8",
+  yaml: "application/yaml; charset=utf-8",
+  yml: "application/yaml; charset=utf-8"
+};
+
 // 读取目录并按名称排序, 让搜索和 glob 结果稳定可测
+
 async function readSortedDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
   return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) =>
     left.name.localeCompare(right.name)
