@@ -99,5 +99,11 @@ export type ProjectFileChangePreview = {
   currentContent: string;
   nextContent: string;
   diff: LineDiffEntry[];
+  changeKind: "create" | "edit" | "delete";
   source?: ProjectFileChangeSource;
+};
+
+export type ProjectFileDeleteResult = {
+  relativePath: string;
+  size: number;
 };

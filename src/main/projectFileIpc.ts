@@ -4,6 +4,7 @@ import type {
   ProjectDirectoryListRequest,
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
+  ProjectFileDeleteResult,
   ProjectFileGlobRequest,
   ProjectFileGlobResult,
   ProjectFilePreview,
@@ -44,6 +45,8 @@ type PreviewProjectTextFileUpdate = (
 
 type WriteProjectTextFile = (request: UpdateProjectTextFileRequest) => Promise<ProjectTextFile>;
 
+type DeleteProjectFile = (request: ReadProjectTextFileRequest) => Promise<ProjectFileDeleteResult>;
+
 type IpcHandler = (_event: unknown, ...args: unknown[]) => Promise<unknown>;
 
 type RegisterHandler = (channel: string, handler: IpcHandler) => void;
@@ -56,6 +59,7 @@ export function registerProjectFileHandlers(
   previewProjectFile: PreviewProjectFile,
   previewProjectTextFileUpdate: PreviewProjectTextFileUpdate,
   writeProjectTextFile: WriteProjectTextFile,
+  deleteProjectFile: DeleteProjectFile,
   listProjectDirectory: ListProjectDirectory,
   globProjectFiles: GlobProjectFiles,
   searchProjectTextFiles: SearchProjectTextFiles,
@@ -87,6 +91,10 @@ export function registerProjectFileHandlers(
 
   registerHandler(fileChannels.writeText, async (_event, request) =>
     writeProjectTextFile(assertUpdateRequest(request))
+  );
+
+  registerHandler(fileChannels.deleteFile, async (_event, request) =>
+    deleteProjectFile(assertReadRequest(request))
   );
 }
 

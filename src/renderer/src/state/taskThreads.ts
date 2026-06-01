@@ -1,7 +1,7 @@
 // 本文件说明: 维护任务线程的生命周期, 流式输出, 命令回放和记忆快照
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
-import type { AgentMemoryContext, AgentProfileContext } from "@shared/agentTypes";
+import type { AgentImageAttachment, AgentMemoryContext, AgentProfileContext } from "@shared/agentTypes";
 import type { CommandOutputChunk } from "@shared/commandTypes";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import { getEnabledModels } from "./modelSettings";
@@ -55,6 +55,11 @@ export type AgentActionRunRecord = {
   reason?: string;
 };
 
+export type FileChangeRecord = {
+  relativePath: string;
+  changeKind: "create" | "edit" | "delete";
+};
+
 export type TaskThreadEvent = {
   id: string;
   kind: TaskThreadEventKind;
@@ -65,6 +70,7 @@ export type TaskThreadEvent = {
   commandResult?: CommandRunResult;
   commandApproval?: CommandApprovalRecord;
   agentActionRun?: AgentActionRunRecord;
+  fileChange?: FileChangeRecord;
   failureRecoveryAttempt?: FailureRecoveryAttemptRecord;
 };
 
@@ -82,6 +88,7 @@ export type TaskThread = {
   projectPath?: string | null;
   contextMemories?: AgentMemoryContext[];
   agentProfile?: AgentProfileContext;
+  attachments?: AgentImageAttachment[];
   agentActions?: AgentAction[];
   events: TaskThreadEvent[];
 };
@@ -90,6 +97,7 @@ type ThreadDeps = {
   createId?: () => string;
   now?: () => string;
   agentProfile?: AgentProfileContext;
+  attachments?: AgentImageAttachment[];
 };
 
 type ThreadMemorySource = AgentMemoryContext & {
@@ -137,6 +145,7 @@ export function createThreadFromSettings(
       speed: settings.speed,
       createdAt,
       agentProfile: deps.agentProfile ? cloneAgentProfileContext(deps.agentProfile) : undefined,
+      attachments: deps.attachments?.map(cloneAgentImageAttachment),
       // 新线程不写入占位计划事件, 真实进度只来自模型输出和命令结果
       events: []
     }
@@ -148,6 +157,10 @@ function cloneAgentProfileContext(agentProfile: AgentProfileContext): AgentProfi
     ...agentProfile,
     enabledTools: [...agentProfile.enabledTools]
   };
+}
+
+function cloneAgentImageAttachment(attachment: AgentImageAttachment): AgentImageAttachment {
+  return { ...attachment };
 }
 
 // 追加线程事件并按需要更新状态, 保持事件历史只通过不可变更新写入

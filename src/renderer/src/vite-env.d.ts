@@ -16,6 +16,7 @@ import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
+  ProjectFileDeleteResult,
   ProjectFileGlobResult,
   ProjectFilePreview,
   ProjectTextFile,
@@ -147,6 +148,11 @@ declare global {
           nextContent: string;
           maxBytes?: number;
         }) => Promise<ProjectTextFile>;
+        delete: (request: {
+          projectRoot: string;
+          relativePath: string;
+          maxBytes?: number;
+        }) => Promise<ProjectFileDeleteResult>;
       };
     };
   }

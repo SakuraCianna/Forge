@@ -53,6 +53,7 @@ import {
   formatCommandResultForClipboard
 } from "@/agent/agentActionDetails";
 import { getFailureRecoveryAttemptsForAction } from "@/agent/failureRecoveryAttempts";
+import { getThreadActivitySummary as getThreadActivitySummaryFromEvents } from "@/agent/threadActivitySummary";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
@@ -105,6 +106,7 @@ type ThreadWorkspaceProps = {
   onDiscardAllChanges?: () => void;
   onGenerateFileChange?: (relativePath: string, currentContent: string) => void;
   onGenerateSelectedFileChanges?: (relativePaths: string[]) => void;
+  onDeleteFile?: (relativePath: string) => void;
 };
 
 type WorkspaceTab = "plan" | "changes" | "commands" | "logs";
@@ -118,6 +120,7 @@ type CommandHistoryEntry = {
 
 type ThreadActivitySummary = {
   kind: "running" | "failure";
+  activityKind: CompactProcessedGroupKind;
   label: string;
   command: string;
   meta: string | null;
@@ -206,7 +209,8 @@ export function ThreadWorkspace({
   onApplyAllChanges,
   onDiscardAllChanges,
   onGenerateFileChange,
-  onGenerateSelectedFileChanges
+  onGenerateSelectedFileChanges,
+  onDeleteFile
 }: ThreadWorkspaceProps): ReactElement {
   const { t } = useI18n(language);
   const [command, setCommand] = useState("");
@@ -237,8 +241,11 @@ export function ThreadWorkspace({
   const canEditPreview = Boolean(onPreviewChange || onApplyChange || onGenerateFileChange);
   const diffHunkCopy = getDiffHunkCopy(language);
   const threadActivitySummary = useMemo(
-    () => (selectedThread ? getThreadActivitySummary(selectedThread.events, language) : null),
-    [language, selectedThread]
+    () =>
+      selectedThread
+        ? getThreadActivitySummaryFromEvents(selectedThread.events, language, liveNow)
+        : null,
+    [language, liveNow, selectedThread]
   );
   const activeCommandEntry = useMemo(
     () => (selectedThread ? findLatestRunningCommandHistoryEntry(selectedThread.events) : null),
@@ -843,7 +850,11 @@ export function ThreadWorkspace({
         </h2>
         <div className="space-y-1.5">
           {threads.map((thread) => {
-            const threadListActivity = getThreadActivitySummary(thread.events, language);
+            const threadListActivity = getThreadActivitySummaryFromEvents(
+              thread.events,
+              language,
+              liveNow
+            );
 
             return (
               <button
@@ -1169,12 +1180,13 @@ export function ThreadWorkspace({
   // 在主屏保留一条低噪声活动心跳, 避免隐藏细节后看起来没有响应
   function renderCompactActivityHeartbeat(summary: ThreadActivitySummary): ReactElement {
     const isRunning = summary.kind === "running";
+    const Icon = getCompactProcessedGroupIcon(summary.activityKind);
 
     return (
       <section
         role="status"
         aria-live="polite"
-        className={`mx-auto flex w-full max-w-[880px] items-start gap-2 rounded-[12px] border px-3 py-2 text-[12px] ${
+        className={`mx-auto flex w-full max-w-[880px] items-center gap-2 rounded-[12px] border px-3 py-2 text-[12px] ${
           isRunning
             ? "border-[#dbeafe] bg-[#eff6ff] text-[#1d4ed8]"
             : "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]"
@@ -1182,12 +1194,14 @@ export function ThreadWorkspace({
       >
         <span
           aria-hidden="true"
-          className={`h-2 w-2 shrink-0 rounded-full ${
-            isRunning ? "animate-pulse bg-[#2563eb]" : "bg-[#f97316]"
+          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+            isRunning ? "bg-white/70 text-[#2563eb]" : "bg-white/70 text-[#f97316]"
           }`}
-        />
+        >
+          <Icon className={`h-3.5 w-3.5 ${isRunning ? "animate-pulse" : ""}`} />
+        </span>
         <span className="shrink-0 font-medium">{summary.label}</span>
-        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-5">
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] leading-5">
           {summary.command}
         </span>
         {summary.meta ? <span className="shrink-0 opacity-80">{summary.meta}</span> : null}
@@ -2843,6 +2857,15 @@ export function ThreadWorkspace({
                     >
                       {t("threads.applyChange")}
                     </button>
+                    {onDeleteFile ? (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteFile(previewFile.relativePath)}
+                        className="h-9 rounded-[13px] border border-[#f4c7ab] bg-[#fff7ed] px-3 text-sm font-semibold text-[#b45309] hover:bg-[#ffedd5]"
+                      >
+                        {language === "zh-CN" ? "删除文件" : "Delete file"}
+                      </button>
+                    ) : null}
                   </div>
                 </>
               ) : (
@@ -3558,64 +3581,6 @@ function canSkipAgentAction(action: AgentAction): boolean {
   return action.status === "pending" || action.status === "failed";
 }
 
-// 从事件和动作里生成一行活动摘要, 侧边栏和标题区共用
-function getThreadActivitySummary(
-  events: TaskThreadEvent[],
-  language: Language
-): ThreadActivitySummary | null {
-  const copy =
-    language === "zh-CN"
-      ? {
-          running: "运行中",
-          actionRunning: "正在处理",
-          failure: "最近失败",
-          timedOut: "已超时",
-          exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`
-        }
-      : {
-          running: "Running command",
-          actionRunning: "Working",
-          failure: "Last failure",
-          timedOut: "timed out",
-          exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`
-        };
-  const runningCommand = findLatestUnfinishedCommandRun(events);
-
-  if (runningCommand) {
-    return {
-      kind: "running",
-      label: copy.running,
-      command: runningCommand,
-      meta: null
-    };
-  }
-
-  const runningAction = findLatestUnfinishedAgentActionRun(events);
-
-  if (runningAction) {
-    return {
-      kind: "running",
-      label: copy.actionRunning,
-      command: runningAction,
-      meta: null
-    };
-  }
-
-  const failedResult = findLatestFailedCommandResult(events);
-
-  if (!failedResult) {
-    return null;
-  }
-
-  return {
-    kind: "failure",
-    label: copy.failure,
-    command: failedResult.command,
-    meta: failedResult.timedOut ? copy.timedOut : copy.exit(failedResult.exitCode)
-  };
-}
-
-// 生成轻量已处理摘要, 把内部步骤默认折叠起来
 function getCompactProcessedSummary(
   thread: TaskThread,
   visibleEvents: TaskThreadEvent[],
@@ -3967,66 +3932,6 @@ function getCompactEventLabel(event: TaskThreadEvent, language: Language): strin
   }
 
   return language === "zh-CN" ? "执行记录" : "Run transcript";
-}
-
-// 查找最近未完成命令, 用于显示停止按钮和运行状态
-function findLatestUnfinishedCommandRun(events: TaskThreadEvent[]): string | null {
-  const finishedRuns = new Set<string>();
-
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-
-    if (event?.commandResult) {
-      finishedRuns.add(getCommandRunKey(event.commandResult.command, event.commandResult.runId));
-      continue;
-    }
-
-    if (
-      event?.commandRun &&
-      !finishedRuns.has(getCommandRunKey(event.commandRun.command, event.commandRun.runId))
-    ) {
-      return event.commandRun.command;
-    }
-  }
-
-  return null;
-}
-
-// 查找最近未完成 Agent 动作, 覆盖读文件和生成修改这类没有命令输出的步骤
-function findLatestUnfinishedAgentActionRun(events: TaskThreadEvent[]): string | null {
-  const settledActionIds = new Set<string>();
-
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const actionRun = events[index]?.agentActionRun;
-
-    if (!actionRun) {
-      continue;
-    }
-
-    if (actionRun.status !== "started") {
-      settledActionIds.add(actionRun.actionId);
-      continue;
-    }
-
-    if (!settledActionIds.has(actionRun.actionId)) {
-      return actionRun.label;
-    }
-  }
-
-  return null;
-}
-
-// 查找最近失败命令结果, 用于生成修复入口
-function findLatestFailedCommandResult(events: TaskThreadEvent[]): CommandRunResult | null {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const result = events[index]?.commandResult;
-
-    if (result && !result.cancelled && (result.timedOut || result.exitCode !== 0)) {
-      return result;
-    }
-  }
-
-  return null;
 }
 
 // 查找最近命令结果, 成功和失败都可以用于上下文

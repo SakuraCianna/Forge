@@ -54,4 +54,46 @@ describe("agent execution plan", () => {
       })
     ]);
   });
+
+  it("uses Chinese tool labels while keeping concrete targets", () => {
+    const actions = createAgentActionsFromPlanSteps([
+      createPlanStep({
+        id: "read-file",
+        description: "Read project README",
+        kind: "inspect",
+        target: "README.md"
+      }),
+      createPlanStep({
+        id: "edit-file",
+        description: "Edit product spec",
+        kind: "edit",
+        target: "docs/product-spec.md"
+      }),
+      createPlanStep({
+        id: "run-command",
+        description: "Run typecheck",
+        kind: "verify",
+        target: "npm run typecheck"
+      })
+    ]);
+
+    expect(actions).toEqual([
+      expect.objectContaining({
+        kind: "inspect-file",
+        label: "读取 README.md",
+        target: "README.md"
+      }),
+      expect.objectContaining({
+        kind: "edit-file",
+        label: "编辑 docs/product-spec.md",
+        target: "docs/product-spec.md"
+      }),
+      expect.objectContaining({
+        kind: "run-command",
+        label: "运行命令 npm run typecheck",
+        command: "npm run typecheck"
+      })
+    ]);
+    expect(actions.map((action) => action.label).join("\n")).not.toMatch(/\b(?:Read|Edit|Run)\b/u);
+  });
 });

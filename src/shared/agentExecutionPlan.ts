@@ -68,7 +68,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "git-status",
-      label: "Check Git status",
+      label: "查看 Git 状态",
       status: "pending",
       target: normalizedTarget
     };
@@ -78,7 +78,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "glob-project",
-      label: `Find ${normalizedTarget}`,
+      label: `匹配文件 ${normalizedTarget}`,
       status: "pending",
       target: normalizedTarget
     };
@@ -88,7 +88,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "list-directory",
-      label: `List ${normalizedTarget}`,
+      label: `列出目录 ${normalizedTarget}`,
       status: "pending",
       target: normalizedTarget
     };
@@ -98,7 +98,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "inspect-file",
-      label: `Inspect ${normalizedTarget}`,
+      label: `读取 ${normalizedTarget}`,
       status: "pending",
       target: normalizedTarget
     };
@@ -108,7 +108,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "search-project",
-      label: `Search ${normalizedTarget}`,
+      label: `搜索 ${normalizedTarget}`,
       status: "pending",
       target: normalizedTarget
     };
@@ -118,7 +118,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "edit-file",
-      label: `Edit ${normalizedTarget}`,
+      label: `编辑 ${normalizedTarget}`,
       status: "pending",
       target: normalizedTarget
     };
@@ -128,7 +128,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "edit-file",
-      label: `Edit ${normalizedTarget}`,
+      label: `编辑 ${normalizedTarget}`,
       status: "pending",
       target: normalizedTarget
     };
@@ -138,7 +138,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "run-command",
-      label: `Run ${normalizedTarget}`,
+      label: `运行命令 ${normalizedTarget}`,
       status: "pending",
       command: normalizedTarget
     };
@@ -148,7 +148,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
     return {
       stepId: step.id,
       kind: "commit",
-      label: normalizedTarget ? `Commit ${normalizedTarget}` : "Commit changes",
+      label: normalizedTarget ? `提交 ${normalizedTarget}` : "提交变更",
       status: "pending",
       target: normalizedTarget
     };
@@ -157,7 +157,7 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
   return {
     stepId: step.id,
     kind: "manual",
-    label: step.description.trim() || step.title.trim() || "Review this plan step",
+    label: step.description.trim() || step.title.trim() || "查看这个计划步骤",
     status: "pending",
     target: normalizedTarget
   };

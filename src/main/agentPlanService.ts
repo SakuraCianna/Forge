@@ -121,6 +121,7 @@ export async function generateAgentPlan({
     apiKey: apiKey ?? "",
     instructions: createAgentPlanInstructions(request.personalization),
     input: createAgentPlanInput(request),
+    attachments: request.attachments,
     intelligence: request.intelligence,
     speed: request.speed
   });
@@ -174,6 +175,7 @@ export async function generateAgentPlanStream({
       apiKey: apiKey ?? "",
       instructions: createAgentPlanInstructions(request.personalization),
       input: createAgentPlanInput(request),
+      attachments: request.attachments,
       intelligence: request.intelligence,
       speed: request.speed
     })
@@ -247,6 +249,7 @@ export async function generateAgentFileChange({
     apiKey: apiKey ?? "",
     instructions: createAgentFileChangeInstructions(request.personalization),
     input: createAgentFileChangeInput(request),
+    attachments: request.attachments,
     intelligence: request.intelligence,
     speed: request.speed
   });
@@ -296,6 +299,7 @@ export async function generateAgentAsk({
     apiKey: apiKey ?? "",
     instructions: createAskInstructions(request.personalization, request.workMode),
     input: createAskInput(request),
+    attachments: request.attachments,
     intelligence: request.intelligence,
     speed: request.speed
   });
@@ -348,6 +352,7 @@ export async function generateAgentAskStream({
       apiKey: apiKey ?? "",
       instructions: createAskInstructions(request.personalization, request.workMode),
       input: createAskInput(request),
+      attachments: request.attachments,
       intelligence: request.intelligence,
       speed: request.speed
     })
@@ -400,6 +405,7 @@ export async function generateAgentAskStream({
         apiKey: apiKey ?? "",
         instructions: createAskInstructions(request.personalization, request.workMode),
         input: createAskContinuationInput(request, text),
+        attachments: request.attachments,
         intelligence: request.intelligence,
         speed: request.speed
       })

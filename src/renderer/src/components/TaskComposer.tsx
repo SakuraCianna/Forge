@@ -1,22 +1,36 @@
 // 本文件说明: 渲染统一输入框, 附件菜单, 权限选择和模型入口
-import type { ComponentType, KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  ClipboardEvent as ReactClipboardEvent,
+  ComponentType,
+  KeyboardEvent as ReactKeyboardEvent,
+  ReactElement
+} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowUp,
   Check,
   ChevronDown,
   Eye,
+  FileImage,
   Paperclip,
   Plug,
   Plus,
   ShieldAlert,
   ShieldCheck,
   Square,
-  Target
+  Target,
+  X
 } from "lucide-react";
+import type { AgentImageAttachment } from "@shared/agentTypes";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
+import {
+  formatAttachmentSize,
+  maxComposerImageAttachments,
+  readComposerImageAttachment,
+  selectComposerImageFiles
+} from "@/state/imageAttachments";
 import {
   createDefaultGeneralPreferences,
   type GeneralPreferences
@@ -33,7 +47,7 @@ type TaskComposerProps = {
   onSelectModel: (modelId: string) => void;
   onSelectIntelligence: (level: IntelligenceLevel) => void;
   onSelectSpeed: (speed: SpeedMode) => void;
-  onSubmitTask: (prompt: string) => void;
+  onSubmitTask: (prompt: string, attachments?: AgentImageAttachment[]) => void;
   onOpenSettings?: () => void;
   onPickProject?: () => void;
   onUpdateGeneralPreferences?: (preferences: GeneralPreferences) => void;
@@ -62,22 +76,36 @@ export function TaskComposer({
 }: TaskComposerProps): ReactElement {
   const { t } = useI18n(settings.language);
   const [prompt, setPrompt] = useState("");
+  const [imageAttachments, setImageAttachments] = useState<AgentImageAttachment[]>([]);
+  const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isHero = variant === "hero";
   const placeholderText = placeholder ?? t("composer.placeholder");
   const copy = getComposerCopy(settings.language);
   const resolvedGeneralPreferences = generalPreferences ?? createDefaultGeneralPreferences();
+  const currentModel = useMemo(
+    () => settings.models.find((model) => model.id === settings.currentModelId) ?? null,
+    [settings.currentModelId, settings.models]
+  );
+  const supportsImageAttachments = currentModel?.capabilities.vision === true;
 
   const submitTask = useCallback((): void => {
     const normalizedPrompt = prompt.trim();
+    const attachments = imageAttachments;
 
-    if (!normalizedPrompt) {
+    if (!normalizedPrompt && attachments.length === 0) {
       return;
     }
 
-    onSubmitTask(normalizedPrompt);
+    onSubmitTask(
+      normalizedPrompt ||
+        (settings.language === "zh-CN" ? "请根据这些图片回答。" : "Please answer based on the attached image."),
+      attachments.length > 0 ? attachments : undefined
+    );
     setPrompt("");
-  }, [onSubmitTask, prompt]);
+    setImageAttachments([]);
+    setAttachmentNotice(null);
+  }, [imageAttachments, onSubmitTask, prompt, settings.language]);
 
   const handlePrimaryAction = useCallback((): void => {
     if (busy) {
@@ -100,6 +128,13 @@ export function TaskComposer({
     }
   }, [submitSignal, submitTask]);
 
+  useEffect(() => {
+    if (!supportsImageAttachments && imageAttachments.length > 0) {
+      setImageAttachments([]);
+      setAttachmentNotice(null);
+    }
+  }, [imageAttachments.length, supportsImageAttachments]);
+
   // 根据设置决定发送快捷键, 另一种 Enter 组合保留原生换行行为
   function handlePromptKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
     if (event.key !== "Enter" || event.nativeEvent.isComposing) {
@@ -119,6 +154,50 @@ export function TaskComposer({
     submitTask();
   }
 
+  function handlePromptPaste(event: ReactClipboardEvent<HTMLTextAreaElement>): void {
+    if (!supportsImageAttachments) {
+      return;
+    }
+
+    const remainingSlots = maxComposerImageAttachments - imageAttachments.length;
+
+    if (remainingSlots <= 0) {
+      return;
+    }
+
+    const pastedFiles = Array.from(event.clipboardData.items)
+      .map((item) => (item.kind === "file" ? item.getAsFile() : null))
+      .filter((file): file is File => Boolean(file));
+    const { accepted: imageFiles, oversizedCount } = selectComposerImageFiles(
+      pastedFiles,
+      remainingSlots
+    );
+
+    if (imageFiles.length === 0) {
+      if (oversizedCount > 0) {
+        event.preventDefault();
+        setAttachmentNotice(copy.imageTooLarge);
+      }
+
+      return;
+    }
+
+    event.preventDefault();
+    setAttachmentNotice(oversizedCount > 0 ? copy.imageTooLarge : null);
+    void Promise.all(imageFiles.map(readComposerImageAttachment))
+      .then((attachments) => {
+        setImageAttachments((current) =>
+          [...current, ...attachments].slice(0, maxComposerImageAttachments)
+        );
+      })
+      .catch(() => undefined);
+  }
+
+  function removeImageAttachment(id: string): void {
+    setImageAttachments((current) => current.filter((attachment) => attachment.id !== id));
+    setAttachmentNotice(null);
+  }
+
   const inputPanel = (
     <div
       className={`bg-white p-1.5 text-[#202123] transition focus-within:border-[#202123] ${
@@ -127,11 +206,43 @@ export function TaskComposer({
           : "rounded-[18px] border border-[#d9d9e3] shadow-[0_10px_28px_rgba(0,0,0,0.08)]"
       }`}
     >
+      {imageAttachments.length > 0 ? (
+        <div className="mb-1 flex flex-wrap gap-1.5 px-1">
+          {imageAttachments.map((attachment) => (
+            <div
+              key={attachment.id}
+              className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-[12px] border border-[#d9d9e3] bg-[#f7f7f8]"
+              title={attachment.name ?? attachment.mediaType}
+            >
+              <img
+                src={attachment.dataUrl}
+                alt={attachment.name ?? copy.pastedImage}
+                className="h-full w-full object-cover"
+              />
+              <span className="pointer-events-none absolute bottom-0 left-0 right-0 truncate bg-black/55 px-1 py-0.5 text-[9px] text-white opacity-0 transition group-hover:opacity-100">
+                {formatAttachmentSize(attachment.size)}
+              </span>
+              <button
+                type="button"
+                aria-label={copy.removeImage}
+                onClick={() => removeImageAttachment(attachment.id)}
+                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-0 outline-none transition hover:bg-black group-hover:opacity-100 focus:outline-none focus-visible:outline-none"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {attachmentNotice ? (
+        <p className="mb-1 px-1 text-[10px] leading-4 text-[#b45309]">{attachmentNotice}</p>
+      ) : null}
       <textarea
         ref={textareaRef}
         value={prompt}
         onChange={(event) => setPrompt(event.currentTarget.value)}
         onKeyDown={handlePromptKeyDown}
+        onPaste={handlePromptPaste}
         className={`w-full resize-none bg-transparent px-1.5 py-0.5 text-[10px] leading-4 outline-none placeholder:text-[#b4b4bf] ${
           isHero ? "min-h-[28px]" : "min-h-[22px]"
         }`}
@@ -258,7 +369,11 @@ export function TaskComposer({
             className="forge-dropdown-content forge-dropdown-fast z-50 w-56 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[13px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
             <DropdownMenu.Item className="flex h-9 cursor-default items-center gap-2 rounded-[10px] px-2 outline-none data-[highlighted]:bg-[#f7f7f8]">
-              <Paperclip className="h-4 w-4 shrink-0 text-[#565869]" />
+              {supportsImageAttachments ? (
+                <FileImage className="h-4 w-4 shrink-0 text-[#565869]" />
+              ) : (
+                <Paperclip className="h-4 w-4 shrink-0 text-[#565869]" />
+              )}
               <span>{copy.addAttachments}</span>
             </DropdownMenu.Item>
             <DropdownMenu.Separator className="my-1 h-px bg-[#ececf1]" />
@@ -300,9 +415,12 @@ function getComposerCopy(language: ModelSettings["language"]): {
   autoReviewPermission: string;
   fullAccessPermission: string;
   goalMode: string;
+  imageTooLarge: string;
   openAddMenu: string;
+  pastedImage: string;
   pluginSystem: string;
   readOnlyPermission: string;
+  removeImage: string;
   stopResponse: string;
 } {
   if (language === "zh-CN") {
@@ -311,9 +429,12 @@ function getComposerCopy(language: ModelSettings["language"]): {
       autoReviewPermission: "自动审查",
       fullAccessPermission: "完全访问权限",
       goalMode: "追求目标",
+      imageTooLarge: "图片超过 8 MB，已跳过。",
       openAddMenu: "打开添加菜单",
+      pastedImage: "粘贴的图片",
       pluginSystem: "插件系统",
       readOnlyPermission: "只读模式",
+      removeImage: "移除图片",
       stopResponse: "停止回答"
     };
   }
@@ -323,9 +444,12 @@ function getComposerCopy(language: ModelSettings["language"]): {
     autoReviewPermission: "Auto review",
     fullAccessPermission: "Full access",
     goalMode: "Goal mode",
+    imageTooLarge: "Images over 8 MB were skipped.",
     openAddMenu: "Open add menu",
+    pastedImage: "Pasted image",
     pluginSystem: "Plugin system",
     readOnlyPermission: "Read only",
+    removeImage: "Remove image",
     stopResponse: "Stop response"
   };
 }
