@@ -37,12 +37,17 @@ import {
   type LineDiffHunkDecision
 } from "@shared/textDiff";
 import {
-  findNextPendingAgentAction,
-  getRunnablePendingAgentActions,
   isRunnableAgentAction,
   resolveAgentCommandRisk,
   type AgentCommandSafetyPolicy
 } from "@/agent/agentActionExecutor";
+import {
+  getAgentConfirmationItems,
+  getAgentQueueControlState,
+  getQueueStats,
+  type AgentConfirmationItem,
+  type AgentConfirmationItemKind
+} from "@/agent/agentConfirmationQueue";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
@@ -148,28 +153,6 @@ type CompactProcessedGroup = {
   label: string;
   summaryLabel: string;
   items: CompactProcessedItem[];
-};
-
-type AgentConfirmationItemKind =
-  | "pending-changes"
-  | "failed-action"
-  | "manual-gate"
-  | "command-approval"
-  | "command-blocked"
-  | "commit-gate";
-
-type AgentConfirmationItem = {
-  id: string;
-  kind: AgentConfirmationItemKind;
-  label: string;
-  active: boolean;
-  action?: AgentAction;
-  afterApprovalActionLabel?: string;
-  command?: string;
-  cwd?: string | null;
-  pendingChangeCount?: number;
-  previewPath?: string;
-  riskReason?: string;
 };
 
 // 紧凑主屏只保留人能直接阅读的消息, 详细执行流水留在 Agent 详情视图里
@@ -792,21 +775,12 @@ export function ThreadWorkspace({
   function getCompactConfirmationItems(thread: TaskThread): AgentConfirmationItem[] {
     const actions = thread.agentActions ?? [];
     const hasPendingFileChanges = allChangePreviews.length > 0;
-    const queueBlockerAction = getQueueBlockerAction(actions, commandSafetyPolicy);
-    const queueBlocked =
-      agentPaused ||
-      hasPendingFileChanges ||
-      queueBlockerAction?.status === "failed" ||
-      queueBlockerAction?.status === "running";
-    const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(actions);
-    const runnablePendingActions = queueBlocked
-      ? []
-      : getRunnablePendingAgentActions(actions, commandSafetyPolicy);
-    const nextGateAction = getNextGateAction(actions, runnablePendingActions);
-    const activeGateAction =
-      nextPendingAction && !isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
-        ? nextPendingAction
-        : nextGateAction;
+    const { activeGateAction, queueBlockerAction } = getAgentQueueControlState({
+      actions,
+      commandSafetyPolicy,
+      agentPaused: Boolean(agentPaused),
+      hasPendingFileChanges
+    });
 
     return getAgentConfirmationItems({
       actions,
@@ -1751,25 +1725,19 @@ export function ThreadWorkspace({
     const queueStats = getQueueStats(agentActions);
     const pendingChangeCount = allChangePreviews.length;
     const hasPendingFileChanges = pendingChangeCount > 0;
-    const queueBlockerAction = getQueueBlockerAction(agentActions, commandSafetyPolicy);
-    const queueBlocked =
-      agentPaused ||
-      hasPendingFileChanges ||
-      queueBlockerAction?.status === "failed" ||
-      queueBlockerAction?.status === "running";
-    const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(agentActions);
-    const runnablePendingActions = queueBlocked
-      ? []
-      : getRunnablePendingAgentActions(agentActions, commandSafetyPolicy);
-    const nextRunnableAction =
-      nextPendingAction && isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
-        ? nextPendingAction
-        : null;
-    const nextGateAction = getNextGateAction(agentActions, runnablePendingActions);
-    const activeGateAction =
-      nextPendingAction && !isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
-        ? nextPendingAction
-        : nextGateAction;
+    const {
+      queueBlockerAction,
+      nextPendingAction,
+      runnablePendingActions,
+      nextRunnableAction,
+      nextGateAction,
+      activeGateAction
+    } = getAgentQueueControlState({
+      actions: agentActions,
+      commandSafetyPolicy,
+      agentPaused: Boolean(agentPaused),
+      hasPendingFileChanges
+    });
     const queueComplete = queueStats.total > 0 && queueStats.completed === queueStats.total;
     const canGenerateContinuationPlan =
       Boolean(onGenerateContinuationPlan && selectedThread) &&
@@ -3411,109 +3379,6 @@ export function ThreadWorkspace({
   }
 }
 
-// 提供 compact Agent 操作面板的中英文文案
-// 汇总需要人处理的动作, 当前项给按钮, 后续项给可见停止点
-function getAgentConfirmationItems({
-  actions,
-  changePreviews,
-  commandSafetyPolicy,
-  fullAccess,
-  activeGateAction,
-  projectPath,
-  queueBlockerAction
-}: {
-  actions: AgentAction[];
-  changePreviews: ProjectFileChangePreview[];
-  commandSafetyPolicy: AgentCommandSafetyPolicy;
-  fullAccess: boolean;
-  activeGateAction: AgentAction | null;
-  projectPath: string | null;
-  queueBlockerAction: AgentAction | null;
-}): AgentConfirmationItem[] {
-  const items: AgentConfirmationItem[] = [];
-
-  if (changePreviews.length > 0) {
-    items.push({
-      id: "pending-changes",
-      kind: "pending-changes",
-      label: changePreviews[0]?.relativePath ?? "Pending changes",
-      active: true,
-      pendingChangeCount: changePreviews.length,
-      previewPath: changePreviews[0]?.relativePath
-    });
-  }
-
-  for (const action of actions) {
-    const kind = getAgentConfirmationKind(action, commandSafetyPolicy, fullAccess);
-
-    if (!kind) {
-      continue;
-    }
-    const actionIndex = actions.findIndex((candidate) => candidate.id === action.id);
-    const nextAction = findNextIncompleteActionAfterIndex(actions, actionIndex);
-    const commandRisk =
-      action.kind === "run-command" && action.command
-        ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
-        : null;
-
-    items.push({
-      id: `action-${action.id}`,
-      kind,
-      label: action.label,
-      action,
-      afterApprovalActionLabel: nextAction?.label,
-      command: action.command,
-      cwd: action.kind === "run-command" ? projectPath : null,
-      riskReason:
-        commandRisk?.level === "ask" || commandRisk?.level === "deny"
-          ? commandRisk.reason
-          : undefined,
-      active:
-        changePreviews.length === 0 &&
-        (activeGateAction?.id === action.id || queueBlockerAction?.id === action.id)
-    });
-  }
-
-  return items;
-}
-
-// 识别需要确认或恢复的动作类型, 过滤普通可自动执行步骤
-function getAgentConfirmationKind(
-  action: AgentAction,
-  commandSafetyPolicy: AgentCommandSafetyPolicy,
-  fullAccess: boolean
-): AgentConfirmationItemKind | null {
-  if (action.status === "failed") {
-    return "failed-action";
-  }
-
-  if (action.status !== "pending") {
-    return null;
-  }
-
-  if (action.kind === "manual") {
-    return "manual-gate";
-  }
-
-  if (action.kind === "commit") {
-    return "commit-gate";
-  }
-
-  if (action.kind === "run-command" && action.command) {
-    const commandRisk = resolveAgentCommandRisk(action.command, commandSafetyPolicy);
-
-    if (commandRisk.level === "deny") {
-      return "command-blocked";
-    }
-
-    if (commandRisk.level === "ask" && !fullAccess) {
-      return "command-approval";
-    }
-  }
-
-  return null;
-}
-
 // 把确认项类型转成短标签, 让队列可以快速扫读
 function getAgentConfirmationKindLabel(
   kind: AgentConfirmationItemKind,
@@ -3592,22 +3457,6 @@ function getAgentConfirmationBody(
   }
 
   return copy.manualGateBody(action.label);
-}
-
-// 找出批准当前项后队列会遇到的下一项, 用于说明审批影响
-function findNextIncompleteActionAfterIndex(
-  actions: AgentAction[],
-  actionIndex: number
-): AgentAction | null {
-  if (actionIndex < 0) {
-    return null;
-  }
-
-  return (
-    actions
-      .slice(actionIndex + 1)
-      .find((action) => action.status !== "completed" && action.status !== "skipped") ?? null
-  );
 }
 
 // 为确认项生成结构化上下文行, 保持 UI 和复制摘要使用同一份信息
@@ -3842,70 +3691,6 @@ function getCompactAgentControlCopy(language: Language) {
 // 用户可以显式跳过未完成动作, 但不能跳过正在运行或已经终态的动作
 function canSkipAgentAction(action: AgentAction): boolean {
   return action.status === "pending" || action.status === "failed";
-}
-
-// 找到当前阻塞队列推进的动作, 用于提示用户下一步
-function getNextGateAction(
-  actions: AgentAction[],
-  runnablePendingActions: AgentAction[]
-): AgentAction | null {
-  const lastRunnableAction = runnablePendingActions.at(-1);
-
-  if (!lastRunnableAction) {
-    return null;
-  }
-
-  const lastRunnableIndex = actions.findIndex((action) => action.id === lastRunnableAction.id);
-
-  if (lastRunnableIndex < 0) {
-    return null;
-  }
-
-  return (
-    actions
-      .slice(lastRunnableIndex + 1)
-      .find((action) => action.status === "pending") ?? null
-  );
-}
-
-// 统计动作队列完成度, 让顶部状态只显示简短数字
-function getQueueStats(actions: AgentAction[]): {
-  completed: number;
-  failed: number;
-  total: number;
-} {
-  return actions.reduce(
-    (stats, action) => ({
-      completed: stats.completed + (action.status === "completed" ? 1 : 0),
-      failed: stats.failed + (action.status === "failed" ? 1 : 0),
-      total: stats.total + 1
-    }),
-    { completed: 0, failed: 0, total: 0 }
-  );
-}
-
-// 找到第一个失败或待人工处理动作, 用于恢复提示
-function getQueueBlockerAction(
-  actions: AgentAction[],
-  policy: AgentCommandSafetyPolicy = {}
-): AgentAction | null {
-  for (const action of actions) {
-    if (action.status === "completed" || action.status === "skipped") {
-      continue;
-    }
-
-    if (action.status === "failed" || action.status === "running") {
-      return action;
-    }
-
-    if (action.status === "pending" && !isRunnableAgentAction(action, policy)) {
-      return action;
-    }
-
-    return null;
-  }
-
-  return null;
 }
 
 // 从事件和动作里生成一行活动摘要, 侧边栏和标题区共用
