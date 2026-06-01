@@ -635,6 +635,190 @@ export function ThreadWorkspace({
     return controls.length > 0 ? <div className="mt-3 flex flex-wrap gap-2">{controls}</div> : null;
   }
 
+  // compact 主屏只露出当前阻塞点, 保持确认入口可见但不铺开完整队列
+  function renderCompactAttentionStrip(
+    items: AgentConfirmationItem[],
+    copy: ReturnType<typeof getCompactAgentControlCopy>
+  ): ReactElement | null {
+    const item = items.find((candidate) => candidate.active);
+
+    if (!selectedThread || !item) {
+      return null;
+    }
+
+    return (
+      <section className="mx-auto flex min-h-10 w-full max-w-[680px] items-center gap-2 border-b border-[#ececf1] pb-2 text-sm text-[#565869]">
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-[#9a3412]" />
+        <span className="shrink-0 font-medium text-[#8e8ea0]">{copy.currentApproval}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-[#202123]">
+          {getAgentConfirmationTitle(item, copy)}
+        </span>
+        <span className="hidden shrink-0 text-[12px] text-[#8e8ea0] sm:inline">
+          {getAgentConfirmationKindLabel(item.kind, copy)}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {renderCompactAttentionActions(item, copy)}
+        </div>
+      </section>
+    );
+  }
+
+  function renderCompactAttentionActions(
+    item: AgentConfirmationItem,
+    copy: ReturnType<typeof getCompactAgentControlCopy>
+  ): ReactElement | null {
+    if (!selectedThread) {
+      return null;
+    }
+
+    const action = item.action;
+    const actions: ReactElement[] = [];
+
+    if (item.kind === "pending-changes" && item.previewPath) {
+      actions.push(
+        renderCompactIconAction({
+          key: "review-changes",
+          label: copy.reviewChanges,
+          icon: FileText,
+          onClick: () => {
+            onPreviewFile(item.previewPath!);
+            onOpenFiles?.();
+          }
+        })
+      );
+    }
+
+    if (item.kind === "command-approval" && action?.command && onApproveAgentCommand) {
+      actions.push(
+        renderCompactIconAction({
+          key: "approve-command",
+          label: copy.approveCommand,
+          icon: CheckCircle2,
+          onClick: () => onApproveAgentCommand(selectedThread.id, action)
+        })
+      );
+    }
+
+    if (item.kind === "manual-gate" && action && onCompleteAgentAction) {
+      actions.push(
+        renderCompactIconAction({
+          key: "complete-manual",
+          label: copy.markReviewComplete,
+          icon: CheckCircle2,
+          onClick: () => onCompleteAgentAction(selectedThread.id, action)
+        })
+      );
+    }
+
+    if (item.kind === "commit-gate" && onOpenSourceControl) {
+      actions.push(
+        renderCompactIconAction({
+          key: "open-source-control",
+          label: copy.openSourceControl,
+          icon: Terminal,
+          onClick: onOpenSourceControl
+        })
+      );
+    }
+
+    if (item.kind === "failed-action" && action && onRunAgentAction) {
+      actions.push(
+        renderCompactIconAction({
+          key: "retry-action",
+          label: copy.retryAction,
+          icon: RotateCcw,
+          onClick: () => onRunAgentAction(selectedThread.id, action)
+        })
+      );
+    }
+
+    if (item.kind === "failed-action" && action && onGenerateFailureFix) {
+      actions.push(
+        renderCompactIconAction({
+          key: "generate-fix",
+          label: copy.generateFixPlan,
+          icon: Wrench,
+          onClick: () => onGenerateFailureFix(selectedThread.id, action)
+        })
+      );
+    }
+
+    if (action && onSkipAgentAction && canSkipAgentAction(action)) {
+      actions.push(
+        renderCompactIconAction({
+          key: "skip-action",
+          label: copy.skipAction,
+          icon: SkipForward,
+          onClick: () => onSkipAgentAction(selectedThread.id, action),
+          quiet: true
+        })
+      );
+    }
+
+    return actions.length > 0 ? <>{actions}</> : null;
+  }
+
+  function renderCompactIconAction({
+    icon: Icon,
+    key,
+    label,
+    onClick,
+    quiet = false
+  }: {
+    icon: typeof CheckCircle2;
+    key: string;
+    label: string;
+    onClick: () => void;
+    quiet?: boolean;
+  }): ReactElement {
+    return (
+      <Tooltip key={key} label={label}>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onClick}
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-[9px] border transition active:scale-[0.98] ${
+            quiet
+              ? "border-[#d9d9e3] bg-white text-[#565869] hover:bg-[#f7f7f8]"
+              : "border-[#f4c7ab] bg-[#fff7ed] text-[#9a3412] hover:bg-[#ffedd5]"
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      </Tooltip>
+    );
+  }
+
+  function getCompactConfirmationItems(thread: TaskThread): AgentConfirmationItem[] {
+    const actions = thread.agentActions ?? [];
+    const hasPendingFileChanges = allChangePreviews.length > 0;
+    const queueBlockerAction = getQueueBlockerAction(actions, commandSafetyPolicy);
+    const queueBlocked =
+      agentPaused ||
+      hasPendingFileChanges ||
+      queueBlockerAction?.status === "failed" ||
+      queueBlockerAction?.status === "running";
+    const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(actions);
+    const runnablePendingActions = queueBlocked
+      ? []
+      : getRunnablePendingAgentActions(actions, commandSafetyPolicy);
+    const nextGateAction = getNextGateAction(actions, runnablePendingActions);
+    const activeGateAction =
+      nextPendingAction && !isRunnableAgentAction(nextPendingAction, commandSafetyPolicy)
+        ? nextPendingAction
+        : nextGateAction;
+
+    return getAgentConfirmationItems({
+      actions,
+      changePreviews: allChangePreviews,
+      commandSafetyPolicy,
+      fullAccess,
+      activeGateAction,
+      projectPath: thread.projectPath ?? projectScan?.rootPath ?? null,
+      queueBlockerAction
+    });
+  }
+
   if (!hasProject) {
     return (
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-8">
@@ -687,6 +871,9 @@ export function ThreadWorkspace({
   }
 
   if (compact) {
+    const confirmationCopy = getCompactAgentControlCopy(language);
+    const confirmationItems = selectedThread ? getCompactConfirmationItems(selectedThread) : [];
+
     return (
       <section className="h-full min-h-0 overflow-auto px-5 py-7">
         <div className="mx-auto flex min-h-full max-w-[920px] flex-col gap-7">
@@ -697,6 +884,8 @@ export function ThreadWorkspace({
           {renderCompactMemoryContext(selectedThread.contextMemories ?? [])}
 
           {compactProcessedSummary ? renderCompactProcessedSummary(compactProcessedSummary) : null}
+
+          {renderCompactAttentionStrip(confirmationItems, confirmationCopy)}
 
           {showActivityHeartbeat && threadActivitySummary
             ? renderCompactActivityHeartbeat(threadActivitySummary)
