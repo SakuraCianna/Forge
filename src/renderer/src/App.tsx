@@ -1032,7 +1032,8 @@ export function App(): ReactElement {
     }
 
     try {
-      const targetBranch = commitBranch.trim() || gitStatus?.currentBranch || undefined;
+      const targetBranch =
+        commitBranch.trim() || gitStatus?.currentBranch || gitStatus?.branches[0] || undefined;
       const targetRemote = gitRemote.trim() || "origin";
       const result = await window.forge.git.commit({
         projectRoot: currentProject.path,
@@ -1083,7 +1084,8 @@ export function App(): ReactElement {
       return;
     }
 
-    const targetBranch = commitBranch.trim() || gitStatus.currentBranch || undefined;
+    const targetBranch =
+      commitBranch.trim() || gitStatus.currentBranch || gitStatus.branches[0] || undefined;
     const targetRemote = gitRemote.trim() || "origin";
 
     try {
@@ -3485,7 +3487,9 @@ export function App(): ReactElement {
     const branchOptions = gitStatus?.branches ?? [];
     const remoteOptions = gitStatus?.remotes ?? [];
     const selectedRemote = gitRemote.trim() || remoteOptions[0] || "origin";
-    const targetBranch = commitBranch.trim() || gitStatus?.currentBranch || "";
+    const targetBranch = commitBranch.trim() || gitStatus?.currentBranch || branchOptions[0] || "";
+    const branchSelectOptions = branchOptions.map((branch) => ({ value: branch, label: branch }));
+    const remoteSelectOptions = remoteOptions.map((remote) => ({ value: remote, label: remote }));
 
     return (
       <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
@@ -3581,28 +3585,45 @@ export function App(): ReactElement {
                   </p>
                   <label className="grid gap-1.5 text-[12px] text-[#6e6e80]">
                     {gitOperationCopy.commitBranch}
-                    <input
-                      value={commitBranch}
-                      list="forge-git-branches"
-                      placeholder={gitOperationCopy.commitBranchHint}
-                      onChange={(event) => setCommitBranch(event.currentTarget.value)}
-                      className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2.5 font-mono text-[12px] text-[#202123] outline-none transition focus:border-[#202123]"
-                    />
+                    {createCommitBranch || branchSelectOptions.length === 0 ? (
+                      <input
+                        value={commitBranch}
+                        placeholder={gitOperationCopy.commitBranchHint}
+                        onChange={(event) => setCommitBranch(event.currentTarget.value)}
+                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2.5 font-mono text-[12px] text-[#202123] outline-none transition focus:border-[#202123]"
+                      />
+                    ) : (
+                      <InlineSelectMenu
+                        align="start"
+                        ariaLabel={gitOperationCopy.commitBranch}
+                        value={targetBranch}
+                        options={branchSelectOptions}
+                        onChange={setCommitBranch}
+                        triggerClassName="w-full justify-between font-mono text-[12px]"
+                        contentClassName="max-h-64 overflow-auto font-mono text-[12px]"
+                      />
+                    )}
                   </label>
-                  <datalist id="forge-git-branches">
-                    {branchOptions.map((branch) => (
-                      <option key={branch} value={branch} />
-                    ))}
-                  </datalist>
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <label className="grid gap-1.5 text-[12px] text-[#6e6e80]">
                       {gitOperationCopy.remote}
-                      <input
-                        value={gitRemote}
-                        list="forge-git-remotes"
-                        onChange={(event) => setGitRemote(event.currentTarget.value)}
-                        className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2.5 font-mono text-[12px] text-[#202123] outline-none transition focus:border-[#202123]"
-                      />
+                      {remoteSelectOptions.length > 0 ? (
+                        <InlineSelectMenu
+                          align="start"
+                          ariaLabel={gitOperationCopy.remote}
+                          value={selectedRemote}
+                          options={remoteSelectOptions}
+                          onChange={setGitRemote}
+                          triggerClassName="w-full justify-between font-mono text-[12px]"
+                          contentClassName="font-mono text-[12px]"
+                        />
+                      ) : (
+                        <input
+                          value={gitRemote}
+                          onChange={(event) => setGitRemote(event.currentTarget.value)}
+                          className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-2.5 font-mono text-[12px] text-[#202123] outline-none transition focus:border-[#202123]"
+                        />
+                      )}
                     </label>
                     <button
                       type="button"
@@ -3613,11 +3634,6 @@ export function App(): ReactElement {
                       {gitOperationCopy.pushBranch}
                     </button>
                   </div>
-                  <datalist id="forge-git-remotes">
-                    {remoteOptions.map((remote) => (
-                      <option key={remote} value={remote} />
-                    ))}
-                  </datalist>
                   <label className="flex items-center gap-2 text-[12px] text-[#565869]">
                     <input
                       type="checkbox"
