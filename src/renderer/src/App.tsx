@@ -87,10 +87,7 @@ import {
   savePersonalizationSettings,
   type PersonalizationSettings
 } from "@/state/personalization";
-import {
-  createHeroComposerPlaceholder,
-  createHeroPromptSuggestions
-} from "@/state/contextSuggestions";
+import { createHeroComposerPlaceholder } from "@/state/contextSuggestions";
 import {
   addRecentProject,
   createProjectFromPath,
@@ -179,9 +176,6 @@ type FailureFixPlanOptions = Pick<
   FailureRecoveryAttemptRecord,
   "source" | "attempt" | "limit"
 >;
-
-const heroSwapAnimationMs = 900;
-const heroSwapIdleMs = 1500;
 
 function selectInitialProjectFromPreferences(
   projects: ForgeProject[],
@@ -278,7 +272,6 @@ export function App(): ReactElement {
   const [composerFocusSignal, setComposerFocusSignal] = useState(0);
   const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
-  const [heroPromptIndex, setHeroPromptIndex] = useState(0);
   const [pausedThreadIds, setPausedThreadIds] = useState<Set<string>>(() => new Set());
   const { t } = useI18n(settings.language);
   const threadsRef = useRef<TaskThread[]>(threads);
@@ -297,14 +290,10 @@ export function App(): ReactElement {
     language: settings.language,
     contextSuggestionsEnabled: personalization.contextSuggestionsEnabled,
     projectName: currentProject?.name ?? null,
-    indexedFileCount: projectScanResult?.files.length ?? 0,
     changedFileCount: gitStatus?.changedFiles.length ?? 0,
     pendingChangeCount: changePreviews.length,
-    hasRunningThread: threads.some((thread) => !thread.archived && thread.status === "running"),
-    hasBlockedThread: threads.some((thread) => !thread.archived && thread.status === "blocked"),
     missingProject: currentProjectMissing
   };
-  const activeHeroPrompts = createHeroPromptSuggestions(heroSuggestionInput);
   const heroComposerPlaceholder = createHeroComposerPlaceholder(
     heroSuggestionInput,
     t("composer.heroPlaceholder")
@@ -578,14 +567,6 @@ export function App(): ReactElement {
     projectScanResult,
     threads
   ]);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setHeroPromptIndex((current) => (current + 1) % activeHeroPrompts.length);
-    }, heroSwapAnimationMs + heroSwapIdleMs);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [activeHeroPrompts.length, heroPromptIndex]);
 
   useEffect(() => {
     if (!currentProject) {
@@ -3150,11 +3131,6 @@ export function App(): ReactElement {
     return (
       <section className="flex h-full min-h-0 items-center justify-center px-6 py-10">
         <div className="w-full max-w-[760px] -translate-y-[5vh]">
-          <h1 className="mb-5 overflow-visible whitespace-nowrap pb-2 text-center text-[22px] font-medium leading-[1.28] tracking-normal text-[#202123] md:text-[24px]">
-            <span key={heroPromptIndex} className="inline-block max-w-full animate-[forge-title-swap_900ms_ease-in-out] truncate align-baseline">
-              {activeHeroPrompts[heroPromptIndex]}
-            </span>
-          </h1>
           {currentProjectMissing ? (
             <div className="mx-auto mb-4 max-w-[680px]">
               {renderProjectMissingNotice()}
