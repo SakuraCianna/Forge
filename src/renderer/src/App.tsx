@@ -325,14 +325,16 @@ export function App(): ReactElement {
   const [heroPromptIndex, setHeroPromptIndex] = useState(0);
   const [pausedThreadIds, setPausedThreadIds] = useState<Set<string>>(() => new Set());
   const { t } = useI18n(settings.language);
+  const threadsRef = useRef<TaskThread[]>(threads);
   const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
   const activePlanStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
   const activeAskStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
-  const activeAgentAutoRunKeysRef = useRef<Set<string>>(new Set());
+  const activeAgentAutoRunActionIdsRef = useRef<Map<string, Set<string>>>(new Map());
   const activeAutoFailureFixKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixAttemptedKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
   const recentAgentToolResultsRef = useRef<Map<string, string[]>>(new Map());
+  threadsRef.current = threads;
   const activeHeroPrompts = settings.language === "zh-CN" ? zhHeroPrompts : enHeroPrompts;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
@@ -370,6 +372,47 @@ export function App(): ReactElement {
       next.delete(threadId);
       return next;
     });
+  }
+
+  function getLiveThread(threadId: string): TaskThread | null {
+    return threadsRef.current.find((thread) => thread.id === threadId) ?? null;
+  }
+
+  function getLiveAgentAction(threadId: string, actionId: string): AgentAction | null {
+    return getLiveThread(threadId)?.agentActions?.find((action) => action.id === actionId) ?? null;
+  }
+
+  function hasReservedAgentAction(threadId: string, actions: AgentAction[]): boolean {
+    const reservedActionIds = activeAgentAutoRunActionIdsRef.current.get(threadId);
+
+    return Boolean(reservedActionIds && actions.some((action) => reservedActionIds.has(action.id)));
+  }
+
+  function reserveAgentActionBatch(threadId: string, actions: AgentAction[]): () => void {
+    const reservedActionIds =
+      activeAgentAutoRunActionIdsRef.current.get(threadId) ?? new Set<string>();
+
+    for (const action of actions) {
+      reservedActionIds.add(action.id);
+    }
+
+    activeAgentAutoRunActionIdsRef.current.set(threadId, reservedActionIds);
+
+    return () => {
+      const currentReservedActionIds = activeAgentAutoRunActionIdsRef.current.get(threadId);
+
+      if (!currentReservedActionIds) {
+        return;
+      }
+
+      for (const action of actions) {
+        currentReservedActionIds.delete(action.id);
+      }
+
+      if (currentReservedActionIds.size === 0) {
+        activeAgentAutoRunActionIdsRef.current.delete(threadId);
+      }
+    };
   }
 
   useEffect(() => {
@@ -450,8 +493,9 @@ export function App(): ReactElement {
         fullAccess: fullAccessMode,
         rules: generalPreferences.commandSafetyRules
       });
+      const runnableBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
 
-      return runnableActions.length > 0;
+      return runnableBatch.length > 0 && !hasReservedAgentAction(thread.id, runnableBatch);
     });
 
     if (!nextThread) {
@@ -463,16 +507,7 @@ export function App(): ReactElement {
       rules: generalPreferences.commandSafetyRules
     });
     const runnableActionBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
-    const runKey = `${nextThread.id}:${runnableActionBatch.map((action) => action.id).join(",")}`;
-
-    if (activeAgentAutoRunKeysRef.current.has(runKey)) {
-      return;
-    }
-
-    activeAgentAutoRunKeysRef.current.add(runKey);
-    void runAgentActions(nextThread.id, runnableActionBatch).finally(() => {
-      activeAgentAutoRunKeysRef.current.delete(runKey);
-    });
+    void runAgentActions(nextThread.id, runnableActionBatch);
   }, [
     changePreviews.length,
     fullAccessMode,
@@ -2246,14 +2281,42 @@ export function App(): ReactElement {
   async function runAgentAction(
     threadId: string,
     action: AgentAction,
-    options: { approvedCommand?: boolean } = {}
+    options: { approvedCommand?: boolean; skipReservation?: boolean } = {}
   ): Promise<AgentActionRunOutcome> {
+    if (!options.skipReservation) {
+      if (hasReservedAgentAction(threadId, [action])) {
+        return { status: "running", continueBatch: false };
+      }
+
+      const releaseReservation = reserveAgentActionBatch(threadId, [action]);
+
+      try {
+        return await runAgentAction(threadId, action, {
+          ...options,
+          skipReservation: true
+        });
+      } finally {
+        releaseReservation();
+      }
+    }
+
     if (cancelledThreadIdsRef.current.has(threadId)) {
       return { status: "pending", continueBatch: false };
     }
 
+    const liveAction = getLiveAgentAction(threadId, action.id);
+
+    if (liveAction && liveAction.status !== "pending") {
+      if (liveAction.status === "completed" || liveAction.status === "skipped") {
+        return { status: "completed", continueBatch: true };
+      }
+
+      return { status: liveAction.status, continueBatch: false };
+    }
+
+    const actionToRun = liveAction ?? action;
     const activeAgentProfile = activeAgentProfileContext;
-    const permission = resolveAgentActionPermission(action, activeAgentProfile);
+    const permission = resolveAgentActionPermission(actionToRun, activeAgentProfile);
 
     if (!permission.ok) {
       const createdAt = new Date().toISOString();
@@ -2263,12 +2326,12 @@ export function App(): ReactElement {
         permission.tool
       );
 
-      updateAgentActionStatus(threadId, action.id, "failed");
+      updateAgentActionStatus(threadId, actionToRun.id, "failed");
       setTaskNotice(message);
       setThreads((current) =>
         appendThreadEvents(current, threadId, [
           {
-            id: `${threadId}-permission-denied-${action.id}-${createdAt}`,
+            id: `${threadId}-permission-denied-${actionToRun.id}-${createdAt}`,
             kind: "error",
             message,
             createdAt
@@ -2278,7 +2341,7 @@ export function App(): ReactElement {
       return "failed";
     }
 
-    const execution = resolveAgentActionExecution(action);
+    const execution = resolveAgentActionExecution(actionToRun);
 
     if (execution.kind === "manual-gate") {
       const createdAt = new Date().toISOString();
@@ -2290,12 +2353,12 @@ export function App(): ReactElement {
       setThreads((current) =>
         appendThreadEvents(current, threadId, [
           {
-            id: `${threadId}-manual-gate-${action.id}-${createdAt}`,
+            id: `${threadId}-manual-gate-${actionToRun.id}-${createdAt}`,
             kind: "plan",
             message:
               settings.language === "zh-CN"
-                ? `等待人工审查: ${action.label}`
-                : `Waiting for manual review: ${action.label}`,
+                ? `等待人工审查: ${actionToRun.label}`
+                : `Waiting for manual review: ${actionToRun.label}`,
             createdAt
           }
         ])
@@ -2304,59 +2367,72 @@ export function App(): ReactElement {
     }
 
     const startedAt = new Date().toISOString();
-    appendAgentActionRunEvent(threadId, action, { status: "started", startedAt });
-    updateAgentActionStatus(threadId, action.id, "running");
+    appendAgentActionRunEvent(threadId, actionToRun, { status: "started", startedAt });
+    updateAgentActionStatus(threadId, actionToRun.id, "running");
 
     let outcome: AgentActionRunOutcome;
 
-    if (execution.kind === "open-file") {
-      outcome = await openAgentFileAction(threadId, action, execution.relativePath);
-    } else if (execution.kind === "list-directory") {
-      outcome = await listAgentProjectDirectoryAction(threadId, action, execution.relativePath);
-    } else if (execution.kind === "glob-project") {
-      outcome = await globAgentProjectAction(threadId, action, execution.pattern);
-    } else if (execution.kind === "search-project") {
-      outcome = await searchAgentProjectAction(threadId, action, execution.query);
-    } else if (execution.kind === "git-status") {
-      outcome = await inspectAgentGitStatusAction(threadId, action);
-    } else if (execution.kind === "generate-file-change") {
-      outcome = await generateAgentFileChangeAction(threadId, action, execution.relativePath);
-    } else if (execution.kind === "run-command") {
-      const commandRisk = resolveAgentCommandRisk(execution.command, {
-        fullAccess: fullAccessMode,
-        rules: generalPreferences.commandSafetyRules
-      });
+    try {
+      if (execution.kind === "open-file") {
+        outcome = await openAgentFileAction(threadId, actionToRun, execution.relativePath);
+      } else if (execution.kind === "list-directory") {
+        outcome = await listAgentProjectDirectoryAction(threadId, actionToRun, execution.relativePath);
+      } else if (execution.kind === "glob-project") {
+        outcome = await globAgentProjectAction(threadId, actionToRun, execution.pattern);
+      } else if (execution.kind === "search-project") {
+        outcome = await searchAgentProjectAction(threadId, actionToRun, execution.query);
+      } else if (execution.kind === "git-status") {
+        outcome = await inspectAgentGitStatusAction(threadId, actionToRun);
+      } else if (execution.kind === "generate-file-change") {
+        outcome = await generateAgentFileChangeAction(threadId, actionToRun, execution.relativePath);
+      } else if (execution.kind === "run-command") {
+        const commandRisk = resolveAgentCommandRisk(execution.command, {
+          fullAccess: fullAccessMode,
+          rules: generalPreferences.commandSafetyRules
+        });
 
-      if (commandRisk.level === "deny") {
-        outcome = blockAgentCommandAction(
-          threadId,
-          action,
-          formatAgentCommandDenied(
-            settings.language,
-            commandRisk.reason
-          ),
-          "failed"
-        );
-      } else if (commandRisk.level === "ask" && !fullAccessMode && !options.approvedCommand) {
-        outcome = blockAgentCommandAction(
-          threadId,
-          action,
-          formatAgentCommandNeedsApproval(
-            settings.language,
-            execution.command,
-            commandRisk.reason
-          ),
-          "pending"
-        );
+        if (commandRisk.level === "deny") {
+          outcome = blockAgentCommandAction(
+            threadId,
+            actionToRun,
+            formatAgentCommandDenied(
+              settings.language,
+              commandRisk.reason
+            ),
+            "failed"
+          );
+        } else if (commandRisk.level === "ask" && !fullAccessMode && !options.approvedCommand) {
+          outcome = blockAgentCommandAction(
+            threadId,
+            actionToRun,
+            formatAgentCommandNeedsApproval(
+              settings.language,
+              execution.command,
+              commandRisk.reason
+            ),
+            "pending"
+          );
+        } else {
+          outcome = await runThreadCommand(threadId, execution.command, actionToRun.id);
+        }
       } else {
-        outcome = await runThreadCommand(threadId, execution.command, action.id);
+        updateAgentActionStatus(threadId, actionToRun.id, "completed");
+        outcome = "completed";
       }
-    } else {
-      updateAgentActionStatus(threadId, action.id, "completed");
-      outcome = "completed";
+    } catch (error) {
+      updateAgentActionStatus(threadId, actionToRun.id, "failed");
+      outcome = "failed";
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "agent",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
     }
 
-    appendAgentActionOutcomeEvent(threadId, action, outcome, startedAt);
+    appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, startedAt);
     window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
     return outcome;
   }
@@ -2519,13 +2595,23 @@ export function App(): ReactElement {
 
   // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
-    await runAgentActionBatch(actions, (action) => {
-      if (cancelledThreadIdsRef.current.has(threadId)) {
-        return { status: "pending", continueBatch: false };
-      }
+    if (actions.length === 0 || hasReservedAgentAction(threadId, actions)) {
+      return;
+    }
 
-      return runAgentAction(threadId, action);
-    });
+    const releaseReservation = reserveAgentActionBatch(threadId, actions);
+
+    try {
+      await runAgentActionBatch(actions, (action) => {
+        if (cancelledThreadIdsRef.current.has(threadId)) {
+          return { status: "pending", continueBatch: false };
+        }
+
+        return runAgentAction(threadId, action, { skipReservation: true });
+      });
+    } finally {
+      releaseReservation();
+    }
   }
 
   // 执行受控目录列表动作, 只返回一层目录条目和文件大小
@@ -2818,7 +2904,7 @@ export function App(): ReactElement {
       }
       return "completed";
     } catch (error) {
-      const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+      const thread = getLiveThread(threadId);
       const missingInspectFallback =
         thread?.agentActions && isMissingProjectFileError(error)
           ? resolveMissingInspectFileFallback(action, thread.agentActions, thread.prompt)
@@ -3580,16 +3666,20 @@ function parseGitCommitMessage(value: string): string | null {
 // 把运行时错误收敛成一行中文提示, 隐藏 HTML 响应噪音
 function formatAgentRuntimeError(
   language: Language,
-  kind: "file" | "command",
+  kind: "file" | "command" | "agent",
   message: string
 ): string {
   const detail = formatRuntimeError(language, message);
 
   if (language === "zh-CN") {
-    return `${kind === "file" ? "文件动作" : "命令执行"}失败: ${detail}`;
+    const prefix = kind === "file" ? "文件动作" : kind === "command" ? "命令执行" : "Agent 动作";
+
+    return `${prefix}失败: ${detail}`;
   }
 
-  return `${kind === "file" ? "File action" : "Command execution"} failed: ${detail}`;
+  const prefix = kind === "file" ? "File action" : kind === "command" ? "Command execution" : "Agent action";
+
+  return `${prefix} failed: ${detail}`;
 }
 
 // 将工具权限拒绝转成用户可读提示, 执行层仍使用稳定英文工具名
