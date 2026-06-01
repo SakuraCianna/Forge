@@ -33,6 +33,7 @@ export function createFailureFixTaskPrompt(
     'Return a JSON object with a "steps" array when possible. Each step must include "kind", "description", and optional "target".',
     'Allowed step kinds are "inspect", "edit", "verify", "commit", and "other".',
     "Reuse completed work. Do not repeat already completed inspect or edit actions unless the failure output specifically points back to them.",
+    "If the likely fix requires installing dependencies, changing package manifests, or elevated permissions, stop at an approval/manual step and explain why instead of bypassing the gate.",
     "Keep the plan safe: do not skip tests, do not hide the failure, and stop before any manual review or commit step."
   ]
     .filter((line): line is string => Boolean(line))

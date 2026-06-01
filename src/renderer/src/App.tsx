@@ -497,7 +497,7 @@ export function App(): ReactElement {
   }
 
   function getThreadFailureRecoveryLimit(threadId: string): number {
-    return getThreadAgentProfileContext(threadId).maxFailureRecoveryAttempts;
+    return Math.max(1, getThreadAgentProfileContext(threadId).maxFailureRecoveryAttempts);
   }
 
   function hasReservedAgentAction(threadId: string, actions: AgentAction[]): boolean {
@@ -636,7 +636,7 @@ export function App(): ReactElement {
   ]);
 
   useEffect(() => {
-    if (!generalPreferences.autoGenerateFailureFixes || !currentProject || !projectScanResult) {
+    if (!currentProject || !projectScanResult) {
       return;
     }
 
@@ -652,12 +652,6 @@ export function App(): ReactElement {
       }))
       .find(({ thread, failedAction }) => {
         if (!failedAction) {
-          return false;
-        }
-
-        const agentProfile = getThreadAgentProfileContext(thread.id);
-
-        if (agentProfile.failureRecoveryPolicy !== "auto") {
           return false;
         }
 
@@ -699,7 +693,6 @@ export function App(): ReactElement {
   }, [
     changePreviews.length,
     currentProject,
-    generalPreferences.autoGenerateFailureFixes,
     projectScanResult,
     threads
   ]);
@@ -2633,21 +2626,16 @@ export function App(): ReactElement {
     }
 
     const liveAction = getLiveAgentAction(threadId, action.id);
-    const retryingFailedAction = liveAction?.status === "failed" && action.status === "failed";
 
     if (liveAction && liveAction.status !== "pending") {
-      if (retryingFailedAction) {
-        appendAgentActionRetryEvent(threadId, liveAction);
-        updateAgentActionStatus(threadId, liveAction.id, "pending");
-      } else if (liveAction.status === "completed" || liveAction.status === "skipped") {
+      if (liveAction.status === "completed" || liveAction.status === "skipped") {
         return { status: "completed", continueBatch: true };
-      } else {
-        return { status: liveAction.status, continueBatch: false };
       }
+
+      return { status: liveAction.status, continueBatch: false };
     }
 
-    const actionToRun =
-      liveAction && retryingFailedAction ? { ...liveAction, status: "pending" as const } : (liveAction ?? action);
+    const actionToRun = liveAction ?? action;
 
     if (actionToRun.status !== "pending") {
       if (actionToRun.status === "completed" || actionToRun.status === "skipped") {
@@ -2782,32 +2770,6 @@ export function App(): ReactElement {
     appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, startedAt);
     window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
     return outcome;
-  }
-
-  // 记录用户显式重试失败动作, 避免重试按钮看起来有反馈但执行器被 failed 状态短路
-  function appendAgentActionRetryEvent(threadId: string, action: AgentAction): void {
-    const createdAt = new Date().toISOString();
-
-    setThreads((current) =>
-      appendThreadEvents(current, threadId, [
-        {
-          id: `${threadId}-agent-action-retry-${action.id}-${createdAt}`,
-          kind: "plan",
-          message:
-            settings.language === "zh-CN"
-              ? `正在重试失败动作: ${action.label}`
-              : `Retrying failed action: ${action.label}`,
-          createdAt,
-          agentActionRun: {
-            actionId: action.id,
-            label: action.label,
-            status: "started",
-            startedAt: createdAt,
-            reason: "retry"
-          }
-        }
-      ])
-    );
   }
 
   // 运行前再次校验文件/目录目标, 让旧线程里的坏 target 不会绕过新的计划解析规则
@@ -3595,7 +3557,6 @@ export function App(): ReactElement {
           onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
           onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
           onAllowAgentCommand={(threadId, action) => void allowAgentCommandAction(threadId, action)}
-          onGenerateFailureFix={(threadId, action) => void generateFailureFixPlan(threadId, action)}
           onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
           onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
           onCompleteAgentAction={completeAgentAction}

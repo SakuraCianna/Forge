@@ -681,17 +681,6 @@ export function SettingsPanel({
                   <span className="text-xs text-[#6e6e80]">{copy.autoRunBatchSizeUnit}</span>
                 </label>
               </SettingRow>
-              <PreferenceToggle
-                label={copy.autoGenerateFailureFixes}
-                description={copy.autoGenerateFailureFixesDescription}
-                enabled={generalPreferences.autoGenerateFailureFixes}
-                onToggle={() =>
-                  onUpdateGeneralPreferences({
-                    ...generalPreferences,
-                    autoGenerateFailureFixes: !generalPreferences.autoGenerateFailureFixes
-                  })
-                }
-              />
             </div>
           </div>
 
@@ -1563,28 +1552,6 @@ export function SettingsPanel({
                       ]}
                       onChange={(value) =>
                         onUpdateAgentProfile(selectedProfile.id, { verificationPolicy: value })
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4">
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium text-[#202123]">
-                        {copy.failureRecoveryPolicy}
-                      </span>
-                      <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
-                        {copy.failureRecoveryPolicyDescription}
-                      </span>
-                    </span>
-                    <InlineSelectMenu<AgentProfile["failureRecoveryPolicy"]>
-                      ariaLabel={copy.failureRecoveryPolicy}
-                      value={selectedProfile.failureRecoveryPolicy}
-                      options={[
-                        { value: "manual", label: copy.failureRecoveryManual },
-                        { value: "suggest", label: copy.failureRecoverySuggest },
-                        { value: "auto", label: copy.failureRecoveryAuto }
-                      ]}
-                      onChange={(value) =>
-                        onUpdateAgentProfile(selectedProfile.id, { failureRecoveryPolicy: value })
                       }
                     />
                   </div>
