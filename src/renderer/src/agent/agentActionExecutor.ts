@@ -1,5 +1,9 @@
 // 本文件说明: 判断 Agent 动作是否可执行并按队列推进动作
-import type { AgentAction } from "@shared/agentExecutionPlan";
+import {
+  isLikelyAgentProjectDirectoryPath,
+  isLikelyAgentProjectFilePath,
+  type AgentAction
+} from "@shared/agentExecutionPlan";
 import type { AgentProfileContext } from "@shared/agentTypes";
 import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "@/state/generalPreferences";
 
@@ -11,6 +15,7 @@ type AgentActionExecution =
   | { kind: "git-status" }
   | { kind: "generate-file-change"; relativePath: string }
   | { kind: "run-command"; command: string }
+  | { kind: "invalid-target"; reason: string }
   | { kind: "manual-gate"; reason: "review" | "commit" }
   | { kind: "complete" };
 
@@ -42,10 +47,18 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
   }
 
   if (action.kind === "inspect-file" && action.target) {
+    if (!isLikelyAgentProjectFilePath(action.target)) {
+      return { kind: "invalid-target", reason: `Invalid file target: ${action.target}` };
+    }
+
     return { kind: "open-file", relativePath: action.target };
   }
 
   if (action.kind === "list-directory" && action.target) {
+    if (!isLikelyAgentProjectDirectoryPath(action.target)) {
+      return { kind: "invalid-target", reason: `Invalid directory target: ${action.target}` };
+    }
+
     return { kind: "list-directory", relativePath: action.target };
   }
 
@@ -62,6 +75,10 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
   }
 
   if (action.kind === "edit-file" && action.target) {
+    if (!isLikelyAgentProjectFilePath(action.target)) {
+      return { kind: "invalid-target", reason: `Invalid edit target: ${action.target}` };
+    }
+
     return { kind: "generate-file-change", relativePath: action.target };
   }
 
@@ -317,7 +334,15 @@ export function isRunnableAgentAction(
       action.kind === "search-project" ||
       action.kind === "git-status" ||
       action.kind === "edit-file") &&
-    (action.kind === "git-status" || action.target)
+    (action.kind === "git-status" ||
+      (action.kind === "list-directory"
+        ? Boolean(action.target && isLikelyAgentProjectDirectoryPath(action.target))
+        : Boolean(
+            action.target &&
+              (action.kind === "inspect-file" || action.kind === "edit-file"
+                ? isLikelyAgentProjectFilePath(action.target)
+                : true)
+          )))
   ) {
     return true;
   }
