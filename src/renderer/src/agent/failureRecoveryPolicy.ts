@@ -30,8 +30,8 @@ export function formatFailureRecoverySuggestion(
   action: Pick<AgentAction, "label">
 ): string {
   if (language === "zh-CN") {
-    return `失败恢复建议: ${action.label} 已失败。可以生成修复计划, 或重试、跳过该动作。`;
+    return `失败恢复提示: ${action.label} 已失败。Forge 会自动准备恢复步骤, 需要权限或依赖处理时会停下等待确认。`;
   }
 
-  return `Recovery suggested: ${action.label} failed. Generate a fix plan, retry it, or skip the action.`;
+  return `Recovery notice: ${action.label} failed. Forge will prepare recovery steps automatically and stop for permission or dependency approval.`;
 }

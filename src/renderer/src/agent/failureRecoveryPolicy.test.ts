@@ -45,9 +45,9 @@ describe("failure recovery policy", () => {
   });
 
   it("formats recovery suggestions in the selected language", () => {
-    expect(formatFailureRecoverySuggestion("zh-CN", failedAction)).toContain("生成修复计划");
+    expect(formatFailureRecoverySuggestion("zh-CN", failedAction)).toContain("Forge");
     expect(formatFailureRecoverySuggestion("zh-CN", failedAction)).toContain("Run npm test");
-    expect(formatFailureRecoverySuggestion("en-US", failedAction)).toContain("Generate a fix plan");
+    expect(formatFailureRecoverySuggestion("en-US", failedAction)).toContain("automatically");
     expect(formatFailureRecoverySuggestion("en-US", failedAction)).toContain("Run npm test");
   });
 

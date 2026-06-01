@@ -128,7 +128,7 @@ const defaultProfiles: AgentProfile[] = [
     ...builtInProfileText.review["zh-CN"],
     permissionMode: "auto",
     verificationPolicy: "suggest",
-    failureRecoveryPolicy: "suggest",
+    failureRecoveryPolicy: "auto",
     tools: {
       read: true,
       edit: false,
@@ -149,7 +149,7 @@ const defaultProfiles: AgentProfile[] = [
     ...builtInProfileText.docs["zh-CN"],
     permissionMode: "auto",
     verificationPolicy: "skip",
-    failureRecoveryPolicy: "manual",
+    failureRecoveryPolicy: "auto",
     tools: {
       read: true,
       edit: true,
@@ -159,7 +159,7 @@ const defaultProfiles: AgentProfile[] = [
     contextBudget: 10000,
     planStepLimit: 5,
     autoRunBatchSize: 2,
-    maxFailureRecoveryAttempts: 0,
+    maxFailureRecoveryAttempts: 1,
     active: false,
     builtIn: true,
     createdAt: defaultProfileTimestamp,

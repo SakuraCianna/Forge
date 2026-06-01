@@ -88,7 +88,6 @@ type ThreadWorkspaceProps = {
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
   onAllowAgentCommand?: (threadId: string, action: AgentAction) => void;
-  onGenerateFailureFix?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onGenerateContinuationPlan?: (threadId: string) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
@@ -191,7 +190,6 @@ export function ThreadWorkspace({
   onRunAgentActions,
   onApproveAgentCommand,
   onAllowAgentCommand,
-  onGenerateFailureFix,
   onGenerateCommandFix,
   onGenerateContinuationPlan,
   onCompleteAgentAction,
@@ -573,36 +571,6 @@ export function ThreadWorkspace({
       );
     }
 
-    if (item.kind === "failed-action" && onRunAgentAction) {
-      controls.push(
-        <button
-          key="retry-action"
-          type="button"
-          aria-label={`${copy.retryQueuedAction} ${action.label}`}
-          onClick={() => onRunAgentAction(selectedThread.id, action)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#f4c7ab] bg-white px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          {copy.retryAction}
-        </button>
-      );
-    }
-
-    if (item.kind === "failed-action" && onGenerateFailureFix) {
-      controls.push(
-        <button
-          key="generate-fix"
-          type="button"
-          aria-label={`${copy.generateQueuedFixPlan} ${action.label}`}
-          onClick={() => onGenerateFailureFix(selectedThread.id, action)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-        >
-          <Wrench className="h-3.5 w-3.5" />
-          {copy.generateFixPlan}
-        </button>
-      );
-    }
-
     if (onSkipAgentAction && canSkipAgentAction(action)) {
       controls.push(
         <button
@@ -703,28 +671,6 @@ export function ThreadWorkspace({
           label: copy.openSourceControl,
           icon: Terminal,
           onClick: onOpenSourceControl
-        })
-      );
-    }
-
-    if (item.kind === "failed-action" && action && onRunAgentAction) {
-      actions.push(
-        renderCompactIconAction({
-          key: "retry-action",
-          label: copy.retryAction,
-          icon: RotateCcw,
-          onClick: () => onRunAgentAction(selectedThread.id, action)
-        })
-      );
-    }
-
-    if (item.kind === "failed-action" && action && onGenerateFailureFix) {
-      actions.push(
-        renderCompactIconAction({
-          key: "generate-fix",
-          label: copy.generateFixPlan,
-          icon: Wrench,
-          onClick: () => onGenerateFailureFix(selectedThread.id, action)
         })
       );
     }
@@ -1711,7 +1657,7 @@ export function ThreadWorkspace({
             stderr: "stderr",
             timedOut: "已超时",
             completed: "已完成",
-            failed: "查看日志, 重试, 或生成修复计划",
+            failed: "等待 Forge 自动自修复, 必要时查看日志或跳过",
             running: "正在等待命令或文件操作完成",
             ready: "可以运行",
             manualGate: "需要人工审查",
@@ -1746,7 +1692,7 @@ export function ThreadWorkspace({
             stderr: "stderr",
             timedOut: "Timed out",
             completed: "Completed",
-            failed: "Review logs, retry, or generate a fix plan",
+            failed: "Wait for Forge auto-recovery, or review logs / skip if needed",
             running: "Waiting for the command or file operation to finish",
             ready: "Ready to run",
             manualGate: "Manual review required",
@@ -2100,32 +2046,6 @@ export function ThreadWorkspace({
             className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
           >
             {actionQueueCopy.markReviewComplete}
-          </button>
-        );
-      }
-
-      if (action.status === "failed" && onRunAgentAction) {
-        controls.push(
-          <button
-            key="retry-failed"
-            type="button"
-            onClick={() => onRunAgentAction(selectedThread.id, action)}
-            className="h-7 rounded-[10px] border border-[#f4c7ab] bg-white px-2 text-[11px] font-medium text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
-          >
-            {recoveryActionCopy.retryFailed}
-          </button>
-        );
-      }
-
-      if (action.status === "failed" && onGenerateFailureFix) {
-        controls.push(
-          <button
-            key="generate-fix"
-            type="button"
-            onClick={() => onGenerateFailureFix(selectedThread.id, action)}
-            className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-          >
-            {recoveryActionCopy.generateFixPlan}
           </button>
         );
       }
@@ -2546,24 +2466,6 @@ export function ThreadWorkspace({
                   >
                     {recoveryActionCopy.viewLogs}
                   </button>
-                  {selectedThread && onRunAgentAction ? (
-                    <button
-                      type="button"
-                      onClick={() => onRunAgentAction(selectedThread.id, queueBlockerAction)}
-                      className="h-7 rounded-[10px] border border-[#f4c7ab] bg-white px-2 text-[11px] font-medium text-[#9a3412] transition hover:bg-[#fffaf5] active:scale-[0.99]"
-                    >
-                      {recoveryActionCopy.retryFailed}
-                    </button>
-                  ) : null}
-                  {selectedThread && onGenerateFailureFix ? (
-                    <button
-                      type="button"
-                      onClick={() => onGenerateFailureFix(selectedThread.id, queueBlockerAction)}
-                      className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
-                    >
-                      {recoveryActionCopy.generateFixPlan}
-                    </button>
-                  ) : null}
                   {selectedThread && onSkipAgentAction && canSkipAgentAction(queueBlockerAction) ? (
                     <button
                       type="button"
@@ -3367,18 +3269,10 @@ function getFailedActionBody(
   item: AgentConfirmationItem,
   copy: ReturnType<typeof getCompactAgentControlCopy>
 ): string {
-  if (item.failureRecoveryPolicy === "suggest") {
-    return copy.failedActionSuggestBody;
-  }
-
-  if (item.failureRecoveryPolicy === "auto") {
-    return copy.failedActionAutoBody(
-      item.maxFailureRecoveryAttempts,
-      item.autoFailureRecoveryAttemptsUsed
-    );
-  }
-
-  return copy.failedActionBody;
+  return copy.failedActionAutoBody(
+    item.maxFailureRecoveryAttempts,
+    item.autoFailureRecoveryAttemptsUsed
+  );
 }
 
 // 为确认项生成结构化上下文行, 保持 UI 和复制摘要使用同一份信息
@@ -3404,13 +3298,13 @@ function getAgentConfirmationMetadataRows(
     });
   }
 
-  if (item.kind === "failed-action" && item.failureRecoveryPolicy) {
+  if (item.kind === "failed-action") {
     rows.push({
       label: copy.failureRecoveryPolicyLabel,
-      value: getFailureRecoveryPolicyLabel(item.failureRecoveryPolicy, copy)
+      value: copy.failureRecoveryAuto
     });
 
-    if (item.failureRecoveryPolicy === "auto" && item.maxFailureRecoveryAttempts !== undefined) {
+    if (item.maxFailureRecoveryAttempts !== undefined) {
       rows.push({
         label: copy.failureRecoveryAttemptLimitLabel,
         value: copy.failureRecoveryAttemptLimit(item.maxFailureRecoveryAttempts)
@@ -3463,21 +3357,6 @@ function formatAgentConfirmationSummary(
   return lines.join("\n");
 }
 
-function getFailureRecoveryPolicyLabel(
-  policy: NonNullable<AgentConfirmationItem["failureRecoveryPolicy"]>,
-  copy: ReturnType<typeof getCompactAgentControlCopy>
-): string {
-  if (policy === "auto") {
-    return copy.failureRecoveryAuto;
-  }
-
-  if (policy === "suggest") {
-    return copy.failureRecoverySuggest;
-  }
-
-  return copy.failureRecoveryManual;
-}
-
 // 提供 compact/full 确认面板共享的中英文文案
 function getCompactAgentControlCopy(language: Language) {
   if (language === "zh-CN") {
@@ -3497,12 +3376,12 @@ function getCompactAgentControlCopy(language: Language) {
       pendingChangesBody: (count: number, path: string) =>
         count > 1 ? `先处理 ${path} 等 ${count} 个修改, Forge 才会继续` : `先处理 ${path}, Forge 才会继续`,
       failedActionTitle: "失败动作",
-      failedActionBody: "先重试、生成修复计划或跳过, 队列才会继续",
-      failedActionSuggestBody: "当前智能体建议先生成修复计划, 也可以重试或跳过该动作",
+      failedActionBody: "Forge 会自动尝试自修复; 只有权限、依赖或跳过需要你介入",
+      failedActionSuggestBody: "Forge 会根据失败上下文自动准备恢复步骤, 必要时再等待人工审批",
       failedActionAutoBody: (count?: number, used = 0) =>
         count === undefined
-          ? "当前智能体会按上限尝试自动生成修复计划, 也可以手动生成、重试或跳过"
-          : `当前智能体已自动尝试 ${used} / ${count} 次修复计划, 也可以手动生成、重试或跳过`,
+          ? "Forge 会按上限自动尝试恢复, 权限或依赖类步骤会等待人工审批"
+          : `Forge 已自动尝试 ${used} / ${count} 次恢复, 后续只在权限、依赖或跳过时需要介入`,
       manualGateTitle: "人工确认",
       commandApprovalTitle: "命令批准",
       commandBlockedTitle: "命令被阻止",
@@ -3593,13 +3472,13 @@ function getCompactAgentControlCopy(language: Language) {
         ? `Review ${path} and ${count - 1} other changes before Forge continues.`
         : `Review ${path} before Forge continues.`,
     failedActionTitle: "Failed action",
-    failedActionBody: "Retry, generate a fix plan, or skip this action before the queue continues.",
+    failedActionBody: "Forge will attempt auto-recovery; only permissions, dependencies, or skipping need your input.",
     failedActionSuggestBody:
-      "This agent suggests generating a fix plan first. You can also retry or skip the action.",
+      "Forge will prepare recovery steps from the failure context and stop for approval when needed.",
     failedActionAutoBody: (count?: number, used = 0) =>
       count === undefined
-        ? "This agent can auto-generate a fix plan within its retry limit. You can still generate one manually, retry, or skip."
-        : `This agent has auto-generated ${used} / ${count} fix ${count === 1 ? "plan" : "plans"}. You can still generate one manually, retry, or skip.`,
+        ? "Forge will auto-recover within its attempt limit and stop for permission or dependency approval."
+        : `Forge has auto-recovered ${used} / ${count} ${count === 1 ? "time" : "times"}. It will only stop for permissions, dependencies, or skip decisions.`,
     manualGateTitle: "Manual confirmation",
     commandApprovalTitle: "Command approval",
     commandBlockedTitle: "Blocked command",

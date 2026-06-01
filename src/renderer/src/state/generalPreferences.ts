@@ -58,7 +58,7 @@ export function createDefaultGeneralPreferences(): GeneralPreferences {
     commandTimeoutSeconds: 120,
     autoRunBatchSize: 3,
     autoRunSafeActions: true,
-    autoGenerateFailureFixes: false,
+    autoGenerateFailureFixes: true,
     autoReview: true,
     defaultPermission: true,
     showActivityHeartbeat: true,
