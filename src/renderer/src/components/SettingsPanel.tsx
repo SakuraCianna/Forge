@@ -32,6 +32,10 @@ import type { TaskThread } from "@/state/taskThreads";
 import type { AgentMemoryEntry } from "@/state/agentMemory";
 import {
   getAgentProfileDisplayText,
+  maxAgentAutoRunBatchSize,
+  maxAgentFailureRecoveryAttempts,
+  minAgentAutoRunBatchSize,
+  minAgentFailureRecoveryAttempts,
   type AgentProfile,
   type AgentProfilePatch,
   type AgentProfileTool
@@ -1482,6 +1486,64 @@ export function SettingsPanel({
                       className="h-10 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition focus:border-[#202123]"
                     />
                   </label>
+                  <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4 text-xs text-[#6e6e80]">
+                    <span>
+                      <span className="block text-sm font-medium text-[#202123]">
+                        {copy.autoRunBatchSize}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
+                        {copy.autoRunBatchSizeDescription}
+                      </span>
+                    </span>
+                    <label className="inline-flex h-10 items-center gap-2 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123]">
+                      <input
+                        type="number"
+                        min={minAgentAutoRunBatchSize}
+                        max={maxAgentAutoRunBatchSize}
+                        step="1"
+                        aria-label={copy.autoRunBatchSize}
+                        value={selectedProfile.autoRunBatchSize}
+                        onChange={(event) =>
+                          onUpdateAgentProfile(selectedProfile.id, {
+                            autoRunBatchSize: Number(event.currentTarget.value)
+                          })
+                        }
+                        className="w-12 bg-transparent text-right outline-none"
+                      />
+                      <span className="text-xs text-[#6e6e80]">
+                        {copy.autoRunBatchSizeUnit}
+                      </span>
+                    </label>
+                  </div>
+                  <div className="grid gap-3 rounded-[16px] border border-[#ececf1] bg-white p-4 text-xs text-[#6e6e80]">
+                    <span>
+                      <span className="block text-sm font-medium text-[#202123]">
+                        {copy.maxFailureRecoveryAttempts}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#6e6e80]">
+                        {copy.maxFailureRecoveryAttemptsDescription}
+                      </span>
+                    </span>
+                    <label className="inline-flex h-10 items-center gap-2 rounded-[14px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123]">
+                      <input
+                        type="number"
+                        min={minAgentFailureRecoveryAttempts}
+                        max={maxAgentFailureRecoveryAttempts}
+                        step="1"
+                        aria-label={copy.maxFailureRecoveryAttempts}
+                        value={selectedProfile.maxFailureRecoveryAttempts}
+                        onChange={(event) =>
+                          onUpdateAgentProfile(selectedProfile.id, {
+                            maxFailureRecoveryAttempts: Number(event.currentTarget.value)
+                          })
+                        }
+                        className="w-12 bg-transparent text-right outline-none"
+                      />
+                      <span className="text-xs text-[#6e6e80]">
+                        {copy.maxFailureRecoveryAttemptsUnit}
+                      </span>
+                    </label>
+                  </div>
                 </div>
 
                 <div className="grid gap-3 rounded-[18px] border border-[#ececf1] bg-white p-4">
@@ -2419,6 +2481,9 @@ function getMemorySettingsCopy(language: Language): {
 
 // 返回智能体配置页文案, 内置配置显示也走这里
 function getAgentProfilesCopy(language: Language): {
+  autoRunBatchSize: string;
+  autoRunBatchSizeDescription: string;
+  autoRunBatchSizeUnit: string;
   autoReview: string;
   contextBudget: string;
   description: string;
@@ -2431,6 +2496,9 @@ function getAgentProfilesCopy(language: Language): {
   failureRecoverySuggest: string;
   fullAccess: string;
   instructions: string;
+  maxFailureRecoveryAttempts: string;
+  maxFailureRecoveryAttemptsDescription: string;
+  maxFailureRecoveryAttemptsUnit: string;
   name: string;
   permissionDescription: string;
   permissionMode: string;
@@ -2448,6 +2516,9 @@ function getAgentProfilesCopy(language: Language): {
 } {
   if (language === "zh-CN") {
     return {
+      autoRunBatchSize: "自动运行上限",
+      autoRunBatchSizeDescription: "作为全局每轮自动运行步数的智能体级上限",
+      autoRunBatchSizeUnit: "步",
       autoReview: "自动审查",
       contextBudget: "上下文预算",
       description: "配置 Forge 的智能体指令、权限、工具和上下文预算",
@@ -2460,6 +2531,9 @@ function getAgentProfilesCopy(language: Language): {
       failureRecoverySuggest: "建议恢复",
       fullAccess: "完全访问权限",
       instructions: "智能体指令",
+      maxFailureRecoveryAttempts: "恢复次数上限",
+      maxFailureRecoveryAttemptsDescription: "单个线程自动生成恢复计划的最多次数, 0 表示不自动恢复",
+      maxFailureRecoveryAttemptsUnit: "次",
       name: "名称",
       permissionDescription: "控制这个智能体默认用什么权限模式运行",
       permissionMode: "权限模式",
@@ -2484,6 +2558,9 @@ function getAgentProfilesCopy(language: Language): {
   }
 
   return {
+    autoRunBatchSize: "Auto-run cap",
+    autoRunBatchSizeDescription: "Agent-level cap for automatic steps per pass",
+    autoRunBatchSizeUnit: "steps",
     autoReview: "Auto review",
     contextBudget: "Context budget",
     description: "Tune reusable agent instructions, permissions, tool access, and context budgets",
@@ -2496,6 +2573,10 @@ function getAgentProfilesCopy(language: Language): {
     failureRecoverySuggest: "Suggest recovery",
     fullAccess: "Full access",
     instructions: "Agent instructions",
+    maxFailureRecoveryAttempts: "Recovery attempt cap",
+    maxFailureRecoveryAttemptsDescription:
+      "Maximum automatic recovery plans per thread, 0 disables automatic recovery",
+    maxFailureRecoveryAttemptsUnit: "tries",
     name: "Name",
     permissionDescription: "Controls the default permission mode for this agent",
     permissionMode: "Permission mode",

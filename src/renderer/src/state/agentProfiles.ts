@@ -3,6 +3,10 @@ import type { AgentProfileContext } from "@shared/agentTypes";
 import type { Language } from "@shared/modelTypes";
 
 const agentProfileStorageKey = "forge.agentProfiles";
+export const minAgentAutoRunBatchSize = 1;
+export const maxAgentAutoRunBatchSize = 8;
+export const minAgentFailureRecoveryAttempts = 0;
+export const maxAgentFailureRecoveryAttempts = 5;
 
 type AgentProfilePermissionMode = "auto" | "full";
 type AgentProfileVerificationPolicy = "suggest" | "require" | "skip";
@@ -22,6 +26,8 @@ export type AgentProfile = {
   tools: AgentProfileTools;
   contextBudget: number;
   planStepLimit: number;
+  autoRunBatchSize: number;
+  maxFailureRecoveryAttempts: number;
   active: boolean;
   builtIn?: boolean;
   createdAt: string;
@@ -40,6 +46,8 @@ export type AgentProfilePatch = Partial<
     | "tools"
     | "contextBudget"
     | "planStepLimit"
+    | "autoRunBatchSize"
+    | "maxFailureRecoveryAttempts"
   >
 >;
 
@@ -108,6 +116,8 @@ const defaultProfiles: AgentProfile[] = [
     },
     contextBudget: 12000,
     planStepLimit: 6,
+    autoRunBatchSize: 3,
+    maxFailureRecoveryAttempts: 2,
     active: true,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -127,6 +137,8 @@ const defaultProfiles: AgentProfile[] = [
     },
     contextBudget: 16000,
     planStepLimit: 4,
+    autoRunBatchSize: 1,
+    maxFailureRecoveryAttempts: 1,
     active: false,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -146,6 +158,8 @@ const defaultProfiles: AgentProfile[] = [
     },
     contextBudget: 10000,
     planStepLimit: 5,
+    autoRunBatchSize: 2,
+    maxFailureRecoveryAttempts: 0,
     active: false,
     builtIn: true,
     createdAt: defaultProfileTimestamp,
@@ -290,8 +304,10 @@ export function getActiveAgentProfileContext(
     enabledTools: getEnabledAgentTools(activeProfile.tools),
     contextBudget: activeProfile.contextBudget,
     planStepLimit: activeProfile.planStepLimit,
+    autoRunBatchSize: activeProfile.autoRunBatchSize,
     verificationPolicy: activeProfile.verificationPolicy,
-    failureRecoveryPolicy: activeProfile.failureRecoveryPolicy
+    failureRecoveryPolicy: activeProfile.failureRecoveryPolicy,
+    maxFailureRecoveryAttempts: activeProfile.maxFailureRecoveryAttempts
   };
 }
 
@@ -350,6 +366,21 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
   const planStepLimit = Number.isFinite(profile.planStepLimit)
     ? Math.min(12, Math.max(2, Math.round(profile.planStepLimit)))
     : getDefaultPlanStepLimit(profile.id);
+  const autoRunBatchSize = Number.isFinite(profile.autoRunBatchSize)
+    ? Math.min(
+        maxAgentAutoRunBatchSize,
+        Math.max(minAgentAutoRunBatchSize, Math.round(profile.autoRunBatchSize))
+      )
+    : getDefaultAutoRunBatchSize(profile.id);
+  const maxFailureRecoveryAttempts = Number.isFinite(profile.maxFailureRecoveryAttempts)
+    ? Math.min(
+        maxAgentFailureRecoveryAttempts,
+        Math.max(
+          minAgentFailureRecoveryAttempts,
+          Math.round(profile.maxFailureRecoveryAttempts)
+        )
+      )
+    : getDefaultFailureRecoveryAttempts(profile.id);
 
   return {
     ...profile,
@@ -364,7 +395,9 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
     ),
     tools: normalizeTools(profile.tools),
     contextBudget,
-    planStepLimit
+    planStepLimit,
+    autoRunBatchSize,
+    maxFailureRecoveryAttempts
   };
 }
 
@@ -458,6 +491,11 @@ function isPersistedAgentProfile(value: unknown): value is AgentProfile {
     typeof value.contextBudget === "number" &&
     (!("planStepLimit" in value) ||
       (typeof value.planStepLimit === "number" && Number.isFinite(value.planStepLimit))) &&
+    (!("autoRunBatchSize" in value) ||
+      (typeof value.autoRunBatchSize === "number" && Number.isFinite(value.autoRunBatchSize))) &&
+    (!("maxFailureRecoveryAttempts" in value) ||
+      (typeof value.maxFailureRecoveryAttempts === "number" &&
+        Number.isFinite(value.maxFailureRecoveryAttempts))) &&
     typeof value.active === "boolean" &&
     typeof value.createdAt === "string" &&
     typeof value.updatedAt === "string" &&
@@ -467,6 +505,14 @@ function isPersistedAgentProfile(value: unknown): value is AgentProfile {
 
 function getDefaultPlanStepLimit(profileId: string): number {
   return defaultProfiles.find((profile) => profile.id === profileId)?.planStepLimit ?? 6;
+}
+
+function getDefaultAutoRunBatchSize(profileId: string): number {
+  return defaultProfiles.find((profile) => profile.id === profileId)?.autoRunBatchSize ?? 3;
+}
+
+function getDefaultFailureRecoveryAttempts(profileId: string): number {
+  return defaultProfiles.find((profile) => profile.id === profileId)?.maxFailureRecoveryAttempts ?? 1;
 }
 
 function normalizeVerificationPolicy(

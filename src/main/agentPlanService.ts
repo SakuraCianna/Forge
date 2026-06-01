@@ -957,8 +957,10 @@ function formatAgentProfile(
     `Permission mode: ${agentProfile.permissionMode}`,
     `Context budget: ${agentProfile.contextBudget}`,
     `Plan step limit: ${agentProfile.planStepLimit}`,
+    `Auto-run batch size: ${agentProfile.autoRunBatchSize}`,
     `Verification policy: ${agentProfile.verificationPolicy}`,
     `Failure recovery policy: ${agentProfile.failureRecoveryPolicy}`,
+    `Max failure recovery attempts: ${agentProfile.maxFailureRecoveryAttempts}`,
     `Tools: ${agentProfile.enabledTools.length > 0 ? agentProfile.enabledTools.join(", ") : "none"}`,
     "Instructions:",
     agentProfile.instructions

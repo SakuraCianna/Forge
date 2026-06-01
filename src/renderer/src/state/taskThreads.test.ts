@@ -43,8 +43,10 @@ const agentProfile: AgentProfileContext = {
   enabledTools: ["read", "edit", "command", "git"],
   contextBudget: 12000,
   planStepLimit: 6,
+  autoRunBatchSize: 3,
   verificationPolicy: "require",
-  failureRecoveryPolicy: "auto"
+  failureRecoveryPolicy: "auto",
+  maxFailureRecoveryAttempts: 2
 };
 
 describe("task threads", () => {
@@ -63,6 +65,8 @@ describe("task threads", () => {
 
     agentProfile.enabledTools.length = 0;
     agentProfile.failureRecoveryPolicy = "manual";
+    agentProfile.autoRunBatchSize = 1;
+    agentProfile.maxFailureRecoveryAttempts = 0;
 
     expect(result.thread.agentProfile?.enabledTools).toEqual([
       "read",
@@ -71,5 +75,7 @@ describe("task threads", () => {
       "git"
     ]);
     expect(result.thread.agentProfile?.failureRecoveryPolicy).toBe("auto");
+    expect(result.thread.agentProfile?.autoRunBatchSize).toBe(3);
+    expect(result.thread.agentProfile?.maxFailureRecoveryAttempts).toBe(2);
   });
 });

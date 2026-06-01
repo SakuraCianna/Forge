@@ -47,8 +47,10 @@ const baseRequest: GenerateAgentPlanRequest = {
     enabledTools: ["read", "edit", "command", "git"],
     contextBudget: 12000,
     planStepLimit: 2,
+    autoRunBatchSize: 2,
     verificationPolicy: "require",
-    failureRecoveryPolicy: "auto"
+    failureRecoveryPolicy: "auto",
+    maxFailureRecoveryAttempts: 2
   }
 };
 

@@ -167,7 +167,6 @@ type ProviderKeyStatus = {
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
-const maxAutoFailureFixesPerThread = 2;
 
 function selectInitialProjectFromPreferences(
   projects: ForgeProject[],
@@ -350,6 +349,17 @@ export function App(): ReactElement {
       (generalPreferences.fullAccess || agentProfile.permissionMode === "full");
   }
 
+  function getThreadAutoRunBatchSize(threadId: string): number {
+    return Math.min(
+      generalPreferences.autoRunBatchSize,
+      getThreadAgentProfileContext(threadId).autoRunBatchSize
+    );
+  }
+
+  function getThreadFailureRecoveryLimit(threadId: string): number {
+    return getThreadAgentProfileContext(threadId).maxFailureRecoveryAttempts;
+  }
+
   function hasReservedAgentAction(threadId: string, actions: AgentAction[]): boolean {
     const reservedActionIds = activeAgentAutoRunActionIdsRef.current.get(threadId);
 
@@ -461,7 +471,7 @@ export function App(): ReactElement {
         fullAccess: getThreadFullAccessMode(thread.id),
         rules: generalPreferences.commandSafetyRules
       });
-      const runnableBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
+      const runnableBatch = runnableActions.slice(0, getThreadAutoRunBatchSize(thread.id));
 
       return runnableBatch.length > 0 && !hasReservedAgentAction(thread.id, runnableBatch);
     });
@@ -474,7 +484,7 @@ export function App(): ReactElement {
       fullAccess: getThreadFullAccessMode(nextThread.id),
       rules: generalPreferences.commandSafetyRules
     });
-    const runnableActionBatch = runnableActions.slice(0, generalPreferences.autoRunBatchSize);
+    const runnableActionBatch = runnableActions.slice(0, getThreadAutoRunBatchSize(nextThread.id));
     void runAgentActions(nextThread.id, runnableActionBatch);
   }, [
     changePreviews.length,
@@ -505,7 +515,9 @@ export function App(): ReactElement {
           return false;
         }
 
-        if (getThreadAgentProfileContext(thread.id).failureRecoveryPolicy !== "auto") {
+        const agentProfile = getThreadAgentProfileContext(thread.id);
+
+        if (agentProfile.failureRecoveryPolicy !== "auto") {
           return false;
         }
 
@@ -513,7 +525,7 @@ export function App(): ReactElement {
         const count = autoFailureFixCountsRef.current.get(thread.id) ?? 0;
 
         return (
-          count < maxAutoFailureFixesPerThread &&
+          count < getThreadFailureRecoveryLimit(thread.id) &&
           !activeAutoFailureFixKeysRef.current.has(key) &&
           !autoFailureFixAttemptedKeysRef.current.has(key)
         );
