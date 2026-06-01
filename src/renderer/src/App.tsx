@@ -101,7 +101,8 @@ import {
   updateThreadAgentActionStatus,
   type AgentActionRunRecord,
   type CommandRunResult,
-  type TaskThread
+  type TaskThread,
+  type TaskThreadEvent
 } from "@/state/taskThreads";
 import {
   appendUsageEvent,
@@ -1658,10 +1659,13 @@ export function App(): ReactElement {
               {
                 id: `${threadId}-plan-empty-summary-${plan.createdAt}`,
                 kind: "result" as const,
-                message:
+                message: appendSourceUrlsToAgentSummary(
                   settings.language === "zh-CN"
                     ? "已完成分析, 但没有生成可执行步骤。具体模型输出已折叠在“已处理”里。"
                     : "Analysis finished, but no executable steps were generated. Model output is folded into Processed.",
+                  extractSourceUrlsFromText(plan.text),
+                  settings.language
+                ),
                 createdAt: plan.createdAt,
                 completedAt: plan.createdAt
               }
@@ -2376,7 +2380,7 @@ export function App(): ReactElement {
 
         const completed = actions.filter((action) => action.status === "completed").length;
         const skipped = actions.filter((action) => action.status === "skipped").length;
-        const message =
+        const baseMessage =
           settings.language === "zh-CN"
             ? `已完成本次操作：完成 ${completed} 个步骤${
                 skipped > 0 ? `, 跳过 ${skipped} 个步骤` : ""
@@ -2384,6 +2388,11 @@ export function App(): ReactElement {
             : `Done: completed ${completed} step${completed === 1 ? "" : "s"}${
                 skipped > 0 ? `, skipped ${skipped}` : ""
               }. Detailed activity is folded into Processed.`;
+        const message = appendSourceUrlsToAgentSummary(
+          baseMessage,
+          extractSourceUrlsFromThreadEvents(thread.events),
+          settings.language
+        );
 
         return {
           ...thread,
@@ -3598,6 +3607,42 @@ function formatAgentPermissionDenied(
   }
 
   return `Agent profile ${profileName} does not allow ${tool} actions`;
+}
+
+// 最终总结把隐藏流水中的网页来源补出来, 保持主屏简洁但不丢引用
+function appendSourceUrlsToAgentSummary(
+  message: string,
+  sourceUrls: string[],
+  language: Language
+): string {
+  const urls = mergeUniqueStrings(sourceUrls).slice(0, 8);
+
+  if (urls.length === 0) {
+    return message;
+  }
+
+  const heading = language === "zh-CN" ? "参考来源:" : "Sources:";
+  const lines = urls.map((url) => `- ${url}`);
+
+  return `${message}\n\n${heading}\n${lines.join("\n")}`;
+}
+
+function extractSourceUrlsFromThreadEvents(events: TaskThreadEvent[]): string[] {
+  return mergeUniqueStrings(
+    events
+      .filter((event) => event.kind !== "user")
+      .flatMap((event) => extractSourceUrlsFromText(event.message))
+  );
+}
+
+function extractSourceUrlsFromText(value: string): string[] {
+  const matches = value.match(/https?:\/\/[^\s<>)\]]+/giu) ?? [];
+
+  return mergeUniqueStrings(matches.map((url) => url.replace(/[.,;:，。；：]+$/u, "")));
+}
+
+function mergeUniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
 }
 
 // 将命令风险提示转成用户可读文案

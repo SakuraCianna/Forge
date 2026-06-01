@@ -6,14 +6,20 @@ import {
   ArrowRight,
   Brain,
   CheckCircle2,
+  ChevronDown,
   Circle,
   Code2,
   Copy,
+  ExternalLink,
+  FilePenLine,
+  FileSearch,
   FileText,
+  Globe,
   Layers,
   ListChecks,
   Play,
   RotateCcw,
+  Search,
   SkipForward,
   Terminal,
   ThumbsDown,
@@ -112,7 +118,35 @@ type CompactProcessedSummary = {
   label: string;
   duration: string;
   hiddenEvents: TaskThreadEvent[];
+  groups: CompactProcessedGroup[];
+  sourceUrls: string[];
   livePreview?: string;
+};
+
+type CompactProcessedGroupKind =
+  | "web"
+  | "command"
+  | "edit"
+  | "search"
+  | "file"
+  | "plan"
+  | "other";
+
+type CompactProcessedItem = {
+  id: string;
+  kind: CompactProcessedGroupKind;
+  label: string;
+  detail: string;
+  createdAt: string;
+  urls: string[];
+  dedupeKey?: string;
+};
+
+type CompactProcessedGroup = {
+  kind: CompactProcessedGroupKind;
+  label: string;
+  summaryLabel: string;
+  items: CompactProcessedItem[];
 };
 
 type AgentConfirmationItemKind =
@@ -888,7 +922,10 @@ export function ThreadWorkspace({
           </div>
           <div className="mt-1">
             {event.kind === "result" && !runningCommand && !result ? (
-              <MarkdownPreview compact content={event.message} />
+              <>
+                <MarkdownPreview compact content={event.message} />
+                {renderAssistantSourceLinks(event.message)}
+              </>
             ) : (
               <p className="whitespace-pre-wrap text-sm leading-6 text-[#202123]">{event.message}</p>
             )}
@@ -1024,19 +1061,33 @@ export function ThreadWorkspace({
 
   // 将内部执行流水折叠进一条已处理摘要, 正文只保留最终可读输出
   function renderCompactProcessedSummary(summary: CompactProcessedSummary): ReactElement {
+    const sourceCopy = language === "zh-CN" ? "来源" : "Sources";
+
     return (
       <section className="mx-auto w-full max-w-[680px] border-b border-[#ececf1] pb-2">
         <button
           type="button"
           aria-expanded={compactProcessedExpanded}
           onClick={() => setCompactProcessedExpanded((expanded) => !expanded)}
-          className="flex h-7 items-center gap-2 text-left text-sm font-medium text-[#8e8ea0] transition hover:text-[#565869]"
+          className="flex min-h-7 w-full flex-wrap items-center gap-x-2 gap-y-1 text-left text-sm font-medium text-[#8e8ea0] transition hover:text-[#565869]"
         >
-          <span>{summary.label}</span>
-          <span>{summary.duration}</span>
-          <ArrowRight
-            className={`h-3.5 w-3.5 transition ${
-              compactProcessedExpanded ? "rotate-90" : ""
+          <span className="shrink-0">{summary.label}</span>
+          <span className="shrink-0">{summary.duration}</span>
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {summary.groups.slice(0, 4).map((group) => {
+              const Icon = getCompactProcessedGroupIcon(group.kind);
+
+              return (
+                <span key={group.kind} className="inline-flex min-w-0 items-center gap-1 text-[12px] font-normal">
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{group.summaryLabel}</span>
+                </span>
+              );
+            })}
+          </span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 transition ${
+              compactProcessedExpanded ? "rotate-180" : ""
             }`}
           />
         </button>
@@ -1046,16 +1097,107 @@ export function ThreadWorkspace({
           </p>
         ) : null}
         {compactProcessedExpanded ? (
-          <div className="mt-2 grid gap-1.5 rounded-[12px] bg-[#f7f7f8] p-2 text-[12px] text-[#6e6e80]">
-            {summary.hiddenEvents.slice(-8).map((event) => (
-              <div key={event.id} className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                <span className="text-[#8e8ea0]">{formatEventTimestamp(event.createdAt)}</span>
-                <span className="min-w-0 truncate">{event.message}</span>
+          <div className="mt-2 grid gap-2 text-[12px] text-[#6e6e80]">
+            {summary.groups.map((group) => renderCompactProcessedGroup(group))}
+            {summary.sourceUrls.length > 0 ? (
+              <div className="rounded-[12px] bg-[#f7f7f8] p-2">
+                <div className="mb-1.5 flex items-center gap-1.5 font-medium text-[#565869]">
+                  <Globe className="h-3.5 w-3.5" />
+                  {sourceCopy}
+                </div>
+                <div className="grid gap-1">
+                  {summary.sourceUrls.slice(0, 8).map((url) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-w-0 items-center gap-1 text-[#0b57d0] transition hover:text-[#063b91]"
+                    >
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{formatSourceUrlLabel(url)}</span>
+                    </a>
+                  ))}
+                </div>
               </div>
-            ))}
+            ) : null}
           </div>
         ) : null}
       </section>
+    );
+  }
+
+  function renderCompactProcessedGroup(group: CompactProcessedGroup): ReactElement {
+    const Icon = getCompactProcessedGroupIcon(group.kind);
+    const visibleItems = group.items.slice(-12);
+
+    return (
+      <details key={group.kind} className="group rounded-[12px] bg-[#f7f7f8] p-2">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-[#565869] [&::-webkit-details-marker]:hidden">
+          <Icon className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate font-medium">{group.label}</span>
+          <span className="shrink-0 text-[#8e8ea0]">{group.summaryLabel}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 transition group-open:rotate-180" />
+        </summary>
+        <div className="mt-2 grid gap-1.5">
+          {visibleItems.map((item) => (
+            <div key={item.id} className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
+              <span className="text-[#8e8ea0]">{formatEventTimestamp(item.createdAt)}</span>
+              <div className="min-w-0">
+                <div className="truncate font-medium text-[#565869]">{item.label}</div>
+                <p
+                  className={`mt-0.5 truncate ${
+                    item.kind === "command" ? "font-mono text-[11px]" : ""
+                  }`}
+                >
+                  {item.detail}
+                </p>
+                {item.urls.length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1">
+                    {item.urls.slice(0, 3).map((url) => (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex max-w-full items-center gap-1 text-[#0b57d0] transition hover:text-[#063b91]"
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{formatSourceUrlLabel(url)}</span>
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </details>
+    );
+  }
+
+  function renderAssistantSourceLinks(message: string): ReactElement | null {
+    const urls = extractSourceUrls(message);
+
+    if (urls.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+        {urls.slice(0, 6).map((url) => (
+          <a
+            key={url}
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#f7f7f8] px-2 py-1 text-[#0b57d0] transition hover:text-[#063b91]"
+          >
+            <Globe className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{formatSourceUrlLabel(url)}</span>
+          </a>
+        ))}
+      </div>
     );
   }
 
@@ -3615,8 +3757,265 @@ function getCompactProcessedSummary(
     label: language === "zh-CN" ? "已处理" : "Processed",
     duration: formatCompactProcessedDuration(thread),
     hiddenEvents,
+    groups: buildCompactProcessedGroups(hiddenEvents, language),
+    sourceUrls: extractSourceUrlsFromEvents(hiddenEvents),
     livePreview: getCompactProcessedLivePreview(thread, hiddenEvents)
   };
+}
+
+function buildCompactProcessedGroups(
+  hiddenEvents: TaskThreadEvent[],
+  language: Language
+): CompactProcessedGroup[] {
+  const buckets = new Map<CompactProcessedGroupKind, CompactProcessedItem[]>();
+
+  for (const event of hiddenEvents) {
+    const item = createCompactProcessedItem(event, language);
+    const current = buckets.get(item.kind) ?? [];
+
+    if (item.dedupeKey) {
+      const existingIndex = current.findIndex((candidate) => candidate.dedupeKey === item.dedupeKey);
+
+      if (existingIndex >= 0) {
+        current[existingIndex] = {
+          ...current[existingIndex],
+          ...item,
+          id: current[existingIndex].id,
+          urls: mergeUniqueStrings([...current[existingIndex].urls, ...item.urls])
+        };
+        buckets.set(item.kind, current);
+        continue;
+      }
+    }
+
+    buckets.set(item.kind, [...current, item]);
+  }
+
+  const order: CompactProcessedGroupKind[] = [
+    "web",
+    "command",
+    "edit",
+    "search",
+    "file",
+    "plan",
+    "other"
+  ];
+
+  return order.flatMap((kind) => {
+    const items = buckets.get(kind) ?? [];
+
+    if (items.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        kind,
+        label: getCompactProcessedGroupTitle(kind, language),
+        summaryLabel: getCompactProcessedGroupSummary(kind, items.length, language),
+        items
+      }
+    ];
+  });
+}
+
+function createCompactProcessedItem(
+  event: TaskThreadEvent,
+  language: Language
+): CompactProcessedItem {
+  const urls = extractSourceUrls(event.message);
+  const command = event.commandResult?.command ?? event.commandRun?.command ?? event.commandApproval?.command;
+  const actionLabel = event.agentActionRun?.label ?? "";
+  const text = `${event.message}\n${actionLabel}`;
+
+  if (command) {
+    const runId = event.commandResult?.runId ?? event.commandRun?.runId;
+
+    return {
+      id: event.id,
+      kind: "command",
+      label: getCompactEventLabel(event, language),
+      detail: compactProcessedDetail(command),
+      createdAt: event.completedAt ?? event.createdAt,
+      urls,
+      dedupeKey: `command:${getCommandRunKey(command, runId)}`
+    };
+  }
+
+  const kind = getCompactProcessedEventKind(event, text, urls);
+  const label = getCompactEventLabel(event, language);
+  const detailSource = getCompactProcessedDetailSource(event, actionLabel);
+  const dedupeKey = event.agentActionRun?.actionId
+    ? `${kind}:action:${event.agentActionRun.actionId}`
+    : undefined;
+
+  return {
+    id: event.id,
+    kind,
+    label,
+    detail: compactProcessedDetail(detailSource),
+    createdAt: event.completedAt ?? event.createdAt,
+    urls,
+    dedupeKey
+  };
+}
+
+function getCompactProcessedEventKind(
+  event: TaskThreadEvent,
+  text: string,
+  urls: string[]
+): CompactProcessedGroupKind {
+  if (urls.length > 0 || isWebSearchTranscript(text)) {
+    return "web";
+  }
+
+  if (isEditTranscript(text)) {
+    return "edit";
+  }
+
+  if (isProjectSearchTranscript(text)) {
+    return "search";
+  }
+
+  if (event.kind === "file" || isFileReadTranscript(text)) {
+    return "file";
+  }
+
+  if (event.kind === "plan") {
+    return "plan";
+  }
+
+  return "other";
+}
+
+function getCompactProcessedDetailSource(event: TaskThreadEvent, actionLabel: string): string {
+  const message = event.message.trim();
+
+  if (message && actionLabel && message.includes(actionLabel)) {
+    return message;
+  }
+
+  if (actionLabel && message) {
+    return `${actionLabel}: ${message}`;
+  }
+
+  return actionLabel || message || event.id;
+}
+
+function isWebSearchTranscript(value: string): boolean {
+  return /网页搜索|搜索网页|已搜索网页|web search|searched web|webpage search|browser search/iu.test(value);
+}
+
+function isEditTranscript(value: string): boolean {
+  return /文件修改|文件写入|文件创建|生成文件|已应用文件|正在编辑|已编辑|Edit |Write |Create |generate file change|file change|patch|diff/iu.test(
+    value
+  );
+}
+
+function isProjectSearchTranscript(value: string): boolean {
+  return /项目搜索|文件匹配|Search |grep|rg |glob|Project search|File glob|search-project/iu.test(
+    value
+  );
+}
+
+function isFileReadTranscript(value: string): boolean {
+  return /文件读取|目录列表|Git 状态|Inspect |Read |List |Directory list|File read|Git status|inspect-file|list-directory/iu.test(
+    value
+  );
+}
+
+function getCompactProcessedGroupTitle(kind: CompactProcessedGroupKind, language: Language): string {
+  if (language === "zh-CN") {
+    return {
+      web: "网页搜索",
+      command: "命令",
+      edit: "编辑",
+      search: "项目检索",
+      file: "文件观察",
+      plan: "思考",
+      other: "其他记录"
+    }[kind];
+  }
+
+  return {
+    web: "Web search",
+    command: "Commands",
+    edit: "Edits",
+    search: "Project search",
+    file: "File reads",
+    plan: "Reasoning",
+    other: "Other records"
+  }[kind];
+}
+
+function getCompactProcessedGroupSummary(
+  kind: CompactProcessedGroupKind,
+  count: number,
+  language: Language
+): string {
+  if (language === "zh-CN") {
+    return {
+      web: `已搜索网页 ${count} 次`,
+      command: `已运行 ${count} 条命令`,
+      edit: `已编辑 ${count} 个文件`,
+      search: `已检索 ${count} 次`,
+      file: `已读取 ${count} 项`,
+      plan: `已思考 ${count} 次`,
+      other: `已处理 ${count} 条记录`
+    }[kind];
+  }
+
+  return {
+    web: `searched web ${count} ${count === 1 ? "time" : "times"}`,
+    command: `ran ${count} command${count === 1 ? "" : "s"}`,
+    edit: `edited ${count} file${count === 1 ? "" : "s"}`,
+    search: `searched project ${count} ${count === 1 ? "time" : "times"}`,
+    file: `read ${count} item${count === 1 ? "" : "s"}`,
+    plan: `reasoned ${count} ${count === 1 ? "time" : "times"}`,
+    other: `processed ${count} record${count === 1 ? "" : "s"}`
+  }[kind];
+}
+
+function getCompactProcessedGroupIcon(kind: CompactProcessedGroupKind): typeof Terminal {
+  return {
+    web: Globe,
+    command: Terminal,
+    edit: FilePenLine,
+    search: Search,
+    file: FileSearch,
+    plan: Brain,
+    other: ListChecks
+  }[kind];
+}
+
+function compactProcessedDetail(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").slice(0, 260);
+}
+
+function extractSourceUrlsFromEvents(events: TaskThreadEvent[]): string[] {
+  return mergeUniqueStrings(events.flatMap((event) => extractSourceUrls(event.message)));
+}
+
+function extractSourceUrls(value: string): string[] {
+  const matches = value.match(/https?:\/\/[^\s<>)\]]+/giu) ?? [];
+
+  return mergeUniqueStrings(matches.map((url) => url.replace(/[.,;:，。；：]+$/u, "")));
+}
+
+function mergeUniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function formatSourceUrlLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname === "/" ? "" : parsed.pathname;
+    const label = `${parsed.hostname}${path}`;
+
+    return label.length > 76 ? `${label.slice(0, 73)}...` : label;
+  } catch {
+    return url.length > 76 ? `${url.slice(0, 73)}...` : url;
+  }
 }
 
 function getCompactProcessedLivePreview(
