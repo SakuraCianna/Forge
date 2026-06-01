@@ -26,6 +26,7 @@ import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
   ProjectFileGlobResult,
+  ProjectFilePreview,
   ProjectTextFile,
   ProjectTextSearchResult
 } from "../shared/fileTypes.js";
@@ -148,6 +149,11 @@ contextBridge.exposeInMainWorld("forge", {
       relativePath: string;
       maxBytes?: number;
     }): Promise<ProjectTextFile> => ipcRenderer.invoke(fileChannels.readText, request),
+    preview: (request: {
+      projectRoot: string;
+      relativePath: string;
+      maxBytes?: number;
+    }): Promise<ProjectFilePreview> => ipcRenderer.invoke(fileChannels.preview, request),
     listDirectory: (request: {
       projectRoot: string;
       relativePath?: string;

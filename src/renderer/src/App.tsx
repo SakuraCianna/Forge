@@ -1,11 +1,12 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
-import { Suspense, useEffect, useRef, useState } from "react";
-import type { ProjectFileChangePreview, ProjectTextFile } from "@shared/fileTypes";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, File as FileIcon, Folder } from "lucide-react";
+import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { AgentProfileContext } from "@shared/agentTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
-import type { ProjectScanResult } from "@shared/projectTypes";
+import type { ProjectFile, ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
@@ -197,6 +198,109 @@ function selectInitialProjectFromPreferences(
 }
 
 // 根组件集中持有持久化状态和跨视图动作, 子组件只接收明确回调
+type ProjectFileTreeNode =
+  | {
+      children: ProjectFileTreeNode[];
+      kind: "directory";
+      name: string;
+      relativePath: string;
+    }
+  | {
+      kind: "file";
+      name: string;
+      relativePath: string;
+      size: number;
+    };
+
+function buildProjectFileTree(files: ProjectFile[]): ProjectFileTreeNode[] {
+  const rootNodes: ProjectFileTreeNode[] = [];
+
+  for (const file of files) {
+    const parts = file.relativePath.split("/").filter(Boolean);
+
+    if (parts.length === 0) {
+      continue;
+    }
+
+    let currentNodes = rootNodes;
+    let currentPath = "";
+
+    for (const [index, part] of parts.entries()) {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+      if (index === parts.length - 1) {
+        if (!currentNodes.some((node) => node.kind === "file" && node.relativePath === file.relativePath)) {
+          currentNodes.push({
+            kind: "file",
+            name: part,
+            relativePath: file.relativePath,
+            size: file.size
+          });
+        }
+
+        continue;
+      }
+
+      let directoryNode = currentNodes.find(
+        (node): node is Extract<ProjectFileTreeNode, { kind: "directory" }> =>
+          node.kind === "directory" && node.relativePath === currentPath
+      );
+
+      if (!directoryNode) {
+        directoryNode = {
+          children: [],
+          kind: "directory",
+          name: part,
+          relativePath: currentPath
+        };
+        currentNodes.push(directoryNode);
+      }
+
+      currentNodes = directoryNode.children;
+    }
+  }
+
+  return sortProjectFileTreeNodes(rootNodes);
+}
+
+function sortProjectFileTreeNodes(nodes: ProjectFileTreeNode[]): ProjectFileTreeNode[] {
+  return nodes
+    .map((node) =>
+      node.kind === "directory"
+        ? {
+            ...node,
+            children: sortProjectFileTreeNodes(node.children)
+          }
+        : node
+    )
+    .sort((left, right) => {
+      if (left.kind !== right.kind) {
+        return left.kind === "directory" ? -1 : 1;
+      }
+
+      return left.name.localeCompare(right.name);
+    });
+}
+
+function getProjectFileParentPaths(relativePath: string): string[] {
+  const parts = relativePath.split("/").filter(Boolean);
+  const parentPaths: string[] = [];
+
+  for (let index = 1; index < parts.length; index += 1) {
+    parentPaths.push(parts.slice(0, index).join("/"));
+  }
+
+  return parentPaths;
+}
+
+function createTextFilePreview(file: ProjectTextFile): ProjectFilePreview {
+  return {
+    ...file,
+    kind: "text",
+    mediaType: "text/plain; charset=utf-8"
+  };
+}
+
 export function App(): ReactElement {
   const [settings, setSettings] = useState(() => {
     if (typeof window === "undefined") {
@@ -221,6 +325,8 @@ export function App(): ReactElement {
   );
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
+  const [filePreview, setFilePreview] = useState<ProjectFilePreview | null>(null);
+  const [expandedFileTreeFolders, setExpandedFileTreeFolders] = useState<string[]>([]);
   const [fileFormatterMode, setFileFormatterMode] = useState<CodeFormatterMode>("raw");
   const [formattedPreview, setFormattedPreview] = useState<CodeFormatResult | null>(null);
   const [missingProjectPath, setMissingProjectPath] = useState<string | null>(null);
@@ -311,6 +417,14 @@ export function App(): ReactElement {
   const activeHeroPrompts = createHeroPromptSuggestions(heroSuggestionInput);
   const activeHeroPrompt =
     activeHeroPrompts[heroPromptIndex % activeHeroPrompts.length] ?? activeHeroPrompts[0];
+  const projectFileTree = useMemo(
+    () => buildProjectFileTree(projectScanResult?.files ?? []),
+    [projectScanResult?.files]
+  );
+  const expandedFileTreeFolderSet = useMemo(
+    () => new Set(expandedFileTreeFolders),
+    [expandedFileTreeFolders]
+  );
   const heroComposerPlaceholder = createHeroComposerPlaceholder(
     heroSuggestionInput,
     t("composer.heroPlaceholder")
@@ -597,6 +711,8 @@ export function App(): ReactElement {
     if (!currentProject) {
       setProjectScanResult(null);
       setPreviewFile(null);
+      setFilePreview(null);
+      setExpandedFileTreeFolders([]);
       setFormattedPreview(null);
       setMissingProjectPath(null);
       setChangePreviews([]);
@@ -977,6 +1093,8 @@ export function App(): ReactElement {
       const result = await window.forge.projects.scan(projectPath);
       setProjectScanResult(result);
       setPreviewFile(null);
+      setFilePreview(null);
+      setExpandedFileTreeFolders([]);
       setFormattedPreview(null);
       setMissingProjectPath(null);
       setChangePreviews([]);
@@ -984,6 +1102,8 @@ export function App(): ReactElement {
     } catch (error) {
       setProjectScanResult(null);
       setPreviewFile(null);
+      setFilePreview(null);
+      setExpandedFileTreeFolders([]);
       setFormattedPreview(null);
       setChangePreviews([]);
       setGitStatus(null);
@@ -1112,10 +1232,29 @@ export function App(): ReactElement {
       return null;
     }
 
-    const file = await window.forge.files.readText({
+    setExpandedFileTreeFolders((current) => [
+      ...new Set([...current, ...getProjectFileParentPaths(relativePath)])
+    ]);
+
+    const projectFilePreview = await window.forge.files.preview({
       projectRoot: currentProject.path,
       relativePath
     });
+    setFilePreview(projectFilePreview);
+
+    if (projectFilePreview.kind !== "text") {
+      setPreviewFile(null);
+      setFormattedPreview(null);
+      setFileFormatterMode("raw");
+      return null;
+    }
+
+    const file: ProjectTextFile = {
+      relativePath: projectFilePreview.relativePath,
+      content: projectFilePreview.content,
+      size: projectFilePreview.size
+    };
+
     setPreviewFile(file);
     setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
 
@@ -1152,6 +1291,7 @@ export function App(): ReactElement {
       nextContent
     });
     setPreviewFile(file);
+    setFilePreview(createTextFilePreview(file));
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
     void refreshProjectGitStatus();
 
@@ -1239,6 +1379,7 @@ export function App(): ReactElement {
 
     if (nextPreviewFile) {
       setPreviewFile(nextPreviewFile);
+      setFilePreview(createTextFilePreview(nextPreviewFile));
     }
 
     setChangePreviews([]);
@@ -1423,6 +1564,7 @@ export function App(): ReactElement {
         });
 
         setPreviewFile(writtenFile);
+        setFilePreview(createTextFilePreview(writtenFile));
         setChangePreviews((current) => removeFileChangePreview(current, sourcedPreview.relativePath));
         void refreshProjectGitStatus();
         setThreads((current) =>
@@ -2949,6 +3091,7 @@ export function App(): ReactElement {
       }
 
       setPreviewFile(file);
+      setFilePreview(createTextFilePreview(file));
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
       const threadFullAccessMode = getThreadFullAccessMode(threadId);
 
@@ -3035,6 +3178,7 @@ export function App(): ReactElement {
         const createdAt = new Date().toISOString();
 
         setPreviewFile(file);
+        setFilePreview(createTextFilePreview(file));
         setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
         updateAgentActionStatus(threadId, action.id, "completed");
         setThreads((current) =>
@@ -3342,16 +3486,87 @@ export function App(): ReactElement {
   }
 
   // 渲染项目文件阅读页, 只有一种格式化模式时禁用下拉
+  function toggleFileTreeFolder(relativePath: string): void {
+    setExpandedFileTreeFolders((current) =>
+      current.includes(relativePath)
+        ? current.filter((path) => path !== relativePath)
+        : [...current, relativePath]
+    );
+  }
+
+  function renderFileTreeNodes(nodes: ProjectFileTreeNode[], depth = 0): ReactElement[] {
+    return nodes.flatMap((node) => {
+      const paddingLeft = 8 + depth * 14;
+
+      if (node.kind === "directory") {
+        const expanded = expandedFileTreeFolderSet.has(node.relativePath);
+
+        return [
+          <button
+            key={node.relativePath}
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => toggleFileTreeFolder(node.relativePath)}
+            className="flex w-full items-center gap-1.5 rounded-[10px] py-1.5 pr-2 text-left text-[12px] text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+            style={{ paddingLeft }}
+            title={node.relativePath}
+          >
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+            )}
+            <Folder className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 truncate">{node.name}</span>
+          </button>,
+          ...(expanded ? renderFileTreeNodes(node.children, depth + 1) : [])
+        ];
+      }
+
+      const selected = filePreview?.relativePath === node.relativePath;
+
+      return [
+        <button
+          key={node.relativePath}
+          type="button"
+          onClick={() => void previewProjectFile(node.relativePath)}
+          className={`flex w-full items-center gap-1.5 rounded-[10px] py-1.5 pr-2 text-left text-[12px] ${
+            selected
+              ? "bg-[#ececf1] text-[#202123]"
+              : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
+          }`}
+          style={{ paddingLeft }}
+          title={node.relativePath}
+        >
+          <span className="h-3.5 w-3.5 shrink-0" />
+          <FileIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 truncate">{node.name}</span>
+        </button>
+      ];
+    });
+  }
+
   function renderFilesView(): ReactElement {
-    const previewContent = formattedPreview?.content ?? previewFile?.content ?? "";
+    const activeFilePreview = filePreview ?? (previewFile ? createTextFilePreview(previewFile) : null);
+    const activeTextPreview = activeFilePreview?.kind === "text" ? activeFilePreview : null;
+    const previewContent = activeTextPreview ? (formattedPreview?.content ?? activeTextPreview.content) : "";
     const formatterMessage =
       fileFormatterMode === "rendered"
         ? settings.language === "zh-CN"
           ? "Markdown 渲染预览"
           : "Rendered Markdown preview"
         : formatPreviewStatus(formattedPreview, settings.language);
-    const formatterOptions: Array<{ value: CodeFormatterMode; label: string }> = previewFile
-      ? getAvailableCodeFormatterModes(previewFile.relativePath).map((mode) => ({
+    const previewStatusMessage = activeFilePreview
+      ? activeFilePreview.kind === "text"
+        ? formatterMessage
+        : activeFilePreview.kind === "office"
+          ? settings.language === "zh-CN"
+            ? "文档文件"
+            : "Document file"
+          : activeFilePreview.mediaType
+      : "";
+    const formatterOptions: Array<{ value: CodeFormatterMode; label: string }> = activeTextPreview
+      ? getAvailableCodeFormatterModes(activeTextPreview.relativePath).map((mode) => ({
           value: mode,
           label:
             mode === "prettier"
@@ -3372,31 +3587,22 @@ export function App(): ReactElement {
         ) : (
           <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
             <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
-              {(projectScanResult?.files ?? []).map((file) => (
-                <button
-                  key={file.relativePath}
-                  type="button"
-                  onClick={() => void previewProjectFile(file.relativePath)}
-                  className={`block w-full truncate rounded-[12px] px-3 py-2 text-left text-[12px] ${
-                    previewFile?.relativePath === file.relativePath
-                      ? "bg-[#ececf1] text-[#202123]"
-                      : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
-                  }`}
-                >
-                  {file.relativePath}
-                </button>
-              ))}
+              {projectFileTree.length > 0 ? (
+                <div className="space-y-0.5">{renderFileTreeNodes(projectFileTree)}</div>
+              ) : (
+                <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">{t("files.pickFile")}</div>
+              )}
             </div>
             <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-4">
-              {previewFile ? (
+              {activeFilePreview ? (
                 <>
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <span className="min-w-0">
                       <span className="block truncate text-[14px] font-semibold text-[#202123]">
-                        {previewFile.relativePath}
+                        {activeFilePreview.relativePath}
                       </span>
                       <span className="mt-1 block truncate text-[12px] text-[#8e8ea0]">
-                        {formatterMessage}
+                        {previewStatusMessage}
                       </span>
                     </span>
                     {formatterOptions.length > 0 ? (
@@ -3422,8 +3628,9 @@ export function App(): ReactElement {
                   <Suspense fallback={<LazyPanelFallback language={settings.language} compact />}>
                     <LazyFilePreviewRenderer
                       content={previewContent}
+                      filePreview={activeFilePreview}
                       mode={fileFormatterMode}
-                      path={previewFile.relativePath}
+                      path={activeFilePreview.relativePath}
                     />
                   </Suspense>
                 </>

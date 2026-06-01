@@ -6,9 +6,11 @@ import lightPlusTheme from "shiki/themes/light-plus.mjs";
 import type { HighlighterCore, LanguageInput } from "shiki/core";
 import type { ReactElement, ReactNode } from "react";
 import type { CodeFormatterMode } from "@/state/codeFormatting";
+import type { ProjectFilePreview } from "@shared/fileTypes";
 
 type FilePreviewRendererProps = {
   content: string;
+  filePreview?: ProjectFilePreview | null;
   mode: CodeFormatterMode;
   path: string;
 };
@@ -39,14 +41,96 @@ let shikiHighlighterPromise: Promise<HighlighterCore> | null = null;
 // 根据预览模式选择 Markdown 渲染或代码渲染
 export function FilePreviewRenderer({
   content,
+  filePreview,
   mode,
   path
 }: FilePreviewRendererProps): ReactElement {
+  if (filePreview && filePreview.kind !== "text") {
+    return <InlineFilePreview preview={filePreview} />;
+  }
+
   if (mode === "rendered" && isMarkdownPath(path)) {
     return <MarkdownPreview content={content} />;
   }
 
   return <CodePreview content={content} path={path} />;
+}
+
+function InlineFilePreview({ preview }: { preview: Exclude<ProjectFilePreview, { kind: "text" }> }): ReactElement {
+  if (preview.kind === "image") {
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center overflow-auto rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-4">
+        <img
+          alt={preview.relativePath}
+          src={preview.dataUrl}
+          className="max-h-full max-w-full rounded-[10px] object-contain shadow-sm"
+        />
+      </div>
+    );
+  }
+
+  if (preview.kind === "pdf") {
+    return (
+      <iframe
+        title={preview.relativePath}
+        src={preview.dataUrl}
+        className="h-full min-h-0 w-full rounded-[14px] border border-[#ececf1] bg-white"
+      />
+    );
+  }
+
+  if (preview.kind === "audio") {
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-6">
+        <div className="w-full max-w-[720px] space-y-3">
+          <audio controls src={preview.dataUrl} className="w-full" />
+          <FileMetaLine preview={preview} />
+        </div>
+      </div>
+    );
+  }
+
+  if (preview.kind === "video") {
+    return (
+      <div className="flex h-full min-h-0 items-center justify-center overflow-hidden rounded-[14px] border border-[#ececf1] bg-[#111827] p-4">
+        <video controls src={preview.dataUrl} className="max-h-full max-w-full rounded-[10px]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 items-center justify-center rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] p-6 text-center">
+      <div className="max-w-[520px] space-y-3">
+        <p className="text-[15px] font-semibold text-[#202123]">
+          {preview.kind === "office" ? "文档预览暂不可用" : "暂不支持预览"}
+        </p>
+        <p className="break-all text-[12px] leading-6 text-[#6e6e80]">
+          {preview.relativePath}
+        </p>
+        <FileMetaLine preview={preview} />
+      </div>
+    </div>
+  );
+}
+
+function FileMetaLine({ preview }: { preview: Exclude<ProjectFilePreview, { kind: "text" }> }): ReactElement {
+  return (
+    <p className="text-[12px] text-[#8e8ea0]">
+      {preview.mediaType} · {formatFileSize(preview.size)}
+    </p>
+  );
+}
+
+function formatFileSize(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
 // 渲染简化 Markdown, 对话输出和文件预览共用

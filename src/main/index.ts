@@ -25,6 +25,7 @@ import { registerProjectFileHandlers } from "./projectFileIpc.js";
 import {
   globProjectFiles,
   listProjectDirectory,
+  previewProjectFile,
   previewProjectTextFileUpdate,
   readProjectTextFile,
   searchProjectTextFiles,
@@ -203,6 +204,7 @@ void app.whenReady().then(() => {
 
   registerProjectFileHandlers(
     (request) => readProjectTextFile(request),
+    (request) => previewProjectFile(request),
     (request) => previewProjectTextFileUpdate(request),
     (request) => writeProjectTextFile(request),
     (request) => listProjectDirectory(request),

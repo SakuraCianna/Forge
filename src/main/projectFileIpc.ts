@@ -6,6 +6,7 @@ import type {
   ProjectFileChangePreview,
   ProjectFileGlobRequest,
   ProjectFileGlobResult,
+  ProjectFilePreview,
   ProjectTextFile,
   ProjectTextSearchRequest,
   ProjectTextSearchResult
@@ -22,6 +23,8 @@ type UpdateProjectTextFileRequest = ReadProjectTextFileRequest & {
 };
 
 type ReadProjectTextFile = (request: ReadProjectTextFileRequest) => Promise<ProjectTextFile>;
+
+type PreviewProjectFile = (request: ReadProjectTextFileRequest) => Promise<ProjectFilePreview>;
 
 type ListProjectDirectory = (
   request: ProjectDirectoryListRequest
@@ -50,6 +53,7 @@ export { fileChannels };
 // 暴露读取, 预览修改和写入文本文件的受控入口
 export function registerProjectFileHandlers(
   readProjectTextFile: ReadProjectTextFile,
+  previewProjectFile: PreviewProjectFile,
   previewProjectTextFileUpdate: PreviewProjectTextFileUpdate,
   writeProjectTextFile: WriteProjectTextFile,
   listProjectDirectory: ListProjectDirectory,
@@ -59,6 +63,10 @@ export function registerProjectFileHandlers(
 ): void {
   registerHandler(fileChannels.readText, async (_event, request) =>
     readProjectTextFile(assertReadRequest(request))
+  );
+
+  registerHandler(fileChannels.preview, async (_event, request) =>
+    previewProjectFile(assertReadRequest(request))
   );
 
   registerHandler(fileChannels.listDirectory, async (_event, request) =>

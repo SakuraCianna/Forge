@@ -17,6 +17,7 @@ import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
   ProjectFileGlobResult,
+  ProjectFilePreview,
   ProjectTextFile,
   ProjectTextSearchResult
 } from "@shared/fileTypes";
@@ -112,6 +113,11 @@ declare global {
           relativePath: string;
           maxBytes?: number;
         }) => Promise<ProjectTextFile>;
+        preview: (request: {
+          projectRoot: string;
+          relativePath: string;
+          maxBytes?: number;
+        }) => Promise<ProjectFilePreview>;
         listDirectory: (request: {
           projectRoot: string;
           relativePath?: string;
