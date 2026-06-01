@@ -129,6 +129,7 @@ type CompactProcessedGroupKind =
   | "edit"
   | "search"
   | "file"
+  | "error"
   | "plan"
   | "other";
 
@@ -232,12 +233,18 @@ export function ThreadWorkspace({
   const [compactProcessedExpanded, setCompactProcessedExpanded] = useState(
     defaultExpandProcessedSummary
   );
+  const [compactProcessedGroupExpanded, setCompactProcessedGroupExpanded] = useState<
+    Record<string, boolean>
+  >({});
   const commandSafetyPolicy = useMemo<AgentCommandSafetyPolicy>(
     () => ({ fullAccess, rules: commandSafetyRules }),
     [commandSafetyRules, fullAccess]
   );
   const selectedThread =
     threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
+  const selectedThreadIsLive =
+    selectedThread?.status === "running" || selectedThread?.status === "planned";
+  const [liveNow, setLiveNow] = useState(() => Date.now());
   const allChangePreviews = changePreviews ?? (changePreview ? [changePreview] : []);
   const visibleChangePreview = previewFile
     ? (allChangePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ??
@@ -261,9 +268,9 @@ export function ThreadWorkspace({
   const compactProcessedSummary = useMemo(
     () =>
       showProcessedSummary && selectedThread
-        ? getCompactProcessedSummary(selectedThread, visibleCompactEvents, language)
+        ? getCompactProcessedSummary(selectedThread, visibleCompactEvents, language, liveNow)
         : null,
-    [language, selectedThread, showProcessedSummary, visibleCompactEvents.length]
+    [language, liveNow, selectedThread, showProcessedSummary, visibleCompactEvents.length]
   );
   const duration = useMemo(() => {
     if (!selectedThread) {
@@ -276,9 +283,9 @@ export function ThreadWorkspace({
       return "0m";
     }
 
-    const minutes = Math.max(0, Math.round((Date.now() - started) / 60000));
+    const minutes = Math.max(0, Math.round((liveNow - started) / 60000));
     return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-  }, [selectedThread]);
+  }, [liveNow, selectedThread]);
 
   useEffect(() => {
     setDraftContent(visibleChangePreview?.nextContent ?? previewFile?.content ?? "");
@@ -292,7 +299,19 @@ export function ThreadWorkspace({
 
   useEffect(() => {
     setCompactProcessedExpanded(defaultExpandProcessedSummary);
+    setCompactProcessedGroupExpanded({});
   }, [defaultExpandProcessedSummary, selectedThread?.id]);
+
+  useEffect(() => {
+    if (!selectedThreadIsLive) {
+      return undefined;
+    }
+
+    setLiveNow(Date.now());
+    const timer = window.setInterval(() => setLiveNow(Date.now()), 1000);
+
+    return () => window.clearInterval(timer);
+  }, [selectedThread?.id, selectedThreadIsLive]);
 
   // 从命令输入区创建运行请求, 交给主流程负责真实执行
   function submitCommand(): void {
@@ -1130,9 +1149,26 @@ export function ThreadWorkspace({
   function renderCompactProcessedGroup(group: CompactProcessedGroup): ReactElement {
     const Icon = getCompactProcessedGroupIcon(group.kind);
     const visibleItems = group.items.slice(-12);
+    const groupExpanded = compactProcessedGroupExpanded[group.kind] ?? true;
 
     return (
-      <details key={group.kind} className="group rounded-[12px] bg-[#f7f7f8] p-2">
+      <details
+        key={group.kind}
+        className="group rounded-[12px] bg-[#f7f7f8] p-2"
+        open={groupExpanded}
+        onToggle={(event) => {
+          const nextExpanded = event.currentTarget.open;
+
+          setCompactProcessedGroupExpanded((current) =>
+            current[group.kind] === nextExpanded
+              ? current
+              : {
+                  ...current,
+                  [group.kind]: nextExpanded
+                }
+          );
+        }}
+      >
         <summary className="flex cursor-pointer list-none items-center gap-2 text-[#565869] [&::-webkit-details-marker]:hidden">
           <Icon className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate font-medium">{group.label}</span>
@@ -3744,18 +3780,23 @@ function getThreadActivitySummary(
 function getCompactProcessedSummary(
   thread: TaskThread,
   visibleEvents: TaskThreadEvent[],
-  language: Language
+  language: Language,
+  now: number
 ): CompactProcessedSummary | null {
   const visibleEventIds = new Set(visibleEvents.map((event) => event.id));
   const hiddenEvents = thread.events.filter((event) => !visibleEventIds.has(event.id));
 
-  if (hiddenEvents.length === 0) {
+  if (
+    hiddenEvents.length === 0 &&
+    thread.status !== "running" &&
+    thread.status !== "planned"
+  ) {
     return null;
   }
 
   return {
     label: language === "zh-CN" ? "已处理" : "Processed",
-    duration: formatCompactProcessedDuration(thread),
+    duration: formatCompactProcessedDuration(thread, now),
     hiddenEvents,
     groups: buildCompactProcessedGroups(hiddenEvents, language),
     sourceUrls: extractSourceUrlsFromEvents(hiddenEvents),
@@ -3797,6 +3838,7 @@ function buildCompactProcessedGroups(
     "edit",
     "search",
     "file",
+    "error",
     "plan",
     "other"
   ];
@@ -3865,6 +3907,10 @@ function getCompactProcessedEventKind(
   text: string,
   urls: string[]
 ): CompactProcessedGroupKind {
+  if (event.kind === "error") {
+    return "error";
+  }
+
   if (urls.length > 0 || isWebSearchTranscript(text)) {
     return "web";
   }
@@ -3932,6 +3978,7 @@ function getCompactProcessedGroupTitle(kind: CompactProcessedGroupKind, language
       edit: "编辑",
       search: "项目检索",
       file: "文件观察",
+      error: "需要恢复",
       plan: "思考",
       other: "其他记录"
     }[kind];
@@ -3943,6 +3990,7 @@ function getCompactProcessedGroupTitle(kind: CompactProcessedGroupKind, language
     edit: "Edits",
     search: "Project search",
     file: "File reads",
+    error: "Needs recovery",
     plan: "Reasoning",
     other: "Other records"
   }[kind];
@@ -3960,6 +4008,7 @@ function getCompactProcessedGroupSummary(
       edit: `已编辑 ${count} 个文件`,
       search: `已检索 ${count} 次`,
       file: `已读取 ${count} 项`,
+      error: `需要恢复 ${count} 条`,
       plan: `已思考 ${count} 次`,
       other: `已处理 ${count} 条记录`
     }[kind];
@@ -3971,6 +4020,7 @@ function getCompactProcessedGroupSummary(
     edit: `edited ${count} file${count === 1 ? "" : "s"}`,
     search: `searched project ${count} ${count === 1 ? "time" : "times"}`,
     file: `read ${count} item${count === 1 ? "" : "s"}`,
+    error: `needs recovery ${count}`,
     plan: `reasoned ${count} ${count === 1 ? "time" : "times"}`,
     other: `processed ${count} record${count === 1 ? "" : "s"}`
   }[kind];
@@ -3983,6 +4033,7 @@ function getCompactProcessedGroupIcon(kind: CompactProcessedGroupKind): typeof T
     edit: FilePenLine,
     search: Search,
     file: FileSearch,
+    error: Wrench,
     plan: Brain,
     other: ListChecks
   }[kind];
@@ -4038,12 +4089,12 @@ function getCompactProcessedLivePreview(
 }
 
 // 计算已处理摘要的耗时, 运行中的线程使用当前时间保证用户看到持续反馈
-function formatCompactProcessedDuration(thread: TaskThread): string {
+function formatCompactProcessedDuration(thread: TaskThread, now: number): string {
   const startedAt = Date.parse(thread.events[0]?.createdAt ?? thread.createdAt);
   const lastEvent = thread.events.at(-1);
   const finishedAt =
     thread.status === "running" || thread.status === "planned"
-      ? Date.now()
+      ? now
       : Date.parse(lastEvent?.completedAt ?? lastEvent?.createdAt ?? thread.createdAt);
 
   if (Number.isNaN(startedAt) || Number.isNaN(finishedAt)) {
