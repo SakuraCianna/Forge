@@ -1623,18 +1623,31 @@ export function App(): ReactElement {
 
       setThreads((current) => attachThreadMemoryContext(current, threadId, memories));
       activePlanStreamRequestIdsRef.current.set(threadId, streamEventId);
+      setThreads((current) =>
+        appendThreadPlanDelta(current, threadId, {
+          eventId: streamEventId,
+          createdAt: streamStartedAt,
+          delta:
+            settings.language === "zh-CN"
+              ? "Forge 正在准备执行计划..."
+              : "Forge is preparing an execution plan...",
+          done: false
+        })
+      );
       unsubscribeStream = window.forge.agent.onPlanStreamChunk((chunk) => {
         if (chunk.requestId !== streamEventId || chunk.type !== "delta") {
           return;
         }
 
+        const replacePlaceholder = !receivedDelta;
         receivedDelta = true;
         setThreads((current) =>
           appendThreadPlanDelta(current, threadId, {
             eventId: streamEventId,
             createdAt: streamStartedAt,
             delta: chunk.delta,
-            done: false
+            done: false,
+            replace: replacePlaceholder
           })
         );
       });

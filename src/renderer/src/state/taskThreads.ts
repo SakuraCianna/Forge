@@ -232,6 +232,7 @@ export function appendThreadResultDelta(
     delta: string;
     done: boolean;
     finalText?: string;
+    replace?: boolean;
   }
 ): TaskThread[] {
   return threads.map((thread) => {
@@ -245,7 +246,8 @@ export function appendThreadResultDelta(
           event.id === delta.eventId
             ? {
                 ...event,
-                message: delta.finalText ?? `${event.message}${delta.delta}`,
+                message:
+                  delta.finalText ?? (delta.replace ? delta.delta : `${event.message}${delta.delta}`),
                 completedAt: delta.completedAt ?? event.completedAt
               }
             : event
@@ -280,6 +282,7 @@ export function appendThreadPlanDelta(
     delta: string;
     done: boolean;
     finalText?: string;
+    replace?: boolean;
   }
 ): TaskThread[] {
   return threads.map((thread) => {
@@ -293,7 +296,8 @@ export function appendThreadPlanDelta(
           event.id === delta.eventId
             ? {
                 ...event,
-                message: delta.finalText ?? `${event.message}${delta.delta}`,
+                message:
+                  delta.finalText ?? (delta.replace ? delta.delta : `${event.message}${delta.delta}`),
                 completedAt: delta.completedAt ?? event.completedAt
               }
             : event
