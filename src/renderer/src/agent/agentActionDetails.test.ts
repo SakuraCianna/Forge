@@ -5,6 +5,7 @@ import {
   formatAgentActionContextForClipboard,
   formatAgentActionRunForClipboard,
   formatAgentActionRunStatus,
+  formatCommandOutputSnippet,
   formatCommandResultForClipboard,
   formatFailureRecoveryAttemptForClipboard
 } from "./agentActionDetails";
@@ -100,5 +101,15 @@ describe("agent action details", () => {
         timedOut: false
       })
     ).toContain("stderr:\nfailed");
+  });
+
+  it("truncates long command output with context from both ends", () => {
+    const output = `${"a".repeat(500)}\n${"b".repeat(500)}`;
+    const snippet = formatCommandOutputSnippet(output);
+
+    expect(snippet.length).toBeLessThan(output.length);
+    expect(snippet).toContain("output truncated");
+    expect(snippet.startsWith("a")).toBe(true);
+    expect(snippet.endsWith("b")).toBe(true);
   });
 });

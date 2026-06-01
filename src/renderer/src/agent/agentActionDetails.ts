@@ -151,3 +151,18 @@ export function formatCommandResultForClipboard(result: CommandRunResult): strin
 
   return [metadata.join("\n"), outputSections.join("\n\n")].filter(Boolean).join("\n\n");
 }
+
+export function formatCommandOutputSnippet(value: string): string {
+  const trimmed = value.trim();
+  const maxLength = 900;
+
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+
+  const omittedMarker = "\n... output truncated, middle omitted ...\n";
+  const headLength = 360;
+  const tailLength = maxLength - omittedMarker.length - headLength;
+
+  return `${trimmed.slice(0, headLength)}${omittedMarker}${trimmed.slice(-tailLength)}`;
+}

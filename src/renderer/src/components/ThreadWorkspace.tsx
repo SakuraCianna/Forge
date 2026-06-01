@@ -49,16 +49,10 @@ import {
   type AgentConfirmationItemKind
 } from "@/agent/agentConfirmationQueue";
 import {
-  formatActionDuration,
-  formatActionTimestamp,
-  formatAgentActionContextForClipboard,
-  formatAgentActionRunStatus,
+  formatCommandOutputSnippet,
   formatCommandResultForClipboard
 } from "@/agent/agentActionDetails";
-import {
-  getFailureRecoveryAttemptsForAction,
-  type FailureRecoveryAttemptView
-} from "@/agent/failureRecoveryAttempts";
+import { getFailureRecoveryAttemptsForAction } from "@/agent/failureRecoveryAttempts";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
@@ -67,6 +61,7 @@ import type {
   TaskThread,
   TaskThreadEvent
 } from "@/state/taskThreads";
+import { AgentActionDetailsPanel } from "./AgentActionDetailsPanel";
 import { MarkdownPreview } from "./FilePreviewRenderer";
 import { Tooltip } from "./Tooltip";
 
@@ -2138,29 +2133,13 @@ export function ThreadWorkspace({
       return controls.length > 0 ? <div className="mt-3 flex flex-wrap gap-2">{controls}</div> : null;
     }
 
-    function formatFailureRecoveryAttemptSource(attempt: FailureRecoveryAttemptView): string {
-      return attempt.source === "auto"
-        ? actionDetailsCopy.autoRecovery
-        : actionDetailsCopy.manualRecovery;
-    }
-
-    function formatFailureRecoveryAttemptProgress(attempt: FailureRecoveryAttemptView): string {
-      if (attempt.attempt === undefined) {
-        return attempt.source === "auto"
-          ? actionDetailsCopy.autoRecovery
-          : actionDetailsCopy.manualRecovery;
-      }
-
-      return actionDetailsCopy.recoveryAttempt(attempt.attempt, attempt.limit);
-    }
-
     // 展示单个动作的输入, 输出和恢复入口
     function renderAgentActionDetails(
       action: AgentAction,
       commandResult: CommandRunResult | null,
       toolResult: TaskThreadEvent | null,
       actionRunEvent: TaskThreadEvent | null,
-      recoveryAttempts: FailureRecoveryAttemptView[]
+      recoveryAttempts: ReturnType<typeof getFailureRecoveryAttemptsForAction>
     ): ReactElement {
       const detailRows = [
         { label: actionDetailsCopy.kind, value: action.kind },
@@ -2172,186 +2151,20 @@ export function ThreadWorkspace({
       const nextStep = getActionNextStep(action);
 
       return (
-        <section
-          aria-label={actionDetailsCopy.title}
-          className="rounded-[18px] border border-[#ececf1] bg-white p-4"
-        >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#202123]">
-              <Layers className="h-4 w-4 text-[#565869]" />
-              {actionDetailsCopy.title}
-            </h2>
-            <Tooltip label={actionDetailsCopy.copyContext}>
-              <button
-                type="button"
-                aria-label={actionDetailsCopy.copyContext}
-                onClick={() =>
-                  void navigator.clipboard?.writeText(
-                    formatAgentActionContextForClipboard(
-                      action,
-                      actionStatusLabel,
-                      nextStep,
-                      commandResult,
-                      toolResult,
-                      actionRunEvent?.agentActionRun ?? null,
-                      recoveryAttempts
-                    )
-                  )
-                }
-                className="inline-flex h-7 w-7 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#6e6e80] transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.99]"
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-            </Tooltip>
-          </div>
-          <p className="text-sm font-medium leading-5 text-[#202123]">{action.label}</p>
-          <dl className="mt-3 grid gap-2">
-            {detailRows.map((row) => (
-              <div
-                key={row.label}
-                className="grid grid-cols-[72px_minmax(0,1fr)] gap-2 rounded-[12px] bg-[#fafafa] px-2.5 py-2 text-xs"
-              >
-                <dt className="text-[#8e8ea0]">{row.label}</dt>
-                <dd className="min-w-0 break-words font-medium text-[#202123]">{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="mt-3 rounded-[14px] border border-[#ececf1] bg-[#f7f7f8] px-3 py-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-              {actionDetailsCopy.nextStep}
-            </div>
-            <p className="mt-1 text-sm leading-5 text-[#202123]">{nextStep}</p>
-          </div>
-          {renderAgentActionDetailControls(action)}
-          {recoveryAttempts.length > 0 ? (
-            <div className="mt-3 border-t border-[#ececf1] pt-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-                {actionDetailsCopy.recoveryHistory}
-              </h3>
-              <div className="mt-2 grid gap-2">
-                {recoveryAttempts.map((attempt, index) => (
-                  <article
-                    key={`${attempt.actionId}-${attempt.source}-${attempt.createdAt ?? index}`}
-                    className="rounded-[12px] bg-[#fafafa] px-2.5 py-2 text-xs"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-semibold text-[#202123]">
-                        {formatFailureRecoveryAttemptSource(attempt)}
-                      </span>
-                      <span className="text-[#8e8ea0]">
-                        {formatFailureRecoveryAttemptProgress(attempt)}
-                      </span>
-                    </div>
-                    {attempt.createdAt ? (
-                      <p className="mt-1 text-[#565869]">
-                        {formatActionTimestamp(attempt.createdAt)}
-                      </p>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {actionRunEvent?.agentActionRun ? (
-            <div className="mt-3 border-t border-[#ececf1] pt-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-                {actionDetailsCopy.executionRecord}
-              </h3>
-              <dl className="mt-2 grid gap-2 text-xs">
-                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.status}</dt>
-                  <dd className="font-medium text-[#202123]">
-                    {formatAgentActionRunStatus(actionRunEvent.agentActionRun.status, language)}
-                  </dd>
-                </div>
-                {actionRunEvent.agentActionRun.startedAt ? (
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.startedAt}</dt>
-                    <dd className="min-w-0 break-words font-medium text-[#202123]">
-                      {formatActionTimestamp(actionRunEvent.agentActionRun.startedAt)}
-                    </dd>
-                  </div>
-                ) : null}
-                {actionRunEvent.agentActionRun.completedAt ? (
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.completedAt}</dt>
-                    <dd className="min-w-0 break-words font-medium text-[#202123]">
-                      {formatActionTimestamp(actionRunEvent.agentActionRun.completedAt)}
-                    </dd>
-                  </div>
-                ) : null}
-                {typeof actionRunEvent.agentActionRun.durationMs === "number" ? (
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.duration}</dt>
-                    <dd className="font-medium text-[#202123]">
-                      {formatActionDuration(actionRunEvent.agentActionRun.durationMs)}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-              <p className="mt-2 rounded-[12px] bg-[#f7f7f8] px-2.5 py-2 text-xs leading-5 text-[#565869]">
-                {actionRunEvent.message}
-              </p>
-            </div>
-          ) : null}
-          {commandResult ? (
-            <div className="mt-3 border-t border-[#ececf1] pt-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-                {actionDetailsCopy.commandOutput}
-              </h3>
-              <dl className="mt-2 grid gap-2 text-xs">
-                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.exitCode}</dt>
-                  <dd className="font-medium text-[#202123]">
-                    {commandResult.exitCode === null ? "null" : commandResult.exitCode}
-                  </dd>
-                </div>
-                <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                  <dt className="text-[#8e8ea0]">{actionDetailsCopy.cwd}</dt>
-                  <dd className="min-w-0 break-words font-medium text-[#202123]">
-                    {commandResult.cwd}
-                  </dd>
-                </div>
-                {commandResult.timedOut ? (
-                  <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-                    <dt className="text-[#8e8ea0]">{actionDetailsCopy.timedOut}</dt>
-                    <dd className="font-medium text-[#9a3412]">true</dd>
-                  </div>
-                ) : null}
-              </dl>
-              {commandResult.stdout.trim() ? (
-                <div className="mt-2">
-                  <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
-                    {actionDetailsCopy.stdout}
-                  </div>
-                  <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#111827] p-2 font-mono text-[11px] leading-4 text-[#f8fafc]">
-                    {formatCommandOutputSnippet(commandResult.stdout)}
-                  </pre>
-                </div>
-              ) : null}
-              {commandResult.stderr.trim() ? (
-                <div className="mt-2">
-                  <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
-                    {actionDetailsCopy.stderr}
-                  </div>
-                  <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-2 font-mono text-[11px] leading-4 text-[#9a3412]">
-                    {formatCommandOutputSnippet(commandResult.stderr)}
-                  </pre>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {toolResult ? (
-            <div className="mt-3 border-t border-[#ececf1] pt-3">
-              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
-                {actionDetailsCopy.toolResult}
-              </h3>
-              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#f7f7f8] p-2 font-mono text-[11px] leading-4 text-[#202123]">
-                {formatCommandOutputSnippet(toolResult.message)}
-              </pre>
-            </div>
-          ) : null}
-        </section>
+        <AgentActionDetailsPanel
+          action={action}
+          actionRun={actionRunEvent?.agentActionRun ?? null}
+          actionRunMessage={actionRunEvent?.message}
+          commandResult={commandResult}
+          controls={renderAgentActionDetailControls(action)}
+          copy={actionDetailsCopy}
+          detailRows={detailRows}
+          language={language}
+          nextStep={nextStep}
+          recoveryAttempts={recoveryAttempts}
+          statusLabel={actionStatusLabel}
+          toolResult={toolResult}
+        />
       );
     }
 
@@ -4591,20 +4404,4 @@ function getAssistantResponseActionCopy(language: Language): {
     like: "Like response",
     dislike: "Dislike response"
   };
-}
-
-// 压缩命令输出片段, 错误恢复提示只需要最后几行
-function formatCommandOutputSnippet(value: string): string {
-  const trimmed = value.trim();
-  const maxLength = 900;
-
-  if (trimmed.length <= maxLength) {
-    return trimmed;
-  }
-
-  const omittedMarker = "\n... output truncated, middle omitted ...\n";
-  const headLength = 360;
-  const tailLength = maxLength - omittedMarker.length - headLength;
-
-  return `${trimmed.slice(0, headLength)}${omittedMarker}${trimmed.slice(-tailLength)}`;
 }
