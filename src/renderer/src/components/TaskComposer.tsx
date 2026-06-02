@@ -24,7 +24,7 @@ import {
   Target,
   X
 } from "lucide-react";
-import type { AgentImageAttachment } from "@shared/agentTypes";
+import type { AgentAttachmentContext, AgentImageAttachment } from "@shared/agentTypes";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
 import {
@@ -51,7 +51,11 @@ type TaskComposerProps = {
   onSelectModel: (modelId: string) => void;
   onSelectIntelligence: (level: IntelligenceLevel) => void;
   onSelectSpeed: (speed: SpeedMode) => void;
-  onSubmitTask: (prompt: string, attachments?: AgentImageAttachment[]) => void;
+  onSubmitTask: (
+    prompt: string,
+    attachments?: AgentImageAttachment[],
+    attachmentContexts?: AgentAttachmentContext[]
+  ) => void;
   onOpenSettings?: () => void;
   onPickProject?: () => void;
   onUpdateGeneralPreferences?: (preferences: GeneralPreferences) => void;
@@ -108,10 +112,6 @@ export function TaskComposer({
     textareaRef
   } = useTaskComposerState({
     copy: {
-      imagePromptFallback:
-        settings.language === "zh-CN"
-          ? "请根据这些附件回答。"
-          : "Please answer based on the attached image.",
       attachmentContextHeader: copy.attachmentContextHeader,
       attachmentContextIntro: copy.attachmentContextIntro,
       attachmentContextTruncated: copy.attachmentContextTruncated,
@@ -371,7 +371,6 @@ function getComposerCopy(language: ModelSettings["language"]): {
   pluginSystem: string;
   readOnlyPermission: string;
   removeAttachment: string;
-  removeImage: string;
   sensitiveAttachmentsSkipped: (count: number) => string;
   stopResponse: string;
 } {
@@ -395,7 +394,6 @@ function getComposerCopy(language: ModelSettings["language"]): {
       pluginSystem: "插件系统",
       readOnlyPermission: "只读模式",
       removeAttachment: "移除附件",
-      removeImage: "移除图片",
       sensitiveAttachmentsSkipped: (count) => `${count} 个敏感附件已跳过。`,
       stopResponse: "停止回答"
     };
@@ -420,7 +418,6 @@ function getComposerCopy(language: ModelSettings["language"]): {
     pluginSystem: "Plugin system",
     readOnlyPermission: "Read only",
     removeAttachment: "Remove attachment",
-    removeImage: "Remove image",
     sensitiveAttachmentsSkipped: (count) => `${count} sensitive attachments were skipped.`,
     stopResponse: "Stop response"
   };

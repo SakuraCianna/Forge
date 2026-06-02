@@ -2,7 +2,11 @@
 import type { ReactElement } from "react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
-import type { AgentImageAttachment, AgentProfileContext } from "@shared/agentTypes";
+import type {
+  AgentAttachmentContext,
+  AgentImageAttachment,
+  AgentProfileContext
+} from "@shared/agentTypes";
 import type { ProjectGitCommitResult, ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
@@ -182,6 +186,7 @@ import {
   type CodeFormatterMode
 } from "@/state/codeFormatting";
 import { createTaskSubmissionRoute } from "@/state/taskSubmissionRouting";
+import { appendAttachmentContextsToPrompt } from "@/state/composerAttachments";
 import {
   appendCommandSafetyRule,
   createExactCommandAllowRule,
@@ -1580,6 +1585,15 @@ export function App(): ReactElement {
       );
 
       setThreads((current) => attachThreadMemoryContext(current, selectedThread.id, memories));
+      // 附件解析内容只增强模型请求, 不改 selectedThread.prompt。
+      // 这样文件修改可以利用需求文档/OCR, 但线程标题和用户原始任务仍保持可读。
+      const fileChangeTaskPrompt = appendAttachmentContextsToPrompt(
+        createFileChangeTaskPrompt(selectedThread, relativePath, options.action, {
+          toolResults: getRecentAgentToolResults(selectedThread.id)
+        }),
+        selectedThread.attachmentContexts,
+        settings.language
+      );
 
       const result = await window.forge.agent.generateFileChange({
         provider,
@@ -1592,9 +1606,7 @@ export function App(): ReactElement {
         speed: selectedThread.speed,
         workMode: generalPreferences.workMode,
         agentRuntime: generalPreferences.agentRuntime,
-        taskPrompt: createFileChangeTaskPrompt(selectedThread, relativePath, options.action, {
-          toolResults: getRecentAgentToolResults(selectedThread.id)
-        }),
+        taskPrompt: fileChangeTaskPrompt,
         relativePath,
         currentContent
       });
@@ -1682,7 +1694,11 @@ export function App(): ReactElement {
   }
 
   // 创建或续写会话, 普通问答和项目任务统一进入同一线程
-  function submitTask(prompt: string, attachments?: AgentImageAttachment[]): void {
+  function submitTask(
+    prompt: string,
+    attachments?: AgentImageAttachment[],
+    attachmentContexts?: AgentAttachmentContext[]
+  ): void {
     const activeThread = selectThreadById(threads, selectedThreadId);
     const submittedAttachments = resolveVisionAttachments(
       settings.models.find((model) => model.id === settings.currentModelId) ?? null,
@@ -1692,6 +1708,7 @@ export function App(): ReactElement {
       activeThread,
       agentProfile: activeAgentProfileContext,
       attachments: submittedAttachments,
+      attachmentContexts,
       currentProjectPath: currentProject?.path ?? null,
       hasProjectScan: Boolean(projectScanResult),
       prompt,
@@ -1728,7 +1745,9 @@ export function App(): ReactElement {
         appendThreadFollowUpPrompt(current, route.thread.id, {
           id: `${route.thread.id}-user-${createdAt}`,
           message: prompt,
-          createdAt
+          createdAt,
+          attachments: submittedAttachments,
+          attachmentContexts: route.draftThread.attachmentContexts
         })
       );
       rememberPromptIfNeeded(
@@ -1748,6 +1767,7 @@ export function App(): ReactElement {
         model: selectedModel,
         provider: selectedProvider,
         attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
+        attachmentContexts: route.draftThread.attachmentContexts,
         projectScan: getProjectScanForThread(route.thread),
         conversation: createThreadConversation(route.thread)
       });
@@ -1777,6 +1797,7 @@ export function App(): ReactElement {
         model: selectedModel,
         provider: selectedProvider,
         attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
+        attachmentContexts: route.thread.attachmentContexts,
         projectScan: currentProject ? projectScanResult : null
       });
       return;
@@ -1795,7 +1816,9 @@ export function App(): ReactElement {
         appendThreadFollowUpPrompt(current, route.thread.id, {
           id: `${route.thread.id}-user-${createdAt}`,
           message: prompt,
-          createdAt
+          createdAt,
+          attachments: submittedAttachments,
+          attachmentContexts: route.draftThread.attachmentContexts
         })
       );
 
@@ -1810,6 +1833,7 @@ export function App(): ReactElement {
         model: selectedModel,
         provider: selectedProvider,
         attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
+        attachmentContexts: route.draftThread.attachmentContexts,
         projectScan: projectScanResult!
       });
       return;
@@ -1836,6 +1860,7 @@ export function App(): ReactElement {
       model: selectedModel,
       provider: selectedProvider,
       attachments: resolveVisionAttachments(selectedModel, route.thread.attachments),
+      attachmentContexts: route.thread.attachmentContexts,
       projectScan: projectScanResult!
     });
   }
@@ -1847,6 +1872,7 @@ export function App(): ReactElement {
     model,
     provider,
     attachments,
+    attachmentContexts,
     projectScan
   }: {
     threadId: string;
@@ -1854,6 +1880,7 @@ export function App(): ReactElement {
     model: ForgeModel;
     provider: ForgeProvider;
     attachments?: AgentImageAttachment[];
+    attachmentContexts?: AgentAttachmentContext[];
     projectScan: ProjectScanResult;
   }): Promise<void> {
     const streamStartedAt = new Date().toISOString();
@@ -1862,6 +1889,12 @@ export function App(): ReactElement {
 
     try {
       const memories = selectRelevantAgentMemories(agentMemories, projectScan.rootPath, 8, taskPrompt);
+      // 记忆检索使用干净的用户任务, 模型规划请求才追加本地附件上下文。
+      const modelTaskPrompt = appendAttachmentContextsToPrompt(
+        taskPrompt,
+        attachmentContexts,
+        settings.language
+      );
       const request = {
         provider,
         model,
@@ -1872,7 +1905,7 @@ export function App(): ReactElement {
         speed: settings.speed,
         workMode: generalPreferences.workMode,
         agentRuntime: generalPreferences.agentRuntime,
-        taskPrompt,
+        taskPrompt: modelTaskPrompt,
         attachments: resolveVisionAttachments(model, attachments),
         projectScan
       };
@@ -2090,6 +2123,7 @@ export function App(): ReactElement {
       model,
       provider,
       attachments: resolveVisionAttachments(model, thread.attachments),
+      attachmentContexts: thread.attachmentContexts,
       projectScan: projectScanResult
     });
   }
@@ -2173,6 +2207,7 @@ export function App(): ReactElement {
       model,
       provider,
       attachments: resolveVisionAttachments(model, thread.attachments),
+      attachmentContexts: thread.attachmentContexts,
       projectScan: projectScanResult
     });
   }
@@ -2224,6 +2259,7 @@ export function App(): ReactElement {
     model,
     provider,
     attachments,
+    attachmentContexts,
     projectScan,
     conversation
   }: {
@@ -2232,10 +2268,13 @@ export function App(): ReactElement {
     model: ForgeModel;
     provider: ForgeProvider;
     attachments?: AgentImageAttachment[];
+    attachmentContexts?: AgentAttachmentContext[];
     projectScan?: ProjectScanResult | null;
     conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   }): Promise<void> {
     const memories = selectRelevantAgentMemories(agentMemories, projectScan?.rootPath ?? null, 8, prompt);
+    // 问答流同样保持 UI prompt 干净, 只把附件本地解析结果作为模型侧上下文。
+    const modelPrompt = appendAttachmentContextsToPrompt(prompt, attachmentContexts, settings.language);
     const request = {
       provider,
       model,
@@ -2248,7 +2287,7 @@ export function App(): ReactElement {
       speed: settings.speed,
       workMode: generalPreferences.workMode,
       agentRuntime: generalPreferences.agentRuntime,
-      prompt,
+      prompt: modelPrompt,
       attachments: resolveVisionAttachments(model, attachments)
     };
     const streamStartedAt = new Date().toISOString();

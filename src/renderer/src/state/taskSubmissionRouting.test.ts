@@ -132,6 +132,15 @@ describe("createTaskSubmissionRoute", () => {
           dataUrl: "data:image/png;base64,AA=="
         }
       ],
+      attachmentContexts: [
+        {
+          id: "attachment-1",
+          kind: "word",
+          name: "brief.docx",
+          size: 2048,
+          content: "Project notes"
+        }
+      ],
       currentProjectPath: null,
       hasProjectScan: false,
       prompt: "What is in this image?",
@@ -141,6 +150,9 @@ describe("createTaskSubmissionRoute", () => {
 
     expect(route.kind === "ask-new" ? route.thread.agentProfile : null).toEqual(agentProfile);
     expect(route.kind === "ask-new" ? route.thread.attachments?.[0].id : null).toBe("image-1");
+    expect(route.kind === "ask-new" ? route.thread.attachmentContexts?.[0].content : null).toBe(
+      "Project notes"
+    );
   });
 });
 

@@ -1,5 +1,6 @@
 // 本文件说明: 管理输入框附件的类型识别、上下文拼接和展示格式
-import type { AgentImageAttachment } from "@shared/agentTypes";
+import type { AgentAttachmentContext, AgentImageAttachment } from "@shared/agentTypes";
+import type { Language } from "@shared/modelTypes";
 
 export type ComposerAttachmentKind =
   | "image"
@@ -35,7 +36,17 @@ export type ComposerSubmissionCopy = {
   attachmentContextIntro: string;
   attachmentContextTruncated: string;
   attachmentPromptFallback: string;
-  imagePromptFallback: string;
+};
+
+type AttachmentContextCopy = Pick<
+  ComposerSubmissionCopy,
+  "attachmentContextHeader" | "attachmentContextIntro" | "attachmentContextTruncated"
+>;
+
+export type ComposerSubmissionPayload = {
+  prompt: string;
+  attachments?: AgentImageAttachment[];
+  attachmentContexts?: AgentAttachmentContext[];
 };
 
 export const maxComposerAttachments = 8;
@@ -248,51 +259,82 @@ export function createPendingComposerAttachment(
   };
 }
 
-export function createComposerSubmissionPrompt(
+export function createComposerSubmissionPayload(
   prompt: string,
   attachments: ComposerAttachment[],
   copy: ComposerSubmissionCopy
-): { prompt: string; attachments?: AgentImageAttachment[] } | null {
+): ComposerSubmissionPayload | null {
   const normalizedPrompt = prompt.trim();
   const readyImageAttachments = attachments
     .filter((attachment) => attachment.status === "ready" && attachment.imageAttachment)
     .map((attachment) => attachment.imageAttachment)
     .filter((attachment): attachment is AgentImageAttachment => Boolean(attachment));
-  const contextBlock = createAttachmentContextBlock(attachments, copy);
+  const attachmentContexts = createAgentAttachmentContexts(attachments);
 
-  if (!normalizedPrompt && readyImageAttachments.length === 0 && !contextBlock) {
+  if (!normalizedPrompt && readyImageAttachments.length === 0 && attachmentContexts.length === 0) {
     return null;
   }
 
-  const basePrompt =
-    normalizedPrompt || (contextBlock ? copy.attachmentPromptFallback : copy.imagePromptFallback);
-  const combinedPrompt = contextBlock ? `${basePrompt}\n\n${contextBlock}` : basePrompt;
-
+  // 提交载荷保留用户原始输入, 本地解析出的附件文本先作为结构化上下文保存。
+  // 真正发送给模型前再拼接, 避免线程标题、用户气泡和路由判断被 OCR/文档内容污染。
   return {
-    prompt: combinedPrompt,
-    attachments: readyImageAttachments.length > 0 ? readyImageAttachments : undefined
+    prompt: normalizedPrompt || copy.attachmentPromptFallback,
+    attachments: readyImageAttachments.length > 0 ? readyImageAttachments : undefined,
+    attachmentContexts: attachmentContexts.length > 0 ? attachmentContexts : undefined
   };
 }
 
-export function createAttachmentContextBlock(
-  attachments: ComposerAttachment[],
-  copy: Pick<
-    ComposerSubmissionCopy,
-    "attachmentContextHeader" | "attachmentContextIntro" | "attachmentContextTruncated"
-  >
+export function appendAttachmentContextsToPrompt(
+  prompt: string,
+  attachmentContexts: AgentAttachmentContext[] | undefined,
+  language: Language
 ): string {
-  const readyTextAttachments = attachments.filter(
-    (attachment) => attachment.status === "ready" && attachment.extractedText?.trim()
+  // 这是唯一把本地附件解析内容注入模型 prompt 的出口。
+  // 调用方应继续用原始 prompt 做记忆检索、标题和界面展示。
+  const contextBlock = createAttachmentContextBlock(
+    attachmentContexts ?? [],
+    getAttachmentContextCopy(language)
   );
 
-  if (readyTextAttachments.length === 0) {
+  return contextBlock ? `${prompt.trim()}\n\n${contextBlock}` : prompt;
+}
+
+export function createAgentAttachmentContexts(
+  attachments: ComposerAttachment[]
+): AgentAttachmentContext[] {
+  return attachments
+    .filter(
+      (
+        attachment
+      ): attachment is ComposerAttachment & {
+        kind: Exclude<ComposerAttachmentKind, "unsupported">;
+        extractedText: string;
+      } =>
+        attachment.kind !== "unsupported" &&
+        attachment.status === "ready" &&
+        Boolean(attachment.extractedText?.trim())
+    )
+    .map((attachment) => ({
+      id: attachment.id,
+      kind: attachment.kind,
+      name: attachment.name,
+      size: attachment.size,
+      content: normalizeAttachmentText(attachment.extractedText)
+    }));
+}
+
+export function createAttachmentContextBlock(
+  attachmentContexts: AgentAttachmentContext[],
+  copy: AttachmentContextCopy
+): string {
+  if (attachmentContexts.length === 0) {
     return "";
   }
 
   const parts = [copy.attachmentContextHeader, copy.attachmentContextIntro];
   let usedChars = parts.join("\n").length;
 
-  readyTextAttachments.forEach((attachment, index) => {
+  attachmentContexts.forEach((attachment, index) => {
     const remainingChars = maxAttachmentContextChars - usedChars;
 
     if (remainingChars <= 0) {
@@ -301,9 +343,8 @@ export function createAttachmentContextBlock(
 
     const label = getComposerAttachmentLabel(attachment.kind);
     const metadata = `[${index + 1}] ${attachment.name} (${label}, ${formatAttachmentSize(attachment.size)})`;
-    const normalizedText = normalizeAttachmentText(attachment.extractedText ?? "");
     const cappedText = limitText(
-      normalizedText,
+      attachment.content,
       Math.min(maxSingleAttachmentContextChars, remainingChars),
       copy.attachmentContextTruncated
     );
@@ -314,6 +355,24 @@ export function createAttachmentContextBlock(
   });
 
   return parts.join("\n\n").trim();
+}
+
+function getAttachmentContextCopy(language: Language): AttachmentContextCopy {
+  if (language === "zh-CN") {
+    return {
+      attachmentContextHeader: "附件本地解析内容:",
+      attachmentContextIntro:
+        "以下内容由 Forge 在本地从用户拖入或粘贴的附件中提取, 可能存在 OCR 或表格截断误差。",
+      attachmentContextTruncated: "[内容已截断]"
+    };
+  }
+
+  return {
+    attachmentContextHeader: "Local attachment context:",
+    attachmentContextIntro:
+      "Forge extracted the following content locally from files the user pasted or dropped. OCR and table content may be imperfect or truncated.",
+    attachmentContextTruncated: "[Content truncated]"
+  };
 }
 
 export function hasProcessingComposerAttachments(attachments: ComposerAttachment[]): boolean {

@@ -10,8 +10,7 @@ const copy: ComposerSubmissionCopy = {
   attachmentContextHeader: "Local attachment context:",
   attachmentContextIntro: "Extracted locally.",
   attachmentContextTruncated: "[truncated]",
-  attachmentPromptFallback: "Use the attachments.",
-  imagePromptFallback: "Describe the image"
+  attachmentPromptFallback: "Use the attachments."
 };
 
 describe("useTaskComposerState helpers", () => {
@@ -22,16 +21,18 @@ describe("useTaskComposerState helpers", () => {
   it("trims text submissions and omits empty attachments", () => {
     expect(createComposerSubmission("  refactor App.tsx  ", [], copy)).toEqual({
       prompt: "refactor App.tsx",
-      attachments: undefined
+      attachments: undefined,
+      attachmentContexts: undefined
     });
   });
 
-  it("uses the image fallback when submitting attachments without text", () => {
+  it("uses the attachment fallback when submitting attachments without text", () => {
     const attachment = createAttachment("image-1");
 
     expect(createComposerSubmission("   ", [attachment], copy)).toEqual({
-      prompt: "Describe the image",
-      attachments: [attachment.imageAttachment]
+      prompt: "Use the attachments.",
+      attachments: [attachment.imageAttachment],
+      attachmentContexts: undefined
     });
   });
 
@@ -39,8 +40,17 @@ describe("useTaskComposerState helpers", () => {
     const attachment = createAttachment("image-1", "OCR text");
 
     expect(createComposerSubmission("Look", [attachment], copy, false)).toEqual({
-      prompt: expect.stringContaining("OCR text"),
-      attachments: undefined
+      prompt: "Look",
+      attachments: undefined,
+      attachmentContexts: [
+        {
+          id: "image-1",
+          kind: "image",
+          name: "image.png",
+          size: 128,
+          content: "OCR text"
+        }
+      ]
     });
   });
 

@@ -1,7 +1,12 @@
 // 本文件说明: 维护任务线程的生命周期, 流式输出, 命令回放和记忆快照
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
-import type { AgentImageAttachment, AgentMemoryContext, AgentProfileContext } from "@shared/agentTypes";
+import type {
+  AgentAttachmentContext,
+  AgentImageAttachment,
+  AgentMemoryContext,
+  AgentProfileContext
+} from "@shared/agentTypes";
 import type { CommandOutputChunk } from "@shared/commandTypes";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import { getEnabledModels } from "./modelSettings";
@@ -97,6 +102,7 @@ export type TaskThread = {
   contextMemories?: AgentMemoryContext[];
   agentProfile?: AgentProfileContext;
   attachments?: AgentImageAttachment[];
+  attachmentContexts?: AgentAttachmentContext[];
   agentActions?: AgentAction[];
   events: TaskThreadEvent[];
 };
@@ -106,6 +112,7 @@ type ThreadDeps = {
   now?: () => string;
   agentProfile?: AgentProfileContext;
   attachments?: AgentImageAttachment[];
+  attachmentContexts?: AgentAttachmentContext[];
 };
 
 type ThreadMemorySource = AgentMemoryContext & {
@@ -154,6 +161,7 @@ export function createThreadFromSettings(
       createdAt,
       agentProfile: deps.agentProfile ? cloneAgentProfileContext(deps.agentProfile) : undefined,
       attachments: deps.attachments?.map(cloneAgentImageAttachment),
+      attachmentContexts: deps.attachmentContexts?.map(cloneAgentAttachmentContext),
       // 新线程不写入占位计划事件, 真实进度只来自模型输出和命令结果
       events: []
     }
@@ -169,6 +177,44 @@ function cloneAgentProfileContext(agentProfile: AgentProfileContext): AgentProfi
 
 function cloneAgentImageAttachment(attachment: AgentImageAttachment): AgentImageAttachment {
   return { ...attachment };
+}
+
+function cloneAgentAttachmentContext(context: AgentAttachmentContext): AgentAttachmentContext {
+  return { ...context };
+}
+
+function mergeAgentImageAttachments(
+  current: AgentImageAttachment[] | undefined,
+  incoming: AgentImageAttachment[] | undefined
+): AgentImageAttachment[] | undefined {
+  if (!incoming?.length) {
+    return current;
+  }
+
+  const byId = new Map((current ?? []).map((attachment) => [attachment.id, attachment]));
+
+  incoming.forEach((attachment) => {
+    byId.set(attachment.id, cloneAgentImageAttachment(attachment));
+  });
+
+  return Array.from(byId.values());
+}
+
+function mergeAgentAttachmentContexts(
+  current: AgentAttachmentContext[] | undefined,
+  incoming: AgentAttachmentContext[] | undefined
+): AgentAttachmentContext[] | undefined {
+  if (!incoming?.length) {
+    return current;
+  }
+
+  const byId = new Map((current ?? []).map((context) => [context.id, context]));
+
+  incoming.forEach((context) => {
+    byId.set(context.id, cloneAgentAttachmentContext(context));
+  });
+
+  return Array.from(byId.values());
 }
 
 // 追加线程事件并按需要更新状态, 保持事件历史只通过不可变更新写入
@@ -193,20 +239,37 @@ export function appendThreadEvents(
 export function appendThreadFollowUpPrompt(
   threads: TaskThread[],
   threadId: string,
-  event: { id: string; message: string; createdAt: string }
+  event: {
+    id: string;
+    message: string;
+    createdAt: string;
+    attachments?: AgentImageAttachment[];
+    attachmentContexts?: AgentAttachmentContext[];
+  }
 ): TaskThread[] {
-  return appendThreadEvents(
-    threads,
-    threadId,
-    [
-      {
-        id: event.id,
-        kind: "user",
-        message: event.message,
-        createdAt: event.createdAt
-      }
-    ],
-    "running"
+  // 追问可能带新附件。这里把附件快照合并进原线程, 后续失败恢复、续跑和文件修改
+  // 才能继续拿到同一批本地解析上下文, 而不是只在当前这一轮模型请求里生效。
+  return threads.map((thread) =>
+    thread.id === threadId
+      ? {
+          ...thread,
+          status: "running",
+          attachments: mergeAgentImageAttachments(thread.attachments, event.attachments),
+          attachmentContexts: mergeAgentAttachmentContexts(
+            thread.attachmentContexts,
+            event.attachmentContexts
+          ),
+          events: [
+            ...thread.events,
+            {
+              id: event.id,
+              kind: "user",
+              message: event.message,
+              createdAt: event.createdAt
+            }
+          ]
+        }
+      : thread
   );
 }
 

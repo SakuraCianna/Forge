@@ -36,6 +36,14 @@ export type AgentImageAttachment = {
   size?: number;
 };
 
+export type AgentAttachmentContext = {
+  id: string;
+  kind: "image" | "pdf" | "word" | "spreadsheet" | "text";
+  name: string;
+  size: number;
+  content: string;
+};
+
 export type GenerateAgentPlanRequest = {
   provider: ForgeProvider;
   model: ForgeModel;
