@@ -29,7 +29,11 @@ import {
   resolveMissingInspectFileFallback,
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
-import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
+import {
+  createCommandFinishedEvent,
+  createCommandRunId,
+  createCommandStartedEvent
+} from "@/agent/commandEvents";
 import {
   createAutoFailureRecoverySkipEvent,
   selectAutoFailureRecoveryCandidate,
@@ -49,6 +53,15 @@ import {
   createAgentCompletionSummaryMessage,
   getAgentCompletionWorkStartedAt
 } from "@/agent/agentCompletionSummary";
+import {
+  formatAgentActionRunMessage,
+  formatFailureFixPlanStartMessage
+} from "@/agent/agentRunMessages";
+import {
+  appendSourceUrlsToAgentSummary,
+  extractSourceUrlsFromText,
+  extractSourceUrlsFromThreadEvents
+} from "@/agent/agentSources";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
 import {
@@ -105,6 +118,7 @@ import {
   createHeroComposerPlaceholder,
   createHeroPromptSuggestions
 } from "@/state/contextSuggestions";
+import { useComposerSignals } from "@/state/composerSignals";
 import {
   buildProjectFileTree,
   getProjectFileParentPaths
@@ -143,6 +157,15 @@ import {
   type TaskThread,
   type TaskThreadEvent
 } from "@/state/taskThreads";
+import {
+  createThreadConversation,
+  findPendingAgentCommitAction,
+  formatAgentCommitMessageSuggestion,
+  hasContinuableAgentActions,
+  resolveVisionAttachments,
+  selectThreadById,
+  selectVisibleWorkspaceThreads
+} from "@/state/threadSelectors";
 import {
   appendUsageEvent,
   createUsageEvent,
@@ -307,8 +330,12 @@ export function App(): ReactElement {
 
     return loadAgentProfiles(window.localStorage);
   });
-  const [composerFocusSignal, setComposerFocusSignal] = useState(0);
-  const [composerSubmitSignal, setComposerSubmitSignal] = useState(0);
+  const {
+    focusSignal: composerFocusSignal,
+    submitSignal: composerSubmitSignal,
+    focusComposer,
+    submitComposer
+  } = useComposerSignals();
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
   const [heroPromptIndex, setHeroPromptIndex] = useState(0);
   const [pausedThreadIds, setPausedThreadIds] = useState<Set<string>>(() => new Set());
@@ -388,7 +415,7 @@ export function App(): ReactElement {
   }
 
   function getLiveThread(threadId: string): TaskThread | null {
-    return threadsRef.current.find((thread) => thread.id === threadId) ?? null;
+    return selectThreadById(threadsRef.current, threadId);
   }
 
   function getLiveAgentAction(threadId: string, actionId: string): AgentAction | null {
@@ -784,8 +811,7 @@ export function App(): ReactElement {
     setGeneralPreferences(createDefaultGeneralPreferences());
     setAgentMemories([]);
     setAgentProfiles(createDefaultAgentProfiles());
-    setComposerFocusSignal((current) => current + 1);
-    setComposerSubmitSignal(0);
+    focusComposer();
     setHeroPromptIndex(0);
     setPausedThreadIds(new Set());
   }
@@ -1131,9 +1157,7 @@ export function App(): ReactElement {
     }
 
     const normalizedMessage = message.trim();
-    const selectedThread = selectedThreadId
-      ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
-      : null;
+    const selectedThread = selectThreadById(threads, selectedThreadId);
     const pendingCommitAction = findPendingAgentCommitAction(selectedThread);
 
     if (!normalizedMessage) {
@@ -1540,7 +1564,7 @@ export function App(): ReactElement {
 
     const targetThreadId = threadId ?? selectedThreadId ?? undefined;
     const selectedThread =
-      (targetThreadId ? threads.find((thread) => thread.id === targetThreadId) : null) ??
+      selectThreadById(threads, targetThreadId) ??
       threads[0] ??
       null;
 
@@ -1682,9 +1706,7 @@ export function App(): ReactElement {
 
   // 创建或续写会话, 普通问答和项目任务统一进入同一线程
   function submitTask(prompt: string, attachments?: AgentImageAttachment[]): void {
-    const activeThread = selectedThreadId
-      ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
-      : null;
+    const activeThread = selectThreadById(threads, selectedThreadId);
     const submittedAttachments = resolveVisionAttachments(
       settings.models.find((model) => model.id === settings.currentModelId) ?? null,
       attachments
@@ -2048,7 +2070,7 @@ export function App(): ReactElement {
     commandResultOverride: CommandRunResult | null = null,
     options: FailureFixPlanOptions = { source: "manual" }
   ): Promise<void> {
-    const thread = threads.find((candidate) => candidate.id === threadId);
+    const thread = selectThreadById(threads, threadId);
 
     if (!thread) {
       return;
@@ -2143,7 +2165,7 @@ export function App(): ReactElement {
 
   // 基于当前线程真实状态生成后续计划, 用于完成或跳过一批动作后的长任务续跑
   async function generateContinuationPlan(threadId: string): Promise<void> {
-    const thread = threads.find((candidate) => candidate.id === threadId);
+    const thread = selectThreadById(threads, threadId);
 
     if (!thread) {
       return;
@@ -2222,7 +2244,7 @@ export function App(): ReactElement {
 
   // 解析线程项目路径, 优先使用线程快照避免当前项目切换造成串线
   function getThreadProjectPath(threadId: string): string | null {
-    const thread = threads.find((candidate) => candidate.id === threadId) ?? null;
+    const thread = selectThreadById(threads, threadId);
 
     return thread?.projectPath ?? currentProject?.path ?? null;
   }
@@ -3491,9 +3513,7 @@ export function App(): ReactElement {
 
   // 渲染统一输入框, 权限, 附件和模型选择都从这里传入
   function renderTaskComposer(variant: "dock" | "hero"): ReactElement {
-    const activeThread = selectedThreadId
-      ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
-      : null;
+    const activeThread = selectThreadById(threads, selectedThreadId);
 
     return (
       <TaskComposer
@@ -3533,13 +3553,9 @@ export function App(): ReactElement {
 
   // 渲染线程详情并连接执行, 取消和反馈按钮
   function renderThreadWorkspace(): ReactElement {
-    const selectedThread = threads.find((thread) => thread.id === selectedThreadId) ?? null;
+    const selectedThread = selectThreadById(threads, selectedThreadId);
     const workspaceProjectPath = selectedThread?.projectPath ?? currentProject?.path ?? null;
-    const visibleWorkspaceThreads = threads.filter(
-      (thread) =>
-        !thread.archived &&
-        (workspaceProjectPath ? thread.projectPath === workspaceProjectPath : !thread.projectPath)
-    );
+    const visibleWorkspaceThreads = selectVisibleWorkspaceThreads(threads, workspaceProjectPath);
     const agentPaused =
       Boolean(selectedThread && pausedThreadIds.has(selectedThread.id)) &&
       hasContinuableAgentActions(selectedThread);
@@ -3727,9 +3743,7 @@ export function App(): ReactElement {
     const changes = gitStatus?.changes ?? [];
     const selectedChange =
       changes.find((change) => change.path === selectedGitPath) ?? changes[0] ?? null;
-    const selectedThread = selectedThreadId
-      ? (threads.find((thread) => thread.id === selectedThreadId) ?? null)
-      : null;
+    const selectedThread = selectThreadById(threads, selectedThreadId);
     const pendingCommitAction = findPendingAgentCommitAction(selectedThread);
     const agentCommitSuggestion = formatAgentCommitMessageSuggestion(pendingCommitAction);
     const agentCommitCopy =
@@ -4097,16 +4111,16 @@ export function App(): ReactElement {
       onNewTask={() => {
         setActiveView("workspace");
         setSelectedThreadId(null);
-        setComposerFocusSignal((current) => current + 1);
+        focusComposer();
       }}
       onNewProjectChat={(projectPath) => {
         selectProject(projectPath);
         setSelectedThreadId(null);
-        setComposerFocusSignal((current) => current + 1);
+        focusComposer();
       }}
       onRun={() => {
         setActiveView("workspace");
-        setComposerSubmitSignal((current) => current + 1);
+        submitComposer();
       }}
       onMinimizeWindow={() => void window.forge.windowControls.minimize()}
       onToggleMaximizeWindow={() => void window.forge.windowControls.toggleMaximize()}
@@ -4115,7 +4129,7 @@ export function App(): ReactElement {
       onRenameProject={renameProject}
       onSelectProject={selectProject}
       onSelectThread={(threadId) => {
-        const thread = threads.find((candidate) => candidate.id === threadId);
+        const thread = selectThreadById(threads, threadId);
 
         if (thread?.projectPath) {
           const project = recentProjects.find((candidate) => candidate.path === thread.projectPath);
@@ -4139,71 +4153,6 @@ export function App(): ReactElement {
       {renderActiveView()}
     </AppShell>
   );
-}
-
-// 把当前线程历史压成模型对话, 用户和输出事件按顺序保留
-function createThreadConversation(
-  thread: TaskThread
-): Array<{ role: "user" | "assistant"; content: string }> {
-  const turns: Array<{ role: "user" | "assistant"; content: string }> = [
-    { role: "user", content: thread.prompt }
-  ];
-
-  for (const event of thread.events) {
-    if (event.kind === "user") {
-      turns.push({ role: "user", content: event.message });
-    } else if (event.kind === "result") {
-      turns.push({ role: "assistant", content: event.message });
-    }
-  }
-
-  return turns;
-}
-
-// 找到当前线程中等待用户处理的提交门禁动作
-function resolveVisionAttachments(
-  model: ForgeModel | null,
-  attachments: AgentImageAttachment[] | undefined
-): AgentImageAttachment[] | undefined {
-  if (model?.capabilities.vision !== true || !attachments?.length) {
-    return undefined;
-  }
-
-  return attachments;
-}
-
-function findPendingAgentCommitAction(thread: TaskThread | null): AgentAction | null {
-  return thread?.agentActions?.find((action) => action.kind === "commit" && action.status === "pending") ?? null;
-}
-
-// 判断被暂停线程是否还有可继续推进的 Agent 动作
-function hasContinuableAgentActions(thread: TaskThread | null): boolean {
-  return Boolean(thread?.agentActions?.some((action) => action.status === "pending"));
-}
-
-// 从提交动作目标里提取可直接使用的 Git 提交信息
-function formatAgentCommitMessageSuggestion(action: AgentAction | null): string | null {
-  const target = action?.target?.trim();
-
-  if (!target) {
-    return null;
-  }
-
-  return parseGitCommitMessage(target) ?? target;
-}
-
-// 支持模型输出 git commit -m "..." 或 --message ... 时提取真实 message
-function parseGitCommitMessage(value: string): string | null {
-  const normalized = value.trim();
-  const quoted = normalized.match(/(?:^|\s)(?:-m|--message)\s+(["'])(.*?)\1/u)?.[2]?.trim();
-
-  if (quoted) {
-    return quoted;
-  }
-
-  const unquoted = normalized.match(/(?:^|\s)(?:-m|--message)\s+(.+)$/u)?.[1]?.trim();
-
-  return unquoted || null;
 }
 
 // 把运行时错误收敛成一行中文提示, 隐藏 HTML 响应噪音
@@ -4243,137 +4192,6 @@ function formatAgentPermissionDenied(
   }
 
   return `Agent profile ${profileName} does not allow ${tool} actions`;
-}
-
-// 最终总结把隐藏流水中的网页来源补出来, 保持主屏简洁但不丢引用
-function appendSourceUrlsToAgentSummary(
-  message: string,
-  sourceUrls: string[],
-  language: Language
-): string {
-  const urls = mergeUniqueStrings(sourceUrls).slice(0, 8);
-
-  if (urls.length === 0) {
-    return message;
-  }
-
-  const heading = language === "zh-CN" ? "参考资料:" : "Sources:";
-  const lines = urls.map((url) => `- ${url}`);
-
-  return `${message}\n\n${heading}\n${lines.join("\n")}`;
-}
-
-function extractSourceUrlsFromThreadEvents(events: TaskThreadEvent[]): string[] {
-  return mergeUniqueStrings(
-    events
-      .filter((event) => event.kind !== "user")
-      .flatMap((event) => extractSourceUrlsFromText(event.message))
-  );
-}
-
-function extractSourceUrlsFromText(value: string): string[] {
-  const matches = value.match(/https?:\/\/[^\s<>)\]]+/giu) ?? [];
-
-  return mergeUniqueStrings(matches.map((url) => url.replace(/[.,;:，。；：]+$/u, "")));
-}
-
-function mergeUniqueStrings(values: string[]): string[] {
-  return Array.from(new Set(values.filter(Boolean)));
-}
-
-// 把动作执行记录转成用户可读消息, 同时保留结构化 agentActionRun 字段供 UI 使用
-function formatAgentActionRunMessage(
-  language: Language,
-  action: AgentAction,
-  record: Omit<AgentActionRunRecord, "actionId" | "label">
-): string {
-  const duration = typeof record.durationMs === "number" ? ` (${formatDurationMs(record.durationMs)})` : "";
-
-  if (language === "zh-CN") {
-    if (record.status === "started") {
-      return `开始执行 Agent 动作: ${action.label}`;
-    }
-
-    if (record.status === "completed") {
-      return `已完成 Agent 动作: ${action.label}${duration}`;
-    }
-
-    if (record.status === "failed") {
-      return `Agent 动作执行失败: ${action.label}${duration}`;
-    }
-
-    if (record.status === "waiting") {
-      return `Agent 动作等待继续: ${action.label}${duration}`;
-    }
-
-    if (record.status === "skipped") {
-      return `已跳过 Agent 动作: ${action.label}`;
-    }
-
-    return `已确认 Agent 动作: ${action.label}`;
-  }
-
-  if (record.status === "started") {
-    return `Started agent action: ${action.label}`;
-  }
-
-  if (record.status === "completed") {
-    return `Completed agent action: ${action.label}${duration}`;
-  }
-
-  if (record.status === "failed") {
-    return `Failed agent action: ${action.label}${duration}`;
-  }
-
-  if (record.status === "waiting") {
-    return `Agent action waiting: ${action.label}${duration}`;
-  }
-
-  if (record.status === "skipped") {
-    return `Skipped agent action: ${action.label}`;
-  }
-
-  return `Confirmed agent action: ${action.label}`;
-}
-
-function formatFailureFixPlanStartMessage(
-  language: Language,
-  action: AgentAction,
-  attempt: FailureRecoveryAttemptRecord
-): string {
-  if (language === "zh-CN") {
-    if (attempt.source === "auto") {
-      const limit = attempt.limit === undefined ? "" : ` / ${attempt.limit}`;
-      const count = attempt.attempt === undefined ? "" : ` ${attempt.attempt}${limit}`;
-
-      return `正在自动生成失败修复计划${count}: ${action.label}`;
-    }
-
-    return `正在根据失败动作生成修复计划: ${action.label}`;
-  }
-
-  if (attempt.source === "auto") {
-    const limit = attempt.limit === undefined ? "" : ` / ${attempt.limit}`;
-    const count = attempt.attempt === undefined ? "" : ` ${attempt.attempt}${limit}`;
-
-    return `Auto-generating failure fix plan${count}: ${action.label}`;
-  }
-
-  return `Generating a fix plan for failed action: ${action.label}`;
-}
-
-// 用短格式显示动作耗时, 保持详情面板和时间线易扫读
-function formatDurationMs(durationMs: number): string {
-  if (durationMs < 1000) {
-    return `${durationMs} ms`;
-  }
-
-  return `${(durationMs / 1000).toFixed(1)} s`;
-}
-
-// 用时间和随机数生成命令运行 id, 避免并发命令串流
-function createCommandRunId(threadId: string): string {
-  return `${threadId}-command-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // 重复项目名加序号, 侧边栏展示时保持可区分

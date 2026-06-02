@@ -1,77 +1,111 @@
 // 本文件说明: 根据项目文件路径推断 UI 文件图标类型, 供文件树和预览标题复用
 export type ProjectFileIconKind =
   | "archive"
+  | "astro"
   | "audio"
-  | "code"
+  | "c"
   | "config"
+  | "cpp"
+  | "csharp"
+  | "css"
+  | "default"
+  | "docker"
   | "document"
+  | "eslint"
+  | "git"
+  | "go"
+  | "html"
   | "image"
+  | "java"
+  | "javascript"
   | "json"
+  | "jsx"
+  | "kotlin"
   | "lock"
+  | "lua"
+  | "markdown"
+  | "npm"
   | "pdf"
+  | "php"
+  | "postcss"
+  | "powerpoint"
+  | "powershell"
+  | "python"
+  | "ruby"
+  | "rust"
+  | "scss"
   | "spreadsheet"
+  | "sql"
+  | "svelte"
+  | "swift"
+  | "tailwind"
   | "terminal"
   | "text"
+  | "toml"
+  | "tsx"
+  | "typescript"
   | "video"
-  | "default";
+  | "vite"
+  | "vue"
+  | "word"
+  | "yaml";
 
-const CODE_EXTENSIONS = new Set([
-  "astro",
-  "c",
-  "cc",
-  "cpp",
-  "cs",
-  "css",
-  "go",
-  "h",
-  "hpp",
-  "html",
-  "java",
-  "js",
-  "jsx",
-  "kt",
-  "less",
-  "lua",
-  "php",
-  "py",
-  "rb",
-  "rs",
-  "scss",
-  "sql",
-  "svelte",
-  "swift",
-  "ts",
-  "tsx",
-  "vue"
+const LANGUAGE_EXTENSION_KIND = new Map<string, ProjectFileIconKind>([
+  ["astro", "astro"],
+  ["c", "c"],
+  ["cc", "cpp"],
+  ["cpp", "cpp"],
+  ["cs", "csharp"],
+  ["css", "css"],
+  ["go", "go"],
+  ["h", "cpp"],
+  ["hpp", "cpp"],
+  ["html", "html"],
+  ["java", "java"],
+  ["js", "javascript"],
+  ["jsx", "jsx"],
+  ["kt", "kotlin"],
+  ["less", "css"],
+  ["lua", "lua"],
+  ["php", "php"],
+  ["py", "python"],
+  ["rb", "ruby"],
+  ["rs", "rust"],
+  ["scss", "scss"],
+  ["sql", "sql"],
+  ["svelte", "svelte"],
+  ["swift", "swift"],
+  ["ts", "typescript"],
+  ["tsx", "tsx"],
+  ["vue", "vue"]
 ]);
-const CONFIG_EXTENSIONS = new Set(["conf", "config", "ini", "toml", "yaml", "yml"]);
-const DOCUMENT_EXTENSIONS = new Set(["doc", "docx", "odt", "ppt", "pptx", "rtf"]);
-const TEXT_EXTENSIONS = new Set(["log", "md", "mdx", "txt"]);
+
+const FILE_NAME_ICON_KINDS = new Map<string, ProjectFileIconKind>([
+  [".dockerignore", "docker"],
+  [".gitattributes", "git"],
+  [".gitignore", "git"],
+  [".npmrc", "npm"],
+  ["dockerfile", "docker"],
+  ["eslint.config.js", "eslint"],
+  ["package.json", "npm"],
+  ["postcss.config.js", "postcss"],
+  ["tailwind.config.js", "tailwind"],
+  ["tsconfig.json", "typescript"],
+  ["vite.config.js", "vite"]
+]);
+
+const CONFIG_FILE_NAMES = new Set([".editorconfig", ".env", ".env.example"]);
+const CONFIG_EXTENSIONS = new Set(["conf", "config", "ini"]);
+const DOCUMENT_EXTENSIONS = new Set(["odt", "rtf"]);
+const TEXT_EXTENSIONS = new Set(["log", "txt"]);
 const IMAGE_EXTENSIONS = new Set(["avif", "bmp", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp"]);
 const AUDIO_EXTENSIONS = new Set(["aac", "flac", "m4a", "mp3", "ogg", "wav"]);
 const VIDEO_EXTENSIONS = new Set(["avi", "m4v", "mkv", "mov", "mp4", "webm"]);
 const ARCHIVE_EXTENSIONS = new Set(["7z", "gz", "rar", "tar", "tgz", "zip"]);
 const SPREADSHEET_EXTENSIONS = new Set(["csv", "ods", "tsv", "xls", "xlsx"]);
-const TERMINAL_EXTENSIONS = new Set(["bat", "cmd", "ps1", "sh", "zsh"]);
+const TERMINAL_EXTENSIONS = new Set(["bat", "cmd", "sh", "zsh"]);
 const LOCK_EXTENSIONS = new Set(["lock"]);
 const JSON_EXTENSIONS = new Set(["json", "json5", "jsonc", "jsonl"]);
-
-const CONFIG_FILE_NAMES = new Set([
-  ".dockerignore",
-  ".editorconfig",
-  ".env",
-  ".env.example",
-  ".gitattributes",
-  ".gitignore",
-  ".npmrc",
-  "dockerfile",
-  "eslint.config.js",
-  "package.json",
-  "postcss.config.js",
-  "tailwind.config.js",
-  "tsconfig.json",
-  "vite.config.js"
-]);
 const TERMINAL_FILE_NAMES = new Set(["makefile"]);
 
 export function getProjectFileIconKind(relativePath: string): ProjectFileIconKind {
@@ -82,27 +116,55 @@ export function getProjectFileIconKind(relativePath: string): ProjectFileIconKin
     return "terminal";
   }
 
-  if (CONFIG_FILE_NAMES.has(name)) {
-    return "config";
+  const fileNameKind = FILE_NAME_ICON_KINDS.get(name);
+
+  if (fileNameKind) {
+    return fileNameKind;
   }
 
   if (LOCK_EXTENSIONS.has(extension) || name.endsWith("-lock.json")) {
     return "lock";
   }
 
-  if (JSON_EXTENSIONS.has(extension)) {
-    return "json";
+  if (name.startsWith("readme") || extension === "md" || extension === "mdx") {
+    return "markdown";
+  }
+
+  if (extension === "yaml" || extension === "yml") {
+    return "yaml";
+  }
+
+  if (extension === "toml") {
+    return "toml";
+  }
+
+  if (extension === "ps1") {
+    return "powershell";
   }
 
   if (extension === "pdf") {
     return "pdf";
   }
 
-  if (CODE_EXTENSIONS.has(extension)) {
-    return "code";
+  if (extension === "doc" || extension === "docx") {
+    return "word";
   }
 
-  if (CONFIG_EXTENSIONS.has(extension)) {
+  if (extension === "ppt" || extension === "pptx") {
+    return "powerpoint";
+  }
+
+  const languageKind = LANGUAGE_EXTENSION_KIND.get(extension);
+
+  if (languageKind) {
+    return languageKind;
+  }
+
+  if (JSON_EXTENSIONS.has(extension)) {
+    return "json";
+  }
+
+  if (CONFIG_FILE_NAMES.has(name) || CONFIG_EXTENSIONS.has(extension)) {
     return "config";
   }
 
@@ -110,7 +172,7 @@ export function getProjectFileIconKind(relativePath: string): ProjectFileIconKin
     return "document";
   }
 
-  if (TEXT_EXTENSIONS.has(extension) || name.startsWith("readme")) {
+  if (TEXT_EXTENSIONS.has(extension)) {
     return "text";
   }
 
