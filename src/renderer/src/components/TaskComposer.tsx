@@ -10,7 +10,11 @@ import {
   Check,
   ChevronDown,
   Eye,
+  File,
   FileImage,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
   Paperclip,
   Plug,
   Plus,
@@ -23,11 +27,17 @@ import {
 import type { AgentImageAttachment } from "@shared/agentTypes";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
-import { formatAttachmentSize } from "@/state/imageAttachments";
 import {
   createDefaultGeneralPreferences,
   type GeneralPreferences
 } from "@/state/generalPreferences";
+import {
+  composerAttachmentAccept,
+  formatAttachmentSize,
+  getComposerAttachmentLabel,
+  type ComposerAttachment,
+  type ComposerAttachmentKind
+} from "@/state/composerAttachments";
 import { ModelSelector } from "./ModelSelector";
 import { useTaskComposerState } from "./useTaskComposerState";
 
@@ -80,12 +90,19 @@ export function TaskComposer({
   const supportsImageAttachments = currentModel?.capabilities.vision === true;
 
   const {
+    attachments,
     attachmentNotice,
+    fileInputRef,
+    handleAttachmentInputChange,
+    handleComposerDragLeave,
+    handleComposerDragOver,
+    handleComposerDrop,
     handlePromptKeyDown,
     handlePromptPaste,
-    imageAttachments,
+    isDraggingAttachments,
+    openAttachmentPicker,
     prompt,
-    removeImageAttachment,
+    removeAttachment,
     setPrompt,
     submitTask,
     textareaRef
@@ -93,9 +110,16 @@ export function TaskComposer({
     copy: {
       imagePromptFallback:
         settings.language === "zh-CN"
-          ? "请根据这些图片回答。"
+          ? "请根据这些附件回答。"
           : "Please answer based on the attached image.",
-      imageTooLarge: copy.imageTooLarge
+      attachmentContextHeader: copy.attachmentContextHeader,
+      attachmentContextIntro: copy.attachmentContextIntro,
+      attachmentContextTruncated: copy.attachmentContextTruncated,
+      attachmentPromptFallback: copy.attachmentPromptFallback,
+      attachmentsProcessing: copy.attachmentsProcessing,
+      attachmentTooLarge: copy.attachmentTooLarge,
+      attachmentUnsupported: copy.attachmentUnsupported,
+      sensitiveAttachmentsSkipped: copy.sensitiveAttachmentsSkipped
     },
     focusSignal,
     onSubmitTask,
@@ -115,38 +139,36 @@ export function TaskComposer({
 
   const inputPanel = (
     <div
-      className={`bg-white p-1.5 text-[#202123] transition focus-within:border-[#202123] ${
+      onDragLeave={handleComposerDragLeave}
+      onDragOver={handleComposerDragOver}
+      onDrop={handleComposerDrop}
+      className={`relative bg-white p-1.5 text-[#202123] transition focus-within:border-[#202123] ${
         isHero
           ? "rounded-[18px] border-0 shadow-none"
           : "rounded-[18px] border border-[#d9d9e3] shadow-[0_10px_28px_rgba(0,0,0,0.08)]"
+      } ${
+        isDraggingAttachments
+          ? "ring-2 ring-[#2563eb]/30"
+          : ""
       }`}
     >
-      {imageAttachments.length > 0 ? (
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={composerAttachmentAccept}
+        onChange={handleAttachmentInputChange}
+        className="hidden"
+        aria-label={copy.addAttachments}
+      />
+      {attachments.length > 0 ? (
         <div className="mb-1 flex flex-wrap gap-1.5 px-1">
-          {imageAttachments.map((attachment) => (
-            <div
-              key={attachment.id}
-              className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-[12px] border border-[#d9d9e3] bg-[#f7f7f8]"
-              title={attachment.name ?? attachment.mediaType}
-            >
-              <img
-                src={attachment.dataUrl}
-                alt={attachment.name ?? copy.pastedImage}
-                className="h-full w-full object-cover"
-              />
-              <span className="pointer-events-none absolute bottom-0 left-0 right-0 truncate bg-black/55 px-1 py-0.5 text-[9px] text-white opacity-0 transition group-hover:opacity-100">
-                {formatAttachmentSize(attachment.size)}
-              </span>
-              <button
-                type="button"
-                aria-label={copy.removeImage}
-                onClick={() => removeImageAttachment(attachment.id)}
-                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-0 outline-none transition hover:bg-black group-hover:opacity-100 focus:outline-none focus-visible:outline-none"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
+          {attachments.map((attachment) =>
+            renderAttachmentPreview(attachment, {
+              copy,
+              onRemove: removeAttachment
+            })
+          )}
         </div>
       ) : null}
       {attachmentNotice ? (
@@ -283,7 +305,13 @@ export function TaskComposer({
             sideOffset={8}
             className="forge-dropdown-content forge-dropdown-fast z-50 w-56 rounded-[14px] border border-[#d9d9e3] bg-white p-1.5 text-[13px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
           >
-            <DropdownMenu.Item className="flex h-9 cursor-default items-center gap-2 rounded-[10px] px-2 outline-none data-[highlighted]:bg-[#f7f7f8]">
+            <DropdownMenu.Item
+              onSelect={(event) => {
+                event.preventDefault();
+                openAttachmentPicker();
+              }}
+              className="flex h-9 cursor-default items-center gap-2 rounded-[10px] px-2 outline-none data-[highlighted]:bg-[#f7f7f8]"
+            >
               {supportsImageAttachments ? (
                 <FileImage className="h-4 w-4 shrink-0 text-[#565869]" />
               ) : (
@@ -327,46 +355,176 @@ export function TaskComposer({
 // 根据语言返回输入框文案, 让组件主体只关心布局
 function getComposerCopy(language: ModelSettings["language"]): {
   addAttachments: string;
+  attachmentContextHeader: string;
+  attachmentContextIntro: string;
+  attachmentContextTruncated: string;
+  attachmentPromptFallback: string;
+  attachmentReady: string;
+  attachmentsProcessing: string;
+  attachmentTooLarge: (count: number, maxSize: string) => string;
+  attachmentUnsupported: (count: number) => string;
   autoReviewPermission: string;
   fullAccessPermission: string;
   goalMode: string;
-  imageTooLarge: string;
   openAddMenu: string;
   pastedImage: string;
   pluginSystem: string;
   readOnlyPermission: string;
+  removeAttachment: string;
   removeImage: string;
+  sensitiveAttachmentsSkipped: (count: number) => string;
   stopResponse: string;
 } {
   if (language === "zh-CN") {
     return {
       addAttachments: "添加照片和文件",
+      attachmentContextHeader: "附件本地解析内容:",
+      attachmentContextIntro:
+        "以下内容由 Forge 在本地从用户拖入或粘贴的附件中提取, 可能存在 OCR 或表格截断误差。",
+      attachmentContextTruncated: "[内容已截断]",
+      attachmentPromptFallback: "请根据附件内容回答。",
+      attachmentReady: "已解析",
+      attachmentsProcessing: "附件仍在本地解析中，请稍后发送。",
+      attachmentTooLarge: (count, maxSize) => `${count} 个附件超过 ${maxSize}，已跳过。`,
+      attachmentUnsupported: (count) => `${count} 个附件类型暂不支持，已跳过。`,
       autoReviewPermission: "自动审查",
       fullAccessPermission: "完全访问权限",
       goalMode: "追求目标",
-      imageTooLarge: "图片超过 8 MB，已跳过。",
       openAddMenu: "打开添加菜单",
       pastedImage: "粘贴的图片",
       pluginSystem: "插件系统",
       readOnlyPermission: "只读模式",
+      removeAttachment: "移除附件",
       removeImage: "移除图片",
+      sensitiveAttachmentsSkipped: (count) => `${count} 个敏感附件已跳过。`,
       stopResponse: "停止回答"
     };
   }
 
   return {
     addAttachments: "Add photos and files",
+    attachmentContextHeader: "Local attachment context:",
+    attachmentContextIntro:
+      "Forge extracted the following content locally from files the user pasted or dropped. OCR and table content may be imperfect or truncated.",
+    attachmentContextTruncated: "[Content truncated]",
+    attachmentPromptFallback: "Please answer based on the attached files.",
+    attachmentReady: "Parsed",
+    attachmentsProcessing: "Attachments are still being parsed locally. Please send again in a moment.",
+    attachmentTooLarge: (count, maxSize) => `${count} attachments over ${maxSize} were skipped.`,
+    attachmentUnsupported: (count) => `${count} unsupported attachments were skipped.`,
     autoReviewPermission: "Auto review",
     fullAccessPermission: "Full access",
     goalMode: "Goal mode",
-    imageTooLarge: "Images over 8 MB were skipped.",
     openAddMenu: "Open add menu",
     pastedImage: "Pasted image",
     pluginSystem: "Plugin system",
     readOnlyPermission: "Read only",
+    removeAttachment: "Remove attachment",
     removeImage: "Remove image",
+    sensitiveAttachmentsSkipped: (count) => `${count} sensitive attachments were skipped.`,
     stopResponse: "Stop response"
   };
+}
+
+function renderAttachmentPreview(
+  attachment: ComposerAttachment,
+  options: {
+    copy: ReturnType<typeof getComposerCopy>;
+    onRemove: (id: string) => void;
+  }
+): ReactElement {
+  if (attachment.imageAttachment?.dataUrl) {
+    return (
+      <div
+        key={attachment.id}
+        className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-[12px] border border-[#d9d9e3] bg-[#f7f7f8]"
+        title={attachment.name}
+      >
+        <img
+          src={attachment.imageAttachment.dataUrl}
+          alt={attachment.name || options.copy.pastedImage}
+          className="h-full w-full object-cover"
+        />
+        {attachment.status === "processing" ? (
+          <span className="absolute inset-0 flex items-center justify-center bg-white/75 text-[#565869]">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </span>
+        ) : null}
+        <span className="pointer-events-none absolute bottom-0 left-0 right-0 truncate bg-black/55 px-1 py-0.5 text-[9px] text-white opacity-0 transition group-hover:opacity-100">
+          {formatAttachmentSize(attachment.size)}
+        </span>
+        {renderAttachmentRemoveButton(attachment.id, options)}
+      </div>
+    );
+  }
+
+  const Icon = getAttachmentPreviewIcon(attachment.kind);
+  const statusLabel =
+    attachment.status === "processing"
+      ? options.copy.attachmentsProcessing
+      : attachment.status === "failed"
+        ? attachment.error || options.copy.attachmentUnsupported(1)
+        : options.copy.attachmentReady;
+
+  return (
+    <div
+      key={attachment.id}
+      className="group relative flex h-16 max-w-[180px] items-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-[#f7f7f8] px-2 pr-7"
+      title={`${attachment.name}\n${statusLabel}`}
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white text-[#565869]">
+        {attachment.status === "processing" ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Icon className="h-4 w-4" />
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-[11px] font-medium leading-4 text-[#202123]">
+          {attachment.name}
+        </span>
+        <span className="block truncate text-[10px] leading-3 text-[#8e8ea0]">
+          {getComposerAttachmentLabel(attachment.kind)} · {formatAttachmentSize(attachment.size)}
+        </span>
+      </span>
+      {renderAttachmentRemoveButton(attachment.id, options)}
+    </div>
+  );
+}
+
+function renderAttachmentRemoveButton(
+  id: string,
+  options: {
+    copy: ReturnType<typeof getComposerCopy>;
+    onRemove: (id: string) => void;
+  }
+): ReactElement {
+  return (
+    <button
+      type="button"
+      aria-label={options.copy.removeAttachment}
+      onClick={() => options.onRemove(id)}
+      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-0 outline-none transition hover:bg-black group-hover:opacity-100 focus:outline-none focus-visible:outline-none"
+    >
+      <X className="h-3 w-3" />
+    </button>
+  );
+}
+
+function getAttachmentPreviewIcon(kind: ComposerAttachmentKind): ComponentType<{ className?: string }> {
+  if (kind === "image") {
+    return FileImage;
+  }
+
+  if (kind === "spreadsheet") {
+    return FileSpreadsheet;
+  }
+
+  if (kind === "pdf" || kind === "word" || kind === "text") {
+    return FileText;
+  }
+
+  return File;
 }
 
 // 从通用偏好读取当前权限模式, 旧值统一回退自动审查

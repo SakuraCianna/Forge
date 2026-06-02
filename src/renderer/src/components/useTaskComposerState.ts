@@ -1,21 +1,33 @@
 // Keeps the composer input state separate from the visual controls.
 import type {
+  ChangeEvent as ReactChangeEvent,
   ClipboardEvent as ReactClipboardEvent,
+  DragEvent as ReactDragEvent,
   KeyboardEvent as ReactKeyboardEvent,
   RefObject
 } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentImageAttachment } from "@shared/agentTypes";
 import {
-  maxComposerImageAttachments,
-  readComposerImageAttachment,
-  selectComposerImageFiles
-} from "@/state/imageAttachments";
+  createComposerSubmissionPrompt,
+  formatAttachmentSize,
+  hasProcessingComposerAttachments,
+  maxComposerAttachments,
+  selectComposerAttachmentFiles,
+  type ComposerAttachment,
+  type ComposerSubmissionCopy
+} from "@/state/composerAttachments";
+import {
+  createComposerAttachmentPlaceholder,
+  preprocessComposerAttachment
+} from "@/state/attachmentPreprocessor";
 import type { GeneralPreferences } from "@/state/generalPreferences";
 
-export type TaskComposerStateCopy = {
-  imagePromptFallback: string;
-  imageTooLarge: string;
+export type TaskComposerStateCopy = ComposerSubmissionCopy & {
+  attachmentsProcessing: string;
+  attachmentTooLarge: (count: number, maxSize: string) => string;
+  attachmentUnsupported: (count: number) => string;
+  sensitiveAttachmentsSkipped: (count: number) => string;
 };
 
 export type ComposerSubmission = {
@@ -52,27 +64,37 @@ export function useTaskComposerState({
   submitSignal,
   supportsImageAttachments
 }: UseTaskComposerStateOptions): {
+  attachments: ComposerAttachment[];
   attachmentNotice: string | null;
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  handleAttachmentInputChange: (event: ReactChangeEvent<HTMLInputElement>) => void;
+  handleComposerDragLeave: (event: ReactDragEvent<HTMLDivElement>) => void;
+  handleComposerDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
+  handleComposerDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   handlePromptKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   handlePromptPaste: (event: ReactClipboardEvent<HTMLTextAreaElement>) => void;
-  imageAttachments: AgentImageAttachment[];
+  isDraggingAttachments: boolean;
+  openAttachmentPicker: () => void;
   prompt: string;
-  removeImageAttachment: (id: string) => void;
+  removeAttachment: (id: string) => void;
   setPrompt: (prompt: string) => void;
   submitTask: () => boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
 } {
   const [prompt, setPrompt] = useState("");
-  const [imageAttachments, setImageAttachments] = useState<AgentImageAttachment[]>([]);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
+  const [isDraggingAttachments, setIsDraggingAttachments] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const submitTask = useCallback((): boolean => {
-    const submission = createComposerSubmission(
-      prompt,
-      imageAttachments,
-      copy.imagePromptFallback
-    );
+    if (hasProcessingComposerAttachments(attachments)) {
+      setAttachmentNotice(copy.attachmentsProcessing);
+      return false;
+    }
+
+    const submission = createComposerSubmission(prompt, attachments, copy, supportsImageAttachments);
 
     if (!submission) {
       return false;
@@ -80,10 +102,10 @@ export function useTaskComposerState({
 
     onSubmitTask(submission.prompt, submission.attachments);
     setPrompt("");
-    setImageAttachments([]);
+    setAttachments([]);
     setAttachmentNotice(null);
     return true;
-  }, [copy.imagePromptFallback, imageAttachments, onSubmitTask, prompt]);
+  }, [attachments, copy, onSubmitTask, prompt, supportsImageAttachments]);
 
   useEffect(() => {
     if (focusSignal > 0) {
@@ -97,12 +119,58 @@ export function useTaskComposerState({
     }
   }, [submitSignal, submitTask]);
 
-  useEffect(() => {
-    if (!supportsImageAttachments && imageAttachments.length > 0) {
-      setImageAttachments([]);
-      setAttachmentNotice(null);
-    }
-  }, [imageAttachments.length, supportsImageAttachments]);
+  const addAttachmentFiles = useCallback(
+    (files: File[]): void => {
+      const remainingSlots = maxComposerAttachments - attachments.length;
+      const selection = selectComposerAttachmentFiles(files, remainingSlots);
+      const notices = createAttachmentSelectionNotices(selection, copy);
+
+      if (notices.length > 0) {
+        setAttachmentNotice(notices.join(" "));
+      } else {
+        setAttachmentNotice(null);
+      }
+
+      if (selection.accepted.length === 0) {
+        return;
+      }
+
+      const pendingAttachments = selection.accepted.map(({ file, kind }) =>
+        createComposerAttachmentPlaceholder(file, kind)
+      );
+
+      setAttachments((current) => [...current, ...pendingAttachments].slice(0, maxComposerAttachments));
+
+      selection.accepted.forEach(({ file }, index) => {
+        const placeholder = pendingAttachments[index];
+
+        if (!placeholder) {
+          return;
+        }
+
+        void preprocessComposerAttachment(file, placeholder.id)
+          .then((attachment) => {
+            setAttachments((current) =>
+              current.map((item) => (item.id === attachment.id ? attachment : item))
+            );
+          })
+          .catch((error) => {
+            setAttachments((current) =>
+              current.map((item) =>
+                item.id === placeholder.id
+                  ? {
+                      ...item,
+                      status: "failed",
+                      error: error instanceof Error ? error.message : "Attachment parsing failed"
+                    }
+                  : item
+              )
+            );
+          });
+      });
+    },
+    [attachments.length, copy]
+  );
 
   const handlePromptKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
@@ -128,58 +196,84 @@ export function useTaskComposerState({
 
   const handlePromptPaste = useCallback(
     (event: ReactClipboardEvent<HTMLTextAreaElement>): void => {
-      if (!supportsImageAttachments) {
-        return;
-      }
-
-      const remainingSlots = maxComposerImageAttachments - imageAttachments.length;
-
-      if (remainingSlots <= 0) {
-        return;
-      }
-
       const pastedFiles = Array.from(event.clipboardData.items)
         .map((item) => (item.kind === "file" ? item.getAsFile() : null))
         .filter((file): file is File => Boolean(file));
-      const { accepted: imageFiles, oversizedCount } = selectComposerImageFiles(
-        pastedFiles,
-        remainingSlots
-      );
 
-      if (imageFiles.length === 0) {
-        if (oversizedCount > 0) {
-          event.preventDefault();
-          setAttachmentNotice(copy.imageTooLarge);
-        }
-
+      if (pastedFiles.length === 0) {
         return;
       }
 
       event.preventDefault();
-      setAttachmentNotice(oversizedCount > 0 ? copy.imageTooLarge : null);
-      void Promise.all(imageFiles.map(readComposerImageAttachment))
-        .then((attachments) => {
-          setImageAttachments((current) =>
-            [...current, ...attachments].slice(0, maxComposerImageAttachments)
-          );
-        })
-        .catch(() => undefined);
+      addAttachmentFiles(pastedFiles);
     },
-    [copy.imageTooLarge, imageAttachments.length, supportsImageAttachments]
+    [addAttachmentFiles]
   );
 
-  const removeImageAttachment = useCallback((id: string): void => {
-    setImageAttachments((current) => current.filter((attachment) => attachment.id !== id));
+  const handleAttachmentInputChange = useCallback(
+    (event: ReactChangeEvent<HTMLInputElement>): void => {
+      addAttachmentFiles(Array.from(event.currentTarget.files ?? []));
+      event.currentTarget.value = "";
+    },
+    [addAttachmentFiles]
+  );
+
+  const handleComposerDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>): void => {
+    if (!hasDragFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    setIsDraggingAttachments(true);
+  }, []);
+
+  const handleComposerDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>): void => {
+    if (
+      event.currentTarget === event.relatedTarget ||
+      (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))
+    ) {
+      return;
+    }
+
+    setIsDraggingAttachments(false);
+  }, []);
+
+  const handleComposerDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>): void => {
+      if (!hasDragFiles(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      setIsDraggingAttachments(false);
+      addAttachmentFiles(Array.from(event.dataTransfer.files));
+    },
+    [addAttachmentFiles]
+  );
+
+  const openAttachmentPicker = useCallback((): void => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const removeAttachment = useCallback((id: string): void => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== id));
     setAttachmentNotice(null);
   }, []);
 
   return {
+    attachments,
     attachmentNotice,
+    fileInputRef,
+    handleAttachmentInputChange,
+    handleComposerDragLeave,
+    handleComposerDragOver,
+    handleComposerDrop,
     handlePromptKeyDown,
     handlePromptPaste,
-    imageAttachments,
+    isDraggingAttachments,
+    openAttachmentPicker,
     prompt,
-    removeImageAttachment,
+    removeAttachment,
     setPrompt,
     submitTask,
     textareaRef
@@ -188,19 +282,21 @@ export function useTaskComposerState({
 
 export function createComposerSubmission(
   prompt: string,
-  attachments: AgentImageAttachment[],
-  imagePromptFallback: string
+  attachments: ComposerAttachment[],
+  copy: ComposerSubmissionCopy,
+  supportsImageAttachments = true
 ): ComposerSubmission | null {
-  const normalizedPrompt = prompt.trim();
+  const submissionAttachments = supportsImageAttachments
+    ? attachments
+    : attachments.map((attachment) => ({ ...attachment, imageAttachment: undefined }));
+  const submission = createComposerSubmissionPrompt(prompt, submissionAttachments, copy);
 
-  if (!normalizedPrompt && attachments.length === 0) {
-    return null;
-  }
-
-  return {
-    prompt: normalizedPrompt || imagePromptFallback,
-    attachments: attachments.length > 0 ? attachments : undefined
-  };
+  return submission
+    ? {
+        prompt: submission.prompt,
+        attachments: supportsImageAttachments ? submission.attachments : undefined
+      }
+    : null;
 }
 
 export function shouldSubmitComposerPrompt({
@@ -219,4 +315,24 @@ export function shouldSubmitComposerPrompt({
   return submitShortcut === "ctrl-enter"
     ? (ctrlKey || metaKey) && !shiftKey && !altKey
     : !shiftKey && !altKey && !ctrlKey && !metaKey;
+}
+
+function createAttachmentSelectionNotices(
+  selection: ReturnType<typeof selectComposerAttachmentFiles>,
+  copy: Pick<
+    TaskComposerStateCopy,
+    "attachmentTooLarge" | "attachmentUnsupported" | "sensitiveAttachmentsSkipped"
+  >
+): string[] {
+  return [
+    selection.oversizedCount > 0
+      ? copy.attachmentTooLarge(selection.oversizedCount, formatAttachmentSize(16 * 1024 * 1024))
+      : "",
+    selection.unsupportedCount > 0 ? copy.attachmentUnsupported(selection.unsupportedCount) : "",
+    selection.sensitiveCount > 0 ? copy.sensitiveAttachmentsSkipped(selection.sensitiveCount) : ""
+  ].filter(Boolean);
+}
+
+function hasDragFiles(event: ReactDragEvent<HTMLDivElement>): boolean {
+  return Array.from(event.dataTransfer.types).includes("Files");
 }

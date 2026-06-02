@@ -25,11 +25,15 @@
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@tailwindcss/vite": "^4.3.0",
     "lucide-react": "^1.16.0",
+    "mammoth": "^1.12.0",
+    "pdfjs-dist": "^6.0.227",
     "prettier": "^3.8.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "read-excel-file": "^9.0.10",
     "shiki": "^4.1.0",
-    "tailwindcss": "^4.3.0"
+    "tailwindcss": "^4.3.0",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
