@@ -59,6 +59,12 @@ import {
   type AgentToolResultEventKind
 } from "@/agent/agentToolResults";
 import {
+  createAgentAskRequestPayload,
+  createAgentFileChangeRequestPayload,
+  createAgentPlanRequestPayload,
+  type AgentRequestRuntimeContext
+} from "@/agent/agentRequestPayloads";
+import {
   formatFailureFixPlanStartMessage
 } from "@/agent/agentRunMessages";
 import {
@@ -186,7 +192,6 @@ import {
   type CodeFormatterMode
 } from "@/state/codeFormatting";
 import { createTaskSubmissionRoute } from "@/state/taskSubmissionRouting";
-import { appendAttachmentContextsToPrompt } from "@/state/composerAttachments";
 import {
   appendCommandSafetyRule,
   createExactCommandAllowRule,
@@ -200,7 +205,6 @@ import {
   extractAgentMemoryCandidate,
   loadAgentMemories,
   saveAgentMemories,
-  selectRelevantAgentMemories,
   upsertAgentMemory,
   type AgentMemoryEntry
 } from "@/state/agentMemory";
@@ -429,6 +433,33 @@ export function App(): ReactElement {
 
   function getThreadFailureRecoveryLimit(threadId: string): number {
     return Math.max(0, getThreadAgentProfileContext(threadId).maxFailureRecoveryAttempts);
+  }
+
+  function createAgentRequestRuntimeContext({
+    threadId,
+    model,
+    provider,
+    intelligence,
+    speed
+  }: {
+    threadId: string;
+    model: ForgeModel;
+    provider: ForgeProvider;
+    intelligence: AgentRequestRuntimeContext["intelligence"];
+    speed: AgentRequestRuntimeContext["speed"];
+  }): AgentRequestRuntimeContext {
+    // 所有 Agent 模型请求都从这里读取实时设置和线程 profile, 避免 plan/ask/edit 三处各自拼接后漂移。
+    return {
+      provider,
+      model,
+      intelligence,
+      agentProfile: getThreadAgentProfileContext(threadId),
+      personalization,
+      speed,
+      workMode: generalPreferences.workMode,
+      agentRuntime: generalPreferences.agentRuntime,
+      language: settings.language
+    };
   }
 
   useEffect(() => {
@@ -1577,39 +1608,36 @@ export function App(): ReactElement {
     );
 
     try {
-      const memories = selectRelevantAgentMemories(
-        agentMemories,
-        currentProject.path,
-        8,
-        `${selectedThread.prompt} ${options.action?.label ?? ""} ${relativePath} ${currentContent.slice(0, 1200)}`
-      );
-
-      setThreads((current) => attachThreadMemoryContext(current, selectedThread.id, memories));
-      // 附件解析内容只增强模型请求, 不改 selectedThread.prompt。
-      // 这样文件修改可以利用需求文档/OCR, 但线程标题和用户原始任务仍保持可读。
-      const fileChangeTaskPrompt = appendAttachmentContextsToPrompt(
-        createFileChangeTaskPrompt(selectedThread, relativePath, options.action, {
+      const fileChangeTaskPrompt = createFileChangeTaskPrompt(
+        selectedThread,
+        relativePath,
+        options.action,
+        {
           toolResults: getRecentAgentToolResults(selectedThread.id)
-        }),
-        selectedThread.attachmentContexts,
-        settings.language
+        }
       );
-
-      const result = await window.forge.agent.generateFileChange({
-        provider,
-        model,
-        intelligence: selectedThread.intelligence,
-        agentProfile: getThreadAgentProfileContext(selectedThread.id),
-        memories,
-        personalization: createPersonalizationPrompt(personalization),
-        projectScan: projectScanResult,
-        speed: selectedThread.speed,
-        workMode: generalPreferences.workMode,
-        agentRuntime: generalPreferences.agentRuntime,
+      const { request, memories } = createAgentFileChangeRequestPayload({
+        runtime: createAgentRequestRuntimeContext({
+          threadId: selectedThread.id,
+          model,
+          provider,
+          intelligence: selectedThread.intelligence,
+          speed: selectedThread.speed
+        }),
+        agentMemories,
+        memoryQuery: `${selectedThread.prompt} ${options.action?.label ?? ""} ${relativePath} ${currentContent.slice(0, 1200)}`,
         taskPrompt: fileChangeTaskPrompt,
+        attachmentContexts: selectedThread.attachmentContexts,
+        attachments: selectedThread.attachments,
+        projectRoot: currentProject.path,
+        projectScan: projectScanResult,
         relativePath,
         currentContent
       });
+
+      setThreads((current) => attachThreadMemoryContext(current, selectedThread.id, memories));
+
+      const result = await window.forge.agent.generateFileChange(request);
       const preview = await window.forge.files.previewTextUpdate({
         projectRoot: currentProject.path,
         relativePath,
@@ -1888,27 +1916,20 @@ export function App(): ReactElement {
     let unsubscribeStream: (() => void) | null = null;
 
     try {
-      const memories = selectRelevantAgentMemories(agentMemories, projectScan.rootPath, 8, taskPrompt);
-      // 记忆检索使用干净的用户任务, 模型规划请求才追加本地附件上下文。
-      const modelTaskPrompt = appendAttachmentContextsToPrompt(
+      const { request, memories } = createAgentPlanRequestPayload({
+        runtime: createAgentRequestRuntimeContext({
+          threadId,
+          model,
+          provider,
+          intelligence: settings.intelligence,
+          speed: settings.speed
+        }),
+        agentMemories,
         taskPrompt,
         attachmentContexts,
-        settings.language
-      );
-      const request = {
-        provider,
-        model,
-        intelligence: settings.intelligence,
-        agentProfile: getThreadAgentProfileContext(threadId),
-        memories,
-        personalization: createPersonalizationPrompt(personalization),
-        speed: settings.speed,
-        workMode: generalPreferences.workMode,
-        agentRuntime: generalPreferences.agentRuntime,
-        taskPrompt: modelTaskPrompt,
-        attachments: resolveVisionAttachments(model, attachments),
+        attachments,
         projectScan
-      };
+      });
       let receivedDelta = false;
 
       setThreads((current) => attachThreadMemoryContext(current, threadId, memories));
@@ -2272,24 +2293,21 @@ export function App(): ReactElement {
     projectScan?: ProjectScanResult | null;
     conversation?: Array<{ role: "user" | "assistant"; content: string }>;
   }): Promise<void> {
-    const memories = selectRelevantAgentMemories(agentMemories, projectScan?.rootPath ?? null, 8, prompt);
-    // 问答流同样保持 UI prompt 干净, 只把附件本地解析结果作为模型侧上下文。
-    const modelPrompt = appendAttachmentContextsToPrompt(prompt, attachmentContexts, settings.language);
-    const request = {
-      provider,
-      model,
-      intelligence: settings.intelligence,
-      agentProfile: getThreadAgentProfileContext(threadId),
-      memories,
-      personalization: createPersonalizationPrompt(personalization),
-      conversation,
+    const { request, memories } = createAgentAskRequestPayload({
+      runtime: createAgentRequestRuntimeContext({
+        threadId,
+        model,
+        provider,
+        intelligence: settings.intelligence,
+        speed: settings.speed
+      }),
+      agentMemories,
+      prompt,
+      attachmentContexts,
+      attachments,
       projectScan,
-      speed: settings.speed,
-      workMode: generalPreferences.workMode,
-      agentRuntime: generalPreferences.agentRuntime,
-      prompt: modelPrompt,
-      attachments: resolveVisionAttachments(model, attachments)
-    };
+      conversation
+    });
     const streamStartedAt = new Date().toISOString();
     const streamEventId = `${threadId}-ask-stream-${Date.now()}`;
     let unsubscribeStream: (() => void) | null = null;
