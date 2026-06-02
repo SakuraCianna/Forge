@@ -1,4 +1,5 @@
 import type { AgentAction } from "@shared/agentExecutionPlan";
+import type { Language } from "@shared/modelTypes";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
 import { countAutoFailureRecoveryAttempts } from "./failureRecoveryAttempts";
 
@@ -24,6 +25,13 @@ export type AutoFailureRecoveryCandidate = {
   attempt: number;
   limit: number;
   decision: AutoFailureRecoveryDecision;
+};
+
+export type AutoFailureRecoverySkipNotice = {
+  thread: TaskThread;
+  failedAction: AgentAction;
+  key: string;
+  decision: Extract<AutoFailureRecoveryDecision, { recoverable: false }>;
 };
 
 export type SelectAutoFailureRecoveryCandidateInput = {
@@ -90,6 +98,48 @@ export function selectAutoFailureRecoveryCandidate({
   return null;
 }
 
+export function selectAutoFailureRecoverySkipNotice({
+  threads,
+  currentProjectPath,
+  cancelledThreadIds
+}: Pick<
+  SelectAutoFailureRecoveryCandidateInput,
+  "threads" | "currentProjectPath" | "cancelledThreadIds"
+>): AutoFailureRecoverySkipNotice | null {
+  for (const thread of threads) {
+    if (!canThreadAutoRecover(thread, currentProjectPath, cancelledThreadIds)) {
+      continue;
+    }
+
+    const failedAction = findFailedAgentQueueBlocker(thread.agentActions ?? []);
+
+    if (!failedAction) {
+      continue;
+    }
+
+    const decision = classifyAutoFailureForRecovery(thread, failedAction);
+
+    if (decision.recoverable) {
+      continue;
+    }
+
+    const key = createAutoFailureRecoverySkipKey(thread.id, failedAction.id, decision.reason);
+
+    if (thread.events.some((event) => event.id === key)) {
+      continue;
+    }
+
+    return {
+      thread,
+      failedAction,
+      key,
+      decision
+    };
+  }
+
+  return null;
+}
+
 export function findFailedAgentQueueBlocker(actions: AgentAction[]): AgentAction | null {
   for (const action of actions) {
     if (action.status === "completed" || action.status === "skipped") {
@@ -104,6 +154,35 @@ export function findFailedAgentQueueBlocker(actions: AgentAction[]): AgentAction
 
 export function createAutoFailureFixKey(threadId: string, actionId: string): string {
   return `${threadId}:${actionId}`;
+}
+
+export function createAutoFailureRecoverySkipKey(
+  threadId: string,
+  actionId: string,
+  reason: AutoFailureRecoverySkipReason
+): string {
+  return `${threadId}-agent-action-recovery-skip-${actionId}-${reason}`;
+}
+
+export function createAutoFailureRecoverySkipEvent({
+  threadId,
+  action,
+  decision,
+  language,
+  createdAt
+}: {
+  threadId: string;
+  action: Pick<AgentAction, "id" | "label">;
+  decision: Extract<AutoFailureRecoveryDecision, { recoverable: false }>;
+  language: Language;
+  createdAt: string;
+}): TaskThreadEvent {
+  return {
+    id: createAutoFailureRecoverySkipKey(threadId, action.id, decision.reason),
+    kind: "plan",
+    message: formatAutoFailureRecoverySkipMessage(language, action, decision),
+    createdAt
+  };
 }
 
 export function classifyAutoFailureForRecovery(
@@ -154,6 +233,30 @@ export function classifyAutoFailureForRecovery(
   return { recoverable: true, reason: "recoverable" };
 }
 
+export function formatAutoFailureRecoverySkipMessage(
+  language: Language,
+  action: Pick<AgentAction, "label">,
+  decision: Extract<AutoFailureRecoveryDecision, { recoverable: false }>
+): string {
+  const reasonText = formatAutoFailureRecoverySkipReason(language, decision.reason);
+
+  if (language === "zh-CN") {
+    return [
+      `自动恢复已暂停: ${action.label}`,
+      `原因: ${reasonText}`,
+      `细节: ${decision.detail}`,
+      "Forge 不会在该失败点继续自动重试, 需要处理权限、依赖或取消状态后再继续。"
+    ].join("\n");
+  }
+
+  return [
+    `Automatic recovery paused: ${action.label}`,
+    `Reason: ${reasonText}`,
+    `Detail: ${decision.detail}`,
+    "Forge will not keep retrying this failure until the permission, dependency, or cancellation state is resolved."
+  ].join("\n");
+}
+
 function canThreadAutoRecover(
   thread: TaskThread,
   currentProjectPath: string,
@@ -165,6 +268,33 @@ function canThreadAutoRecover(
     thread.agentProfile?.failureRecoveryPolicy === "auto" &&
     !cancelledThreadIds.has(thread.id)
   );
+}
+
+function formatAutoFailureRecoverySkipReason(
+  language: Language,
+  reason: AutoFailureRecoverySkipReason
+): string {
+  if (language === "zh-CN") {
+    if (reason === "requires-dependency") {
+      return "需要先确认或安装依赖";
+    }
+
+    if (reason === "requires-permission") {
+      return "需要用户确认权限";
+    }
+
+    return "用户已取消相关命令";
+  }
+
+  if (reason === "requires-dependency") {
+    return "dependency or tool setup is required";
+  }
+
+  if (reason === "requires-permission") {
+    return "permission approval is required";
+  }
+
+  return "the related command was cancelled by the user";
 }
 
 function findManualGateFailureEvent(

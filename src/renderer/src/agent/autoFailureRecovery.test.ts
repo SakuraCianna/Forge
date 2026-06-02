@@ -4,9 +4,12 @@ import type { AgentProfileContext } from "@shared/agentTypes";
 import type { TaskThread } from "@/state/taskThreads";
 import {
   classifyAutoFailureForRecovery,
+  createAutoFailureRecoverySkipEvent,
+  createAutoFailureRecoverySkipKey,
   createAutoFailureFixKey,
   findFailedAgentQueueBlocker,
-  selectAutoFailureRecoveryCandidate
+  selectAutoFailureRecoveryCandidate,
+  selectAutoFailureRecoverySkipNotice
 } from "./autoFailureRecovery";
 
 const autoProfile: AgentProfileContext = {
@@ -231,6 +234,72 @@ describe("auto failure recovery", () => {
       reason: "requires-dependency",
       detail: "Missing dependency or package: left-pad"
     });
+  });
+
+  it("selects a non-recoverable skip notice once per action and reason", () => {
+    const thread = createThread({
+      events: [
+        createCommandResultEvent("Cannot find module 'left-pad'\nRequire stack:\n- test.js")
+      ]
+    });
+    const notice = selectAutoFailureRecoverySkipNotice({
+      threads: [thread],
+      currentProjectPath: "E:\\CodeHome\\Forge",
+      cancelledThreadIds: new Set()
+    });
+
+    expect(notice?.failedAction.id).toBe("action-1");
+    expect(notice?.decision.reason).toBe("requires-dependency");
+    expect(notice?.key).toBe(
+      createAutoFailureRecoverySkipKey("thread-1", "action-1", "requires-dependency")
+    );
+
+    const alreadyNotifiedThread = createThread({
+      events: [
+        ...thread.events,
+        createAutoFailureRecoverySkipEvent({
+          threadId: "thread-1",
+          action: createAction("action-1", "failed"),
+          decision: {
+            recoverable: false,
+            reason: "requires-dependency",
+            detail: "Missing dependency or package: left-pad"
+          },
+          language: "zh-CN",
+          createdAt: "2026-06-02T00:01:00.000Z"
+        })
+      ]
+    });
+
+    expect(
+      selectAutoFailureRecoverySkipNotice({
+        threads: [alreadyNotifiedThread],
+        currentProjectPath: "E:\\CodeHome\\Forge",
+        cancelledThreadIds: new Set()
+      })
+    ).toBeNull();
+  });
+
+  it("creates readable skip notice events for the current language", () => {
+    const event = createAutoFailureRecoverySkipEvent({
+      threadId: "thread-1",
+      action: createAction("action-1", "failed"),
+      decision: {
+        recoverable: false,
+        reason: "requires-permission",
+        detail: "Permission problem: access is denied"
+      },
+      language: "zh-CN",
+      createdAt: "2026-06-02T00:01:00.000Z"
+    });
+
+    expect(event.id).toBe(
+      createAutoFailureRecoverySkipKey("thread-1", "action-1", "requires-permission")
+    );
+    expect(event.kind).toBe("plan");
+    expect(event.message).toContain("自动恢复已暂停");
+    expect(event.message).toContain("需要用户确认权限");
+    expect(event.message).toContain("access is denied");
   });
 
   it("keeps local source import failures recoverable", () => {
