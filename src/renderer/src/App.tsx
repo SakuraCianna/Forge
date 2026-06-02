@@ -49,7 +49,11 @@ import {
   appendAgentCompletionSummaryIfDone as appendAgentCompletionSummaryIfDoneToThreads,
   applyAgentActionDecisionStatus
 } from "@/agent/agentActionLifecycle";
-import { useAgentToolResults } from "@/agent/agentToolResults";
+import {
+  appendAgentToolResultEvent,
+  useAgentToolResults,
+  type AgentToolResultEventKind
+} from "@/agent/agentToolResults";
 import {
   formatFailureFixPlanStartMessage
 } from "@/agent/agentRunMessages";
@@ -2436,7 +2440,27 @@ export function App(): ReactElement {
     setThreads((current) => updateThreadAgentActionStatus(current, threadId, actionId, status));
   }
 
-  // 写入动作级执行记录, 让线程详情能展示每一步开始, 结束和等待原因
+  // Cache controlled tool results and expose them in the thread event list.
+  function recordAgentToolResultEvent(
+    threadId: string,
+    action: AgentAction,
+    toolKind: AgentToolResultEventKind,
+    message: string,
+    createdAt: string
+  ): void {
+    rememberAgentToolResult(threadId, message);
+    setThreads((current) =>
+      appendAgentToolResultEvent(current, {
+        threadId,
+        action,
+        toolKind,
+        message,
+        createdAt
+      })
+    );
+  }
+
+  // Write action-level run records so thread details can show every step.
   function appendAgentActionRunEvent(
     threadId: string,
     action: AgentAction,
@@ -2855,18 +2879,7 @@ export function App(): ReactElement {
       const createdAt = new Date().toISOString();
       const message = formatProjectDirectoryListResultMessage(settings.language, result);
 
-      rememberAgentToolResult(threadId, message);
-      updateAgentActionStatus(threadId, action.id, "completed");
-      setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-agent-list-directory-${action.id}-${createdAt}`,
-            kind: "file",
-            message,
-            createdAt
-          }
-        ])
-      );
+      recordAgentToolResultEvent(threadId, action, "list-directory", message, createdAt);
       return "completed";
     } catch (error) {
       updateAgentActionStatus(threadId, action.id, "failed");
@@ -2900,18 +2913,7 @@ export function App(): ReactElement {
 
       setGitStatus(status);
       setGitNotice(null);
-      rememberAgentToolResult(threadId, message);
-      updateAgentActionStatus(threadId, action.id, "completed");
-      setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-agent-git-status-${action.id}-${createdAt}`,
-            kind: "file",
-            message,
-            createdAt
-          }
-        ])
-      );
+      recordAgentToolResultEvent(threadId, action, "git-status", message, createdAt);
       return "completed";
     } catch (error) {
       updateAgentActionStatus(threadId, action.id, "failed");
@@ -2947,18 +2949,7 @@ export function App(): ReactElement {
       const createdAt = new Date().toISOString();
       const message = formatProjectGlobResultMessage(settings.language, result);
 
-      rememberAgentToolResult(threadId, message);
-      updateAgentActionStatus(threadId, action.id, "completed");
-      setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-agent-glob-${action.id}-${createdAt}`,
-            kind: "file",
-            message,
-            createdAt
-          }
-        ])
-      );
+      recordAgentToolResultEvent(threadId, action, "glob", message, createdAt);
       return "completed";
     } catch (error) {
       updateAgentActionStatus(threadId, action.id, "failed");
@@ -2995,18 +2986,7 @@ export function App(): ReactElement {
       const createdAt = new Date().toISOString();
       const message = formatProjectSearchResultMessage(settings.language, result);
 
-      rememberAgentToolResult(threadId, message);
-      updateAgentActionStatus(threadId, action.id, "completed");
-      setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-agent-search-${action.id}-${createdAt}`,
-            kind: "file",
-            message,
-            createdAt
-          }
-        ])
-      );
+      recordAgentToolResultEvent(threadId, action, "search", message, createdAt);
       return "completed";
     } catch (error) {
       updateAgentActionStatus(threadId, action.id, "failed");
@@ -3109,21 +3089,9 @@ export function App(): ReactElement {
       const message = file ? formatProjectFileReadResultMessage(settings.language, file) : null;
 
       if (message) {
-        rememberAgentToolResult(threadId, message);
-      }
-
-      updateAgentActionStatus(threadId, action.id, "completed");
-      if (message) {
-        setThreads((current) =>
-          appendThreadEvents(current, threadId, [
-            {
-              id: `${threadId}-agent-read-file-${action.id}-${createdAt}`,
-              kind: "file",
-              message,
-              createdAt
-            }
-          ])
-        );
+        recordAgentToolResultEvent(threadId, action, "read-file", message, createdAt);
+      } else {
+        updateAgentActionStatus(threadId, action.id, "completed");
       }
       return "completed";
     } catch (error) {

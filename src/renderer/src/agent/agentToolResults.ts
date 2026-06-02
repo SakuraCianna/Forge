@@ -1,9 +1,30 @@
 // Keeps recent Agent tool results bounded for follow-up file-change prompts.
 import { useCallback, useRef } from "react";
+import type { AgentAction } from "@shared/agentExecutionPlan";
+import {
+  appendThreadEvents,
+  updateThreadAgentActionStatus,
+  type TaskThread
+} from "@/state/taskThreads";
 
 export const maxRecentAgentToolResults = 8;
 
 export type AgentToolResultStore = Map<string, string[]>;
+
+export type AgentToolResultEventKind =
+  | "list-directory"
+  | "git-status"
+  | "glob"
+  | "search"
+  | "read-file";
+
+const agentToolResultEventNameByKind: Record<AgentToolResultEventKind, string> = {
+  "list-directory": "agent-list-directory",
+  "git-status": "agent-git-status",
+  glob: "agent-glob",
+  search: "agent-search",
+  "read-file": "agent-read-file"
+};
 
 export type AgentToolResults = {
   clearAgentToolResults: () => void;
@@ -57,4 +78,35 @@ export function getRecentAgentToolResultMessages(
   threadId: string
 ): string[] {
   return [...(store.get(threadId) ?? [])];
+}
+
+export function appendAgentToolResultEvent(
+  threads: TaskThread[],
+  {
+    threadId,
+    action,
+    toolKind,
+    message,
+    createdAt
+  }: {
+    threadId: string;
+    action: AgentAction;
+    toolKind: AgentToolResultEventKind;
+    message: string;
+    createdAt: string;
+  }
+): TaskThread[] {
+  return updateThreadAgentActionStatus(
+    appendThreadEvents(threads, threadId, [
+      {
+        id: `${threadId}-${agentToolResultEventNameByKind[toolKind]}-${action.id}-${createdAt}`,
+        kind: "file",
+        message,
+        createdAt
+      }
+    ]),
+    threadId,
+    action.id,
+    "completed"
+  );
 }
