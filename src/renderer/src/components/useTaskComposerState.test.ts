@@ -1,17 +1,26 @@
 import { describe, expect, it } from "vitest";
 import type { AgentImageAttachment } from "@shared/agentTypes";
+import type { ComposerSubmissionCopy } from "@/state/composerAttachments";
 import {
   createComposerSubmission,
   shouldSubmitComposerPrompt
 } from "./useTaskComposerState";
 
+const copy: ComposerSubmissionCopy = {
+  attachmentContextHeader: "Local attachment context:",
+  attachmentContextIntro: "Extracted locally.",
+  attachmentContextTruncated: "[truncated]",
+  attachmentPromptFallback: "Use the attachments.",
+  imagePromptFallback: "Describe the image"
+};
+
 describe("useTaskComposerState helpers", () => {
   it("returns null for empty composer submissions", () => {
-    expect(createComposerSubmission("   ", [], "Describe the image")).toBeNull();
+    expect(createComposerSubmission("   ", [], copy)).toBeNull();
   });
 
   it("trims text submissions and omits empty attachments", () => {
-    expect(createComposerSubmission("  refactor App.tsx  ", [], "Describe the image")).toEqual({
+    expect(createComposerSubmission("  refactor App.tsx  ", [], copy)).toEqual({
       prompt: "refactor App.tsx",
       attachments: undefined
     });
@@ -20,9 +29,18 @@ describe("useTaskComposerState helpers", () => {
   it("uses the image fallback when submitting attachments without text", () => {
     const attachment = createAttachment("image-1");
 
-    expect(createComposerSubmission("   ", [attachment], "Describe the image")).toEqual({
+    expect(createComposerSubmission("   ", [attachment], copy)).toEqual({
       prompt: "Describe the image",
-      attachments: [attachment]
+      attachments: [attachment.imageAttachment]
+    });
+  });
+
+  it("drops binary images for non-vision models but keeps OCR text", () => {
+    const attachment = createAttachment("image-1", "OCR text");
+
+    expect(createComposerSubmission("Look", [attachment], copy, false)).toEqual({
+      prompt: expect.stringContaining("OCR text"),
+      attachments: undefined
     });
   });
 
@@ -83,12 +101,23 @@ describe("useTaskComposerState helpers", () => {
   });
 });
 
-function createAttachment(id: string): AgentImageAttachment {
-  return {
+function createAttachment(id: string, extractedText?: string) {
+  const imageAttachment: AgentImageAttachment = {
     id,
     mediaType: "image/png",
     dataUrl: "data:image/png;base64,AA==",
     name: "image.png",
     size: 128
+  };
+
+  return {
+    id,
+    kind: "image" as const,
+    mediaType: "image/png",
+    imageAttachment,
+    name: "image.png",
+    size: 128,
+    status: "ready" as const,
+    extractedText
   };
 }
