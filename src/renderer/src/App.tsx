@@ -166,7 +166,6 @@ import {
   type TaskThread
 } from "@/state/taskThreads";
 import {
-  createThreadConversation,
   findPendingAgentCommitAction,
   formatAgentCommitMessageSuggestion,
   hasContinuableAgentActions,
@@ -192,6 +191,10 @@ import {
   type CodeFormatterMode
 } from "@/state/codeFormatting";
 import { createTaskSubmissionRoute } from "@/state/taskSubmissionRouting";
+import {
+  createTaskSubmissionExecution,
+  type TaskSubmissionNoticeReason
+} from "@/state/taskSubmissionExecution";
 import {
   appendCommandSafetyRule,
   createExactCommandAllowRule,
@@ -1743,154 +1746,69 @@ export function App(): ReactElement {
       settings
     });
 
-    if (route.kind === "invalid") {
-      setTaskNotice(
-        route.reason === "empty-prompt" ? t("composer.emptyPrompt") : t("composer.missingModel")
-      );
+    const execution = createTaskSubmissionExecution({
+      route,
+      prompt,
+      settings,
+      submittedAttachments,
+      currentProjectPath: currentProject?.path ?? null,
+      projectScan: projectScanResult
+    });
+
+    if (execution.kind === "notice") {
+      setTaskNotice(getTaskSubmissionNoticeMessage(execution.reason));
       return;
     }
-
-    if (route.kind === "project-required") {
-      setTaskNotice(t("projects.required"));
-      return;
-    }
-
-    if (route.kind === "project-scanning") {
-      setTaskNotice(t("projects.scanning"));
-      return;
-    }
-
-    if (route.kind === "ask-follow-up") {
-      const selectedModel = settings.models.find((model) => model.id === route.draftThread.modelId);
-      const selectedProvider = selectedModel
-        ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
-        : null;
-      const createdAt = new Date().toISOString();
-
-      setTaskNotice(null);
-      clearPausedAgentThread(route.thread.id);
-      setThreads((current) =>
-        appendThreadFollowUpPrompt(current, route.thread.id, {
-          id: `${route.thread.id}-user-${createdAt}`,
-          message: prompt,
-          createdAt,
-          attachments: submittedAttachments,
-          attachmentContexts: route.draftThread.attachmentContexts
-        })
-      );
-      rememberPromptIfNeeded(
-        route.thread.id,
-        prompt,
-        getProjectScanForThread(route.thread)?.rootPath ?? route.thread.projectPath ?? null
-      );
-
-      if (!selectedModel || !selectedProvider) {
-        appendThreadError(route.thread.id, "未找到当前模型或提供商配置");
-        return;
-      }
-
-      void generateAskResponse({
-        threadId: route.thread.id,
-        prompt,
-        model: selectedModel,
-        provider: selectedProvider,
-        attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
-        attachmentContexts: route.draftThread.attachmentContexts,
-        projectScan: getProjectScanForThread(route.thread),
-        conversation: createThreadConversation(route.thread)
-      });
-      return;
-    }
-
-    if (route.kind === "ask-new") {
-      const selectedModel = settings.models.find((model) => model.id === route.thread.modelId);
-      const selectedProvider = selectedModel
-        ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
-        : null;
-
-      setTaskNotice(null);
-      clearPausedAgentThread(route.thread.id);
-      setThreads((current) => [route.thread, ...current]);
-      setSelectedThreadId(route.thread.id);
-      rememberPromptIfNeeded(route.thread.id, prompt, route.thread.projectPath ?? null);
-
-      if (!selectedModel || !selectedProvider) {
-        appendThreadError(route.thread.id, "未找到当前模型或提供商配置");
-        return;
-      }
-
-      void generateAskResponse({
-        threadId: route.thread.id,
-        prompt: route.thread.prompt,
-        model: selectedModel,
-        provider: selectedProvider,
-        attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
-        attachmentContexts: route.thread.attachmentContexts,
-        projectScan: currentProject ? projectScanResult : null
-      });
-      return;
-    }
-
-    if (route.kind === "project-follow-up") {
-      const selectedModel = settings.models.find((model) => model.id === route.draftThread.modelId);
-      const selectedProvider = selectedModel
-        ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
-        : null;
-      const createdAt = new Date().toISOString();
-
-      setTaskNotice(null);
-      clearPausedAgentThread(route.thread.id);
-      setThreads((current) =>
-        appendThreadFollowUpPrompt(current, route.thread.id, {
-          id: `${route.thread.id}-user-${createdAt}`,
-          message: prompt,
-          createdAt,
-          attachments: submittedAttachments,
-          attachmentContexts: route.draftThread.attachmentContexts
-        })
-      );
-
-      if (!selectedModel || !selectedProvider) {
-        appendThreadError(route.thread.id, "未找到当前模型或提供商配置");
-        return;
-      }
-
-      void generateThreadPlan({
-        threadId: route.thread.id,
-        taskPrompt: prompt,
-        model: selectedModel,
-        provider: selectedProvider,
-        attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
-        attachmentContexts: route.draftThread.attachmentContexts,
-        projectScan: projectScanResult!
-      });
-      return;
-    }
-
-    const selectedModel = settings.models.find((model) => model.id === route.thread.modelId);
-    const selectedProvider = selectedModel
-      ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
-      : null;
 
     setTaskNotice(null);
-    clearPausedAgentThread(route.thread.id);
-    setThreads((current) => [route.thread, ...current]);
-    setSelectedThreadId(route.thread.id);
+    clearPausedAgentThread(execution.clearPausedThreadId);
 
-    if (!selectedModel || !selectedProvider) {
-      appendThreadError(route.thread.id, "未找到当前模型或提供商配置");
+    const threadMutation = execution.threadMutation;
+
+    if (threadMutation.kind === "append-follow-up") {
+      setThreads((current) =>
+        appendThreadFollowUpPrompt(current, threadMutation.threadId, threadMutation.event)
+      );
+    } else {
+      setThreads((current) => [threadMutation.thread, ...current]);
+
+      if (threadMutation.selectThread) {
+        setSelectedThreadId(threadMutation.thread.id);
+      }
+    }
+
+    if (execution.remember) {
+      rememberPromptIfNeeded(
+        execution.remember.threadId,
+        execution.remember.prompt,
+        execution.remember.projectPath
+      );
+    }
+
+    if (execution.modelExecution.kind === "missing-model") {
+      appendThreadError(execution.modelExecution.threadId, "未找到当前模型或提供商配置");
       return;
     }
 
-    void generateThreadPlan({
-      threadId: route.thread.id,
-      taskPrompt: route.thread.prompt,
-      model: selectedModel,
-      provider: selectedProvider,
-      attachments: resolveVisionAttachments(selectedModel, route.thread.attachments),
-      attachmentContexts: route.thread.attachmentContexts,
-      projectScan: projectScanResult!
-    });
+    if (execution.modelExecution.kind === "ask") {
+      void generateAskResponse(execution.modelExecution);
+      return;
+    }
+
+    void generateThreadPlan(execution.modelExecution);
+  }
+
+  function getTaskSubmissionNoticeMessage(reason: TaskSubmissionNoticeReason): string {
+    switch (reason) {
+      case "empty-prompt":
+        return t("composer.emptyPrompt");
+      case "missing-model":
+        return t("composer.missingModel");
+      case "project-required":
+        return t("projects.required");
+      case "project-scanning":
+        return t("projects.scanning");
+    }
   }
 
   // 为线程请求 Agent 计划, 生成动作队列前先注入当前记忆
@@ -2231,19 +2149,6 @@ export function App(): ReactElement {
       attachmentContexts: thread.attachmentContexts,
       projectScan: projectScanResult
     });
-  }
-
-  // 按线程所属项目取得扫描结果, 缺失时回退到当前项目扫描
-  function getProjectScanForThread(thread: TaskThread): ProjectScanResult | null {
-    if (!currentProject || !projectScanResult) {
-      return null;
-    }
-
-    if (!thread.projectPath || thread.projectPath === currentProject.path) {
-      return projectScanResult;
-    }
-
-    return null;
   }
 
   // 解析线程项目路径, 优先使用线程快照避免当前项目切换造成串线
