@@ -1,12 +1,11 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, File as FileIcon, Folder } from "lucide-react";
 import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { AgentImageAttachment, AgentProfileContext } from "@shared/agentTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
-import type { ProjectFile, ProjectScanResult } from "@shared/projectTypes";
+import type { ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
@@ -17,6 +16,8 @@ import {
   LazyThreadWorkspace
 } from "@/components/lazyWorkbenchComponents";
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
+import { ProjectFileIcon } from "@/components/ProjectFileIcon";
+import { ProjectFileTree } from "@/components/ProjectFileTree";
 import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import {
@@ -104,6 +105,10 @@ import {
   createHeroComposerPlaceholder,
   createHeroPromptSuggestions
 } from "@/state/contextSuggestions";
+import {
+  buildProjectFileTree,
+  getProjectFileParentPaths
+} from "@/state/projectFileTree";
 import {
   addRecentProject,
   createProjectFromPath,
@@ -208,102 +213,6 @@ function selectInitialProjectFromPreferences(
   const preferences = loadGeneralPreferences(storage);
 
   return preferences.defaultOpenTarget === "blank" ? null : (projects[0] ?? null);
-}
-
-// 根组件集中持有持久化状态和跨视图动作, 子组件只接收明确回调
-type ProjectFileTreeNode =
-  | {
-      children: ProjectFileTreeNode[];
-      kind: "directory";
-      name: string;
-      relativePath: string;
-    }
-  | {
-      kind: "file";
-      name: string;
-      relativePath: string;
-      size: number;
-    };
-
-function buildProjectFileTree(files: ProjectFile[]): ProjectFileTreeNode[] {
-  const rootNodes: ProjectFileTreeNode[] = [];
-
-  for (const file of files) {
-    const parts = file.relativePath.split("/").filter(Boolean);
-
-    if (parts.length === 0) {
-      continue;
-    }
-
-    let currentNodes = rootNodes;
-    let currentPath = "";
-
-    for (const [index, part] of parts.entries()) {
-      currentPath = currentPath ? `${currentPath}/${part}` : part;
-
-      if (index === parts.length - 1) {
-        if (!currentNodes.some((node) => node.kind === "file" && node.relativePath === file.relativePath)) {
-          currentNodes.push({
-            kind: "file",
-            name: part,
-            relativePath: file.relativePath,
-            size: file.size
-          });
-        }
-
-        continue;
-      }
-
-      let directoryNode = currentNodes.find(
-        (node): node is Extract<ProjectFileTreeNode, { kind: "directory" }> =>
-          node.kind === "directory" && node.relativePath === currentPath
-      );
-
-      if (!directoryNode) {
-        directoryNode = {
-          children: [],
-          kind: "directory",
-          name: part,
-          relativePath: currentPath
-        };
-        currentNodes.push(directoryNode);
-      }
-
-      currentNodes = directoryNode.children;
-    }
-  }
-
-  return sortProjectFileTreeNodes(rootNodes);
-}
-
-function sortProjectFileTreeNodes(nodes: ProjectFileTreeNode[]): ProjectFileTreeNode[] {
-  return nodes
-    .map((node) =>
-      node.kind === "directory"
-        ? {
-            ...node,
-            children: sortProjectFileTreeNodes(node.children)
-          }
-        : node
-    )
-    .sort((left, right) => {
-      if (left.kind !== right.kind) {
-        return left.kind === "directory" ? -1 : 1;
-      }
-
-      return left.name.localeCompare(right.name);
-    });
-}
-
-function getProjectFileParentPaths(relativePath: string): string[] {
-  const parts = relativePath.split("/").filter(Boolean);
-  const parentPaths: string[] = [];
-
-  for (let index = 1; index < parts.length; index += 1) {
-    parentPaths.push(parts.slice(0, index).join("/"));
-  }
-
-  return parentPaths;
 }
 
 function createTextFilePreview(file: ProjectTextFile): ProjectFilePreview {
@@ -3695,67 +3604,6 @@ export function App(): ReactElement {
     );
   }
 
-  // 渲染项目文件阅读页, 只有一种格式化模式时禁用下拉
-  function toggleFileTreeFolder(relativePath: string): void {
-    setExpandedFileTreeFolders((current) =>
-      current.includes(relativePath)
-        ? current.filter((path) => path !== relativePath)
-        : [...current, relativePath]
-    );
-  }
-
-  function renderFileTreeNodes(nodes: ProjectFileTreeNode[], depth = 0): ReactElement[] {
-    return nodes.flatMap((node) => {
-      const paddingLeft = 8 + depth * 14;
-
-      if (node.kind === "directory") {
-        const expanded = expandedFileTreeFolderSet.has(node.relativePath);
-
-        return [
-          <button
-            key={node.relativePath}
-            type="button"
-            aria-expanded={expanded}
-            onClick={() => toggleFileTreeFolder(node.relativePath)}
-            className="flex w-full items-center gap-1.5 rounded-[10px] py-1.5 pr-2 text-left text-[12px] text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
-            style={{ paddingLeft }}
-            title={node.relativePath}
-          >
-            {expanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-            )}
-            <Folder className="h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0 truncate">{node.name}</span>
-          </button>,
-          ...(expanded ? renderFileTreeNodes(node.children, depth + 1) : [])
-        ];
-      }
-
-      const selected = filePreview?.relativePath === node.relativePath;
-
-      return [
-        <button
-          key={node.relativePath}
-          type="button"
-          onClick={() => void previewProjectFile(node.relativePath)}
-          className={`flex w-full items-center gap-1.5 rounded-[10px] py-1.5 pr-2 text-left text-[12px] ${
-            selected
-              ? "bg-[#ececf1] text-[#202123]"
-              : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
-          }`}
-          style={{ paddingLeft }}
-          title={node.relativePath}
-        >
-          <span className="h-3.5 w-3.5 shrink-0" />
-          <FileIcon className="h-3.5 w-3.5 shrink-0" />
-          <span className="min-w-0 truncate">{node.name}</span>
-        </button>
-      ];
-    });
-  }
-
   function renderFilesView(): ReactElement {
     const activeFilePreview = filePreview ?? (previewFile ? createTextFilePreview(previewFile) : null);
     const activeTextPreview = activeFilePreview?.kind === "text" ? activeFilePreview : null;
@@ -3798,7 +3646,19 @@ export function App(): ReactElement {
           <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
             <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
               {projectFileTree.length > 0 ? (
-                <div className="space-y-0.5">{renderFileTreeNodes(projectFileTree)}</div>
+                <ProjectFileTree
+                  expandedFolders={expandedFileTreeFolderSet}
+                  nodes={projectFileTree}
+                  selectedPath={filePreview?.relativePath ?? null}
+                  onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
+                  onToggleFolder={(relativePath) =>
+                    setExpandedFileTreeFolders((current) =>
+                      current.includes(relativePath)
+                        ? current.filter((path) => path !== relativePath)
+                        : [...current, relativePath]
+                    )
+                  }
+                />
               ) : (
                 <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">{t("files.pickFile")}</div>
               )}
@@ -3807,12 +3667,17 @@ export function App(): ReactElement {
               {activeFilePreview ? (
                 <>
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block truncate text-[14px] font-semibold text-[#202123]">
-                        {activeFilePreview.relativePath}
+                    <span className="flex min-w-0 items-start gap-2">
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[#f7f7f8]">
+                        <ProjectFileIcon className="h-4 w-4 shrink-0" relativePath={activeFilePreview.relativePath} />
                       </span>
-                      <span className="mt-1 block truncate text-[12px] text-[#8e8ea0]">
-                        {previewStatusMessage}
+                      <span className="min-w-0">
+                        <span className="block truncate text-[14px] font-semibold text-[#202123]">
+                          {activeFilePreview.relativePath}
+                        </span>
+                        <span className="mt-1 block truncate text-[12px] text-[#8e8ea0]">
+                          {previewStatusMessage}
+                        </span>
                       </span>
                     </span>
                     {formatterOptions.length > 0 ? (
