@@ -15,55 +15,59 @@ export type ProjectFileTreeNode =
       size: number;
     };
 
-export function buildProjectFileTree(files: ProjectFile[]): ProjectFileTreeNode[] {
-  const rootNodes: ProjectFileTreeNode[] = [];
+type MutableProjectDirectoryNode = {
+  childDirectories: Map<string, MutableProjectDirectoryNode>;
+  children: MutableProjectFileTreeNode[];
+  kind: "directory";
+  name: string;
+  relativePath: string;
+};
 
+type MutableProjectFileTreeNode = MutableProjectDirectoryNode | Extract<ProjectFileTreeNode, { kind: "file" }>;
+
+export function buildProjectFileTree(files: ProjectFile[]): ProjectFileTreeNode[] {
+  const rootDirectory = createMutableDirectoryNode("", "");
+  const seenFilePaths = new Set<string>();
+
+  // Build with per-directory maps so large projects do not repeatedly scan sibling nodes.
   for (const file of files) {
     const parts = file.relativePath.split("/").filter(Boolean);
 
-    if (parts.length === 0) {
+    if (parts.length === 0 || seenFilePaths.has(file.relativePath)) {
       continue;
     }
 
-    let currentNodes = rootNodes;
+    seenFilePaths.add(file.relativePath);
+
+    let currentDirectory = rootDirectory;
     let currentPath = "";
 
     for (const [index, part] of parts.entries()) {
       currentPath = currentPath ? `${currentPath}/${part}` : part;
 
       if (index === parts.length - 1) {
-        if (!currentNodes.some((node) => node.kind === "file" && node.relativePath === file.relativePath)) {
-          currentNodes.push({
-            kind: "file",
-            name: part,
-            relativePath: file.relativePath,
-            size: file.size
-          });
-        }
-
+        currentDirectory.children.push({
+          kind: "file",
+          name: part,
+          relativePath: file.relativePath,
+          size: file.size
+        });
         continue;
       }
 
-      let directoryNode = currentNodes.find(
-        (node): node is Extract<ProjectFileTreeNode, { kind: "directory" }> =>
-          node.kind === "directory" && node.relativePath === currentPath
-      );
+      let directoryNode = currentDirectory.childDirectories.get(currentPath);
 
       if (!directoryNode) {
-        directoryNode = {
-          children: [],
-          kind: "directory",
-          name: part,
-          relativePath: currentPath
-        };
-        currentNodes.push(directoryNode);
+        directoryNode = createMutableDirectoryNode(part, currentPath);
+        currentDirectory.childDirectories.set(currentPath, directoryNode);
+        currentDirectory.children.push(directoryNode);
       }
 
-      currentNodes = directoryNode.children;
+      currentDirectory = directoryNode;
     }
   }
 
-  return sortProjectFileTreeNodes(rootNodes);
+  return sortProjectFileTreeNodes(rootDirectory.children);
 }
 
 export function getProjectFileParentPaths(relativePath: string): string[] {
@@ -77,13 +81,25 @@ export function getProjectFileParentPaths(relativePath: string): string[] {
   return parentPaths;
 }
 
-function sortProjectFileTreeNodes(nodes: ProjectFileTreeNode[]): ProjectFileTreeNode[] {
+function createMutableDirectoryNode(name: string, relativePath: string): MutableProjectDirectoryNode {
+  return {
+    childDirectories: new Map(),
+    children: [],
+    kind: "directory",
+    name,
+    relativePath
+  };
+}
+
+function sortProjectFileTreeNodes(nodes: MutableProjectFileTreeNode[]): ProjectFileTreeNode[] {
   return nodes
     .map((node) =>
       node.kind === "directory"
         ? {
-            ...node,
-            children: sortProjectFileTreeNodes(node.children)
+            children: sortProjectFileTreeNodes(node.children),
+            kind: node.kind,
+            name: node.name,
+            relativePath: node.relativePath
           }
         : node
     )

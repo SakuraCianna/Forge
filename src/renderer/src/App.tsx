@@ -1,6 +1,6 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
 import type {
   AgentAttachmentContext,
@@ -235,6 +235,7 @@ type FailureFixPlanOptions = Pick<
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
+const emptyProjectFiles: ProjectScanResult["files"] = [];
 
 function selectInitialProjectFromPreferences(
   projects: ForgeProject[],
@@ -389,9 +390,12 @@ export function App(): ReactElement {
   const activeHeroPrompts = createHeroPromptSuggestions(heroSuggestionInput);
   const activeHeroPrompt =
     activeHeroPrompts[heroPromptIndex % activeHeroPrompts.length] ?? activeHeroPrompts[0];
+  // Large repositories can produce thousands of files; defer tree building to keep the composer responsive.
+  const projectFilesForTree = projectScanResult?.files ?? emptyProjectFiles;
+  const deferredProjectFilesForTree = useDeferredValue(projectFilesForTree);
   const projectFileTree = useMemo(
-    () => buildProjectFileTree(projectScanResult?.files ?? []),
-    [projectScanResult?.files]
+    () => buildProjectFileTree(deferredProjectFilesForTree),
+    [deferredProjectFilesForTree]
   );
   const expandedFileTreeFolderSet = useMemo(
     () => new Set(expandedFileTreeFolders),
