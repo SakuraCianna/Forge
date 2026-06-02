@@ -42,6 +42,8 @@ export type AgentConfirmationItem = {
   autoFailureRecoveryExhausted?: boolean;
 };
 
+type AgentChangePreviewForQueue = Pick<ProjectFileChangePreview, "relativePath" | "source">;
+
 export type AgentQueueControlState = {
   queueBlockerAction: AgentAction | null;
   queueBlocked: boolean;
@@ -64,9 +66,10 @@ export function getAgentQueueControlState({
   hasPendingFileChanges: boolean;
 }): AgentQueueControlState {
   const queueBlockerAction = getQueueBlockerAction(actions, commandSafetyPolicy);
+  const hasBlockingFileChanges = hasPendingFileChanges && !commandSafetyPolicy.fullAccess;
   const queueBlocked =
     agentPaused ||
-    hasPendingFileChanges ||
+    hasBlockingFileChanges ||
     queueBlockerAction?.status === "failed" ||
     queueBlockerAction?.status === "running";
   const nextPendingAction = queueBlocked ? null : findNextPendingAgentAction(actions);
@@ -107,7 +110,7 @@ export function getAgentConfirmationItems({
   events = []
 }: {
   actions: AgentAction[];
-  changePreviews: Pick<ProjectFileChangePreview, "relativePath">[];
+  changePreviews: AgentChangePreviewForQueue[];
   commandSafetyPolicy: AgentCommandSafetyPolicy;
   fullAccess: boolean;
   activeGateAction: AgentAction | null;
@@ -118,15 +121,16 @@ export function getAgentConfirmationItems({
   events?: FailureRecoveryAttemptEvent[];
 }): AgentConfirmationItem[] {
   const items: AgentConfirmationItem[] = [];
+  const blockingChangePreviews = getBlockingFileChangePreviews(changePreviews, { fullAccess });
 
-  if (changePreviews.length > 0) {
+  if (blockingChangePreviews.length > 0) {
     items.push({
       id: "pending-changes",
       kind: "pending-changes",
-      label: changePreviews[0]?.relativePath ?? "Pending changes",
+      label: blockingChangePreviews[0]?.relativePath ?? "Pending changes",
       active: true,
-      pendingChangeCount: changePreviews.length,
-      previewPath: changePreviews[0]?.relativePath
+      pendingChangeCount: blockingChangePreviews.length,
+      previewPath: blockingChangePreviews[0]?.relativePath
     });
   }
 
@@ -170,12 +174,38 @@ export function getAgentConfirmationItems({
       autoFailureRecoveryAttemptsUsed,
       autoFailureRecoveryExhausted,
       active:
-        changePreviews.length === 0 &&
+        blockingChangePreviews.length === 0 &&
         (activeGateAction?.id === action.id || queueBlockerAction?.id === action.id)
     });
   }
 
   return items;
+}
+
+// full access 下不把文件预览当成人工确认项; App 可额外传入线程级判断, 避免其他线程的审查项卡住全自动队列。
+export function getBlockingFileChangePreviews(
+  changePreviews: AgentChangePreviewForQueue[],
+  {
+    fullAccess = false,
+    isFullAccessThread
+  }: {
+    fullAccess?: boolean;
+    isFullAccessThread?: (threadId: string) => boolean;
+  } = {}
+): AgentChangePreviewForQueue[] {
+  if (fullAccess) {
+    return [];
+  }
+
+  if (!isFullAccessThread) {
+    return changePreviews;
+  }
+
+  return changePreviews.filter((preview) => {
+    const sourceThreadId = preview.source?.threadId;
+
+    return !sourceThreadId || !isFullAccessThread(sourceThreadId);
+  });
 }
 
 export function getAgentConfirmationKind(

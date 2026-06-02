@@ -42,6 +42,7 @@ import {
   type AgentCommandSafetyPolicy
 } from "@/agent/agentActionExecutor";
 import {
+  getBlockingFileChangePreviews,
   getAgentConfirmationItems,
   getAgentQueueControlState,
   getQueueStats,
@@ -238,6 +239,7 @@ export function ThreadWorkspace({
     selectedThread?.status === "running" || selectedThread?.status === "planned";
   const [liveNow, setLiveNow] = useState(() => Date.now());
   const allChangePreviews = changePreviews ?? (changePreview ? [changePreview] : []);
+  const blockingChangePreviews = getBlockingFileChangePreviews(allChangePreviews, { fullAccess });
   const visibleChangePreview = previewFile
     ? (allChangePreviews.find((preview) => preview.relativePath === previewFile.relativePath) ??
       null)
@@ -736,7 +738,7 @@ export function ThreadWorkspace({
 
   function getCompactConfirmationItems(thread: TaskThread): AgentConfirmationItem[] {
     const actions = thread.agentActions ?? [];
-    const hasPendingFileChanges = allChangePreviews.length > 0;
+    const hasPendingFileChanges = blockingChangePreviews.length > 0;
     const { activeGateAction, queueBlockerAction } = getAgentQueueControlState({
       actions,
       commandSafetyPolicy,
@@ -746,7 +748,7 @@ export function ThreadWorkspace({
 
     return getAgentConfirmationItems({
       actions,
-      changePreviews: allChangePreviews,
+      changePreviews: blockingChangePreviews,
       commandSafetyPolicy,
       fullAccess,
       activeGateAction,
@@ -1737,7 +1739,7 @@ export function ThreadWorkspace({
             skipped: "Skipped"
           };
     const queueStats = getQueueStats(agentActions);
-    const pendingChangeCount = allChangePreviews.length;
+    const pendingChangeCount = blockingChangePreviews.length;
     const hasPendingFileChanges = pendingChangeCount > 0;
     const {
       queueBlockerAction,
@@ -1764,7 +1766,7 @@ export function ThreadWorkspace({
     const confirmationCopy = getCompactAgentControlCopy(language);
     const confirmationItems = getAgentConfirmationItems({
       actions: agentActions,
-      changePreviews: allChangePreviews,
+      changePreviews: blockingChangePreviews,
       commandSafetyPolicy,
       fullAccess,
       activeGateAction,

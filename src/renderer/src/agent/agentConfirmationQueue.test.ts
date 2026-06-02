@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import {
+  getBlockingFileChangePreviews,
   getAgentConfirmationItems,
   getAgentQueueControlState,
   getQueueBlockerAction,
@@ -112,6 +113,44 @@ describe("agent confirmation queue", () => {
       autoFailureRecoveryAttemptsUsed: 1,
       autoFailureRecoveryExhausted: false
     });
+  });
+
+  it("does not block full access queues on pending file changes", () => {
+    const fullAccessState = getAgentQueueControlState({
+      actions: [inspectAction],
+      commandSafetyPolicy: { fullAccess: true },
+      agentPaused: false,
+      hasPendingFileChanges: true
+    });
+    const fullAccessItems = getAgentConfirmationItems({
+      actions: [inspectAction],
+      changePreviews: [{ relativePath: "src/App.tsx" }],
+      commandSafetyPolicy: { fullAccess: true },
+      fullAccess: true,
+      activeGateAction: fullAccessState.activeGateAction,
+      projectPath: "E:\\CodeHome\\Forge",
+      queueBlockerAction: fullAccessState.queueBlockerAction
+    });
+
+    expect(fullAccessState.queueBlocked).toBe(false);
+    expect(fullAccessState.runnablePendingActions.map((action) => action.id)).toEqual([
+      inspectAction.id
+    ]);
+    expect(fullAccessItems).toHaveLength(0);
+  });
+
+  it("keeps previews from non-full-access sources blocking automatic queues", () => {
+    const previews = [
+      { relativePath: "src/full.ts", source: { threadId: "full-access-thread" } },
+      { relativePath: "src/manual.ts", source: { threadId: "manual-thread" } },
+      { relativePath: "src/unknown.ts" }
+    ];
+
+    expect(
+      getBlockingFileChangePreviews(previews, {
+        isFullAccessThread: (threadId) => threadId === "full-access-thread"
+      }).map((preview) => preview.relativePath)
+    ).toEqual(["src/manual.ts", "src/unknown.ts"]);
   });
 
   it("marks failed auto recovery as exhausted when its limit is reached", () => {

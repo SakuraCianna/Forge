@@ -33,6 +33,7 @@ import {
   resolveMissingInspectFileFallback,
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
+import { getBlockingFileChangePreviews } from "@/agent/agentConfirmationQueue";
 import {
   createCommandFinishedEvent,
   createCommandRunId,
@@ -530,7 +531,11 @@ export function App(): ReactElement {
       return;
     }
 
-    if (changePreviews.length > 0) {
+    const blockingChangePreviews = getBlockingFileChangePreviews(changePreviews, {
+      isFullAccessThread: getThreadFullAccessMode
+    });
+
+    if (blockingChangePreviews.length > 0) {
       return;
     }
 
@@ -559,7 +564,7 @@ export function App(): ReactElement {
     const runnableActionBatch = runnableActions.slice(0, getThreadAutoRunBatchSize(nextThread.id));
     void runAgentActions(nextThread.id, runnableActionBatch);
   }, [
-    changePreviews.length,
+    changePreviews,
     fullAccessMode,
     generalPreferences.autoRunBatchSize,
     generalPreferences.autoRunSafeActions,
@@ -572,7 +577,11 @@ export function App(): ReactElement {
       return;
     }
 
-    if (changePreviews.length > 0) {
+    const blockingChangePreviews = getBlockingFileChangePreviews(changePreviews, {
+      isFullAccessThread: getThreadFullAccessMode
+    });
+
+    if (blockingChangePreviews.length > 0) {
       return;
     }
 
@@ -634,7 +643,7 @@ export function App(): ReactElement {
       activeAutoFailureFixKeysRef.current.delete(candidate.key);
     });
   }, [
-    changePreviews.length,
+    changePreviews,
     currentProject,
     projectScanResult,
     settings.language,
@@ -3387,6 +3396,9 @@ export function App(): ReactElement {
     const selectedThread = selectThreadById(threads, selectedThreadId);
     const workspaceProjectPath = selectedThread?.projectPath ?? currentProject?.path ?? null;
     const visibleWorkspaceThreads = selectVisibleWorkspaceThreads(threads, workspaceProjectPath);
+    const selectedThreadFullAccess = selectedThread
+      ? getThreadFullAccessMode(selectedThread.id)
+      : fullAccessMode;
     const agentPaused =
       Boolean(selectedThread && pausedThreadIds.has(selectedThread.id)) &&
       hasContinuableAgentActions(selectedThread);
@@ -3400,7 +3412,7 @@ export function App(): ReactElement {
           selectedThreadId={selectedThreadId}
           threads={visibleWorkspaceThreads}
           commandSafetyRules={generalPreferences.commandSafetyRules}
-          fullAccess={fullAccessMode}
+          fullAccess={selectedThreadFullAccess}
           agentPaused={agentPaused}
           showActivityHeartbeat={generalPreferences.showActivityHeartbeat}
           showProcessedSummary={generalPreferences.showProcessedSummary}
