@@ -1,8 +1,9 @@
 // 本文件说明: 渲染项目文件树, 从 App 抽出递归 UI 以降低主文件复杂度
 import type { ReactElement } from "react";
-import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ProjectFileTreeNode } from "@/state/projectFileTree";
 import { ProjectFileIcon } from "./ProjectFileIcon";
+import { ProjectFolderIcon } from "./ProjectFolderIcon";
 
 type ProjectFileTreeProps = {
   expandedFolders: ReadonlySet<string>;
@@ -28,7 +29,6 @@ export function ProjectFileTree({
 
       if (node.kind === "directory") {
         const expanded = expandedFolders.has(node.relativePath);
-        const FolderIcon = expanded ? FolderOpen : Folder;
 
         return [
           <button
@@ -45,7 +45,7 @@ export function ProjectFileTree({
             ) : (
               <ChevronRight className="h-3.5 w-3.5 shrink-0" />
             )}
-            <FolderIcon className="h-3.5 w-3.5 shrink-0 text-[#64748b]" />
+            <ProjectFolderIcon expanded={expanded} relativePath={node.relativePath} />
             <span className="min-w-0 truncate">{node.name}</span>
           </button>,
           ...(expanded ? renderProjectFileTreeNodes(node.children, depth + 1) : [])
