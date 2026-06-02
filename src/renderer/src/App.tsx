@@ -118,6 +118,7 @@ import {
   createHeroComposerPlaceholder,
   createHeroPromptSuggestions
 } from "@/state/contextSuggestions";
+import { useAgentRunState } from "@/state/agentRunState";
 import { useComposerSignals } from "@/state/composerSignals";
 import {
   buildProjectFileTree,
@@ -338,13 +339,21 @@ export function App(): ReactElement {
   } = useComposerSignals();
   const [activeView, setActiveView] = useState<WorkbenchView>("workspace");
   const [heroPromptIndex, setHeroPromptIndex] = useState(0);
-  const [pausedThreadIds, setPausedThreadIds] = useState<Set<string>>(() => new Set());
+  const {
+    cancelledThreadIdsRef,
+    clearPausedAgentThread,
+    clearPausedAgentThreads,
+    clearReservedAgentActions,
+    hasReservedAgentAction,
+    markThreadCancelled,
+    pauseAgentThread,
+    pausedThreadIds,
+    reserveAgentActionBatch
+  } = useAgentRunState();
   const { t } = useI18n(settings.language);
   const threadsRef = useRef<TaskThread[]>(threads);
-  const cancelledThreadIdsRef = useRef<Set<string>>(new Set());
   const activePlanStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
   const activeAskStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
-  const activeAgentAutoRunActionIdsRef = useRef<Map<string, Set<string>>>(new Map());
   const activeAutoFailureFixKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixAttemptedKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
@@ -386,34 +395,6 @@ export function App(): ReactElement {
     !generalPreferences.readOnly &&
     (generalPreferences.fullAccess || activeAgentProfileContext.permissionMode === "full");
 
-  // 同步暂停 ref 和 UI 状态, ref 用于执行器快速判断, state 用于渲染恢复入口
-  function pauseAgentThread(threadId: string): void {
-    cancelledThreadIdsRef.current.add(threadId);
-    setPausedThreadIds((current) => {
-      if (current.has(threadId)) {
-        return current;
-      }
-
-      const next = new Set(current);
-      next.add(threadId);
-      return next;
-    });
-  }
-
-  // 清理暂停标记, 用于新请求, follow-up 和用户显式恢复
-  function clearPausedAgentThread(threadId: string): void {
-    cancelledThreadIdsRef.current.delete(threadId);
-    setPausedThreadIds((current) => {
-      if (!current.has(threadId)) {
-        return current;
-      }
-
-      const next = new Set(current);
-      next.delete(threadId);
-      return next;
-    });
-  }
-
   function getLiveThread(threadId: string): TaskThread | null {
     return selectThreadById(threadsRef.current, threadId);
   }
@@ -442,39 +423,6 @@ export function App(): ReactElement {
 
   function getThreadFailureRecoveryLimit(threadId: string): number {
     return Math.max(0, getThreadAgentProfileContext(threadId).maxFailureRecoveryAttempts);
-  }
-
-  function hasReservedAgentAction(threadId: string, actions: AgentAction[]): boolean {
-    const reservedActionIds = activeAgentAutoRunActionIdsRef.current.get(threadId);
-
-    return Boolean(reservedActionIds && actions.some((action) => reservedActionIds.has(action.id)));
-  }
-
-  function reserveAgentActionBatch(threadId: string, actions: AgentAction[]): () => void {
-    const reservedActionIds =
-      activeAgentAutoRunActionIdsRef.current.get(threadId) ?? new Set<string>();
-
-    for (const action of actions) {
-      reservedActionIds.add(action.id);
-    }
-
-    activeAgentAutoRunActionIdsRef.current.set(threadId, reservedActionIds);
-
-    return () => {
-      const currentReservedActionIds = activeAgentAutoRunActionIdsRef.current.get(threadId);
-
-      if (!currentReservedActionIds) {
-        return;
-      }
-
-      for (const action of actions) {
-        currentReservedActionIds.delete(action.id);
-      }
-
-      if (currentReservedActionIds.size === 0) {
-        activeAgentAutoRunActionIdsRef.current.delete(threadId);
-      }
-    };
   }
 
   useEffect(() => {
@@ -760,7 +708,7 @@ export function App(): ReactElement {
     const activeAskRequestIds = [...activeAskStreamRequestIdsRef.current.values()];
 
     for (const thread of threadsRef.current) {
-      cancelledThreadIdsRef.current.add(thread.id);
+      markThreadCancelled(thread.id);
     }
 
     await Promise.allSettled([
@@ -774,7 +722,7 @@ export function App(): ReactElement {
 
     activePlanStreamRequestIdsRef.current.clear();
     activeAskStreamRequestIdsRef.current.clear();
-    activeAgentAutoRunActionIdsRef.current.clear();
+    clearReservedAgentActions();
     activeAutoFailureFixKeysRef.current.clear();
     autoFailureFixAttemptedKeysRef.current.clear();
     autoFailureFixCountsRef.current.clear();
@@ -813,7 +761,7 @@ export function App(): ReactElement {
     setAgentProfiles(createDefaultAgentProfiles());
     focusComposer();
     setHeroPromptIndex(0);
-    setPausedThreadIds(new Set());
+    clearPausedAgentThreads();
   }
 
   // 先保存当前配置再拉取模型, 自定义 Base URL 和 Key 都以最新输入为准

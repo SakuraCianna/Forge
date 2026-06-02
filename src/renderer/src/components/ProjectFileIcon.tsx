@@ -1,4 +1,4 @@
-// 本文件说明: 渲染项目文件类型图标, 文件树、列表和预览标题共用同一套视觉映射
+// Renders file type icons shared by project trees, lists, and preview titles.
 import type { ReactElement } from "react";
 import archiveIconUrl from "@/assets/file-icons/zip.svg";
 import astroIconUrl from "@/assets/file-icons/astro.svg";

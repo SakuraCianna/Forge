@@ -1,4 +1,4 @@
-// 本文件说明: 根据项目文件路径推断 UI 文件图标类型, 供文件树和预览标题复用
+// Resolves UI file icon kinds from project file paths.
 export type ProjectFileIconKind =
   | "archive"
   | "astro"
