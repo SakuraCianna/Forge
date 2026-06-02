@@ -109,7 +109,42 @@ describe("agent confirmation queue", () => {
       cwd: "E:\\CodeHome\\Forge",
       failureRecoveryPolicy: "suggest",
       maxFailureRecoveryAttempts: 2,
-      autoFailureRecoveryAttemptsUsed: 1
+      autoFailureRecoveryAttemptsUsed: 1,
+      autoFailureRecoveryExhausted: false
+    });
+  });
+
+  it("marks failed auto recovery as exhausted when its limit is reached", () => {
+    const items = getAgentConfirmationItems({
+      actions: [failedAction],
+      changePreviews: [],
+      commandSafetyPolicy: {},
+      fullAccess: false,
+      activeGateAction: failedAction,
+      projectPath: "E:\\CodeHome\\Forge",
+      queueBlockerAction: failedAction,
+      failureRecoveryPolicy: "auto",
+      maxFailureRecoveryAttempts: 1,
+      events: [
+        {
+          failureRecoveryAttempt: {
+            actionId: failedAction.id,
+            label: failedAction.label,
+            source: "auto",
+            attempt: 1,
+            limit: 1
+          }
+        }
+      ]
+    });
+
+    expect(items[0]).toMatchObject({
+      kind: "failed-action",
+      active: true,
+      failureRecoveryPolicy: "auto",
+      maxFailureRecoveryAttempts: 1,
+      autoFailureRecoveryAttemptsUsed: 1,
+      autoFailureRecoveryExhausted: true
     });
   });
 

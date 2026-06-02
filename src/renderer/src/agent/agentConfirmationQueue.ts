@@ -39,6 +39,7 @@ export type AgentConfirmationItem = {
   failureRecoveryPolicy?: AgentFailureRecoveryPolicy;
   maxFailureRecoveryAttempts?: number;
   autoFailureRecoveryAttemptsUsed?: number;
+  autoFailureRecoveryExhausted?: boolean;
 };
 
 export type AgentQueueControlState = {
@@ -142,6 +143,13 @@ export function getAgentConfirmationItems({
       action.kind === "run-command" && action.command
         ? resolveAgentCommandRisk(action.command, commandSafetyPolicy)
         : null;
+    const autoFailureRecoveryAttemptsUsed =
+      kind === "failed-action" ? countAutoFailureRecoveryAttempts(events) : undefined;
+    const autoFailureRecoveryExhausted =
+      kind === "failed-action" &&
+      failureRecoveryPolicy === "auto" &&
+      typeof maxFailureRecoveryAttempts === "number" &&
+      (autoFailureRecoveryAttemptsUsed ?? 0) >= maxFailureRecoveryAttempts;
 
     items.push({
       id: `action-${action.id}`,
@@ -159,8 +167,8 @@ export function getAgentConfirmationItems({
         kind === "failed-action" ? (failureRecoveryPolicy ?? undefined) : undefined,
       maxFailureRecoveryAttempts:
         kind === "failed-action" ? (maxFailureRecoveryAttempts ?? undefined) : undefined,
-      autoFailureRecoveryAttemptsUsed:
-        kind === "failed-action" ? countAutoFailureRecoveryAttempts(events) : undefined,
+      autoFailureRecoveryAttemptsUsed,
+      autoFailureRecoveryExhausted,
       active:
         changePreviews.length === 0 &&
         (activeGateAction?.id === action.id || queueBlockerAction?.id === action.id)

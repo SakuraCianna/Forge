@@ -612,13 +612,15 @@ export function ThreadWorkspace({
     }
 
     return (
-      <section className="mx-auto flex min-h-10 w-full max-w-[880px] items-start gap-2 border-b border-[#ececf1] pb-2 text-sm text-[#565869]">
+      <section className="mx-auto flex min-h-11 w-full max-w-[880px] items-center gap-2 border-b border-[#ececf1] pb-2 text-[14px] leading-5 text-[#565869]">
         <CheckCircle2 className="h-4 w-4 shrink-0 text-[#9a3412]" />
-        <span className="shrink-0 font-medium text-[#8e8ea0]">{copy.currentApproval}</span>
-        <span className="min-w-0 flex-1 whitespace-pre-wrap break-words font-medium leading-5 text-[#202123]">
+        <span className="inline-flex h-7 shrink-0 items-center font-medium text-[#8e8ea0]">
+          {copy.currentApproval}
+        </span>
+        <span className="flex min-h-7 min-w-0 flex-1 items-center whitespace-pre-wrap break-words font-medium text-[#202123]">
           {getAgentConfirmationTitle(item, copy)}
         </span>
-        <span className="hidden shrink-0 text-[12px] text-[#8e8ea0] sm:inline">
+        <span className="hidden h-7 shrink-0 items-center text-[12px] text-[#8e8ea0] sm:inline-flex">
           {getAgentConfirmationKindLabel(item.kind, copy)}
         </span>
         <div className="flex shrink-0 items-center gap-1">
@@ -1026,7 +1028,7 @@ export function ThreadWorkspace({
       return (
         <article
           key={event.id}
-          className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-sm leading-5 text-[#202123]"
+          className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-[14px] leading-6 text-[#202123]"
         >
           <p className="whitespace-pre-wrap">{event.message}</p>
         </article>
@@ -1041,9 +1043,9 @@ export function ThreadWorkspace({
     const label = getCompactEventLabel(event, language);
 
     return (
-      <article key={event.id} className="grid grid-cols-[20px_minmax(0,1fr)] gap-3">
+      <article key={event.id} className="grid grid-cols-[24px_minmax(0,1fr)] gap-3">
         <span
-          className={`mt-1 flex h-5 w-5 items-center justify-center rounded-full ${
+          className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
             failed
               ? "bg-[#fff7ed] text-[#b45309]"
               : passed || approvedCommand || event.kind === "result"
@@ -1062,21 +1064,27 @@ export function ThreadWorkspace({
           )}
         </span>
         <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2 text-[11px] text-[#8e8ea0]">
-            <span className="shrink-0">{label}</span>
-            <span className="truncate">{formatEventTimestamp(event.completedAt ?? event.createdAt)}</span>
+          <div className="flex min-h-6 min-w-0 flex-wrap items-center gap-1.5 text-[12px] leading-5 text-[#8e8ea0]">
+            <span className="inline-flex h-6 shrink-0 items-center rounded-full bg-[#f7f7f8] px-2 font-medium text-[#565869]">
+              {label}
+            </span>
+            <span className="inline-flex h-6 min-w-0 items-center truncate rounded-full bg-[#f7f7f8] px-2">
+              {formatEventTimestamp(event.completedAt ?? event.createdAt)}
+            </span>
             {event.kind === "result" ? (
-              <span className="shrink-0">{formatLlmWorkDuration(event)}</span>
+              <span className="inline-flex h-6 shrink-0 items-center rounded-full bg-[#f7f7f8] px-2 font-medium">
+                {formatLlmWorkDuration(event)}
+              </span>
             ) : null}
           </div>
-          <div className="mt-1">
+          <div className="mt-2 text-[14px] leading-6 text-[#202123]">
             {event.kind === "result" && !runningCommand && !result ? (
               <>
                 <MarkdownPreview compact content={stripAssistantSourceBlock(event.message)} />
                 {renderAssistantSourceLinks(event.message)}
               </>
             ) : (
-              <p className="whitespace-pre-wrap text-sm leading-6 text-[#202123]">{event.message}</p>
+              <p className="whitespace-pre-wrap">{event.message}</p>
             )}
           </div>
           {event.kind === "result" && !runningCommand && !result ? renderAssistantResponseActions(event) : null}
@@ -1091,12 +1099,12 @@ export function ThreadWorkspace({
 
           {result ? (
             <div className="mt-2 grid gap-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-[#6e6e80]">
-                <code className="max-w-full truncate rounded-[8px] bg-[#f7f7f8] px-2 py-1 font-mono text-[#202123]">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-[12px] leading-5 text-[#6e6e80]">
+                <code className="inline-flex h-7 max-w-full items-center truncate rounded-[8px] bg-[#f7f7f8] px-2 font-mono text-[11px] text-[#202123]">
                   {result.command}
                 </code>
                 <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 ${
+                  className={`inline-flex h-6 shrink-0 items-center rounded-full px-2 text-[11px] font-medium ${
                     failed ? "bg-[#fff7ed] text-[#b45309]" : "bg-[#effaf6] text-[#087443]"
                   }`}
                 >
@@ -1112,16 +1120,18 @@ export function ThreadWorkspace({
                       <button
                         type="button"
                         onClick={() => onGenerateCommandFix(selectedThread.id, result)}
-                        className="h-7 shrink-0 rounded-[9px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                        className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
                       >
+                        <Wrench className="h-3.5 w-3.5" />
                         {language === "zh-CN" ? "生成修复计划" : "Generate fix plan"}
                       </button>
                     ) : null}
                     <button
                       type="button"
                       onClick={() => onRunCommand(selectedThread.id, result.command)}
-                      className="h-7 shrink-0 rounded-[9px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+                      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[9px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
                     >
+                      <RotateCcw className="h-3.5 w-3.5" />
                       {language === "zh-CN" ? "重试" : "Retry"}
                     </button>
                   </>
@@ -1371,8 +1381,8 @@ export function ThreadWorkspace({
     }
 
     return (
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
-        <span className="inline-flex items-center gap-1 text-[#8e8ea0]">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] leading-5">
+        <span className="inline-flex h-6 items-center gap-1 text-[#8e8ea0]">
           <Globe className="h-3.5 w-3.5" />
           {language === "zh-CN" ? "参考资料" : "Sources"}
         </span>
@@ -1382,9 +1392,9 @@ export function ThreadWorkspace({
             href={url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#f7f7f8] px-2 py-1 text-[#0b57d0] transition hover:text-[#063b91]"
+            className="inline-flex h-6 max-w-full items-center gap-1 text-[#0b57d0] transition hover:text-[#063b91]"
           >
-            <Globe className="h-3.5 w-3.5 shrink-0" />
+            <ExternalLink className="h-3 w-3 shrink-0" />
             <span className="truncate">{formatSourceUrlLabel(url)}</span>
           </a>
         ))}
@@ -1439,7 +1449,7 @@ export function ThreadWorkspace({
             <button
               type="button"
               onClick={() => setActiveTab("commands")}
-              className="h-8 rounded-[11px] border border-[#d9d9e3] bg-white px-2.5 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
+              className="inline-flex h-8 items-center justify-center rounded-[11px] border border-[#d9d9e3] bg-white px-2.5 text-[11px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] active:scale-[0.99]"
             >
               {copy.openCommands}
             </button>
@@ -1447,7 +1457,7 @@ export function ThreadWorkspace({
               <button
                 type="button"
                 onClick={() => onCancelCommand(selectedThread.id, entry.result.runId!)}
-                className="h-8 rounded-[11px] border border-[#f4c7ab] bg-[#fff7ed] px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#ffedd5] active:scale-[0.99]"
+                className="inline-flex h-8 items-center justify-center rounded-[11px] border border-[#f4c7ab] bg-[#fff7ed] px-2.5 text-[11px] font-semibold text-[#9a3412] transition hover:bg-[#ffedd5] active:scale-[0.99]"
               >
                 {copy.stopCommand}
               </button>
@@ -3320,10 +3330,37 @@ function getFailedActionBody(
   item: AgentConfirmationItem,
   copy: ReturnType<typeof getCompactAgentControlCopy>
 ): string {
+  if (item.failureRecoveryPolicy === "manual") {
+    return copy.failedActionManualBody;
+  }
+
+  if (item.failureRecoveryPolicy === "suggest") {
+    return copy.failedActionSuggestBody;
+  }
+
+  if (item.autoFailureRecoveryExhausted) {
+    return copy.failedActionAutoExhaustedBody(item.maxFailureRecoveryAttempts);
+  }
+
   return copy.failedActionAutoBody(
     item.maxFailureRecoveryAttempts,
     item.autoFailureRecoveryAttemptsUsed
   );
+}
+
+function getFailureRecoveryPolicyLabel(
+  policy: AgentConfirmationItem["failureRecoveryPolicy"],
+  copy: ReturnType<typeof getCompactAgentControlCopy>
+): string {
+  if (policy === "manual") {
+    return copy.failureRecoveryManual;
+  }
+
+  if (policy === "auto") {
+    return copy.failureRecoveryAuto;
+  }
+
+  return copy.failureRecoverySuggest;
 }
 
 // 为确认项生成结构化上下文行, 保持 UI 和复制摘要使用同一份信息
@@ -3352,7 +3389,7 @@ function getAgentConfirmationMetadataRows(
   if (item.kind === "failed-action") {
     rows.push({
       label: copy.failureRecoveryPolicyLabel,
-      value: copy.failureRecoveryAuto
+      value: getFailureRecoveryPolicyLabel(item.failureRecoveryPolicy, copy)
     });
 
     if (item.maxFailureRecoveryAttempts !== undefined) {
@@ -3428,7 +3465,12 @@ function getCompactAgentControlCopy(language: Language) {
         count > 1 ? `先处理 ${path} 等 ${count} 个修改, Forge 才会继续` : `先处理 ${path}, Forge 才会继续`,
       failedActionTitle: "失败动作",
       failedActionBody: "Forge 会自动尝试自修复; 只有权限、依赖或跳过需要你介入",
+      failedActionManualBody: "当前恢复策略为手动处理, 请查看日志后重试、生成修复计划或跳过",
       failedActionSuggestBody: "Forge 会根据失败上下文自动准备恢复步骤, 必要时再等待人工审批",
+      failedActionAutoExhaustedBody: (count?: number) =>
+        count === undefined
+          ? "自动恢复已停止, 请查看日志后重试、生成修复计划或跳过"
+          : `自动恢复已达到 ${count} 次上限, 请查看日志后重试、生成修复计划或跳过`,
       failedActionAutoBody: (count?: number, used = 0) =>
         count === undefined
           ? "Forge 会按上限自动尝试恢复, 权限或依赖类步骤会等待人工审批"
@@ -3524,8 +3566,14 @@ function getCompactAgentControlCopy(language: Language) {
         : `Review ${path} before Forge continues.`,
     failedActionTitle: "Failed action",
     failedActionBody: "Forge will attempt auto-recovery; only permissions, dependencies, or skipping need your input.",
+    failedActionManualBody:
+      "Recovery is set to manual. Review logs, retry, generate a fix plan, or skip this action.",
     failedActionSuggestBody:
       "Forge will prepare recovery steps from the failure context and stop for approval when needed.",
+    failedActionAutoExhaustedBody: (count?: number) =>
+      count === undefined
+        ? "Automatic recovery has stopped. Review logs, retry, generate a fix plan, or skip this action."
+        : `Automatic recovery reached its ${count} ${count === 1 ? "attempt" : "attempts"} limit. Review logs, retry, generate a fix plan, or skip this action.`,
     failedActionAutoBody: (count?: number, used = 0) =>
       count === undefined
         ? "Forge will auto-recover within its attempt limit and stop for permission or dependency approval."
