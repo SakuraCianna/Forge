@@ -49,6 +49,7 @@ import {
   appendAgentCompletionSummaryIfDone as appendAgentCompletionSummaryIfDoneToThreads,
   applyAgentActionDecisionStatus
 } from "@/agent/agentActionLifecycle";
+import { useAgentToolResults } from "@/agent/agentToolResults";
 import {
   formatFailureFixPlanStartMessage
 } from "@/agent/agentRunMessages";
@@ -350,7 +351,11 @@ export function App(): ReactElement {
   const activeAutoFailureFixKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixAttemptedKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
-  const recentAgentToolResultsRef = useRef<Map<string, string[]>>(new Map());
+  const {
+    clearAgentToolResults,
+    getRecentAgentToolResults,
+    rememberAgentToolResult
+  } = useAgentToolResults();
   threadsRef.current = threads;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
@@ -719,7 +724,7 @@ export function App(): ReactElement {
     activeAutoFailureFixKeysRef.current.clear();
     autoFailureFixAttemptedKeysRef.current.clear();
     autoFailureFixCountsRef.current.clear();
-    recentAgentToolResultsRef.current.clear();
+    clearAgentToolResults();
 
     setSettings(createDefaultModelSettings());
     setKeyStatuses({});
@@ -2492,18 +2497,6 @@ export function App(): ReactElement {
   // 跳过用户明确放弃的动作, 用于越过被阻止或已过时的队列步骤
   function skipAgentAction(threadId: string, action: AgentAction): void {
     setAgentActionDecisionStatus(threadId, action, "skipped");
-  }
-
-  // 同批自动执行时 React 状态尚未刷新, 这里缓存刚完成的读类工具结果
-  function rememberAgentToolResult(threadId: string, message: string): void {
-    const currentMessages = recentAgentToolResultsRef.current.get(threadId) ?? [];
-
-    recentAgentToolResultsRef.current.set(threadId, [...currentMessages, message].slice(-8));
-  }
-
-  // 读取当前线程的近期工具结果, 供后续编辑提示使用
-  function getRecentAgentToolResults(threadId: string): string[] {
-    return recentAgentToolResultsRef.current.get(threadId) ?? [];
   }
 
   // 执行单个 Agent 动作, 失败时保留可恢复的结果说明
