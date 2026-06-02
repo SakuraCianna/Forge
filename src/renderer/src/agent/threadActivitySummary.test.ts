@@ -97,6 +97,131 @@ describe("thread activity summary", () => {
     expect(getThreadActivitySummary(events, "en-US", Date.parse("2025-01-01T00:00:03.000Z"))).toBeNull();
   });
 
+  it("surfaces the latest automatic recovery attempt while no tool is active", () => {
+    const events: TaskThreadEvent[] = [
+      {
+        id: "cmd-end",
+        kind: "command",
+        message: "failed",
+        createdAt: "2025-01-01T00:00:02.000Z",
+        commandResult: {
+          command: "npm test",
+          cwd: "",
+          exitCode: 1,
+          stdout: "",
+          stderr: "failed",
+          timedOut: false
+        }
+      },
+      {
+        id: "recovery-1",
+        kind: "plan",
+        message: "auto recovery",
+        createdAt: "2025-01-01T00:00:05.000Z",
+        failureRecoveryAttempt: {
+          actionId: "run-tests",
+          label: "Run npm test",
+          source: "auto",
+          attempt: 1,
+          limit: 2
+        }
+      }
+    ];
+
+    expect(
+      getThreadActivitySummary(events, "en-US", Date.parse("2025-01-01T00:00:10.000Z"))
+    ).toEqual({
+      kind: "running",
+      activityKind: "error",
+      label: "Auto recovery",
+      command: "Run npm test",
+      meta: "attempt 1 / 2 · 5s elapsed"
+    });
+  });
+
+  it("surfaces paused recovery reasons before falling back to the failed command", () => {
+    const events: TaskThreadEvent[] = [
+      {
+        id: "cmd-end",
+        kind: "command",
+        message: "failed",
+        createdAt: "2025-01-01T00:00:02.000Z",
+        commandResult: {
+          command: "npm install left-pad",
+          cwd: "",
+          exitCode: 1,
+          stdout: "",
+          stderr: "Cannot find module 'left-pad'",
+          timedOut: false
+        }
+      },
+      {
+        id: "thread-1-agent-action-recovery-skip-install-dependency-requires-dependency",
+        kind: "plan",
+        message: "Automatic recovery paused: Install dependency",
+        createdAt: "2025-01-01T00:00:03.000Z",
+        autoFailureRecoverySkip: {
+          actionId: "install-dependency",
+          label: "Install dependency",
+          reason: "requires-dependency",
+          detail: "Missing dependency or package: left-pad"
+        }
+      }
+    ];
+
+    expect(
+      getThreadActivitySummary(events, "zh-CN", Date.parse("2025-01-01T00:00:04.000Z"))
+    ).toEqual({
+      kind: "failure",
+      activityKind: "error",
+      label: "恢复已暂停",
+      command: "Install dependency",
+      meta: "需要依赖配置"
+    });
+  });
+
+  it("does not let stale recovery attempts hide a newer failed command", () => {
+    const events: TaskThreadEvent[] = [
+      {
+        id: "recovery-1",
+        kind: "plan",
+        message: "auto recovery",
+        createdAt: "2025-01-01T00:00:01.000Z",
+        failureRecoveryAttempt: {
+          actionId: "run-tests",
+          label: "Run npm test",
+          source: "auto",
+          attempt: 1,
+          limit: 2
+        }
+      },
+      {
+        id: "cmd-end",
+        kind: "command",
+        message: "failed",
+        createdAt: "2025-01-01T00:00:03.000Z",
+        commandResult: {
+          command: "npm test",
+          cwd: "",
+          exitCode: 1,
+          stdout: "",
+          stderr: "failed",
+          timedOut: false
+        }
+      }
+    ];
+
+    expect(
+      getThreadActivitySummary(events, "en-US", Date.parse("2025-01-01T00:00:05.000Z"))
+    ).toEqual({
+      kind: "failure",
+      activityKind: "error",
+      label: "Last failure",
+      command: "npm test",
+      meta: "exit 1"
+    });
+  });
+
   it("maps common tool labels to activity kinds", () => {
     expect(inferActivityKindFromText("读取 README.md")).toBe("file");
     expect(inferActivityKindFromText("搜索 error")).toBe("search");

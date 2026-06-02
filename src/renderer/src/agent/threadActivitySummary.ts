@@ -1,6 +1,11 @@
 // 本文件说明: 把线程运行状态心跳的纯逻辑从 ThreadWorkspace 拆出, 便于测试和复用
 import type { Language } from "@shared/modelTypes";
-import type { CommandRunResult, TaskThreadEvent } from "@/state/taskThreads";
+import type {
+  AutoFailureRecoverySkipRecord,
+  CommandRunResult,
+  FailureRecoveryAttemptRecord,
+  TaskThreadEvent
+} from "@/state/taskThreads";
 
 export type CompactProcessedGroupKind =
   | "web"
@@ -25,6 +30,23 @@ type RunningActivity = {
   startedAt: string;
 };
 
+type RecoveryActivity =
+  | {
+      kind: "attempt";
+      attempt: FailureRecoveryAttemptRecord;
+      createdAt: string;
+    }
+  | {
+      kind: "paused";
+      paused: AutoFailureRecoverySkipRecord;
+      createdAt: string;
+    };
+
+type FailedCommandActivity = {
+  result: CommandRunResult;
+  createdAt: string;
+};
+
 export function getThreadActivitySummary(
   events: TaskThreadEvent[],
   language: Language,
@@ -36,15 +58,35 @@ export function getThreadActivitySummary(
           running: "运行中",
           actionRunning: "正在处理",
           failure: "最近失败",
+          autoRecovery: "自动恢复",
+          manualRecovery: "人工恢复",
+          recoveryPaused: "恢复已暂停",
           timedOut: "已超时",
-          exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`
+          exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
+          recoveryAttempt: (attempt: FailureRecoveryAttemptRecord) =>
+            attempt.attempt === undefined
+              ? null
+              : attempt.limit === undefined
+                ? `第 ${attempt.attempt} 次`
+                : `第 ${attempt.attempt} / ${attempt.limit} 次`,
+          recoveryPauseReason: formatRecoveryPauseReasonZh
         }
       : {
           running: "Running command",
           actionRunning: "Working",
           failure: "Last failure",
+          autoRecovery: "Auto recovery",
+          manualRecovery: "Manual recovery",
+          recoveryPaused: "Recovery paused",
           timedOut: "timed out",
-          exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`
+          exit: (exitCode: number | null) => `exit ${exitCode === null ? "null" : exitCode}`,
+          recoveryAttempt: (attempt: FailureRecoveryAttemptRecord) =>
+            attempt.attempt === undefined
+              ? null
+              : attempt.limit === undefined
+                ? `attempt ${attempt.attempt}`
+                : `attempt ${attempt.attempt} / ${attempt.limit}`,
+          recoveryPauseReason: formatRecoveryPauseReasonEn
         };
   const runningCommand = findLatestUnfinishedCommandRun(events);
 
@@ -74,7 +116,38 @@ export function getThreadActivitySummary(
     };
   }
 
+  const recoveryActivity = findLatestRecoveryActivity(events);
   const failedResult = findLatestFailedCommandResult(events);
+  const recoveryIsLatest =
+    recoveryActivity &&
+    (!failedResult ||
+      Date.parse(recoveryActivity.createdAt) >= Date.parse(failedResult.createdAt));
+
+  if (recoveryIsLatest && recoveryActivity.kind === "attempt") {
+    const elapsed = formatRunningActivityElapsed(recoveryActivity.createdAt, nowMs, language);
+    const attemptMeta = copy.recoveryAttempt(recoveryActivity.attempt);
+
+    return {
+      kind: "running",
+      activityKind: "error",
+      label:
+        recoveryActivity.attempt.source === "auto"
+          ? copy.autoRecovery
+          : copy.manualRecovery,
+      command: recoveryActivity.attempt.label,
+      meta: joinMetaParts([attemptMeta, elapsed], language)
+    };
+  }
+
+  if (recoveryIsLatest && recoveryActivity.kind === "paused") {
+    return {
+      kind: "failure",
+      activityKind: "error",
+      label: copy.recoveryPaused,
+      command: recoveryActivity.paused.label,
+      meta: copy.recoveryPauseReason(recoveryActivity.paused.reason)
+    };
+  }
 
   if (!failedResult) {
     return null;
@@ -84,8 +157,8 @@ export function getThreadActivitySummary(
     kind: "failure",
     activityKind: "error",
     label: copy.failure,
-    command: failedResult.command,
-    meta: failedResult.timedOut ? copy.timedOut : copy.exit(failedResult.exitCode)
+    command: failedResult.result.command,
+    meta: failedResult.result.timedOut ? copy.timedOut : copy.exit(failedResult.result.exitCode)
   };
 }
 
@@ -164,6 +237,90 @@ function findLatestUnfinishedAgentActionRun(events: TaskThreadEvent[]): RunningA
   return null;
 }
 
+function findLatestRecoveryActivity(events: TaskThreadEvent[]): RecoveryActivity | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+
+    if (!event) {
+      continue;
+    }
+
+    const paused = event.autoFailureRecoverySkip ?? parseAutoFailureRecoverySkipEvent(event);
+
+    if (paused) {
+      return {
+        kind: "paused",
+        paused,
+        createdAt: event.createdAt
+      };
+    }
+
+    if (event.failureRecoveryAttempt) {
+      return {
+        kind: "attempt",
+        attempt: event.failureRecoveryAttempt,
+        createdAt: event.createdAt
+      };
+    }
+  }
+
+  return null;
+}
+
+function parseAutoFailureRecoverySkipEvent(
+  event: TaskThreadEvent
+): AutoFailureRecoverySkipRecord | null {
+  const match = event.id.match(
+    /^.+-agent-action-recovery-skip-(.+)-(requires-permission|requires-dependency|user-cancelled)$/u
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const [, actionId, reason] = match;
+
+  return {
+    actionId,
+    label: extractAutoFailureRecoverySkipLabel(event.message) ?? actionId,
+    reason: reason as AutoFailureRecoverySkipRecord["reason"],
+    detail: event.message.trim()
+  };
+}
+
+function extractAutoFailureRecoverySkipLabel(message: string): string | null {
+  const firstLine = message.trim().split(/\r?\n/u)[0]?.trim() ?? "";
+  const match = firstLine.match(/^(?:自动恢复已暂停|Automatic recovery paused):\s*(.+)$/u);
+
+  return match?.[1]?.trim() || null;
+}
+
+function joinMetaParts(parts: Array<string | null>, language: Language): string | null {
+  const values = parts.filter((part): part is string => Boolean(part));
+
+  if (values.length === 0) {
+    return null;
+  }
+
+  return values.join(language === "zh-CN" ? " · " : " · ");
+}
+
+function formatRecoveryPauseReasonZh(reason: AutoFailureRecoverySkipRecord["reason"]): string {
+  return {
+    "requires-permission": "需要权限确认",
+    "requires-dependency": "需要依赖配置",
+    "user-cancelled": "用户取消命令"
+  }[reason];
+}
+
+function formatRecoveryPauseReasonEn(reason: AutoFailureRecoverySkipRecord["reason"]): string {
+  return {
+    "requires-permission": "permission required",
+    "requires-dependency": "dependency setup required",
+    "user-cancelled": "cancelled by user"
+  }[reason];
+}
+
 function getActivityElapsedStartedAt(events: TaskThreadEvent[], fallbackStartedAt: string): string {
   for (const event of events) {
     if ((event.kind === "plan" || event.kind === "result") && Number.isFinite(Date.parse(event.createdAt))) {
@@ -196,12 +353,16 @@ function formatRunningActivityElapsed(
   return minutes > 0 ? `${minutes}m ${seconds}s elapsed` : `${seconds}s elapsed`;
 }
 
-function findLatestFailedCommandResult(events: TaskThreadEvent[]): CommandRunResult | null {
+function findLatestFailedCommandResult(events: TaskThreadEvent[]): FailedCommandActivity | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
-    const result = events[index]?.commandResult;
+    const event = events[index];
+    const result = event?.commandResult;
 
     if (result && !result.cancelled && (result.timedOut || result.exitCode !== 0)) {
-      return result;
+      return {
+        result,
+        createdAt: event.createdAt
+      };
     }
   }
 
