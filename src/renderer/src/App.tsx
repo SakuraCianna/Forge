@@ -29,7 +29,7 @@ import {
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
-import { countAutoFailureRecoveryAttempts } from "@/agent/failureRecoveryAttempts";
+import { selectAutoFailureRecoveryCandidate } from "@/agent/autoFailureRecovery";
 import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
@@ -501,7 +501,7 @@ export function App(): ReactElement {
   }
 
   function getThreadFailureRecoveryLimit(threadId: string): number {
-    return Math.max(1, getThreadAgentProfileContext(threadId).maxFailureRecoveryAttempts);
+    return Math.max(0, getThreadAgentProfileContext(threadId).maxFailureRecoveryAttempts);
   }
 
   function hasReservedAgentAction(threadId: string, actions: AgentAction[]): boolean {
@@ -648,51 +648,29 @@ export function App(): ReactElement {
       return;
     }
 
-    const candidate = threads
-      .filter((thread) => !thread.archived && !cancelledThreadIdsRef.current.has(thread.id))
-      .map((thread) => ({
-        thread,
-        failedAction: findFailedAgentQueueBlocker(thread.agentActions ?? [])
-      }))
-      .find(({ thread, failedAction }) => {
-        if (!failedAction) {
-          return false;
-        }
+    const candidate = selectAutoFailureRecoveryCandidate({
+      threads,
+      currentProjectPath: currentProject.path,
+      cancelledThreadIds: cancelledThreadIdsRef.current,
+      activeKeys: activeAutoFailureFixKeysRef.current,
+      attemptedKeys: autoFailureFixAttemptedKeysRef.current,
+      countsByThreadId: autoFailureFixCountsRef.current,
+      getThreadFailureRecoveryLimit
+    });
 
-        const key = createAutoFailureFixKey(thread.id, failedAction.id);
-        const count = Math.max(
-          autoFailureFixCountsRef.current.get(thread.id) ?? 0,
-          countAutoFailureRecoveryAttempts(thread.events)
-        );
-        const actionAutoAttempted = countAutoFailureRecoveryAttempts(thread.events, failedAction.id) > 0;
-
-        return (
-          count < getThreadFailureRecoveryLimit(thread.id) &&
-          !activeAutoFailureFixKeysRef.current.has(key) &&
-          !autoFailureFixAttemptedKeysRef.current.has(key) &&
-          !actionAutoAttempted
-        );
-      });
-
-    if (!candidate?.failedAction) {
+    if (!candidate) {
       return;
     }
 
-    const key = createAutoFailureFixKey(candidate.thread.id, candidate.failedAction.id);
-    const limit = getThreadFailureRecoveryLimit(candidate.thread.id);
-    const currentCount = Math.max(
-      autoFailureFixCountsRef.current.get(candidate.thread.id) ?? 0,
-      countAutoFailureRecoveryAttempts(candidate.thread.events)
-    );
-    activeAutoFailureFixKeysRef.current.add(key);
-    autoFailureFixAttemptedKeysRef.current.add(key);
-    autoFailureFixCountsRef.current.set(candidate.thread.id, currentCount + 1);
+    activeAutoFailureFixKeysRef.current.add(candidate.key);
+    autoFailureFixAttemptedKeysRef.current.add(candidate.key);
+    autoFailureFixCountsRef.current.set(candidate.thread.id, candidate.attempt);
     void generateFailureFixPlan(candidate.thread.id, candidate.failedAction, null, {
       source: "auto",
-      attempt: currentCount + 1,
-      limit
+      attempt: candidate.attempt,
+      limit: candidate.limit
     }).finally(() => {
-      activeAutoFailureFixKeysRef.current.delete(key);
+      activeAutoFailureFixKeysRef.current.delete(candidate.key);
     });
   }, [
     changePreviews.length,
@@ -4658,25 +4636,7 @@ function formatPreviewStatus(
   return language === "zh-CN" ? "原始内容" : "Raw content";
 }
 
-// 找到队列中第一个失败阻塞点, 自动恢复只处理真正挡住后续步骤的动作
-function findFailedAgentQueueBlocker(actions: AgentAction[]): AgentAction | null {
-  for (const action of actions) {
-    if (action.status === "completed" || action.status === "skipped") {
-      continue;
-    }
-
-    return action.status === "failed" ? action : null;
-  }
-
-  return null;
-}
-
-// 自动恢复以线程和动作作为幂等键, 避免同一失败点重复生成修复计划
-function createAutoFailureFixKey(threadId: string, actionId: string): string {
-  return `${threadId}:${actionId}`;
-}
-
-// 将全局权限模式叠加到当前智能体配置, 只读模式必须在运行时硬拦截写操作
+// Read-only mode is enforced at runtime by narrowing writable agent permissions.
 function applyGeneralPermissionModeToAgentProfile(
   agentProfile: AgentProfileContext,
   generalPreferences: GeneralPreferences
