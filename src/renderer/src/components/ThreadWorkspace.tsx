@@ -54,6 +54,7 @@ import {
 } from "@/agent/agentActionDetails";
 import { getAutoFailureRecoverySkipEventPrefix } from "@/agent/autoFailureRecovery";
 import { getFailureRecoveryAttemptsForAction } from "@/agent/failureRecoveryAttempts";
+import { getProcessedRecoverySummary } from "@/agent/processedRecoverySummary";
 import { getThreadActivitySummary as getThreadActivitySummaryFromEvents } from "@/agent/threadActivitySummary";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
@@ -132,6 +133,7 @@ type CompactProcessedSummary = {
   groups: CompactProcessedGroup[];
   sourceUrls: string[];
   livePreview?: string;
+  recoverySummary?: string;
 };
 
 type CompactProcessedGroupKind =
@@ -1224,6 +1226,12 @@ export function ThreadWorkspace({
           className="flex min-h-7 w-full flex-wrap items-center gap-x-2 gap-y-1 text-left text-sm font-medium text-[#8e8ea0] transition hover:text-[#565869]"
         >
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {summary.recoverySummary ? (
+              <span className="inline-flex min-w-0 items-center gap-1 text-[12px] font-normal text-[#9a3412]">
+                <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{summary.recoverySummary}</span>
+              </span>
+            ) : null}
             {summary.groups.length > 0
               ? summary.groups.slice(0, 4).map((group) => {
                   const Icon = getCompactProcessedGroupIcon(group.kind);
@@ -1238,7 +1246,7 @@ export function ThreadWorkspace({
                     </span>
                   );
                 })
-              : (
+              : summary.recoverySummary ? null : (
                 <span className="truncate text-[12px] font-normal">
                   {summary.livePreview ?? (language === "zh-CN" ? "处理详情" : "Processed details")}
                 </span>
@@ -3614,7 +3622,8 @@ function getCompactProcessedSummary(
     hiddenEvents,
     groups: buildCompactProcessedGroups(hiddenEvents, language),
     sourceUrls: extractSourceUrlsFromEvents(hiddenEvents),
-    livePreview: getCompactProcessedLivePreview(thread, hiddenEvents)
+    livePreview: getCompactProcessedLivePreview(thread, hiddenEvents),
+    recoverySummary: getProcessedRecoverySummary(thread, language) ?? undefined
   };
 }
 
