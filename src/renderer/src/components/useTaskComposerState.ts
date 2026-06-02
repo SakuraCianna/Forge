@@ -7,9 +7,9 @@ import type {
   RefObject
 } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentImageAttachment } from "@shared/agentTypes";
+import type { AgentAttachmentContext, AgentImageAttachment } from "@shared/agentTypes";
 import {
-  createComposerSubmissionPrompt,
+  createComposerSubmissionPayload,
   formatAttachmentSize,
   hasProcessingComposerAttachments,
   maxComposerAttachments,
@@ -33,6 +33,7 @@ export type TaskComposerStateCopy = ComposerSubmissionCopy & {
 export type ComposerSubmission = {
   prompt: string;
   attachments?: AgentImageAttachment[];
+  attachmentContexts?: AgentAttachmentContext[];
 };
 
 export type ComposerSubmitShortcut = GeneralPreferences["composerSubmitShortcut"];
@@ -40,7 +41,11 @@ export type ComposerSubmitShortcut = GeneralPreferences["composerSubmitShortcut"
 type UseTaskComposerStateOptions = {
   copy: TaskComposerStateCopy;
   focusSignal: number;
-  onSubmitTask: (prompt: string, attachments?: AgentImageAttachment[]) => void;
+  onSubmitTask: (
+    prompt: string,
+    attachments?: AgentImageAttachment[],
+    attachmentContexts?: AgentAttachmentContext[]
+  ) => void;
   submitShortcut: ComposerSubmitShortcut;
   submitSignal: number;
   supportsImageAttachments: boolean;
@@ -100,7 +105,7 @@ export function useTaskComposerState({
       return false;
     }
 
-    onSubmitTask(submission.prompt, submission.attachments);
+    onSubmitTask(submission.prompt, submission.attachments, submission.attachmentContexts);
     setPrompt("");
     setAttachments([]);
     setAttachmentNotice(null);
@@ -289,12 +294,13 @@ export function createComposerSubmission(
   const submissionAttachments = supportsImageAttachments
     ? attachments
     : attachments.map((attachment) => ({ ...attachment, imageAttachment: undefined }));
-  const submission = createComposerSubmissionPrompt(prompt, submissionAttachments, copy);
+  const submission = createComposerSubmissionPayload(prompt, submissionAttachments, copy);
 
   return submission
     ? {
         prompt: submission.prompt,
-        attachments: supportsImageAttachments ? submission.attachments : undefined
+        attachments: supportsImageAttachments ? submission.attachments : undefined,
+        attachmentContexts: submission.attachmentContexts
       }
     : null;
 }

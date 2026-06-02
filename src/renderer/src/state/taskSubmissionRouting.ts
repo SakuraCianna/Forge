@@ -1,5 +1,9 @@
 // Turns a composer submission into a structured route before App side effects run.
-import type { AgentImageAttachment, AgentProfileContext } from "@shared/agentTypes";
+import type {
+  AgentAttachmentContext,
+  AgentImageAttachment,
+  AgentProfileContext
+} from "@shared/agentTypes";
 import type { ModelSettings } from "@shared/modelTypes";
 import { isDirectAnswerPrompt } from "./conversationRouting";
 import {
@@ -20,6 +24,7 @@ type CreateTaskSubmissionRouteOptions = {
   activeThread: TaskThread | null;
   agentProfile?: AgentProfileContext;
   attachments?: AgentImageAttachment[];
+  attachmentContexts?: AgentAttachmentContext[];
   createId?: () => string;
   currentProjectPath: string | null;
   hasProjectScan: boolean;
@@ -32,6 +37,7 @@ export function createTaskSubmissionRoute({
   activeThread,
   agentProfile,
   attachments,
+  attachmentContexts,
   createId,
   currentProjectPath,
   hasProjectScan,
@@ -43,6 +49,7 @@ export function createTaskSubmissionRoute({
     const result = createThreadFromSettings(settings, prompt, {
       agentProfile,
       attachments,
+      attachmentContexts,
       createId,
       now
     });
@@ -77,6 +84,7 @@ export function createTaskSubmissionRoute({
   const result = createThreadFromSettings(settings, prompt, {
     agentProfile,
     attachments,
+    attachmentContexts,
     createId,
     now
   });

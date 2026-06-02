@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AgentImageAttachment } from "@shared/agentTypes";
 import {
+  appendAttachmentContextsToPrompt,
   createAttachmentContextBlock,
-  createComposerSubmissionPrompt,
+  createComposerSubmissionPayload,
   formatAttachmentSize,
   getComposerAttachmentKind,
   selectComposerAttachmentFiles,
@@ -13,8 +14,7 @@ const copy: ComposerSubmissionCopy = {
   attachmentContextHeader: "Local attachment context:",
   attachmentContextIntro: "Extracted locally.",
   attachmentContextTruncated: "[truncated]",
-  attachmentPromptFallback: "Use the attachments.",
-  imagePromptFallback: "Use the image."
+  attachmentPromptFallback: "Use the attachments."
 };
 
 describe("composer attachments", () => {
@@ -52,11 +52,9 @@ describe("composer attachments", () => {
         {
           id: "doc-1",
           kind: "word",
-          status: "ready",
           name: "brief.docx",
-          mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           size: 2048,
-          extractedText: "Project notes"
+          content: "Project notes"
         }
       ],
       copy
@@ -67,7 +65,7 @@ describe("composer attachments", () => {
     expect(block).toContain("Project notes");
   });
 
-  it("creates prompts with extracted context and image attachments", () => {
+  it("creates clean submissions with extracted context and image attachments", () => {
     const imageAttachment: AgentImageAttachment = {
       id: "image-1",
       mediaType: "image/png",
@@ -75,7 +73,7 @@ describe("composer attachments", () => {
       name: "image.png",
       size: 128
     };
-    const submission = createComposerSubmissionPrompt(
+    const submission = createComposerSubmissionPayload(
       "Explain this",
       [
         {
@@ -93,8 +91,36 @@ describe("composer attachments", () => {
     );
 
     expect(submission?.attachments).toEqual([imageAttachment]);
-    expect(submission?.prompt).toContain("Explain this");
-    expect(submission?.prompt).toContain("OCR words");
+    expect(submission?.prompt).toBe("Explain this");
+    expect(submission?.attachmentContexts).toEqual([
+      {
+        id: "image-1",
+        kind: "image",
+        name: "image.png",
+        size: 128,
+        content: "OCR words"
+      }
+    ]);
+  });
+
+  it("appends extracted context only when preparing model prompts", () => {
+    const modelPrompt = appendAttachmentContextsToPrompt(
+      "Explain this",
+      [
+        {
+          id: "doc-1",
+          kind: "word",
+          name: "brief.docx",
+          size: 2048,
+          content: "Project notes"
+        }
+      ],
+      "en-US"
+    );
+
+    expect(modelPrompt).toContain("Explain this");
+    expect(modelPrompt).toContain("Local attachment context:");
+    expect(modelPrompt).toContain("Project notes");
   });
 
   it("formats attachment sizes", () => {
