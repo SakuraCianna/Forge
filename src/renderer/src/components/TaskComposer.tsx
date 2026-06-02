@@ -1,11 +1,9 @@
 // 本文件说明: 渲染统一输入框, 附件菜单, 权限选择和模型入口
 import type {
-  ClipboardEvent as ReactClipboardEvent,
   ComponentType,
-  KeyboardEvent as ReactKeyboardEvent,
   ReactElement
 } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowUp,
@@ -25,17 +23,13 @@ import {
 import type { AgentImageAttachment } from "@shared/agentTypes";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
 import { useI18n } from "@/i18n/useI18n";
-import {
-  formatAttachmentSize,
-  maxComposerImageAttachments,
-  readComposerImageAttachment,
-  selectComposerImageFiles
-} from "@/state/imageAttachments";
+import { formatAttachmentSize } from "@/state/imageAttachments";
 import {
   createDefaultGeneralPreferences,
   type GeneralPreferences
 } from "@/state/generalPreferences";
 import { ModelSelector } from "./ModelSelector";
+import { useTaskComposerState } from "./useTaskComposerState";
 
 type ComposerPermissionMode = "read-only" | "auto" | "full";
 
@@ -75,10 +69,6 @@ export function TaskComposer({
   variant = "dock"
 }: TaskComposerProps): ReactElement {
   const { t } = useI18n(settings.language);
-  const [prompt, setPrompt] = useState("");
-  const [imageAttachments, setImageAttachments] = useState<AgentImageAttachment[]>([]);
-  const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isHero = variant === "hero";
   const placeholderText = placeholder ?? t("composer.placeholder");
   const copy = getComposerCopy(settings.language);
@@ -89,23 +79,30 @@ export function TaskComposer({
   );
   const supportsImageAttachments = currentModel?.capabilities.vision === true;
 
-  const submitTask = useCallback((): void => {
-    const normalizedPrompt = prompt.trim();
-    const attachments = imageAttachments;
-
-    if (!normalizedPrompt && attachments.length === 0) {
-      return;
-    }
-
-    onSubmitTask(
-      normalizedPrompt ||
-        (settings.language === "zh-CN" ? "请根据这些图片回答。" : "Please answer based on the attached image."),
-      attachments.length > 0 ? attachments : undefined
-    );
-    setPrompt("");
-    setImageAttachments([]);
-    setAttachmentNotice(null);
-  }, [imageAttachments, onSubmitTask, prompt, settings.language]);
+  const {
+    attachmentNotice,
+    handlePromptKeyDown,
+    handlePromptPaste,
+    imageAttachments,
+    prompt,
+    removeImageAttachment,
+    setPrompt,
+    submitTask,
+    textareaRef
+  } = useTaskComposerState({
+    copy: {
+      imagePromptFallback:
+        settings.language === "zh-CN"
+          ? "请根据这些图片回答。"
+          : "Please answer based on the attached image.",
+      imageTooLarge: copy.imageTooLarge
+    },
+    focusSignal,
+    onSubmitTask,
+    submitShortcut: resolvedGeneralPreferences.composerSubmitShortcut,
+    submitSignal,
+    supportsImageAttachments
+  });
 
   const handlePrimaryAction = useCallback((): void => {
     if (busy) {
@@ -115,88 +112,6 @@ export function TaskComposer({
 
     submitTask();
   }, [busy, onCancelTask, submitTask]);
-
-  useEffect(() => {
-    if (focusSignal > 0) {
-      textareaRef.current?.focus();
-    }
-  }, [focusSignal]);
-
-  useEffect(() => {
-    if (submitSignal > 0) {
-      submitTask();
-    }
-  }, [submitSignal, submitTask]);
-
-  useEffect(() => {
-    if (!supportsImageAttachments && imageAttachments.length > 0) {
-      setImageAttachments([]);
-      setAttachmentNotice(null);
-    }
-  }, [imageAttachments.length, supportsImageAttachments]);
-
-  // 根据设置决定发送快捷键, 另一种 Enter 组合保留原生换行行为
-  function handlePromptKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
-    if (event.key !== "Enter" || event.nativeEvent.isComposing) {
-      return;
-    }
-
-    const shouldSubmit =
-      resolvedGeneralPreferences.composerSubmitShortcut === "ctrl-enter"
-        ? (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey
-        : !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey;
-
-    if (!shouldSubmit) {
-      return;
-    }
-
-    event.preventDefault();
-    submitTask();
-  }
-
-  function handlePromptPaste(event: ReactClipboardEvent<HTMLTextAreaElement>): void {
-    if (!supportsImageAttachments) {
-      return;
-    }
-
-    const remainingSlots = maxComposerImageAttachments - imageAttachments.length;
-
-    if (remainingSlots <= 0) {
-      return;
-    }
-
-    const pastedFiles = Array.from(event.clipboardData.items)
-      .map((item) => (item.kind === "file" ? item.getAsFile() : null))
-      .filter((file): file is File => Boolean(file));
-    const { accepted: imageFiles, oversizedCount } = selectComposerImageFiles(
-      pastedFiles,
-      remainingSlots
-    );
-
-    if (imageFiles.length === 0) {
-      if (oversizedCount > 0) {
-        event.preventDefault();
-        setAttachmentNotice(copy.imageTooLarge);
-      }
-
-      return;
-    }
-
-    event.preventDefault();
-    setAttachmentNotice(oversizedCount > 0 ? copy.imageTooLarge : null);
-    void Promise.all(imageFiles.map(readComposerImageAttachment))
-      .then((attachments) => {
-        setImageAttachments((current) =>
-          [...current, ...attachments].slice(0, maxComposerImageAttachments)
-        );
-      })
-      .catch(() => undefined);
-  }
-
-  function removeImageAttachment(id: string): void {
-    setImageAttachments((current) => current.filter((attachment) => attachment.id !== id));
-    setAttachmentNotice(null);
-  }
 
   const inputPanel = (
     <div
