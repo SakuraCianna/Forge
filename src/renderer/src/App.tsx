@@ -29,7 +29,11 @@ import {
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
 import { createCommandFinishedEvent, createCommandStartedEvent } from "@/agent/commandEvents";
-import { selectAutoFailureRecoveryCandidate } from "@/agent/autoFailureRecovery";
+import {
+  createAutoFailureRecoverySkipEvent,
+  selectAutoFailureRecoveryCandidate,
+  selectAutoFailureRecoverySkipNotice
+} from "@/agent/autoFailureRecovery";
 import {
   createFailureFixTaskPrompt,
   findLatestCommandResultForAction
@@ -659,6 +663,39 @@ export function App(): ReactElement {
     });
 
     if (!candidate) {
+      const skipNotice = selectAutoFailureRecoverySkipNotice({
+        threads,
+        currentProjectPath: currentProject.path,
+        cancelledThreadIds: cancelledThreadIdsRef.current
+      });
+
+      if (skipNotice) {
+        const createdAt = new Date().toISOString();
+        const event = createAutoFailureRecoverySkipEvent({
+          threadId: skipNotice.thread.id,
+          action: skipNotice.failedAction,
+          decision: skipNotice.decision,
+          language: settings.language,
+          createdAt
+        });
+
+        setThreads((current) =>
+          current.map((thread) => {
+            if (
+              thread.id !== skipNotice.thread.id ||
+              thread.events.some((threadEvent) => threadEvent.id === event.id)
+            ) {
+              return thread;
+            }
+
+            return {
+              ...thread,
+              events: [...thread.events, event]
+            };
+          })
+        );
+      }
+
       return;
     }
 
@@ -676,6 +713,7 @@ export function App(): ReactElement {
     changePreviews.length,
     currentProject,
     projectScanResult,
+    settings.language,
     threads
   ]);
 
