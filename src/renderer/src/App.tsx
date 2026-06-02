@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { AgentImageAttachment, AgentProfileContext } from "@shared/agentTypes";
-import type { ProjectGitStatus } from "@shared/gitTypes";
+import type { ProjectGitCommitResult, ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
@@ -146,7 +146,6 @@ import {
   cancelThread,
   completeNextPendingAgentAction,
   createCommandApprovalEvent,
-  createThreadFromSettings,
   restoreThread,
   toggleThreadPinned,
   updateThreadAgentActionFromFileChangePreview,
@@ -182,7 +181,7 @@ import {
   type CodeFormatResult,
   type CodeFormatterMode
 } from "@/state/codeFormatting";
-import { isDirectAnswerPrompt } from "@/state/conversationRouting";
+import { createTaskSubmissionRoute } from "@/state/taskSubmissionRouting";
 import {
   appendCommandSafetyRule,
   createExactCommandAllowRule,
@@ -1101,6 +1100,52 @@ export function App(): ReactElement {
   }
 
   // 使用用户填写的消息提交当前项目, 成功后重刷 Git 状态
+  async function createProjectCommit(
+    normalizedMessage: string
+  ): Promise<{
+    result: ProjectGitCommitResult;
+    targetBranch: string | undefined;
+    targetRemote: string;
+  }> {
+    if (!currentProject) {
+      throw new Error(t("projects.required"));
+    }
+
+    const targetBranch =
+      commitBranch.trim() || gitStatus?.currentBranch || gitStatus?.branches[0] || undefined;
+    const targetRemote = gitRemote.trim() || "origin";
+    const result = await window.forge.git.commit({
+      projectRoot: currentProject.path,
+      message: normalizedMessage,
+      branch: targetBranch,
+      createBranch: createCommitBranch,
+      push: pushAfterCommit,
+      remote: targetRemote
+    });
+
+    return { result, targetBranch, targetRemote };
+  }
+
+  function applyProjectCommitResult({
+    result,
+    targetBranch,
+    targetRemote
+  }: {
+    result: ProjectGitCommitResult;
+    targetBranch: string | undefined;
+    targetRemote: string;
+  }): void {
+    setGitStatus(result.status);
+    setCommitMessage("");
+    setGitNotice(
+      createGitOperationNotice(settings.language, {
+        type: pushAfterCommit ? "commit-push" : "commit",
+        branch: result.branch ?? targetBranch ?? null,
+        remote: targetRemote
+      })
+    );
+  }
+
   async function commitCurrentProject(message: string): Promise<void> {
     if (!currentProject) {
       return;
@@ -1116,26 +1161,8 @@ export function App(): ReactElement {
     }
 
     try {
-      const targetBranch =
-        commitBranch.trim() || gitStatus?.currentBranch || gitStatus?.branches[0] || undefined;
-      const targetRemote = gitRemote.trim() || "origin";
-      const result = await window.forge.git.commit({
-        projectRoot: currentProject.path,
-        message: normalizedMessage,
-        branch: targetBranch,
-        createBranch: createCommitBranch,
-        push: pushAfterCommit,
-        remote: targetRemote
-      });
-      setGitStatus(result.status);
-      setCommitMessage("");
-      setGitNotice(
-        createGitOperationNotice(settings.language, {
-          type: pushAfterCommit ? "commit-push" : "commit",
-          branch: result.branch ?? targetBranch ?? null,
-          remote: targetRemote
-        })
-      );
+      const commitResult = await createProjectCommit(normalizedMessage);
+      applyProjectCommitResult(commitResult);
       if (selectedThreadId && pendingCommitAction) {
         const createdAt = new Date().toISOString();
 
@@ -1661,88 +1688,92 @@ export function App(): ReactElement {
       settings.models.find((model) => model.id === settings.currentModelId) ?? null,
       attachments
     );
+    const route = createTaskSubmissionRoute({
+      activeThread,
+      agentProfile: activeAgentProfileContext,
+      attachments: submittedAttachments,
+      currentProjectPath: currentProject?.path ?? null,
+      hasProjectScan: Boolean(projectScanResult),
+      prompt,
+      settings
+    });
 
-    if (isDirectAnswerPrompt(prompt)) {
-      const result = createThreadFromSettings(settings, prompt, {
-        agentProfile: activeAgentProfileContext,
-        attachments: submittedAttachments
+    if (route.kind === "invalid") {
+      setTaskNotice(
+        route.reason === "empty-prompt" ? t("composer.emptyPrompt") : t("composer.missingModel")
+      );
+      return;
+    }
+
+    if (route.kind === "project-required") {
+      setTaskNotice(t("projects.required"));
+      return;
+    }
+
+    if (route.kind === "project-scanning") {
+      setTaskNotice(t("projects.scanning"));
+      return;
+    }
+
+    if (route.kind === "ask-follow-up") {
+      const selectedModel = settings.models.find((model) => model.id === route.draftThread.modelId);
+      const selectedProvider = selectedModel
+        ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
+        : null;
+      const createdAt = new Date().toISOString();
+
+      setTaskNotice(null);
+      clearPausedAgentThread(route.thread.id);
+      setThreads((current) =>
+        appendThreadFollowUpPrompt(current, route.thread.id, {
+          id: `${route.thread.id}-user-${createdAt}`,
+          message: prompt,
+          createdAt
+        })
+      );
+      rememberPromptIfNeeded(
+        route.thread.id,
+        prompt,
+        getProjectScanForThread(route.thread)?.rootPath ?? route.thread.projectPath ?? null
+      );
+
+      if (!selectedModel || !selectedProvider) {
+        appendThreadError(route.thread.id, "未找到当前模型或提供商配置");
+        return;
+      }
+
+      void generateAskResponse({
+        threadId: route.thread.id,
+        prompt,
+        model: selectedModel,
+        provider: selectedProvider,
+        attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
+        projectScan: getProjectScanForThread(route.thread),
+        conversation: createThreadConversation(route.thread)
       });
+      return;
+    }
 
-      if (!result.ok) {
-        setTaskNotice(
-          result.reason === "empty-prompt" ? t("composer.emptyPrompt") : t("composer.missingModel")
-        );
-        return;
-      }
-
-      if (activeThread && activeThread.status !== "running") {
-        const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
-        const selectedProvider = selectedModel
-          ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
-          : null;
-        const createdAt = new Date().toISOString();
-
-        setTaskNotice(null);
-        clearPausedAgentThread(activeThread.id);
-        setThreads((current) =>
-          appendThreadFollowUpPrompt(
-            current,
-            activeThread.id,
-            {
-              id: `${activeThread.id}-user-${createdAt}`,
-              message: prompt,
-              createdAt
-            }
-          )
-        );
-        rememberPromptIfNeeded(
-          activeThread.id,
-          prompt,
-          getProjectScanForThread(activeThread)?.rootPath ?? activeThread.projectPath ?? null
-        );
-
-        if (!selectedModel || !selectedProvider) {
-          appendThreadError(activeThread.id, "未找到当前模型或提供商配置");
-          return;
-        }
-
-        void generateAskResponse({
-          threadId: activeThread.id,
-          prompt,
-          model: selectedModel,
-          provider: selectedProvider,
-          attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
-          projectScan: getProjectScanForThread(activeThread),
-          conversation: createThreadConversation(activeThread)
-        });
-        return;
-      }
-
-      const askThread: TaskThread = {
-        ...result.thread,
-        projectPath: currentProject?.path ?? null,
-        status: "running",
-        events: []
-      };
-      const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
+    if (route.kind === "ask-new") {
+      const selectedModel = settings.models.find((model) => model.id === route.thread.modelId);
       const selectedProvider = selectedModel
         ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
         : null;
 
       setTaskNotice(null);
-      clearPausedAgentThread(result.thread.id);
-      setThreads((current) => [askThread, ...current]);
-      setSelectedThreadId(result.thread.id);
-      rememberPromptIfNeeded(result.thread.id, prompt, currentProject?.path ?? null);
+      clearPausedAgentThread(route.thread.id);
+      setThreads((current) => [route.thread, ...current]);
+      setSelectedThreadId(route.thread.id);
+      rememberPromptIfNeeded(route.thread.id, prompt, route.thread.projectPath ?? null);
 
       if (!selectedModel || !selectedProvider) {
-        appendThreadError(result.thread.id, "未找到当前模型或提供商配置");
+        appendThreadError(route.thread.id, "未找到当前模型或提供商配置");
         return;
       }
 
       void generateAskResponse({
-        threadId: result.thread.id,
-        prompt: result.thread.prompt,
+        threadId: route.thread.id,
+        prompt: route.thread.prompt,
         model: selectedModel,
         provider: selectedProvider,
         attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
@@ -1751,94 +1782,61 @@ export function App(): ReactElement {
       return;
     }
 
-    if (!currentProject) {
-      setTaskNotice(t("projects.required"));
-      return;
-    }
-
-    if (!projectScanResult) {
-      setTaskNotice(t("projects.scanning"));
-      return;
-    }
-
-    const activeProjectThread =
-      activeThread && activeThread.status !== "running" && activeThread.projectPath === currentProject.path
-        ? activeThread
-        : null;
-
-    const result = createThreadFromSettings(settings, prompt, {
-      agentProfile: activeAgentProfileContext,
-      attachments: submittedAttachments
-    });
-
-    if (!result.ok) {
-      setTaskNotice(
-        result.reason === "empty-prompt" ? t("composer.emptyPrompt") : t("composer.missingModel")
-      );
-      return;
-    }
-
-    if (activeProjectThread) {
-      const selectedModel = settings.models.find((model) => model.id === result.thread.modelId);
+    if (route.kind === "project-follow-up") {
+      const selectedModel = settings.models.find((model) => model.id === route.draftThread.modelId);
       const selectedProvider = selectedModel
         ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
         : null;
       const createdAt = new Date().toISOString();
 
       setTaskNotice(null);
-      clearPausedAgentThread(activeProjectThread.id);
+      clearPausedAgentThread(route.thread.id);
       setThreads((current) =>
-        appendThreadFollowUpPrompt(current, activeProjectThread.id, {
-          id: `${activeProjectThread.id}-user-${createdAt}`,
+        appendThreadFollowUpPrompt(current, route.thread.id, {
+          id: `${route.thread.id}-user-${createdAt}`,
           message: prompt,
           createdAt
         })
       );
 
       if (!selectedModel || !selectedProvider) {
-        appendThreadError(activeProjectThread.id, "未找到当前模型或提供商配置");
+        appendThreadError(route.thread.id, "未找到当前模型或提供商配置");
         return;
       }
 
       void generateThreadPlan({
-        threadId: activeProjectThread.id,
+        threadId: route.thread.id,
         taskPrompt: prompt,
         model: selectedModel,
         provider: selectedProvider,
         attachments: resolveVisionAttachments(selectedModel, submittedAttachments),
-        projectScan: projectScanResult
+        projectScan: projectScanResult!
       });
       return;
     }
 
-    setTaskNotice(null);
-    clearPausedAgentThread(result.thread.id);
-    const projectThread: TaskThread = {
-      ...result.thread,
-      // 项目任务直接等待真实模型输出, 不再插入静态计划模板
-      status: "running",
-      projectPath: currentProject.path
-    };
-    const selectedModel = settings.models.find((model) => model.id === projectThread.modelId);
+    const selectedModel = settings.models.find((model) => model.id === route.thread.modelId);
     const selectedProvider = selectedModel
       ? settings.providers.find((provider) => provider.id === selectedModel.providerId)
       : null;
 
-    setThreads((current) => [projectThread, ...current]);
-    setSelectedThreadId(projectThread.id);
+    setTaskNotice(null);
+    clearPausedAgentThread(route.thread.id);
+    setThreads((current) => [route.thread, ...current]);
+    setSelectedThreadId(route.thread.id);
 
     if (!selectedModel || !selectedProvider) {
-      appendThreadError(projectThread.id, "未找到当前模型或提供商配置");
+      appendThreadError(route.thread.id, "未找到当前模型或提供商配置");
       return;
     }
 
     void generateThreadPlan({
-      threadId: projectThread.id,
-      taskPrompt: projectThread.prompt,
+      threadId: route.thread.id,
+      taskPrompt: route.thread.prompt,
       model: selectedModel,
       provider: selectedProvider,
-      attachments: resolveVisionAttachments(selectedModel, projectThread.attachments),
-      projectScan: projectScanResult
+      attachments: resolveVisionAttachments(selectedModel, route.thread.attachments),
+      projectScan: projectScanResult!
     });
   }
 
@@ -2523,6 +2521,76 @@ export function App(): ReactElement {
     setAgentActionDecisionStatus(threadId, action, "skipped");
   }
 
+  function completeFullAccessManualGateAction(
+    threadId: string,
+    action: AgentAction,
+    createdAt: string
+  ): AgentActionRunOutcome {
+    updateAgentActionStatus(threadId, action.id, "completed");
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        {
+          id: `${threadId}-full-access-gate-${action.id}-${createdAt}`,
+          kind: "plan",
+          message:
+            settings.language === "zh-CN"
+              ? `完全访问权限已自动接管: ${action.label}`
+              : `Full access handled automatically: ${action.label}`,
+          createdAt
+        }
+      ])
+    );
+
+    return "completed";
+  }
+
+  async function commitFullAccessAgentAction(
+    threadId: string,
+    action: AgentAction
+  ): Promise<AgentActionRunOutcome> {
+    const normalizedMessage = (formatAgentCommitMessageSuggestion(action) ?? action.label).trim();
+
+    if (!normalizedMessage) {
+      const message = t("projects.commitMessageRequired");
+
+      setTaskNotice(message);
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(threadId, message);
+      return "failed";
+    }
+
+    try {
+      const commitResult = await createProjectCommit(normalizedMessage);
+      const createdAt = new Date().toISOString();
+
+      applyProjectCommitResult(commitResult);
+      updateAgentActionStatus(threadId, action.id, "completed");
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-full-access-commit-${action.id}-${createdAt}`,
+            kind: "plan",
+            message:
+              settings.language === "zh-CN"
+                ? `完全访问权限已自动提交: ${normalizedMessage}`
+                : `Full access committed automatically: ${normalizedMessage}`,
+            createdAt
+          }
+        ])
+      );
+
+      return "completed";
+    } catch (error) {
+      const message = formatRuntimeError(settings.language, error);
+
+      setGitNotice(message);
+      setTaskNotice(message);
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(threadId, message);
+      return "failed";
+    }
+  }
+
   // 执行单个 Agent 动作, 失败时保留可恢复的结果说明
   async function runAgentAction(
     threadId: string,
@@ -2601,6 +2669,20 @@ export function App(): ReactElement {
 
     if (execution.kind === "manual-gate") {
       const createdAt = new Date().toISOString();
+
+      if (threadFullAccessMode) {
+        appendAgentActionRunEvent(threadId, actionToRun, { status: "started", startedAt: createdAt });
+        updateAgentActionStatus(threadId, actionToRun.id, "running");
+        const outcome =
+          execution.reason === "commit"
+            ? await commitFullAccessAgentAction(threadId, actionToRun)
+            : completeFullAccessManualGateAction(threadId, actionToRun, createdAt);
+
+        appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, createdAt);
+        window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
+        return outcome;
+      }
+
       setTaskNotice(
         settings.language === "zh-CN"
           ? "需要先完成审查门禁, Forge 不会自动越过人工确认"

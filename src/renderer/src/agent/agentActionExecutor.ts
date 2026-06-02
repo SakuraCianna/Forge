@@ -327,6 +327,10 @@ export function isRunnableAgentAction(
   action: AgentAction,
   policy: AgentCommandSafetyPolicy = {}
 ): boolean {
+  if (policy.fullAccess === true && (action.kind === "manual" || action.kind === "commit")) {
+    return true;
+  }
+
   if (
     (action.kind === "inspect-file" ||
       action.kind === "list-directory" ||
