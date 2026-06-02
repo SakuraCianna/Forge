@@ -66,6 +66,7 @@ import type {
 } from "@/state/taskThreads";
 import { AgentActionDetailsPanel } from "./AgentActionDetailsPanel";
 import { MarkdownPreview } from "./FilePreviewRenderer";
+import { ProjectFileIcon } from "./ProjectFileIcon";
 import { Tooltip } from "./Tooltip";
 
 type ThreadWorkspaceProps = {
@@ -2770,9 +2771,10 @@ export function ThreadWorkspace({
                 <button
                   type="button"
                   onClick={() => onPreviewFile(file.relativePath)}
-                  className="block min-w-0 flex-1 truncate rounded-[12px] px-2 py-1.5 text-left text-xs text-[#202123]"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[12px] px-2 py-1.5 text-left text-xs text-[#202123]"
                 >
-                  {file.relativePath}
+                  <ProjectFileIcon relativePath={file.relativePath} />
+                  <span className="min-w-0 truncate">{file.relativePath}</span>
                 </button>
               </div>
             )) ?? <p className="text-sm text-[#6e6e80]">{t("threads.emptyBody")}</p>}
@@ -2809,13 +2811,14 @@ export function ThreadWorkspace({
                     type="button"
                     aria-label={`Pending change ${preview.relativePath}`}
                     onClick={() => onPreviewFile(preview.relativePath)}
-                    className={`block w-full truncate rounded-[12px] px-2 py-1.5 text-left text-xs ${
+                    className={`flex w-full items-center gap-1.5 rounded-[12px] px-2 py-1.5 text-left text-xs ${
                       previewFile?.relativePath === preview.relativePath
                         ? "bg-[#ececf1] text-[#202123]"
                         : "text-[#202123] hover:bg-[#f7f7f8]"
                     }`}
                   >
-                    {preview.relativePath}
+                    <ProjectFileIcon relativePath={preview.relativePath} />
+                    <span className="min-w-0 truncate">{preview.relativePath}</span>
                   </button>
                 ))}
               </div>
