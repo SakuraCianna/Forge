@@ -44,23 +44,17 @@ import {
   findLatestCommandResultForAction
 } from "@/agent/failureFixPrompt";
 import {
-  createFailureRecoverySuggestionEventId,
-  formatFailureRecoverySuggestion,
-  getFailureRecoverySuggestionEventPrefix,
-  shouldSuggestFailureRecovery
-} from "@/agent/failureRecoveryPolicy";
+  appendAgentActionOutcomeRecord,
+  appendAgentActionRunRecord,
+  appendAgentCompletionSummaryIfDone as appendAgentCompletionSummaryIfDoneToThreads,
+  applyAgentActionDecisionStatus
+} from "@/agent/agentActionLifecycle";
 import {
-  createAgentCompletionSummaryMessage,
-  getAgentCompletionWorkStartedAt
-} from "@/agent/agentCompletionSummary";
-import {
-  formatAgentActionRunMessage,
   formatFailureFixPlanStartMessage
 } from "@/agent/agentRunMessages";
 import {
   appendSourceUrlsToAgentSummary,
   extractSourceUrlsFromText,
-  extractSourceUrlsFromThreadEvents
 } from "@/agent/agentSources";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
@@ -155,8 +149,7 @@ import {
   type AgentActionRunRecord,
   type CommandRunResult,
   type FailureRecoveryAttemptRecord,
-  type TaskThread,
-  type TaskThreadEvent
+  type TaskThread
 } from "@/state/taskThreads";
 import {
   createThreadConversation,
@@ -2444,86 +2437,35 @@ export function App(): ReactElement {
     action: AgentAction,
     record: Omit<AgentActionRunRecord, "actionId" | "label">
   ): void {
-    const createdAt = record.completedAt ?? record.startedAt ?? new Date().toISOString();
-    const message = formatAgentActionRunMessage(settings.language, action, record);
-
     setThreads((current) =>
-      appendThreadEvents(current, threadId, [
-        {
-          id: `${threadId}-agent-action-run-${record.status}-${action.id}-${createdAt}`,
-          kind: record.status === "failed" ? "error" : "plan",
-          message,
-          createdAt,
-          agentActionRun: {
-            actionId: action.id,
-            label: action.label,
-            ...record
-          }
-        }
-      ])
-    );
-  }
-
-  // 在 suggest 策略下补一条可见恢复建议, 让失败动作有清晰的下一步入口
-  function appendFailureRecoverySuggestionEvent(
-    threadId: string,
-    action: AgentAction,
-    status: AgentAction["status"],
-    createdAt: string
-  ): void {
-    const agentProfile = getThreadAgentProfileContext(threadId);
-
-    if (!shouldSuggestFailureRecovery(agentProfile, status)) {
-      return;
-    }
-
-    const eventPrefix = getFailureRecoverySuggestionEventPrefix(threadId, action.id);
-    const event: TaskThreadEvent = {
-      id: createFailureRecoverySuggestionEventId(threadId, action.id, createdAt),
-      kind: "plan",
-      message: formatFailureRecoverySuggestion(settings.language, action),
-      createdAt
-    };
-
-    setThreads((current) =>
-      current.map((thread) => {
-        if (
-          thread.id !== threadId ||
-          thread.events.some((threadEvent) => threadEvent.id.startsWith(eventPrefix))
-        ) {
-          return thread;
-        }
-
-        return {
-          ...thread,
-          events: [...thread.events, event]
-        };
+      appendAgentActionRunRecord(current, {
+        threadId,
+        action,
+        record,
+        language: settings.language
       })
     );
   }
 
-  // 根据动作执行结果写入完成, 失败或等待记录, 供 UI 和后续计划复用
+  // 根据动作执行结果写入完成, 失败, 等待和恢复建议记录, 供 UI 和后续计划复用
   function appendAgentActionOutcomeEvent(
     threadId: string,
     action: AgentAction,
     outcome: AgentActionRunOutcome,
     startedAt: string
   ): void {
-    const status = typeof outcome === "string" ? outcome : outcome.status;
+    const agentProfile = getThreadAgentProfileContext(threadId);
 
-    const completedAt = new Date().toISOString();
-    const durationMs = Math.max(0, Date.parse(completedAt) - Date.parse(startedAt));
-    const runStatus: AgentActionRunRecord["status"] =
-      status === "completed" ? "completed" : status === "failed" ? "failed" : "waiting";
-
-    appendAgentActionRunEvent(threadId, action, {
-      status: runStatus,
-      startedAt,
-      completedAt,
-      durationMs
-    });
-
-    appendFailureRecoverySuggestionEvent(threadId, action, status, completedAt);
+    setThreads((current) =>
+      appendAgentActionOutcomeRecord(current, {
+        threadId,
+        action,
+        outcome,
+        startedAt,
+        agentProfile,
+        language: settings.language
+      })
+    );
   }
 
   // 用户确认或跳过门禁时写入时间线, 让队列推进有可审计记录
@@ -2532,37 +2474,13 @@ export function App(): ReactElement {
     action: AgentAction,
     status: Extract<AgentAction["status"], "completed" | "skipped">
   ): void {
-    const createdAt = new Date().toISOString();
-    const skipped = status === "skipped";
-    const message =
-      settings.language === "zh-CN"
-        ? skipped
-          ? `已跳过 Agent 动作: ${action.label}`
-          : `已确认 Agent 动作: ${action.label}`
-        : skipped
-          ? `Skipped agent action: ${action.label}`
-          : `Confirmed agent action: ${action.label}`;
-
     setThreads((current) =>
-      updateThreadAgentActionStatus(
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-agent-action-${status}-${action.id}-${createdAt}`,
-            kind: "plan",
-            message,
-            createdAt,
-            agentActionRun: {
-              actionId: action.id,
-              label: action.label,
-              status: skipped ? "skipped" : "confirmed",
-              completedAt: createdAt
-            }
-          }
-        ]),
+      applyAgentActionDecisionStatus(current, {
         threadId,
-        action.id,
-        status
-      )
+        action,
+        status,
+        language: settings.language
+      })
     );
   }
 
@@ -2793,50 +2711,10 @@ export function App(): ReactElement {
 
   // 队列完成后只在正文留下简短总结, 具体执行细节继续折叠在“已处理”
   function appendAgentCompletionSummaryIfDone(threadId: string): void {
-    const createdAt = new Date().toISOString();
-
     setThreads((current) =>
-      current.map((thread) => {
-        if (thread.id !== threadId) {
-          return thread;
-        }
-
-        const actions = thread.agentActions ?? [];
-
-        if (
-          actions.length === 0 ||
-          thread.events.some((event) => event.id.startsWith(`${threadId}-agent-summary-`)) ||
-          actions.some((action) => action.status !== "completed" && action.status !== "skipped")
-        ) {
-          return thread;
-        }
-
-        const baseMessage = createAgentCompletionSummaryMessage(
-          thread,
-          settings.language,
-          createdAt
-        );
-        const message = appendSourceUrlsToAgentSummary(
-          baseMessage,
-          extractSourceUrlsFromThreadEvents(thread.events),
-          settings.language
-        );
-        const workStartedAt = getAgentCompletionWorkStartedAt(thread);
-
-        return {
-          ...thread,
-          status: "completed",
-          events: [
-            ...thread.events,
-            {
-              id: `${threadId}-agent-summary-${createdAt}`,
-              kind: "result" as const,
-              message,
-              createdAt: workStartedAt,
-              completedAt: createdAt
-            }
-          ]
-        };
+      appendAgentCompletionSummaryIfDoneToThreads(current, {
+        threadId,
+        language: settings.language
       })
     );
   }
