@@ -15,6 +15,7 @@ export function formatAgentActionContextForClipboard(
   commandResult: CommandRunResult | null,
   toolResult: TaskThreadEvent | null,
   actionRun: AgentActionRunRecord | null,
+  recoveryDecision: TaskThreadEvent | null,
   recoveryAttempts: FailureRecoveryAttemptView[] = []
 ): string {
   const metadata = [
@@ -33,6 +34,10 @@ export function formatAgentActionContextForClipboard(
 
   if (actionRun) {
     sections.push(`Execution record:\n${formatAgentActionRunForClipboard(actionRun)}`);
+  }
+
+  if (recoveryDecision) {
+    sections.push(`Recovery decision:\n${recoveryDecision.message.trim()}`);
   }
 
   if (recoveryAttempts.length > 0) {

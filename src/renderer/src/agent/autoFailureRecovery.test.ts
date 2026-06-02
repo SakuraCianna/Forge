@@ -8,6 +8,7 @@ import {
   createAutoFailureRecoverySkipKey,
   createAutoFailureFixKey,
   findFailedAgentQueueBlocker,
+  getAutoFailureRecoverySkipEventPrefix,
   selectAutoFailureRecoveryCandidate,
   selectAutoFailureRecoverySkipNotice
 } from "./autoFailureRecovery";
@@ -295,6 +296,9 @@ describe("auto failure recovery", () => {
 
     expect(event.id).toBe(
       createAutoFailureRecoverySkipKey("thread-1", "action-1", "requires-permission")
+    );
+    expect(getAutoFailureRecoverySkipEventPrefix("thread-1", "action-1")).toBe(
+      "thread-1-agent-action-recovery-skip-action-1-"
     );
     expect(event.kind).toBe("plan");
     expect(event.message).toContain("自动恢复已暂停");

@@ -46,6 +46,13 @@ describe("agent action details", () => {
         status: "failed",
         durationMs: 1250
       },
+      {
+        id: "thread-1-agent-action-recovery-skip-action-1-requires-dependency",
+        kind: "plan",
+        message:
+          "Automatic recovery paused: Run npm test\nReason: dependency or tool setup is required",
+        createdAt: "2026-06-01T00:00:00.000Z"
+      },
       [
         {
           actionId: action.id,
@@ -61,6 +68,8 @@ describe("agent action details", () => {
     expect(context).toContain("Action: Run npm test");
     expect(context).toContain("Command result:");
     expect(context).toContain("Execution record:");
+    expect(context).toContain("Recovery decision:");
+    expect(context).toContain("dependency or tool setup is required");
     expect(context).toContain("Recovery history:");
     expect(context).toContain("Tool result:");
   });

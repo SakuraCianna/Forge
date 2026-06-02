@@ -28,6 +28,7 @@ export type AgentActionDetailsCopy = {
   noTarget: string;
   commandOutput: string;
   toolResult: string;
+  recoveryDecision: string;
   recoveryHistory: string;
   copyContext: string;
   executionRecord: string;
@@ -54,6 +55,7 @@ type AgentActionDetailsPanelProps = {
   detailRows: Array<{ label: string; value: string }>;
   language: Language;
   nextStep: string;
+  recoveryDecision: TaskThreadEvent | null;
   recoveryAttempts: FailureRecoveryAttemptView[];
   statusLabel: string;
   toolResult: TaskThreadEvent | null;
@@ -69,6 +71,7 @@ export function AgentActionDetailsPanel({
   detailRows,
   language,
   nextStep,
+  recoveryDecision,
   recoveryAttempts,
   statusLabel,
   toolResult
@@ -93,6 +96,7 @@ export function AgentActionDetailsPanel({
                   commandResult,
                   toolResult,
                   actionRun,
+                  recoveryDecision,
                   recoveryAttempts
                 )
               )
@@ -122,11 +126,32 @@ export function AgentActionDetailsPanel({
         <p className="mt-1 text-sm leading-5 text-[#202123]">{nextStep}</p>
       </div>
       {controls}
+      {renderRecoveryDecision(recoveryDecision, copy)}
       {renderRecoveryHistory(recoveryAttempts, copy)}
       {renderActionRun(actionRun, actionRunMessage, copy, language)}
       {renderCommandResult(commandResult, copy)}
       {renderToolResult(toolResult, copy)}
     </section>
+  );
+}
+
+function renderRecoveryDecision(
+  recoveryDecision: TaskThreadEvent | null,
+  copy: AgentActionDetailsCopy
+): ReactElement | null {
+  if (!recoveryDecision) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 border-t border-[#ececf1] pt-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8e8ea0]">
+        {copy.recoveryDecision}
+      </h3>
+      <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-[12px] bg-[#fff7ed] p-2 text-xs leading-5 text-[#9a3412]">
+        {recoveryDecision.message.trim()}
+      </pre>
+    </div>
   );
 }
 

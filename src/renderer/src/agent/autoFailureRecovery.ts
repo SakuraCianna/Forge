@@ -161,7 +161,14 @@ export function createAutoFailureRecoverySkipKey(
   actionId: string,
   reason: AutoFailureRecoverySkipReason
 ): string {
-  return `${threadId}-agent-action-recovery-skip-${actionId}-${reason}`;
+  return `${getAutoFailureRecoverySkipEventPrefix(threadId, actionId)}${reason}`;
+}
+
+export function getAutoFailureRecoverySkipEventPrefix(
+  threadId: string,
+  actionId: string
+): string {
+  return `${threadId}-agent-action-recovery-skip-${actionId}-`;
 }
 
 export function createAutoFailureRecoverySkipEvent({
