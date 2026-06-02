@@ -301,6 +301,12 @@ describe("auto failure recovery", () => {
       "thread-1-agent-action-recovery-skip-action-1-"
     );
     expect(event.kind).toBe("plan");
+    expect(event.autoFailureRecoverySkip).toEqual({
+      actionId: "action-1",
+      label: "Run action-1",
+      reason: "requires-permission",
+      detail: "Permission problem: access is denied"
+    });
     expect(event.message).toContain("自动恢复已暂停");
     expect(event.message).toContain("需要用户确认权限");
     expect(event.message).toContain("access is denied");
