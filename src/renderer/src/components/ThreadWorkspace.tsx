@@ -52,6 +52,7 @@ import {
   formatCommandOutputSnippet,
   formatCommandResultForClipboard
 } from "@/agent/agentActionDetails";
+import { getAutoFailureRecoverySkipEventPrefix } from "@/agent/autoFailureRecovery";
 import { getFailureRecoveryAttemptsForAction } from "@/agent/failureRecoveryAttempts";
 import { getThreadActivitySummary as getThreadActivitySummaryFromEvents } from "@/agent/threadActivitySummary";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
@@ -1655,6 +1656,7 @@ export function ThreadWorkspace({
             selectAction: (label: string) => `选择动作 ${label}`,
             commandOutput: "最近命令输出",
             toolResult: "工具结果",
+            recoveryDecision: "恢复决策",
             recoveryHistory: "恢复历史",
             copyContext: "复制动作上下文",
             executionRecord: "执行记录",
@@ -1690,6 +1692,7 @@ export function ThreadWorkspace({
             selectAction: (label: string) => `Select action ${label}`,
             commandOutput: "Last command output",
             toolResult: "Tool result",
+            recoveryDecision: "Recovery decision",
             recoveryHistory: "Recovery history",
             copyContext: "Copy action context",
             executionRecord: "Execution record",
@@ -1789,6 +1792,13 @@ export function ThreadWorkspace({
       : null;
     const selectedActionRunEvent = selectedAgentAction
       ? findLatestAgentActionRunEvent(selectedThread?.events ?? [], selectedAgentAction)
+      : null;
+    const selectedRecoveryDecisionEvent = selectedAgentAction
+      ? findLatestAutoFailureRecoverySkipEvent(
+          selectedThread?.events ?? [],
+          selectedThread?.id ?? "",
+          selectedAgentAction
+        )
       : null;
     const selectedRecoveryAttempts = selectedAgentAction
       ? getFailureRecoveryAttemptsForAction(selectedThread?.events ?? [], selectedAgentAction.id)
@@ -2087,6 +2097,7 @@ export function ThreadWorkspace({
       commandResult: CommandRunResult | null,
       toolResult: TaskThreadEvent | null,
       actionRunEvent: TaskThreadEvent | null,
+      recoveryDecisionEvent: TaskThreadEvent | null,
       recoveryAttempts: ReturnType<typeof getFailureRecoveryAttemptsForAction>
     ): ReactElement {
       const detailRows = [
@@ -2109,6 +2120,7 @@ export function ThreadWorkspace({
           detailRows={detailRows}
           language={language}
           nextStep={nextStep}
+          recoveryDecision={recoveryDecisionEvent}
           recoveryAttempts={recoveryAttempts}
           statusLabel={actionStatusLabel}
           toolResult={toolResult}
@@ -2643,6 +2655,7 @@ export function ThreadWorkspace({
                 selectedCommandResult,
                 selectedToolResult,
                 selectedActionRunEvent,
+                selectedRecoveryDecisionEvent,
                 selectedRecoveryAttempts
               )
             : null}
@@ -3995,6 +4008,25 @@ function findLatestAgentActionRunEvent(
     const event = events[index];
 
     if (event?.agentActionRun?.actionId === action.id) {
+      return event;
+    }
+  }
+
+  return null;
+}
+
+// 查找自动恢复被门禁跳过时写入的说明, 让用户在动作详情里直接看到原因
+function findLatestAutoFailureRecoverySkipEvent(
+  events: TaskThreadEvent[],
+  threadId: string,
+  action: AgentAction
+): TaskThreadEvent | null {
+  const prefix = getAutoFailureRecoverySkipEventPrefix(threadId, action.id);
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+
+    if (event?.id.startsWith(prefix)) {
       return event;
     }
   }
