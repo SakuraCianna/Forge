@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { AgentAction } from "@shared/agentExecutionPlan";
-import { isRunnableAgentAction, resolveAgentActionExecution } from "./agentActionExecutor";
+import {
+  getRunnablePendingAgentActions,
+  isRunnableAgentAction,
+  resolveAgentActionExecution
+} from "./agentActionExecutor";
 
 function createAction(overrides: Partial<AgentAction>): AgentAction {
   return {
@@ -46,5 +50,29 @@ describe("agent action executor", () => {
       kind: "list-directory",
       relativePath: "frontend/src/components"
     });
+  });
+
+  it("treats manual and commit gates as runnable only in full access mode", () => {
+    const manualAction = createAction({
+      kind: "manual",
+      label: "Review generated files",
+      target: undefined
+    });
+    const commitAction = createAction({
+      id: "action-2",
+      kind: "commit",
+      label: "Commit changes",
+      target: "git commit -m update"
+    });
+
+    expect(isRunnableAgentAction(manualAction)).toBe(false);
+    expect(isRunnableAgentAction(commitAction)).toBe(false);
+    expect(isRunnableAgentAction(manualAction, { fullAccess: true })).toBe(true);
+    expect(isRunnableAgentAction(commitAction, { fullAccess: true })).toBe(true);
+    expect(
+      getRunnablePendingAgentActions([manualAction, commitAction], { fullAccess: true }).map(
+        (action) => action.id
+      )
+    ).toEqual(["action-1", "action-2"]);
   });
 });

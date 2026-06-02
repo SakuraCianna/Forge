@@ -1832,7 +1832,11 @@ export function ThreadWorkspace({
         return actionQueueCopy.commandBlocked;
       }
 
-      if (action.status === "pending" && (action.kind === "manual" || action.kind === "commit")) {
+      if (
+        action.status === "pending" &&
+        (action.kind === "manual" || action.kind === "commit") &&
+        !fullAccess
+      ) {
         return actionQueueCopy.reviewGate;
       }
 
@@ -1972,7 +1976,7 @@ export function ThreadWorkspace({
         return actionDetailsCopy.skipped;
       }
 
-      if (action.kind === "manual" || action.kind === "commit") {
+      if ((action.kind === "manual" || action.kind === "commit") && !fullAccess) {
         return actionDetailsCopy.manualGate;
       }
 
@@ -2011,7 +2015,7 @@ export function ThreadWorkspace({
         return actionQueueCopy.commandBlocked;
       }
 
-      return actionQueueCopy.manualGate;
+      return fullAccess ? actionQueueCopy.ready : actionQueueCopy.manualGate;
     }
 
     // 生成人工门禁或命令审批门禁说明
@@ -2026,7 +2030,7 @@ export function ThreadWorkspace({
         return actionDetailsCopy.commandBlocked;
       }
 
-      return actionQueueCopy.manualGateBody(action.label);
+      return fullAccess ? actionDetailsCopy.ready : actionQueueCopy.manualGateBody(action.label);
     }
 
     // 动作详情也提供门禁和恢复操作, 避免用户看完详情后还要回到队列顶部找确认入口

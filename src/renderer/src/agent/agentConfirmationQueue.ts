@@ -183,6 +183,10 @@ export function getAgentConfirmationKind(
     return null;
   }
 
+  if (fullAccess && (action.kind === "manual" || action.kind === "commit")) {
+    return null;
+  }
+
   if (action.kind === "manual") {
     return "manual-gate";
   }

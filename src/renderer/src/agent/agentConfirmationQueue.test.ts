@@ -34,6 +34,15 @@ const failedAction: AgentAction = {
   command: "npm test"
 };
 
+const commitAction: AgentAction = {
+  id: "action-5",
+  stepId: "step-5",
+  kind: "commit",
+  label: "Commit changes",
+  status: "pending",
+  target: "git commit -m update"
+};
+
 describe("agent confirmation queue", () => {
   it("summarizes queue state without duplicating UI logic", () => {
     const state = getAgentQueueControlState({
@@ -139,6 +148,41 @@ describe("agent confirmation queue", () => {
       command: "custom-tool --write"
     });
     expect(restrictedItems[0]?.riskReason).toBeTruthy();
+    expect(fullAccessItems).toHaveLength(0);
+  });
+
+  it("does not expose manual or commit gates when full access is active", () => {
+    const restrictedItems = getAgentConfirmationItems({
+      actions: [manualAction, commitAction],
+      changePreviews: [],
+      commandSafetyPolicy: {},
+      fullAccess: false,
+      activeGateAction: manualAction,
+      projectPath: "E:\\CodeHome\\Forge",
+      queueBlockerAction: null
+    });
+    const fullAccessState = getAgentQueueControlState({
+      actions: [manualAction, commitAction],
+      commandSafetyPolicy: { fullAccess: true },
+      agentPaused: false,
+      hasPendingFileChanges: false
+    });
+    const fullAccessItems = getAgentConfirmationItems({
+      actions: [manualAction, commitAction],
+      changePreviews: [],
+      commandSafetyPolicy: { fullAccess: true },
+      fullAccess: true,
+      activeGateAction: fullAccessState.activeGateAction,
+      projectPath: "E:\\CodeHome\\Forge",
+      queueBlockerAction: fullAccessState.queueBlockerAction
+    });
+
+    expect(restrictedItems.map((item) => item.kind)).toEqual(["manual-gate", "commit-gate"]);
+    expect(fullAccessState.activeGateAction).toBeNull();
+    expect(fullAccessState.runnablePendingActions.map((action) => action.id)).toEqual([
+      manualAction.id,
+      commitAction.id
+    ]);
     expect(fullAccessItems).toHaveLength(0);
   });
 

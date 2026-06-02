@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
 import type { AgentImageAttachment, AgentProfileContext } from "@shared/agentTypes";
-import type { ProjectGitStatus } from "@shared/gitTypes";
+import type { ProjectGitCommitResult, ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
@@ -1100,6 +1100,52 @@ export function App(): ReactElement {
   }
 
   // 使用用户填写的消息提交当前项目, 成功后重刷 Git 状态
+  async function createProjectCommit(
+    normalizedMessage: string
+  ): Promise<{
+    result: ProjectGitCommitResult;
+    targetBranch: string | undefined;
+    targetRemote: string;
+  }> {
+    if (!currentProject) {
+      throw new Error(t("projects.required"));
+    }
+
+    const targetBranch =
+      commitBranch.trim() || gitStatus?.currentBranch || gitStatus?.branches[0] || undefined;
+    const targetRemote = gitRemote.trim() || "origin";
+    const result = await window.forge.git.commit({
+      projectRoot: currentProject.path,
+      message: normalizedMessage,
+      branch: targetBranch,
+      createBranch: createCommitBranch,
+      push: pushAfterCommit,
+      remote: targetRemote
+    });
+
+    return { result, targetBranch, targetRemote };
+  }
+
+  function applyProjectCommitResult({
+    result,
+    targetBranch,
+    targetRemote
+  }: {
+    result: ProjectGitCommitResult;
+    targetBranch: string | undefined;
+    targetRemote: string;
+  }): void {
+    setGitStatus(result.status);
+    setCommitMessage("");
+    setGitNotice(
+      createGitOperationNotice(settings.language, {
+        type: pushAfterCommit ? "commit-push" : "commit",
+        branch: result.branch ?? targetBranch ?? null,
+        remote: targetRemote
+      })
+    );
+  }
+
   async function commitCurrentProject(message: string): Promise<void> {
     if (!currentProject) {
       return;
@@ -1115,26 +1161,8 @@ export function App(): ReactElement {
     }
 
     try {
-      const targetBranch =
-        commitBranch.trim() || gitStatus?.currentBranch || gitStatus?.branches[0] || undefined;
-      const targetRemote = gitRemote.trim() || "origin";
-      const result = await window.forge.git.commit({
-        projectRoot: currentProject.path,
-        message: normalizedMessage,
-        branch: targetBranch,
-        createBranch: createCommitBranch,
-        push: pushAfterCommit,
-        remote: targetRemote
-      });
-      setGitStatus(result.status);
-      setCommitMessage("");
-      setGitNotice(
-        createGitOperationNotice(settings.language, {
-          type: pushAfterCommit ? "commit-push" : "commit",
-          branch: result.branch ?? targetBranch ?? null,
-          remote: targetRemote
-        })
-      );
+      const commitResult = await createProjectCommit(normalizedMessage);
+      applyProjectCommitResult(commitResult);
       if (selectedThreadId && pendingCommitAction) {
         const createdAt = new Date().toISOString();
 
@@ -2493,6 +2521,76 @@ export function App(): ReactElement {
     setAgentActionDecisionStatus(threadId, action, "skipped");
   }
 
+  function completeFullAccessManualGateAction(
+    threadId: string,
+    action: AgentAction,
+    createdAt: string
+  ): AgentActionRunOutcome {
+    updateAgentActionStatus(threadId, action.id, "completed");
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        {
+          id: `${threadId}-full-access-gate-${action.id}-${createdAt}`,
+          kind: "plan",
+          message:
+            settings.language === "zh-CN"
+              ? `完全访问权限已自动接管: ${action.label}`
+              : `Full access handled automatically: ${action.label}`,
+          createdAt
+        }
+      ])
+    );
+
+    return "completed";
+  }
+
+  async function commitFullAccessAgentAction(
+    threadId: string,
+    action: AgentAction
+  ): Promise<AgentActionRunOutcome> {
+    const normalizedMessage = (formatAgentCommitMessageSuggestion(action) ?? action.label).trim();
+
+    if (!normalizedMessage) {
+      const message = t("projects.commitMessageRequired");
+
+      setTaskNotice(message);
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(threadId, message);
+      return "failed";
+    }
+
+    try {
+      const commitResult = await createProjectCommit(normalizedMessage);
+      const createdAt = new Date().toISOString();
+
+      applyProjectCommitResult(commitResult);
+      updateAgentActionStatus(threadId, action.id, "completed");
+      setThreads((current) =>
+        appendThreadEvents(current, threadId, [
+          {
+            id: `${threadId}-full-access-commit-${action.id}-${createdAt}`,
+            kind: "plan",
+            message:
+              settings.language === "zh-CN"
+                ? `完全访问权限已自动提交: ${normalizedMessage}`
+                : `Full access committed automatically: ${normalizedMessage}`,
+            createdAt
+          }
+        ])
+      );
+
+      return "completed";
+    } catch (error) {
+      const message = formatRuntimeError(settings.language, error);
+
+      setGitNotice(message);
+      setTaskNotice(message);
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(threadId, message);
+      return "failed";
+    }
+  }
+
   // 执行单个 Agent 动作, 失败时保留可恢复的结果说明
   async function runAgentAction(
     threadId: string,
@@ -2571,6 +2669,20 @@ export function App(): ReactElement {
 
     if (execution.kind === "manual-gate") {
       const createdAt = new Date().toISOString();
+
+      if (threadFullAccessMode) {
+        appendAgentActionRunEvent(threadId, actionToRun, { status: "started", startedAt: createdAt });
+        updateAgentActionStatus(threadId, actionToRun.id, "running");
+        const outcome =
+          execution.reason === "commit"
+            ? await commitFullAccessAgentAction(threadId, actionToRun)
+            : completeFullAccessManualGateAction(threadId, actionToRun, createdAt);
+
+        appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, createdAt);
+        window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
+        return outcome;
+      }
+
       setTaskNotice(
         settings.language === "zh-CN"
           ? "需要先完成审查门禁, Forge 不会自动越过人工确认"
