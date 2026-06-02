@@ -1,13 +1,19 @@
 // 本文件说明: 汇总 Agent 结束时的文件读写统计、耗时和用户可读结果
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { Language } from "@shared/modelTypes";
-import type { TaskThread } from "@/state/taskThreads";
+import type { AutoFailureRecoverySkipRecord, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
 
 export type AgentFileChangeStats = {
   readFiles: string[];
   createdFiles: string[];
   editedFiles: string[];
   deletedFiles: string[];
+};
+
+export type AgentRecoverySummaryStats = {
+  autoAttempts: number;
+  manualAttempts: number;
+  paused: AutoFailureRecoverySkipRecord[];
 };
 
 export function createAgentCompletionSummaryMessage(
@@ -19,8 +25,11 @@ export function createAgentCompletionSummaryMessage(
   const completed = actions.filter((action) => action.status === "completed").length;
   const skipped = actions.filter((action) => action.status === "skipped").length;
   const stats = collectAgentFileChangeStats(thread, actions);
+  const recoveryStats = collectAgentRecoverySummaryStats(thread);
   const timing = collectAgentCompletionTimingStats(thread, completedAt);
   const fileParts = formatAgentFileChangeSummaryParts(stats, language);
+  const recoveryPart = formatAgentRecoverySummaryPart(recoveryStats, language);
+  const summaryParts = recoveryPart ? [...fileParts, recoveryPart] : fileParts;
   const skippedPart =
     skipped > 0
       ? language === "zh-CN"
@@ -40,10 +49,10 @@ export function createAgentCompletionSummaryMessage(
   const concreteResult = formatAgentConcreteResult(stats, completed, language);
 
   if (language === "zh-CN") {
-    return `${concreteResult}：${fileParts.join("，")}${skippedPart}，${detailPart}。查看详情可展开“已处理”。`;
+    return `${concreteResult}：${summaryParts.join("，")}${skippedPart}，${detailPart}。查看详情可展开“已处理”。`;
   }
 
-  return `${concreteResult}: ${fileParts.join(", ")}${skippedPart}, ${detailPart}. View details in Processed.`;
+  return `${concreteResult}: ${summaryParts.join(", ")}${skippedPart}, ${detailPart}. View details in Processed.`;
 }
 
 export function collectAgentFileChangeStats(
@@ -89,6 +98,51 @@ export function collectAgentFileChangeStats(
   };
 }
 
+export function collectAgentRecoverySummaryStats(thread: TaskThread): AgentRecoverySummaryStats {
+  const actionLabelsById = new Map(
+    (thread.agentActions ?? []).map((action) => [action.id, action.label])
+  );
+  const countedAttempts = new Set<string>();
+  const pausedByActionAndReason = new Map<string, AutoFailureRecoverySkipRecord>();
+  let autoAttempts = 0;
+  let manualAttempts = 0;
+
+  for (const event of thread.events) {
+    const attempt = event.failureRecoveryAttempt;
+
+    if (attempt) {
+      const attemptKey = [
+        attempt.source,
+        attempt.actionId,
+        attempt.attempt ?? event.id,
+        attempt.limit ?? ""
+      ].join(":");
+
+      if (!countedAttempts.has(attemptKey)) {
+        countedAttempts.add(attemptKey);
+
+        if (attempt.source === "auto") {
+          autoAttempts += 1;
+        } else {
+          manualAttempts += 1;
+        }
+      }
+    }
+
+    const paused = event.autoFailureRecoverySkip ?? parseAutoFailureRecoverySkipEvent(event, actionLabelsById);
+
+    if (paused) {
+      pausedByActionAndReason.set(`${paused.actionId}:${paused.reason}`, paused);
+    }
+  }
+
+  return {
+    autoAttempts,
+    manualAttempts,
+    paused: [...pausedByActionAndReason.values()]
+  };
+}
+
 export function getAgentCompletionWorkStartedAt(thread: TaskThread): string {
   for (const event of thread.events) {
     if ((event.kind === "plan" || event.kind === "result") && Number.isFinite(Date.parse(event.createdAt))) {
@@ -124,6 +178,103 @@ function formatAgentFileChangeSummaryParts(stats: AgentFileChangeStats, language
     `deleted ${stats.deletedFiles.length} file${stats.deletedFiles.length === 1 ? "" : "s"}`,
     `read ${stats.readFiles.length} file${stats.readFiles.length === 1 ? "" : "s"}`
   ];
+}
+
+function parseAutoFailureRecoverySkipEvent(
+  event: TaskThreadEvent,
+  actionLabelsById: ReadonlyMap<string, string>
+): AutoFailureRecoverySkipRecord | null {
+  const match = event.id.match(
+    /^.+-agent-action-recovery-skip-(.+)-(requires-permission|requires-dependency|user-cancelled)$/u
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const [, actionId, reason] = match;
+
+  return {
+    actionId,
+    label: actionLabelsById.get(actionId) ?? actionId,
+    reason: reason as AutoFailureRecoverySkipRecord["reason"],
+    detail: event.message.trim()
+  };
+}
+
+function formatAgentRecoverySummaryPart(
+  stats: AgentRecoverySummaryStats,
+  language: Language
+): string | null {
+  const parts: string[] = [];
+
+  if (stats.autoAttempts > 0) {
+    parts.push(
+      language === "zh-CN"
+        ? `自动恢复 ${stats.autoAttempts} 次`
+        : `auto recovery ${stats.autoAttempts} ${stats.autoAttempts === 1 ? "time" : "times"}`
+    );
+  }
+
+  if (stats.manualAttempts > 0) {
+    parts.push(
+      language === "zh-CN"
+        ? `人工恢复 ${stats.manualAttempts} 次`
+        : `manual recovery ${stats.manualAttempts} ${stats.manualAttempts === 1 ? "time" : "times"}`
+    );
+  }
+
+  if (stats.paused.length > 0) {
+    const reasons = formatRecoveryPauseReasonList(stats.paused, language);
+
+    parts.push(
+      language === "zh-CN"
+        ? `恢复暂停 ${stats.paused.length} 次${reasons ? `（${reasons}）` : ""}`
+        : `recovery paused ${stats.paused.length} ${
+            stats.paused.length === 1 ? "time" : "times"
+          }${reasons ? ` (${reasons})` : ""}`
+    );
+  }
+
+  return parts.length > 0 ? parts.join(language === "zh-CN" ? "，" : ", ") : null;
+}
+
+function formatRecoveryPauseReasonList(
+  paused: AutoFailureRecoverySkipRecord[],
+  language: Language
+): string {
+  const labels = mergeUniqueStrings(
+    paused.map((item) => formatRecoveryPauseReason(item.reason, language))
+  );
+
+  if (labels.length <= 2) {
+    return labels.join(language === "zh-CN" ? "、" : ", ");
+  }
+
+  if (language === "zh-CN") {
+    return `${labels.slice(0, 2).join("、")} 等 ${labels.length} 类原因`;
+  }
+
+  return `${labels.slice(0, 2).join(", ")} and ${labels.length - 2} more`;
+}
+
+function formatRecoveryPauseReason(
+  reason: AutoFailureRecoverySkipRecord["reason"],
+  language: Language
+): string {
+  if (language === "zh-CN") {
+    return {
+      "requires-permission": "需要权限确认",
+      "requires-dependency": "需要依赖配置",
+      "user-cancelled": "用户取消命令"
+    }[reason];
+  }
+
+  return {
+    "requires-permission": "permission required",
+    "requires-dependency": "dependency setup required",
+    "user-cancelled": "cancelled by user"
+  }[reason];
 }
 
 function collectAgentCompletionTimingStats(

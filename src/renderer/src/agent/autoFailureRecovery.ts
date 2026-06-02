@@ -188,7 +188,13 @@ export function createAutoFailureRecoverySkipEvent({
     id: createAutoFailureRecoverySkipKey(threadId, action.id, decision.reason),
     kind: "plan",
     message: formatAutoFailureRecoverySkipMessage(language, action, decision),
-    createdAt
+    createdAt,
+    autoFailureRecoverySkip: {
+      actionId: action.id,
+      label: action.label,
+      reason: decision.reason,
+      detail: decision.detail
+    }
   };
 }
 

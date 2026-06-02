@@ -3,6 +3,7 @@ import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { TaskThread } from "@/state/taskThreads";
 import {
   collectAgentFileChangeStats,
+  collectAgentRecoverySummaryStats,
   createAgentCompletionSummaryMessage,
   getAgentCompletionWorkStartedAt
 } from "./agentCompletionSummary";
@@ -50,9 +51,109 @@ describe("agent completion summary", () => {
     expect(getAgentCompletionWorkStartedAt(thread)).toBe("2025-01-01T00:00:01.000Z");
     expect(summary).toContain("total 9s");
   });
+
+  it("includes deduped recovery attempts and paused recovery reasons", () => {
+    const baseThread = createSummaryThread();
+    const thread = createSummaryThread({
+      agentActions: [
+        ...(baseThread.agentActions ?? []),
+        {
+          id: "install-dependency",
+          stepId: "step-4",
+          kind: "run-command",
+          label: "Install dependency",
+          status: "skipped",
+          command: "npm install left-pad"
+        }
+      ],
+      events: [
+        ...baseThread.events,
+        {
+          id: "auto-recovery-1",
+          kind: "error",
+          message: "auto recovery",
+          createdAt: "2025-01-01T00:00:09.000Z",
+          failureRecoveryAttempt: {
+            actionId: "edit-new",
+            label: "编辑 docs/new.md",
+            source: "auto",
+            attempt: 1,
+            limit: 2
+          }
+        },
+        {
+          id: "auto-recovery-duplicate",
+          kind: "error",
+          message: "duplicate auto recovery",
+          createdAt: "2025-01-01T00:00:09.100Z",
+          failureRecoveryAttempt: {
+            actionId: "edit-new",
+            label: "编辑 docs/new.md",
+            source: "auto",
+            attempt: 1,
+            limit: 2
+          }
+        },
+        {
+          id: "manual-recovery-1",
+          kind: "error",
+          message: "manual recovery",
+          createdAt: "2025-01-01T00:00:09.200Z",
+          failureRecoveryAttempt: {
+            actionId: "edit-new",
+            label: "编辑 docs/new.md",
+            source: "manual"
+          }
+        },
+        {
+          id: "thread-1-agent-action-recovery-skip-install-dependency-requires-dependency",
+          kind: "plan",
+          message: "Automatic recovery paused: Install dependency",
+          createdAt: "2025-01-01T00:00:09.300Z",
+          autoFailureRecoverySkip: {
+            actionId: "install-dependency",
+            label: "Install dependency",
+            reason: "requires-dependency",
+            detail: "Missing dependency or package: left-pad"
+          }
+        }
+      ]
+    });
+
+    expect(collectAgentRecoverySummaryStats(thread)).toEqual({
+      autoAttempts: 1,
+      manualAttempts: 1,
+      paused: [
+        {
+          actionId: "install-dependency",
+          label: "Install dependency",
+          reason: "requires-dependency",
+          detail: "Missing dependency or package: left-pad"
+        }
+      ]
+    });
+
+    const zhSummary = createAgentCompletionSummaryMessage(
+      thread,
+      "zh-CN",
+      "2025-01-01T00:00:12.000Z"
+    );
+    const enSummary = createAgentCompletionSummaryMessage(
+      thread,
+      "en-US",
+      "2025-01-01T00:00:12.000Z"
+    );
+
+    expect(zhSummary).toContain("自动恢复 1 次");
+    expect(zhSummary).toContain("人工恢复 1 次");
+    expect(zhSummary).toContain("恢复暂停 1 次（需要依赖配置）");
+    expect(enSummary).toContain("auto recovery 1 time");
+    expect(enSummary).toContain("manual recovery 1 time");
+    expect(enSummary).toContain("recovery paused 1 time (dependency setup required)");
+  });
 });
 
-function createSummaryThread(): TaskThread {
+function createSummaryThread(overrides: Partial<TaskThread> = {}): TaskThread {
   const actions: AgentAction[] = [
     {
       id: "read-1",
@@ -140,6 +241,7 @@ function createSummaryThread(): TaskThread {
           changeKind: "delete"
         }
       }
-    ]
+    ],
+    ...overrides
   };
 }

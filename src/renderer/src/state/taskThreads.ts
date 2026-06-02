@@ -45,6 +45,13 @@ export type FailureRecoveryAttemptRecord = {
   limit?: number;
 };
 
+export type AutoFailureRecoverySkipRecord = {
+  actionId: string;
+  label: string;
+  reason: "requires-permission" | "requires-dependency" | "user-cancelled";
+  detail: string;
+};
+
 export type AgentActionRunRecord = {
   actionId: string;
   label: string;
@@ -72,6 +79,7 @@ export type TaskThreadEvent = {
   agentActionRun?: AgentActionRunRecord;
   fileChange?: FileChangeRecord;
   failureRecoveryAttempt?: FailureRecoveryAttemptRecord;
+  autoFailureRecoverySkip?: AutoFailureRecoverySkipRecord;
 };
 
 export type TaskThread = {
