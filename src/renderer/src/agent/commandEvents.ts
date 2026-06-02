@@ -78,3 +78,8 @@ function truncateLog(value: string): string {
 
   return `${value.slice(0, maxLogLength)}\n... output truncated`;
 }
+
+// 用时间和随机数生成命令运行 id, 避免并发命令串流
+export function createCommandRunId(threadId: string): string {
+  return `${threadId}-command-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
