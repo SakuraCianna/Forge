@@ -9,6 +9,7 @@ import type {
 } from "@shared/agentTypes";
 import type { ProjectGitCommitResult, ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
+import type { LocalSkillScanResult } from "@shared/pluginSkillTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
@@ -22,15 +23,13 @@ import {
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { ProjectFileIcon } from "@/components/ProjectFileIcon";
 import { ProjectFileTree } from "@/components/ProjectFileTree";
+import { PluginLibraryPanel } from "@/components/PluginLibraryPanel";
 import { SourceDiffPreview } from "@/components/SourceDiffPreview";
 import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
+import type { ComposerSlashCommandId } from "@/state/pluginSkills";
 import {
-  resolveAgentCommandRisk,
-  resolveAgentActionPermission,
-  resolveAgentActionExecution,
   getRunnablePendingAgentActions,
-  runAgentActionBatch,
   resolveMissingInspectFileFallback,
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
@@ -41,39 +40,49 @@ import {
   createCommandStartedEvent
 } from "@/agent/commandEvents";
 import {
-  createAutoFailureRecoverySkipEvent,
-  selectAutoFailureRecoveryCandidate,
-  selectAutoFailureRecoverySkipNotice
+  createAutoFailureRecoverySkipEvent
 } from "@/agent/autoFailureRecovery";
 import {
-  createFailureFixTaskPrompt,
-  findLatestCommandResultForAction
-} from "@/agent/failureFixPrompt";
+  appendAgentFailureFixPlanStartEvent,
+  resolveAgentFailureFixPlanStart,
+  type FailureFixPlanOptions
+} from "@/agent/agentFailureRecoveryPlan";
 import {
   appendAgentActionOutcomeRecord,
   appendAgentActionRunRecord,
-  appendAgentCompletionSummaryIfDone as appendAgentCompletionSummaryIfDoneToThreads,
-  applyAgentActionDecisionStatus
+  appendAgentManualGateWaitEvent,
+  appendAgentPermissionDeniedEvent,
+  applyAgentRuntimePostActionStep,
+  applyAgentActionDecisionStatus,
+  formatAgentManualGateRequiredNotice,
+  formatAgentPermissionDeniedNotice
 } from "@/agent/agentActionLifecycle";
 import {
   appendAgentToolResultEvent,
   useAgentToolResults,
   type AgentToolResultEventKind
 } from "@/agent/agentToolResults";
+import { createAgentPlanReadyEvents } from "@/agent/agentPlanLifecycle";
 import {
   createAgentAskRequestPayload,
   createAgentFileChangeRequestPayload,
   createAgentPlanRequestPayload,
   type AgentRequestRuntimeContext
 } from "@/agent/agentRequestPayloads";
-import {
-  formatFailureFixPlanStartMessage
-} from "@/agent/agentRunMessages";
 import { improveAgentPlanActions } from "@/agent/agentPlanQuality";
 import {
-  appendSourceUrlsToAgentSummary,
-  extractSourceUrlsFromText,
-} from "@/agent/agentSources";
+  resolveAgentRuntimeAutoFailureRecoveryStep,
+  resolveAgentRuntimeCommandDecision,
+  resolveAgentRuntimeManualGateStep,
+  resolveAgentRuntimePostActionStep,
+  resolveAgentRuntimePreflightDecision,
+  runAgentRuntimeExecution
+} from "@/agent/agentRuntimeOrchestrator";
+import {
+  runAgentRuntimeQueuedAction,
+  runAgentRuntimeQueuedActionBatch,
+  type AgentRuntimeQueueCoordinator
+} from "@/agent/agentRuntimeQueue";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
 import {
@@ -130,6 +139,7 @@ import {
   createHeroComposerPlaceholder,
   createHeroPromptSuggestions
 } from "@/state/contextSuggestions";
+import { createDefaultPluginCatalog } from "@/state/pluginSkills";
 import { useAgentRunState } from "@/state/agentRunState";
 import { useComposerSignals } from "@/state/composerSignals";
 import {
@@ -169,7 +179,6 @@ import {
   updateThreadAgentActionStatus,
   type AgentActionRunRecord,
   type CommandRunResult,
-  type FailureRecoveryAttemptRecord,
   type TaskThread
 } from "@/state/taskThreads";
 import {
@@ -234,10 +243,14 @@ type ProviderKeyStatus = {
   last4: string | null;
 };
 
-type FailureFixPlanOptions = Pick<
-  FailureRecoveryAttemptRecord,
-  "source" | "attempt" | "limit"
->;
+type CommandDialogState = {
+  title: string;
+  description: string;
+  rows: Array<{
+    label: string;
+    value: string;
+  }>;
+};
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
@@ -309,6 +322,9 @@ export function App(): ReactElement {
   const [pushAfterCommit, setPushAfterCommit] = useState(false);
   const [gitRemote, setGitRemote] = useState("origin");
   const [threads, setThreads] = useState<TaskThread[]>([]);
+  const [localSkillScan, setLocalSkillScan] = useState<LocalSkillScanResult | null>(null);
+  const [commandDialog, setCommandDialog] = useState<CommandDialogState | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
   const [providerFetchStates, setProviderFetchStates] = useState<Record<string, ProviderFetchState>>({});
@@ -373,6 +389,14 @@ export function App(): ReactElement {
     pausedThreadIds,
     reserveAgentActionBatch
   } = useAgentRunState();
+  const agentRuntimeQueueCoordinator = useMemo<AgentRuntimeQueueCoordinator>(
+    () => ({
+      hasReservedAgentAction,
+      isThreadCancelled: (threadId) => cancelledThreadIdsRef.current.has(threadId),
+      reserveAgentActionBatch
+    }),
+    [cancelledThreadIdsRef, hasReservedAgentAction, reserveAgentActionBatch]
+  );
   const { t } = useI18n(settings.language);
   const threadsRef = useRef<TaskThread[]>(threads);
   const activePlanStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
@@ -431,6 +455,10 @@ export function App(): ReactElement {
   const activeAgentProfileContext = applyGeneralPreferencesToAgentProfile(
     getActiveAgentProfileContext(agentProfiles, settings.language),
     generalPreferences
+  );
+  const pluginCatalog = useMemo(
+    () => createDefaultPluginCatalog(settings.language, localSkillScan?.skills ?? []),
+    [localSkillScan?.skills, settings.language]
   );
   const fullAccessMode =
     !generalPreferences.readOnly &&
@@ -548,6 +576,38 @@ export function App(): ReactElement {
   }, []);
 
   useEffect(() => {
+    let disposed = false;
+
+    void window.forge.skills
+      .scanLocal()
+      .then((result) => {
+        if (!disposed) {
+          setLocalSkillScan(result);
+        }
+      })
+      .catch((error) => {
+        if (disposed) {
+          return;
+        }
+
+        setLocalSkillScan({
+          skills: [],
+          scannedRoots: [],
+          errors: [
+            {
+              root: "local skills",
+              message: error instanceof Error ? error.message : String(error)
+            }
+          ]
+        });
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
     return window.forge.commands.onOutput((chunk) => {
       setThreads((current) => appendCommandRunOutput(current, chunk));
     });
@@ -612,7 +672,7 @@ export function App(): ReactElement {
       return;
     }
 
-    const candidate = selectAutoFailureRecoveryCandidate({
+    const recoveryStep = resolveAgentRuntimeAutoFailureRecoveryStep({
       threads,
       currentProjectPath: currentProject.path,
       cancelledThreadIds: cancelledThreadIdsRef.current,
@@ -622,43 +682,40 @@ export function App(): ReactElement {
       getThreadFailureRecoveryLimit
     });
 
-    if (!candidate) {
-      const skipNotice = selectAutoFailureRecoverySkipNotice({
-        threads,
-        currentProjectPath: currentProject.path,
-        cancelledThreadIds: cancelledThreadIdsRef.current
-      });
-
-      if (skipNotice) {
-        const createdAt = new Date().toISOString();
-        const event = createAutoFailureRecoverySkipEvent({
-          threadId: skipNotice.thread.id,
-          action: skipNotice.failedAction,
-          decision: skipNotice.decision,
-          language: settings.language,
-          createdAt
-        });
-
-        setThreads((current) =>
-          current.map((thread) => {
-            if (
-              thread.id !== skipNotice.thread.id ||
-              thread.events.some((threadEvent) => threadEvent.id === event.id)
-            ) {
-              return thread;
-            }
-
-            return {
-              ...thread,
-              events: [...thread.events, event]
-            };
-          })
-        );
-      }
-
+    if (recoveryStep.kind === "idle") {
       return;
     }
 
+    if (recoveryStep.kind === "write-skip-notice") {
+      const { skipNotice } = recoveryStep;
+      const createdAt = new Date().toISOString();
+      const event = createAutoFailureRecoverySkipEvent({
+        threadId: skipNotice.thread.id,
+        action: skipNotice.failedAction,
+        decision: skipNotice.decision,
+        language: settings.language,
+        createdAt
+      });
+
+      setThreads((current) =>
+        current.map((thread) => {
+          if (
+            thread.id !== skipNotice.thread.id ||
+            thread.events.some((threadEvent) => threadEvent.id === event.id)
+          ) {
+            return thread;
+          }
+
+          return {
+            ...thread,
+            events: [...thread.events, event]
+          };
+        })
+      );
+      return;
+    }
+
+    const { candidate } = recoveryStep;
     activeAutoFailureFixKeysRef.current.add(candidate.key);
     autoFailureFixAttemptedKeysRef.current.add(candidate.key);
     autoFailureFixCountsRef.current.set(candidate.thread.id, candidate.attempt);
@@ -1974,6 +2031,57 @@ export function App(): ReactElement {
     }
   }
 
+  function runComposerCommand(commandId: ComposerSlashCommandId): void {
+    if (commandId === "feedback") {
+      setFeedbackDialogOpen(true);
+      return;
+    }
+
+    if (commandId === "persona" || commandId === "model") {
+      setActiveView("settings");
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? commandId === "persona"
+            ? "已打开个性化设置"
+            : "已打开模型配置"
+          : commandId === "persona"
+            ? "Opened personalization settings"
+            : "Opened model settings"
+      );
+      return;
+    }
+
+    if (commandId === "quick") {
+      setSettings((current) => setSpeed(current, "fast"));
+      setTaskNotice(settings.language === "zh-CN" ? "已切换到快速模式" : "Switched to quick mode");
+      return;
+    }
+
+    if (commandId === "reasoning") {
+      setSettings((current) => setIntelligence(current, "xhigh"));
+      setTaskNotice(
+        settings.language === "zh-CN" ? "已切换到超高推理模式" : "Switched to ultra reasoning"
+      );
+      return;
+    }
+
+    if (commandId === "mcp") {
+      setCommandDialog(createMcpCommandDialog(settings.language, localSkillScan));
+      return;
+    }
+
+    setCommandDialog(
+      createStatusCommandDialog(settings.language, {
+        currentProjectName: currentProject?.name ?? null,
+        currentProjectPath: currentProject?.path ?? null,
+        currentModelId: settings.currentModelId,
+        indexedFileCount: projectScanResult?.files.length ?? 0,
+        localSkillCount: localSkillScan?.skills.length ?? 0,
+        threadCount: threads.filter((thread) => !thread.archived).length
+      })
+    );
+  }
+
   // 为线程请求 Agent 计划, 生成动作队列前先注入当前记忆
   async function generateThreadPlan({
     threadId,
@@ -2080,64 +2188,23 @@ export function App(): ReactElement {
         fullAccess: getThreadFullAccessMode(threadId),
         rules: generalPreferences.commandSafetyRules
       });
-      const planMessage =
-        runnableAgentActions.length > 0
-          ? generalPreferences.autoRunSafeActions
-            ? settings.language === "zh-CN"
-              ? "已生成执行计划, Forge 正在准备自动执行安全步骤。"
-              : "Execution plan created. Forge will auto-run safe steps."
-            : settings.language === "zh-CN"
-              ? "已生成执行计划, 等你确认继续运行安全步骤。"
-              : "Execution plan created. Continue when you want Forge to run safe steps."
-          : agentActions.length > 0
-            ? settings.language === "zh-CN"
-              ? "已生成执行计划, 但下一步需要你先确认。"
-              : "Execution plan created, but the next step needs your review."
-          : settings.language === "zh-CN"
-            ? "已生成执行计划, 但没有可执行步骤。"
-            : "Execution plan created, but no executable steps were found.";
-      const planEvents = [
-        {
-          id: `${threadId}-plan-ready-${plan.createdAt}`,
-          kind: "plan" as const,
-          message: planMessage,
-          createdAt: plan.createdAt
-        },
-        ...planQuality.notices.map((message, index) => ({
-          id: `${threadId}-plan-quality-${index + 1}-${plan.createdAt}`,
-          kind: "plan" as const,
-          message,
-          createdAt: plan.createdAt
-        })),
-        ...(agentActions.length === 0
-          ? [
-              {
-                id: `${threadId}-plan-empty-summary-${plan.createdAt}`,
-                kind: "result" as const,
-                message: appendSourceUrlsToAgentSummary(
-                  settings.language === "zh-CN"
-                    ? "已完成分析, 但没有生成可执行步骤。具体模型输出已折叠在“已处理”里。"
-                    : "Analysis finished, but no executable steps were generated. Model output is folded into Processed.",
-                  extractSourceUrlsFromText(plan.text),
-                  settings.language
-                ),
-                createdAt: plan.createdAt,
-                completedAt: plan.createdAt
-              }
-            ]
-          : [])
-      ];
+      const planReadyState = createAgentPlanReadyEvents({
+        threadId,
+        planCreatedAt: plan.createdAt,
+        planText: plan.text,
+        agentActions,
+        runnableActionCount: runnableAgentActions.length,
+        autoRunSafeActions: generalPreferences.autoRunSafeActions,
+        qualityNotices: planQuality.notices,
+        language: settings.language
+      });
       setThreads((current) =>
         attachThreadAgentActions(
           appendThreadEvents(
             current,
             threadId,
-            planEvents,
-            runnableAgentActions.length > 0
-              ? "planned"
-              : agentActions.length > 0
-                ? "blocked"
-                : "completed"
+            planReadyState.events,
+            planReadyState.status
           ),
           threadId,
           agentActions
@@ -2165,80 +2232,49 @@ export function App(): ReactElement {
     commandResultOverride: CommandRunResult | null = null,
     options: FailureFixPlanOptions = { source: "manual" }
   ): Promise<void> {
-    const thread = selectThreadById(threads, threadId);
+    const startDecision = resolveAgentFailureFixPlanStart({
+      threads,
+      threadId,
+      action,
+      language: settings.language,
+      models: settings.models,
+      providers: settings.providers,
+      projectScan: currentProject ? projectScanResult : null,
+      commandResultOverride,
+      options
+    });
 
-    if (!thread) {
+    if (startDecision.kind === "missing-thread") {
       return;
     }
 
-    if (!currentProject || !projectScanResult) {
-      setTaskNotice(t("projects.required"));
-      appendThreadError(
-        threadId,
-        settings.language === "zh-CN"
-          ? "需要先打开并索引项目, 才能根据失败动作生成修复计划"
-          : "Open and scan a project before generating a fix plan for a failed action."
-      );
+    if (startDecision.kind === "missing-project") {
+      setTaskNotice(t(startDecision.noticeKey));
+      appendThreadError(threadId, startDecision.errorMessage);
       return;
     }
 
-    const model = settings.models.find((candidate) => candidate.id === thread.modelId);
-    const provider = model
-      ? settings.providers.find((candidate) => candidate.id === model.providerId)
-      : null;
-
-    if (!model || !provider) {
-      appendThreadError(
-        threadId,
-        settings.language === "zh-CN"
-          ? "未找到当前模型或提供商配置"
-          : "Current model or provider configuration was not found."
-      );
+    if (startDecision.kind === "missing-model-provider") {
+      appendThreadError(threadId, startDecision.errorMessage);
       return;
     }
 
-    const createdAt = new Date().toISOString();
-    const failureRecoveryAttempt: FailureRecoveryAttemptRecord = {
-      actionId: action.id,
-      label: action.label,
-      source: options.source,
-      ...(options.attempt === undefined ? {} : { attempt: options.attempt }),
-      ...(options.limit === undefined ? {} : { limit: options.limit })
-    };
     setTaskNotice(null);
     setThreads((current) =>
-      appendThreadEvents(
-        current,
+      appendAgentFailureFixPlanStartEvent(current, {
         threadId,
-        [
-          {
-            id: `${threadId}-failure-fix-${action.id}-${createdAt}`,
-            kind: "plan",
-            message: formatFailureFixPlanStartMessage(
-              settings.language,
-              action,
-              failureRecoveryAttempt
-            ),
-            createdAt,
-            failureRecoveryAttempt
-          }
-        ],
-        "running"
-      )
+        startEvent: startDecision.preparedPlan.startEvent
+      })
     );
 
     await generateThreadPlan({
       threadId,
-      taskPrompt: createFailureFixTaskPrompt(
-        thread,
-        action,
-        commandResultOverride ?? findLatestCommandResultForAction(thread.events, action)
-      ),
-      model,
-      provider,
-      attachments: resolveVisionAttachments(model, thread.attachments),
-      attachmentContexts: thread.attachmentContexts,
-      projectScan: projectScanResult
+      taskPrompt: startDecision.preparedPlan.taskPrompt,
+      model: startDecision.model,
+      provider: startDecision.provider,
+      attachments: resolveVisionAttachments(startDecision.model, startDecision.thread.attachments),
+      attachmentContexts: startDecision.thread.attachmentContexts,
+      projectScan: startDecision.projectScan
     });
   }
 
@@ -2734,113 +2770,90 @@ export function App(): ReactElement {
     action: AgentAction,
     options: { approvedCommand?: boolean; skipReservation?: boolean } = {}
   ): Promise<AgentActionRunOutcome> {
-    if (!options.skipReservation) {
-      if (hasReservedAgentAction(threadId, [action])) {
-        return { status: "running", continueBatch: false };
-      }
+    return runAgentRuntimeQueuedAction({
+      threadId,
+      action,
+      options,
+      coordinator: agentRuntimeQueueCoordinator,
+      runReservedAction: (reservedAction, runtimeOptions) =>
+        runReservedAgentAction(threadId, reservedAction, runtimeOptions)
+    });
+  }
 
-      const releaseReservation = reserveAgentActionBatch(threadId, [action]);
-
-      try {
-        return await runAgentAction(threadId, action, {
-          ...options,
-          skipReservation: true
-        });
-      } finally {
-        releaseReservation();
-      }
-    }
-
-    if (cancelledThreadIdsRef.current.has(threadId)) {
-      return { status: "pending", continueBatch: false };
-    }
-
-    const liveAction = getLiveAgentAction(threadId, action.id);
-
-    if (liveAction && liveAction.status !== "pending") {
-      if (liveAction.status === "completed" || liveAction.status === "skipped") {
-        return { status: "completed", continueBatch: true };
-      }
-
-      return { status: liveAction.status, continueBatch: false };
-    }
-
-    const actionToRun = liveAction ?? action;
-
-    if (actionToRun.status !== "pending") {
-      if (actionToRun.status === "completed" || actionToRun.status === "skipped") {
-        return { status: "completed", continueBatch: true };
-      }
-
-      return { status: actionToRun.status, continueBatch: false };
-    }
-
+  // 已经过 Runtime 队列层预约的动作, 这里只处理权限, 门禁和真实副作用。
+  async function runReservedAgentAction(
+    threadId: string,
+    action: AgentAction,
+    options: { approvedCommand?: boolean } = {}
+  ): Promise<AgentActionRunOutcome> {
     const activeAgentProfile = getThreadAgentProfileContext(threadId);
     const threadFullAccessMode = getThreadFullAccessMode(threadId);
-    const permission = resolveAgentActionPermission(actionToRun, activeAgentProfile);
+    const runtimeDecision = resolveAgentRuntimePreflightDecision({
+      action,
+      liveAction: getLiveAgentAction(threadId, action.id),
+      agentProfile: activeAgentProfile
+    });
 
-    if (!permission.ok) {
+    if (runtimeDecision.kind === "reuse-status") {
+      return runtimeDecision.outcome;
+    }
+
+    const actionToRun = runtimeDecision.action;
+
+    if (runtimeDecision.kind === "permission-denied") {
       const createdAt = new Date().toISOString();
-      const message = formatAgentPermissionDenied(
+      const message = formatAgentPermissionDeniedNotice(
         settings.language,
         activeAgentProfile.name,
-        permission.tool
+        runtimeDecision.permission.tool
       );
 
       updateAgentActionStatus(threadId, actionToRun.id, "failed");
       setTaskNotice(message);
       setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-permission-denied-${actionToRun.id}-${createdAt}`,
-            kind: "error",
-            message,
-            createdAt
-          }
-        ], "blocked")
+        appendAgentPermissionDeniedEvent(current, {
+          threadId,
+          action: actionToRun,
+          message,
+          createdAt
+        })
       );
       return "failed";
     }
 
-    const execution = resolveAgentActionExecution(actionToRun);
-
-    if (execution.kind === "manual-gate") {
+    if (runtimeDecision.kind === "manual-gate") {
       const createdAt = new Date().toISOString();
+      const gateStep = resolveAgentRuntimeManualGateStep({
+        execution: runtimeDecision.execution,
+        fullAccess: threadFullAccessMode
+      });
 
-      if (threadFullAccessMode) {
+      if (gateStep.kind !== "wait-for-review") {
         appendAgentActionRunEvent(threadId, actionToRun, { status: "started", startedAt: createdAt });
         updateAgentActionStatus(threadId, actionToRun.id, "running");
         const outcome =
-          execution.reason === "commit"
+          gateStep.kind === "auto-commit"
             ? await commitFullAccessAgentAction(threadId, actionToRun)
             : completeFullAccessManualGateAction(threadId, actionToRun, createdAt);
 
         appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, createdAt);
-        window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
+        scheduleAgentPostActionStep(threadId, outcome);
         return outcome;
       }
 
-      setTaskNotice(
-        settings.language === "zh-CN"
-          ? "需要先完成审查门禁, Forge 不会自动越过人工确认"
-          : "Manual review is required before Forge can continue."
-      );
+      setTaskNotice(formatAgentManualGateRequiredNotice(settings.language));
       setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-manual-gate-${actionToRun.id}-${createdAt}`,
-            kind: "plan",
-            message:
-              settings.language === "zh-CN"
-                ? `等待人工审查: ${actionToRun.label}`
-                : `Waiting for manual review: ${actionToRun.label}`,
-            createdAt
-          }
-        ])
+        appendAgentManualGateWaitEvent(current, {
+          threadId,
+          action: actionToRun,
+          language: settings.language,
+          createdAt
+        })
       );
       return "pending";
     }
 
+    const execution = runtimeDecision.execution;
     const startedAt = new Date().toISOString();
     appendAgentActionRunEvent(threadId, actionToRun, { status: "started", startedAt });
     updateAgentActionStatus(threadId, actionToRun.id, "running");
@@ -2848,56 +2861,52 @@ export function App(): ReactElement {
     let outcome: AgentActionRunOutcome;
 
     try {
-      if (execution.kind === "open-file") {
-        outcome = await openAgentFileAction(threadId, actionToRun, execution.relativePath);
-      } else if (execution.kind === "list-directory") {
-        outcome = await listAgentProjectDirectoryAction(threadId, actionToRun, execution.relativePath);
-      } else if (execution.kind === "glob-project") {
-        outcome = await globAgentProjectAction(threadId, actionToRun, execution.pattern);
-      } else if (execution.kind === "search-project") {
-        outcome = await searchAgentProjectAction(threadId, actionToRun, execution.query);
-      } else if (execution.kind === "git-status") {
-        outcome = await inspectAgentGitStatusAction(threadId, actionToRun);
-      } else if (execution.kind === "generate-file-change") {
-        outcome = await generateAgentFileChangeAction(threadId, actionToRun, execution.relativePath);
-      } else if (execution.kind === "run-command") {
-        const commandRisk = resolveAgentCommandRisk(execution.command, {
+      outcome = await runAgentRuntimeExecution({
+        execution,
+        commandPolicy: {
           fullAccess: threadFullAccessMode,
           rules: generalPreferences.commandSafetyRules
-        });
-
-        if (commandRisk.level === "deny") {
-          outcome = blockAgentCommandAction(
-            threadId,
-            actionToRun,
-            formatAgentCommandDenied(
-              settings.language,
-              commandRisk.reason
+        },
+        approvedCommand: options.approvedCommand,
+        handlers: {
+          openFile: (relativePath) => openAgentFileAction(threadId, actionToRun, relativePath),
+          listDirectory: (relativePath) =>
+            listAgentProjectDirectoryAction(threadId, actionToRun, relativePath),
+          globProject: (pattern) => globAgentProjectAction(threadId, actionToRun, pattern),
+          searchProject: (query) => searchAgentProjectAction(threadId, actionToRun, query),
+          inspectGitStatus: () => inspectAgentGitStatusAction(threadId, actionToRun),
+          generateFileChange: (relativePath) =>
+            generateAgentFileChangeAction(threadId, actionToRun, relativePath),
+          runCommand: (command) => runThreadCommand(threadId, command, actionToRun.id),
+          blockCommandDenied: (reason) =>
+            blockAgentCommandAction(
+              threadId,
+              actionToRun,
+              formatAgentCommandDenied(
+                settings.language,
+                reason
+              ),
+              "failed"
             ),
-            "failed"
-          );
-        } else if (commandRisk.level === "ask" && !threadFullAccessMode && !options.approvedCommand) {
-          outcome = blockAgentCommandAction(
-            threadId,
-            actionToRun,
-            formatAgentCommandNeedsApproval(
-              settings.language,
-              execution.command,
-              commandRisk.reason
+          blockCommandApprovalRequired: (command, reason) =>
+            blockAgentCommandAction(
+              threadId,
+              actionToRun,
+              formatAgentCommandNeedsApproval(
+                settings.language,
+                command,
+                reason
+              ),
+              "pending"
             ),
-            "pending"
-          );
-        } else {
-          outcome = await runThreadCommand(threadId, execution.command, actionToRun.id);
+          blockInvalidTarget: (reason) =>
+            blockAgentInvalidTargetAction(threadId, actionToRun, reason),
+          completeAction: () => {
+            updateAgentActionStatus(threadId, actionToRun.id, "completed");
+            return "completed";
+          }
         }
-      } else {
-        if (execution.kind === "invalid-target") {
-          outcome = blockAgentInvalidTargetAction(threadId, actionToRun, execution.reason);
-        } else {
-          updateAgentActionStatus(threadId, actionToRun.id, "completed");
-          outcome = "completed";
-        }
-      }
+      });
     } catch (error) {
       updateAgentActionStatus(threadId, actionToRun.id, "failed");
       outcome = "failed";
@@ -2912,7 +2921,7 @@ export function App(): ReactElement {
     }
 
     appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, startedAt);
-    window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
+    scheduleAgentPostActionStep(threadId, outcome);
     return outcome;
   }
 
@@ -2945,14 +2954,26 @@ export function App(): ReactElement {
     return "failed";
   }
 
-  // 队列完成后只在正文留下简短总结, 具体执行细节继续折叠在“已处理”
-  function appendAgentCompletionSummaryIfDone(threadId: string): void {
-    setThreads((current) =>
-      appendAgentCompletionSummaryIfDoneToThreads(current, {
-        threadId,
-        language: settings.language
-      })
-    );
+  // 动作收尾交给 Runtime 决定是否需要追加完成总结, App 只负责异步调度线程更新。
+  function scheduleAgentPostActionStep(
+    threadId: string,
+    outcome: AgentActionRunOutcome
+  ): void {
+    const step = resolveAgentRuntimePostActionStep({ outcome });
+
+    if (step.kind === "idle") {
+      return;
+    }
+
+    window.setTimeout(() => {
+      setThreads((current) =>
+        applyAgentRuntimePostActionStep(current, {
+          threadId,
+          language: settings.language,
+          step
+        })
+      );
+    }, 0);
   }
 
   // 阻止高风险命令继续执行, 并把原因写入线程时间线
@@ -2989,12 +3010,15 @@ export function App(): ReactElement {
   async function approveAgentCommandAction(threadId: string, action: AgentAction): Promise<void> {
     if (action.kind === "run-command" && action.command) {
       const command = action.command;
-      const commandRisk = resolveAgentCommandRisk(command, {
-        fullAccess: getThreadFullAccessMode(threadId),
-        rules: generalPreferences.commandSafetyRules
+      const commandDecision = resolveAgentRuntimeCommandDecision({
+        command,
+        policy: {
+          fullAccess: getThreadFullAccessMode(threadId),
+          rules: generalPreferences.commandSafetyRules
+        }
       });
 
-      if (commandRisk.level === "ask") {
+      if (commandDecision.kind === "approval-required") {
         const createdAt = new Date().toISOString();
 
         setThreads((current) =>
@@ -3006,7 +3030,7 @@ export function App(): ReactElement {
                 threadId,
                 actionId: action.id,
                 command,
-                reason: commandRisk.reason,
+                reason: commandDecision.risk.reason,
                 createdAt
               })
             ],
@@ -3059,23 +3083,12 @@ export function App(): ReactElement {
 
   // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
-    if (actions.length === 0 || hasReservedAgentAction(threadId, actions)) {
-      return;
-    }
-
-    const releaseReservation = reserveAgentActionBatch(threadId, actions);
-
-    try {
-      await runAgentActionBatch(actions, (action) => {
-        if (cancelledThreadIdsRef.current.has(threadId)) {
-          return { status: "pending", continueBatch: false };
-        }
-
-        return runAgentAction(threadId, action, { skipReservation: true });
-      });
-    } finally {
-      releaseReservation();
-    }
+    await runAgentRuntimeQueuedActionBatch({
+      threadId,
+      actions,
+      coordinator: agentRuntimeQueueCoordinator,
+      runReservedAction: (action) => runReservedAgentAction(threadId, action)
+    });
   }
 
   // 执行受控目录列表动作, 只返回一层目录条目和文件大小
@@ -3534,6 +3547,8 @@ export function App(): ReactElement {
         busy={activeThread?.status === "running"}
         settings={settings}
         generalPreferences={generalPreferences}
+        pluginCatalog={pluginCatalog}
+        projectFiles={projectScanResult?.files ?? []}
         focusSignal={composerFocusSignal}
         placeholder={variant === "hero" ? heroComposerPlaceholder : undefined}
         submitSignal={composerSubmitSignal}
@@ -3541,6 +3556,7 @@ export function App(): ReactElement {
         onCancelTask={cancelActiveThread}
         onOpenSettings={() => setActiveView("settings")}
         onPickProject={() => void pickProject()}
+        onRunCommand={runComposerCommand}
         onUpdateGeneralPreferences={setGeneralPreferences}
         onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
         onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
@@ -4119,10 +4135,25 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染插件和技能目录, 当前阶段作为输入框上下文来源
+  function renderPluginsView(): ReactElement {
+    return (
+      <PluginLibraryPanel
+        language={settings.language}
+        plugins={pluginCatalog}
+        onOpenExternal={(url) => void window.forge.system.openExternal(url)}
+      />
+    );
+  }
+
   // 根据侧边栏选中项决定主内容, 设置默认进入常规页
   function renderActiveView(): ReactElement {
     if (activeView === "settings") {
       return renderSettingsView();
+    }
+
+    if (activeView === "plugins") {
+      return renderPluginsView();
     }
 
     if (activeView === "files") {
@@ -4137,77 +4168,361 @@ export function App(): ReactElement {
   }
 
   return (
-    <AppShell
-      language={settings.language}
-      activeView={activeView}
-      currentProjectName={currentProject?.name}
-      currentProjectPath={currentProject?.path}
-      projects={recentProjects}
-      threads={threads}
-      onArchiveAllChats={() => {
-        setThreads((current) => archiveAllThreads(current));
-        setSelectedThreadId(null);
-      }}
-      onArchiveProjectChats={archiveProjectConversations}
-      onArchiveThread={(threadId) => {
-        setThreads((current) => archiveThread(current, threadId));
-        if (selectedThreadId === threadId) {
+    <>
+      <AppShell
+        language={settings.language}
+        activeView={activeView}
+        currentProjectName={currentProject?.name}
+        currentProjectPath={currentProject?.path}
+        projects={recentProjects}
+        threads={threads}
+        onArchiveAllChats={() => {
+          setThreads((current) => archiveAllThreads(current));
           setSelectedThreadId(null);
-        }
-      }}
-      onCreateProjectWorktree={createProjectWorktree}
-      onDeleteThread={(threadId) => {
-        setThreads((current) => deleteThread(current, threadId));
-        if (selectedThreadId === threadId) {
-          setSelectedThreadId(null);
-        }
-      }}
-      onNavigate={setActiveView}
-      onNewTask={() => {
-        setActiveView("workspace");
-        setSelectedThreadId(null);
-        focusComposer();
-      }}
-      onNewProjectChat={(projectPath) => {
-        selectProject(projectPath);
-        setSelectedThreadId(null);
-        focusComposer();
-      }}
-      onRun={() => {
-        setActiveView("workspace");
-        submitComposer();
-      }}
-      onMinimizeWindow={() => void window.forge.windowControls.minimize()}
-      onToggleMaximizeWindow={() => void window.forge.windowControls.toggleMaximize()}
-      onPickProject={() => void pickProject()}
-      onRemoveProject={removeProjectRecord}
-      onRenameProject={renameProject}
-      onSelectProject={selectProject}
-      onSelectThread={(threadId) => {
-        const thread = selectThreadById(threads, threadId);
-
-        if (thread?.projectPath) {
-          const project = recentProjects.find((candidate) => candidate.path === thread.projectPath);
-
-          if (project) {
-            setCurrentProject(project);
-            setRecentProjects((current) =>
-              addRecentProject(current, { ...project, openedAt: new Date().toISOString() })
-            );
+        }}
+        onArchiveProjectChats={archiveProjectConversations}
+        onArchiveThread={(threadId) => {
+          setThreads((current) => archiveThread(current, threadId));
+          if (selectedThreadId === threadId) {
+            setSelectedThreadId(null);
           }
-        }
+        }}
+        onCreateProjectWorktree={createProjectWorktree}
+        onDeleteThread={(threadId) => {
+          setThreads((current) => deleteThread(current, threadId));
+          if (selectedThreadId === threadId) {
+            setSelectedThreadId(null);
+          }
+        }}
+        onNavigate={setActiveView}
+        onNewTask={() => {
+          setActiveView("workspace");
+          setSelectedThreadId(null);
+          focusComposer();
+        }}
+        onNewProjectChat={(projectPath) => {
+          selectProject(projectPath);
+          setSelectedThreadId(null);
+          focusComposer();
+        }}
+        onRun={() => {
+          setActiveView("workspace");
+          submitComposer();
+        }}
+        onMinimizeWindow={() => void window.forge.windowControls.minimize()}
+        onToggleMaximizeWindow={() => void window.forge.windowControls.toggleMaximize()}
+        onPickProject={() => void pickProject()}
+        onRemoveProject={removeProjectRecord}
+        onRenameProject={renameProject}
+        onSelectProject={selectProject}
+        onSelectThread={(threadId) => {
+          const thread = selectThreadById(threads, threadId);
 
-        setSelectedThreadId(threadId);
-        setActiveView("workspace");
-      }}
-      onTogglePinProject={togglePinnedProject}
-      onTogglePinThread={(threadId) => setThreads((current) => toggleThreadPinned(current, threadId))}
-      backgroundImageDataUrl={generalPreferences.backgroundImageDataUrl}
-      backgroundOpacity={generalPreferences.backgroundOpacity}
-    >
-      {renderActiveView()}
-    </AppShell>
+          if (thread?.projectPath) {
+            const project = recentProjects.find((candidate) => candidate.path === thread.projectPath);
+
+            if (project) {
+              setCurrentProject(project);
+              setRecentProjects((current) =>
+                addRecentProject(current, { ...project, openedAt: new Date().toISOString() })
+              );
+            }
+          }
+
+          setSelectedThreadId(threadId);
+          setActiveView("workspace");
+        }}
+        onTogglePinProject={togglePinnedProject}
+        onTogglePinThread={(threadId) => setThreads((current) => toggleThreadPinned(current, threadId))}
+        backgroundImageDataUrl={generalPreferences.backgroundImageDataUrl}
+        backgroundOpacity={generalPreferences.backgroundOpacity}
+      >
+        {renderActiveView()}
+      </AppShell>
+      {commandDialog ? (
+        <CommandDialog
+          dialog={commandDialog}
+          language={settings.language}
+          onClose={() => setCommandDialog(null)}
+        />
+      ) : null}
+      {feedbackDialogOpen ? (
+        <FeedbackDialog
+          language={settings.language}
+          onClose={() => setFeedbackDialogOpen(false)}
+          onSubmit={(category, detail, includeStatus) => {
+            const url = createFeedbackIssueUrl({
+              category,
+              currentProjectName: currentProject?.name ?? null,
+              currentModelId: settings.currentModelId,
+              detail,
+              includeStatus,
+              localSkillCount: localSkillScan?.skills.length ?? 0,
+              threadCount: threads.filter((thread) => !thread.archived).length
+            });
+
+            setFeedbackDialogOpen(false);
+            void window.forge.system.openExternal(url);
+          }}
+        />
+      ) : null}
+    </>
   );
+}
+
+function CommandDialog({
+  dialog,
+  language,
+  onClose
+}: {
+  dialog: CommandDialogState;
+  language: Language;
+  onClose: () => void;
+}): ReactElement {
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/20 px-6">
+      <div className="w-full max-w-[520px] rounded-[22px] border border-[#ececf1] bg-white p-5 shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <span className="min-w-0">
+            <h2 className="text-[20px] font-semibold text-[#202123]">{dialog.title}</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[#6e6e80]">{dialog.description}</p>
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123]"
+            aria-label={language === "zh-CN" ? "关闭" : "Close"}
+          >
+            ×
+          </button>
+        </div>
+        <div className="space-y-2">
+          {dialog.rows.map((row) => (
+            <div
+              key={row.label}
+              className="grid grid-cols-[130px_minmax(0,1fr)] gap-3 rounded-[12px] bg-[#f7f7f8] px-3 py-2.5 text-[12px]"
+            >
+              <span className="text-[#6e6e80]">{row.label}</span>
+              <span className="min-w-0 break-words text-[#202123]">{row.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackDialog({
+  language,
+  onClose,
+  onSubmit
+}: {
+  language: Language;
+  onClose: () => void;
+  onSubmit: (category: string, detail: string, includeStatus: boolean) => void;
+}): ReactElement {
+  const [category, setCategory] = useState(language === "zh-CN" ? "错误" : "Bug");
+  const [detail, setDetail] = useState("");
+  const [includeStatus, setIncludeStatus] = useState(true);
+  const copy = getFeedbackDialogCopy(language);
+  const canSubmit = detail.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/20 px-6">
+      <div className="w-full max-w-[860px] rounded-[22px] border border-[#ececf1] bg-white p-6 shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <h2 className="text-[24px] font-semibold text-[#202123]">{copy.title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-[10px] text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123]"
+            aria-label={copy.close}
+          >
+            ×
+          </button>
+        </div>
+        <div className="mb-4 flex flex-wrap gap-3">
+          {copy.categories.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setCategory(item)}
+              className={`h-11 rounded-full border px-5 text-[14px] transition ${
+                category === item
+                  ? "border-[#202123] bg-[#202123] text-white"
+                  : "border-[#d9d9e3] bg-white text-[#202123] hover:bg-[#f7f7f8]"
+              }`}
+            >
+              + {item}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={detail}
+          onChange={(event) => setDetail(event.currentTarget.value)}
+          placeholder={copy.placeholder}
+          className="h-44 w-full resize-none rounded-[18px] border border-[#2563eb] bg-white px-4 py-3 text-[15px] leading-6 text-[#202123] outline-none placeholder:text-[#8e8ea0]"
+        />
+        <label className="mt-4 flex items-center gap-2 text-[14px] text-[#6e6e80]">
+          <input
+            type="checkbox"
+            checked={includeStatus}
+            onChange={(event) => setIncludeStatus(event.currentTarget.checked)}
+            className="h-4 w-4 rounded border-[#d9d9e3]"
+          />
+          {copy.includeStatus}
+        </label>
+        <button
+          type="button"
+          disabled={!canSubmit}
+          onClick={() => onSubmit(category, detail, includeStatus)}
+          className="mt-6 h-12 w-full rounded-[14px] bg-[#202123] text-[15px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-[#a3a3a3]"
+        >
+          {copy.submit}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function createMcpCommandDialog(
+  language: Language,
+  localSkillScan: LocalSkillScanResult | null
+): CommandDialogState {
+  const isChinese = language === "zh-CN";
+
+  return {
+    title: isChinese ? "MCP 状态" : "MCP Status",
+    description: isChinese
+      ? "Forge 当前还没有接入 MCP 运行时, 本页只显示本机可用上下文能力。"
+      : "Forge has not connected an MCP runtime yet. This only reports local context capabilities.",
+    rows: [
+      {
+        label: isChinese ? "Forge MCP" : "Forge MCP",
+        value: isChinese ? "未接入" : "Not connected"
+      },
+      {
+        label: isChinese ? "本机 Skills" : "Local skills",
+        value: `${localSkillScan?.skills.length ?? 0}`
+      },
+      {
+        label: isChinese ? "扫描目录" : "Scanned roots",
+        value: localSkillScan?.scannedRoots.join("\n") || (isChinese ? "未发现" : "None found")
+      }
+    ]
+  };
+}
+
+function createStatusCommandDialog(
+  language: Language,
+  input: {
+    currentModelId: string | null;
+    currentProjectName: string | null;
+    currentProjectPath: string | null;
+    indexedFileCount: number;
+    localSkillCount: number;
+    threadCount: number;
+  }
+): CommandDialogState {
+  const isChinese = language === "zh-CN";
+
+  return {
+    title: isChinese ? "当前状态" : "Current Status",
+    description: isChinese ? "Forge 当前工作区和上下文状态。" : "Current Forge workspace and context status.",
+    rows: [
+      {
+        label: isChinese ? "项目" : "Project",
+        value: input.currentProjectName || (isChinese ? "未选择" : "Not selected")
+      },
+      {
+        label: isChinese ? "项目路径" : "Project path",
+        value: input.currentProjectPath || "-"
+      },
+      {
+        label: isChinese ? "模型" : "Model",
+        value: input.currentModelId || (isChinese ? "未选择" : "Not selected")
+      },
+      {
+        label: isChinese ? "索引文件" : "Indexed files",
+        value: `${input.indexedFileCount}`
+      },
+      {
+        label: isChinese ? "本机 Skills" : "Local skills",
+        value: `${input.localSkillCount}`
+      },
+      {
+        label: isChinese ? "可见对话" : "Visible chats",
+        value: `${input.threadCount}`
+      }
+    ]
+  };
+}
+
+function createFeedbackIssueUrl({
+  category,
+  currentModelId,
+  currentProjectName,
+  detail,
+  includeStatus,
+  localSkillCount,
+  threadCount
+}: {
+  category: string;
+  currentModelId: string | null;
+  currentProjectName: string | null;
+  detail: string;
+  includeStatus: boolean;
+  localSkillCount: number;
+  threadCount: number;
+}): string {
+  const title = `[Feedback] ${category}`;
+  const statusBlock = includeStatus
+    ? [
+        "",
+        "## Forge status",
+        `- Project: ${currentProjectName ?? "Not selected"}`,
+        `- Model: ${currentModelId ?? "Not selected"}`,
+        `- Local skills: ${localSkillCount}`,
+        `- Visible chats: ${threadCount}`
+      ].join("\n")
+    : "";
+  const body = [`## Category`, category, "", "## Detail", detail.trim(), statusBlock].join("\n");
+  const params = new URLSearchParams({
+    title,
+    body,
+    labels: "feedback"
+  });
+
+  return `https://github.com/SakuraCianna/Forge/issues/new?${params.toString()}`;
+}
+
+function getFeedbackDialogCopy(language: Language): {
+  categories: string[];
+  close: string;
+  includeStatus: string;
+  placeholder: string;
+  submit: string;
+  title: string;
+} {
+  if (language === "zh-CN") {
+    return {
+      categories: ["错误", "结果异常", "结果正常", "安全检查", "其他"],
+      close: "关闭",
+      includeStatus: "包含当前 Forge 状态摘要",
+      placeholder: "填写详情（必填）",
+      submit: "提交",
+      title: "提交反馈"
+    };
+  }
+
+  return {
+    categories: ["Bug", "Unexpected result", "Good result", "Safety check", "Other"],
+    close: "Close",
+    includeStatus: "Include current Forge status summary",
+    placeholder: "Describe the feedback (required)",
+    submit: "Submit",
+    title: "Submit Feedback"
+  };
 }
 
 // 把运行时错误收敛成一行中文提示, 隐藏 HTML 响应噪音
@@ -4227,26 +4542,6 @@ function formatAgentRuntimeError(
   const prefix = kind === "file" ? "File action" : kind === "command" ? "Command execution" : "Agent action";
 
   return `${prefix} failed: ${detail}`;
-}
-
-// 将工具权限拒绝转成用户可读提示, 执行层仍使用稳定英文工具名
-function formatAgentPermissionDenied(
-  language: Language,
-  profileName: string,
-  tool: "read" | "edit" | "command" | "git"
-): string {
-  if (language === "zh-CN") {
-    const toolLabel = {
-      read: "读取文件",
-      edit: "编辑文件",
-      command: "运行命令",
-      git: "Git 操作"
-    }[tool];
-
-    return `智能体配置 ${profileName} 未允许${toolLabel}`;
-  }
-
-  return `Agent profile ${profileName} does not allow ${tool} actions`;
 }
 
 // 重复项目名加序号, 侧边栏展示时保持可区分

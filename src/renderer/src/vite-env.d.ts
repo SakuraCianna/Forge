@@ -13,6 +13,7 @@ import type {
   GenerateAgentPlanRequest
 } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
+import type { LocalSkillScanResult } from "@shared/pluginSkillTypes";
 import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
@@ -54,6 +55,12 @@ declare global {
       models: {
         fetchProviderModels: (provider: ForgeProvider) => Promise<ForgeModel[]>;
         refreshOpenRouterCatalog: () => Promise<ForgeModel[]>;
+      };
+      skills: {
+        scanLocal: () => Promise<LocalSkillScanResult>;
+      };
+      system: {
+        openExternal: (url: string) => Promise<boolean>;
       };
       agent: {
         generatePlan: (request: GenerateAgentPlanRequest) => Promise<AgentPlanResult>;

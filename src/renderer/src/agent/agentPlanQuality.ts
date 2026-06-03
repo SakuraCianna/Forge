@@ -2,6 +2,11 @@
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
+import {
+  formatScaffoldLayerLabels,
+  supplementBareProjectScaffoldActions,
+  type ScaffoldLayer
+} from "@/agent/agentScaffoldPlanQuality";
 
 type AgentPlanQualityInput = {
   actions: AgentAction[];
@@ -42,7 +47,7 @@ const FOUNDATION_FILE_NAMES = new Set([
 ]);
 
 const COMMON_SCAFFOLD_TARGET_PATTERN =
-  /(?:^|\/)(?:pom\.xml|package\.json|vite\.config\.[jt]s|tsconfig\.json|index\.html|application\.(?:ya?ml|properties)|main\.[jt]sx?|app\.[jt]sx?|[^/]+application\.java|[^/]+controller\.java|[^/]+repository\.java|[^/]+entity\/[^/]+\.java|readme\.md)$/iu;
+  /(?:^|\/)(?:pom\.xml|package\.json|vite\.config\.[jt]s|tsconfig\.json|index\.html|application\.(?:ya?ml|properties)|main\.[jt]sx?|app\.(?:[jt]sx?|vue)|[^/]+application\.java|[^/]+controller\.java|[^/]+repository\.java|[^/]+service\.java|[^/]+entity\/[^/]+\.java|readme\.md)$/iu;
 
 // 计划质量层只改动作类型和目标, 不生成文件内容; 真实内容仍走受控 edit 通道和 diff 审查。
 export function improveAgentPlanActions({
@@ -82,14 +87,23 @@ export function improveAgentPlanActions({
     improvedActions.push(action);
   }
 
+  const scaffoldResult = supplementBareProjectScaffoldActions({
+    actions: improvedActions,
+    bareProject,
+    isCreationTask,
+    prompt
+  });
+
   const notices = formatPlanQualityNotices({
     language,
     inspectConversions,
-    shellWriterConversions
+    shellWriterConversions,
+    scaffoldSupplements: scaffoldResult.addedActions,
+    missingScaffoldLayers: scaffoldResult.missingLayers
   });
 
   return {
-    actions: renumberActions(improvedActions),
+    actions: renumberActions(scaffoldResult.actions),
     notices
   };
 }
@@ -138,11 +152,15 @@ function renumberActions(actions: AgentAction[]): AgentAction[] {
 function formatPlanQualityNotices({
   language,
   inspectConversions,
-  shellWriterConversions
+  shellWriterConversions,
+  scaffoldSupplements,
+  missingScaffoldLayers
 }: {
   language: Language;
   inspectConversions: number;
   shellWriterConversions: number;
+  scaffoldSupplements: number;
+  missingScaffoldLayers: ScaffoldLayer[];
 }): string[] {
   const notices: string[] = [];
 
@@ -159,6 +177,14 @@ function formatPlanQualityNotices({
       language === "zh-CN"
         ? `计划预检已将 shell 写文件脚本拆成 ${shellWriterConversions} 个受控文件编辑步骤。`
         : `Plan preflight converted shell file-writer commands into ${shellWriterConversions} controlled edit step(s).`
+    );
+  }
+
+  if (scaffoldSupplements > 0) {
+    notices.push(
+      language === "zh-CN"
+        ? `计划预检已补充 ${scaffoldSupplements} 个空项目工程骨架步骤, 覆盖缺失的 ${formatScaffoldLayerLabels(missingScaffoldLayers, language)}。`
+        : `Plan preflight added ${scaffoldSupplements} bare-project scaffold step(s), covering missing ${formatScaffoldLayerLabels(missingScaffoldLayers, language)}.`
     );
   }
 

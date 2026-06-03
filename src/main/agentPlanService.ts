@@ -105,7 +105,9 @@ const projectEngineeringPresetInstructions = [
   "For feature requests, plan the smallest complete product slice: data/model changes, backend/API changes, frontend/UI changes, configuration, and verification when those layers are relevant.",
   "For full-stack requests, include both server and client entrypoints plus the integration contract between them.",
   "Do not satisfy app-building requests with only a dependency file or one isolated source file unless the existing project truly requires no other files.",
-  "When the user names a framework or architecture, use the framework's normal project structure instead of inventing a flat demo."
+  "When the user names a framework or architecture, use the framework's normal project structure instead of inventing a flat demo.",
+  "Project scaffolding requests are not tiny edits: if the project is empty or bare, plan a coherent skeleton with build config, source entrypoints, runtime config, and verification.",
+  'For scaffold edit steps, prefer a "files" string array so Forge can expand one architectural step into several controlled file edits without wasting the plan budget.'
 ] as const;
 
 // 生成可执行计划并解析成步骤, 这里只请求模型不直接改文件
@@ -818,6 +820,7 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
   const instructionContext = formatProjectInstructions(request.projectScan);
   const planStepLimit = getPlanStepLimit(request);
   const verificationPolicy = getVerificationPolicy(request);
+  const scaffoldPlanningContext = formatProjectScaffoldPlanningContext(request);
 
   return [
     `Task:\n${request.taskPrompt}`,
@@ -830,11 +833,86 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     profileContext,
     memoryContext,
     instructionContext,
+    scaffoldPlanningContext,
     `Project root:\n${request.projectScan.rootPath}`,
     `Indexed files:\n${files || "- No files indexed"}${truncatedNote}`
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+// 新项目和全栈任务需要显式工程骨架要求, 否则模型容易把计划压缩成一个依赖文件和一个入口文件。
+function formatProjectScaffoldPlanningContext(request: GenerateAgentPlanRequest): string {
+  if (!hasProjectScaffoldPlanningIntent(request.taskPrompt)) {
+    return "";
+  }
+
+  const files = request.projectScan.files;
+  const bareProject =
+    files.length === 0 || !files.some((file) => isKnownProjectFoundationFile(file.relativePath));
+  const stackHints = detectProjectStackHints(request.taskPrompt);
+  const lines = [
+    "Project scaffold planning:",
+    bareProject
+      ? "The selected project appears empty or bare. Treat this as a scaffold task, not a single-file edit."
+      : "The selected project already has files. Preserve its structure and fill the missing layers only.",
+    "The plan must cover these layers when relevant: dependency/build files, backend entrypoint, domain/model, API/controller, runtime configuration, frontend package/config, frontend entrypoint, UI component/page, and verification command.",
+    'Use grouped edit steps with a "files" array for related files, for example backend foundation files or frontend foundation files.',
+    "Do not use shell heredocs or PowerShell file-writing scripts to create project files; use Forge edit steps instead."
+  ];
+
+  if (stackHints.length > 0) {
+    lines.push(`Detected stack hints: ${stackHints.join(", ")}`);
+  }
+
+  return lines.join("\n");
+}
+
+function hasProjectScaffoldPlanningIntent(prompt: string): boolean {
+  return (
+    /(创建|新建|生成|搭建|实现|做一个|写一个|开发|create|generate|scaffold|build|make|implement)/iu.test(
+      prompt
+    ) &&
+    /(项目|工程|系统|应用|页面|接口|数据库|前端|后端|前后端|project|app|application|system|frontend|backend|spring|vue|react|vite|api)/iu.test(
+      prompt
+    )
+  );
+}
+
+function isKnownProjectFoundationFile(relativePath: string): boolean {
+  const normalizedPath = relativePath.trim().replace(/\\/gu, "/").toLocaleLowerCase();
+
+  return (
+    /(^|\/)(package\.json|pom\.xml|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|pyproject\.toml|requirements\.txt|cargo\.toml|go\.mod)$/u.test(
+      normalizedPath
+    ) ||
+    /(^|\/)src\/main\/(?:java|kotlin|resources)\//u.test(normalizedPath) ||
+    /(^|\/)(src|frontend|client|app)\/(?:main|app|index|router|views|components)\./u.test(
+      normalizedPath
+    ) ||
+    /(^|\/)frontend\/src\//u.test(normalizedPath)
+  );
+}
+
+function detectProjectStackHints(prompt: string): string[] {
+  const hints: string[] = [];
+  const normalizedPrompt = prompt.toLocaleLowerCase();
+
+  for (const [label, pattern] of [
+    ["Spring Boot", /spring\s*boot|springboot/u],
+    ["Vue", /\bvue\b|vue3|vue\s*3/u],
+    ["React", /\breact\b/u],
+    ["Vite", /\bvite\b/u],
+    ["H2", /\bh2\b/u],
+    ["Maven", /\bmaven\b|pom\.xml/u],
+    ["Gradle", /\bgradle\b/u]
+  ] as const) {
+    if (pattern.test(normalizedPrompt)) {
+      hints.push(label);
+    }
+  }
+
+  return hints;
 }
 
 // 把文件内容和任务要求整理成单文件修改输入

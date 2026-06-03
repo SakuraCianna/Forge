@@ -52,6 +52,14 @@ export const fileChannels = {
   deleteFile: "forge:file:delete-file"
 } as const;
 
+export const localSkillChannels = {
+  scan: "forge:local-skills:scan"
+} as const;
+
+export const systemChannels = {
+  openExternal: "forge:system:open-external"
+} as const;
+
 export const windowChannels = {
   minimize: "forge:window:minimize",
   toggleMaximize: "forge:window:toggle-maximize",

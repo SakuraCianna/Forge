@@ -40,7 +40,9 @@ export type ComposerSubmitShortcut = GeneralPreferences["composerSubmitShortcut"
 
 type UseTaskComposerStateOptions = {
   copy: TaskComposerStateCopy;
+  extraAttachmentContexts?: AgentAttachmentContext[];
   focusSignal: number;
+  onSubmitted?: () => void;
   onSubmitTask: (
     prompt: string,
     attachments?: AgentImageAttachment[],
@@ -63,7 +65,9 @@ type ComposerPromptKeyState = {
 
 export function useTaskComposerState({
   copy,
+  extraAttachmentContexts = [],
   focusSignal,
+  onSubmitted,
   onSubmitTask,
   submitShortcut,
   submitSignal,
@@ -105,12 +109,26 @@ export function useTaskComposerState({
       return false;
     }
 
-    onSubmitTask(submission.prompt, submission.attachments, submission.attachmentContexts);
+    const attachmentContexts = mergeAttachmentContexts(
+      submission.attachmentContexts,
+      extraAttachmentContexts
+    );
+
+    onSubmitTask(submission.prompt, submission.attachments, attachmentContexts);
     setPrompt("");
     setAttachments([]);
     setAttachmentNotice(null);
+    onSubmitted?.();
     return true;
-  }, [attachments, copy, onSubmitTask, prompt, supportsImageAttachments]);
+  }, [
+    attachments,
+    copy,
+    extraAttachmentContexts,
+    onSubmitTask,
+    onSubmitted,
+    prompt,
+    supportsImageAttachments
+  ]);
 
   useEffect(() => {
     if (focusSignal > 0) {
@@ -337,6 +355,23 @@ function createAttachmentSelectionNotices(
     selection.unsupportedCount > 0 ? copy.attachmentUnsupported(selection.unsupportedCount) : "",
     selection.sensitiveCount > 0 ? copy.sensitiveAttachmentsSkipped(selection.sensitiveCount) : ""
   ].filter(Boolean);
+}
+
+function mergeAttachmentContexts(
+  baseContexts: AgentAttachmentContext[] | undefined,
+  extraContexts: AgentAttachmentContext[]
+): AgentAttachmentContext[] | undefined {
+  if (!extraContexts.length) {
+    return baseContexts;
+  }
+
+  const byId = new Map((baseContexts ?? []).map((context) => [context.id, context]));
+
+  extraContexts.forEach((context) => {
+    byId.set(context.id, context);
+  });
+
+  return Array.from(byId.values());
 }
 
 function hasDragFiles(event: ReactDragEvent<HTMLDivElement>): boolean {

@@ -6,8 +6,10 @@ import {
   fileChannels,
   gitChannels,
   keyVaultChannels,
+  localSkillChannels,
   projectChannels,
   providerModelChannels,
+  systemChannels,
   windowChannels
 } from "../shared/ipcChannels.js";
 import type {
@@ -21,6 +23,7 @@ import type {
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
+import type { LocalSkillScanResult } from "../shared/pluginSkillTypes.js";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
 import type {
   ProjectDirectoryListResult,
@@ -72,6 +75,14 @@ contextBridge.exposeInMainWorld("forge", {
       ipcRenderer.invoke(providerModelChannels.fetch, provider),
     refreshOpenRouterCatalog: () =>
       ipcRenderer.invoke(providerModelChannels.refreshOpenRouterCatalog)
+  },
+  skills: {
+    scanLocal: (): Promise<LocalSkillScanResult> =>
+      ipcRenderer.invoke(localSkillChannels.scan)
+  },
+  system: {
+    openExternal: (url: string): Promise<boolean> =>
+      ipcRenderer.invoke(systemChannels.openExternal, url)
   },
   agent: {
     generatePlan: (request: GenerateAgentPlanRequest): Promise<AgentPlanResult> =>

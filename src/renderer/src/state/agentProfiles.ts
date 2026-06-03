@@ -115,7 +115,7 @@ const defaultProfiles: AgentProfile[] = [
       git: true
     },
     contextBudget: 12000,
-    planStepLimit: 6,
+    planStepLimit: 10,
     autoRunBatchSize: 3,
     maxFailureRecoveryAttempts: 2,
     active: true,
@@ -363,9 +363,7 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
   const contextBudget = Number.isFinite(profile.contextBudget)
     ? Math.min(64000, Math.max(2000, Math.round(profile.contextBudget)))
     : 12000;
-  const planStepLimit = Number.isFinite(profile.planStepLimit)
-    ? Math.min(12, Math.max(2, Math.round(profile.planStepLimit)))
-    : getDefaultPlanStepLimit(profile.id);
+  const planStepLimit = normalizePlanStepLimit(profile);
   const autoRunBatchSize = Number.isFinite(profile.autoRunBatchSize)
     ? Math.min(
         maxAgentAutoRunBatchSize,
@@ -399,6 +397,24 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
     autoRunBatchSize,
     maxFailureRecoveryAttempts
   };
+}
+
+// build 智能体旧默认值是 6 步, 对空项目脚手架太紧; 仅迁移未手动修改过的内置默认配置。
+function normalizePlanStepLimit(profile: AgentProfile): number {
+  if (
+    profile.id === "build" &&
+    profile.builtIn &&
+    profile.updatedAt === defaultProfileTimestamp &&
+    profile.planStepLimit === 6
+  ) {
+    return getDefaultPlanStepLimit(profile.id);
+  }
+
+  if (!Number.isFinite(profile.planStepLimit)) {
+    return getDefaultPlanStepLimit(profile.id);
+  }
+
+  return Math.min(12, Math.max(2, Math.round(profile.planStepLimit)));
 }
 
 // 把旧版内置配置迁移成当前默认文案, 保留用户自定义内容

@@ -7,7 +7,7 @@ import {
 import type { AgentProfileContext } from "@shared/agentTypes";
 import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "@/state/generalPreferences";
 
-type AgentActionExecution =
+export type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }
   | { kind: "list-directory"; relativePath: string }
   | { kind: "glob-project"; pattern: string }
@@ -19,13 +19,13 @@ type AgentActionExecution =
   | { kind: "manual-gate"; reason: "review" | "commit" }
   | { kind: "complete" };
 
-type AgentToolPermission = "read" | "edit" | "command" | "git";
+export type AgentToolPermission = "read" | "edit" | "command" | "git";
 
 export type AgentActionPermissionResult =
   | { ok: true }
   | { ok: false; tool: AgentToolPermission; message: string };
 
-type AgentCommandRisk =
+export type AgentCommandRisk =
   | { level: "allow" }
   | { level: "ask" | "deny"; reason: string };
 
@@ -351,7 +351,13 @@ function isCommonScaffoldFileTarget(target: string): boolean {
       target
     ) ||
     /(^|\/)src\/main\/(?:java|kotlin|resources)\//iu.test(target) ||
-    /(^|\/)(src|frontend|client|app)\/(?:main|app|index|router|views|components)\./iu.test(target)
+    /(^|\/)(src|frontend|client|app)\/(?:main|app|index|router|views|components)\./iu.test(target) ||
+    /(^|\/)(frontend|client|web)\/(?:index\.html|package\.json|vite\.config\.[jt]s|src\/(?:main\.[jt]s|App\.vue|App\.[jt]sx?|components\/[^/]+\.(?:vue|[jt]sx?)))$/iu.test(
+      target
+    ) ||
+    /(^|\/)(backend|server|api)\/(?:pom\.xml|build\.gradle|src\/main\/(?:java|kotlin|resources)\/)/iu.test(
+      target
+    )
   );
 }
 
