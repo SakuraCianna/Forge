@@ -69,7 +69,8 @@ import {
 import { improveAgentPlanActions } from "@/agent/agentPlanQuality";
 import {
   resolveAgentRuntimeCommandDecision,
-  resolveAgentRuntimePreflightDecision
+  resolveAgentRuntimePreflightDecision,
+  runAgentRuntimeExecution
 } from "@/agent/agentRuntimeOrchestrator";
 import {
   appendSourceUrlsToAgentSummary,
@@ -2838,60 +2839,52 @@ export function App(): ReactElement {
     let outcome: AgentActionRunOutcome;
 
     try {
-      if (execution.kind === "open-file") {
-        outcome = await openAgentFileAction(threadId, actionToRun, execution.relativePath);
-      } else if (execution.kind === "list-directory") {
-        outcome = await listAgentProjectDirectoryAction(threadId, actionToRun, execution.relativePath);
-      } else if (execution.kind === "glob-project") {
-        outcome = await globAgentProjectAction(threadId, actionToRun, execution.pattern);
-      } else if (execution.kind === "search-project") {
-        outcome = await searchAgentProjectAction(threadId, actionToRun, execution.query);
-      } else if (execution.kind === "git-status") {
-        outcome = await inspectAgentGitStatusAction(threadId, actionToRun);
-      } else if (execution.kind === "generate-file-change") {
-        outcome = await generateAgentFileChangeAction(threadId, actionToRun, execution.relativePath);
-      } else if (execution.kind === "run-command") {
-        const commandDecision = resolveAgentRuntimeCommandDecision({
-          command: execution.command,
-          policy: {
-            fullAccess: threadFullAccessMode,
-            rules: generalPreferences.commandSafetyRules
-          },
-          approvedCommand: options.approvedCommand
-        });
-
-        if (commandDecision.kind === "deny") {
-          outcome = blockAgentCommandAction(
-            threadId,
-            actionToRun,
-            formatAgentCommandDenied(
-              settings.language,
-              commandDecision.risk.reason
+      outcome = await runAgentRuntimeExecution({
+        execution,
+        commandPolicy: {
+          fullAccess: threadFullAccessMode,
+          rules: generalPreferences.commandSafetyRules
+        },
+        approvedCommand: options.approvedCommand,
+        handlers: {
+          openFile: (relativePath) => openAgentFileAction(threadId, actionToRun, relativePath),
+          listDirectory: (relativePath) =>
+            listAgentProjectDirectoryAction(threadId, actionToRun, relativePath),
+          globProject: (pattern) => globAgentProjectAction(threadId, actionToRun, pattern),
+          searchProject: (query) => searchAgentProjectAction(threadId, actionToRun, query),
+          inspectGitStatus: () => inspectAgentGitStatusAction(threadId, actionToRun),
+          generateFileChange: (relativePath) =>
+            generateAgentFileChangeAction(threadId, actionToRun, relativePath),
+          runCommand: (command) => runThreadCommand(threadId, command, actionToRun.id),
+          blockCommandDenied: (reason) =>
+            blockAgentCommandAction(
+              threadId,
+              actionToRun,
+              formatAgentCommandDenied(
+                settings.language,
+                reason
+              ),
+              "failed"
             ),
-            "failed"
-          );
-        } else if (commandDecision.kind === "approval-required") {
-          outcome = blockAgentCommandAction(
-            threadId,
-            actionToRun,
-            formatAgentCommandNeedsApproval(
-              settings.language,
-              execution.command,
-              commandDecision.risk.reason
+          blockCommandApprovalRequired: (command, reason) =>
+            blockAgentCommandAction(
+              threadId,
+              actionToRun,
+              formatAgentCommandNeedsApproval(
+                settings.language,
+                command,
+                reason
+              ),
+              "pending"
             ),
-            "pending"
-          );
-        } else {
-          outcome = await runThreadCommand(threadId, execution.command, actionToRun.id);
+          blockInvalidTarget: (reason) =>
+            blockAgentInvalidTargetAction(threadId, actionToRun, reason),
+          completeAction: () => {
+            updateAgentActionStatus(threadId, actionToRun.id, "completed");
+            return "completed";
+          }
         }
-      } else {
-        if (execution.kind === "invalid-target") {
-          outcome = blockAgentInvalidTargetAction(threadId, actionToRun, execution.reason);
-        } else {
-          updateAgentActionStatus(threadId, actionToRun.id, "completed");
-          outcome = "completed";
-        }
-      }
+      });
     } catch (error) {
       updateAgentActionStatus(threadId, actionToRun.id, "failed");
       outcome = "failed";
