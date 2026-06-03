@@ -2,7 +2,7 @@
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { AgentProfileContext } from "@shared/agentTypes";
 import type { Language } from "@shared/modelTypes";
-import type { AgentActionRunOutcome } from "@/agent/agentActionExecutor";
+import type { AgentActionRunOutcome, AgentToolPermission } from "@/agent/agentActionExecutor";
 import {
   createAgentCompletionSummaryMessage,
   getAgentCompletionWorkStartedAt
@@ -172,6 +172,92 @@ export function appendAgentActionOutcomeRecord(
     language,
     createdAt: completedAt
   });
+}
+
+export function appendAgentManualGateWaitEvent(
+  threads: TaskThread[],
+  {
+    threadId,
+    action,
+    language,
+    createdAt = new Date().toISOString()
+  }: {
+    threadId: string;
+    action: AgentAction;
+    language: Language;
+    createdAt?: string;
+  }
+): TaskThread[] {
+  return appendThreadEvents(
+    threads,
+    threadId,
+    [
+      {
+        id: `${threadId}-manual-gate-${action.id}-${createdAt}`,
+        kind: "plan",
+        message:
+          language === "zh-CN"
+            ? `等待人工审查: ${action.label}`
+            : `Waiting for manual review: ${action.label}`,
+        createdAt
+      }
+    ],
+    "blocked"
+  );
+}
+
+export function appendAgentPermissionDeniedEvent(
+  threads: TaskThread[],
+  {
+    threadId,
+    action,
+    message,
+    createdAt = new Date().toISOString()
+  }: {
+    threadId: string;
+    action: AgentAction;
+    message: string;
+    createdAt?: string;
+  }
+): TaskThread[] {
+  return appendThreadEvents(
+    threads,
+    threadId,
+    [
+      {
+        id: `${threadId}-permission-denied-${action.id}-${createdAt}`,
+        kind: "error",
+        message,
+        createdAt
+      }
+    ],
+    "blocked"
+  );
+}
+
+export function formatAgentPermissionDeniedNotice(
+  language: Language,
+  profileName: string,
+  tool: AgentToolPermission
+): string {
+  if (language === "zh-CN") {
+    const toolLabel = {
+      read: "读取文件",
+      edit: "编辑文件",
+      command: "运行命令",
+      git: "Git 操作"
+    }[tool];
+
+    return `智能体配置 ${profileName} 未允许${toolLabel}`;
+  }
+
+  return `Agent profile ${profileName} does not allow ${tool} actions`;
+}
+
+export function formatAgentManualGateRequiredNotice(language: Language): string {
+  return language === "zh-CN"
+    ? "需要先完成审查门禁, Forge 不会自动越过人工确认"
+    : "Manual review is required before Forge can continue.";
 }
 
 export function applyAgentActionDecisionStatus(

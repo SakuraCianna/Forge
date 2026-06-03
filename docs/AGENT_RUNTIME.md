@@ -26,7 +26,9 @@
   - 已完成或跳过的动作复用当前状态, 避免重复执行。
   - Agent Profile 工具权限在执行前形成硬边界。
   - 人工门禁和 commit 门禁在完全访问权限下可以被运行时接管。
+  - `resolveAgentRuntimeManualGateStep` 已把人工审查, 自动完成和自动 commit 的策略分支收拢到 Runtime。
   - 命令门禁统一返回 `run`, `approval-required` 或 `deny`。
+  - 权限拒绝和人工审查等待事件由 `agentActionLifecycle.ts` 统一生成, `App.tsx` 只更新状态和提示。
   - 执行分派已经通过 `runAgentRuntimeExecution` 收拢到 Runtime, `App.tsx` 只注入文件, 命令, Git 和线程事件等副作用 handler。
   - 自动失败恢复通过 `resolveAgentRuntimeAutoFailureRecoveryStep` 先决策恢复候选, 暂停通知或空闲状态, `App.tsx` 只负责写事件和触发修复计划。
 - `App.tsx` 仍负责真实副作用: 文件读取, 文件修改生成, 命令执行, Git 操作, 线程事件和 UI 状态。

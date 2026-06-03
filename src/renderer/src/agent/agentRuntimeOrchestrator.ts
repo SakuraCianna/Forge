@@ -88,6 +88,40 @@ export type AgentRuntimeAutoFailureRecoveryStep =
       kind: "idle";
     };
 
+export type AgentRuntimeManualGateStep =
+  | {
+      kind: "auto-commit";
+    }
+  | {
+      kind: "auto-complete";
+    }
+  | {
+      kind: "wait-for-review";
+    };
+
+// 完全访问权限下, 人工门禁由 Runtime 明确接管; 受控模式下仍停在用户审查点。
+export function resolveAgentRuntimeManualGateStep({
+  execution,
+  fullAccess
+}: {
+  execution: ManualGateExecution;
+  fullAccess: boolean;
+}): AgentRuntimeManualGateStep {
+  if (!fullAccess) {
+    return {
+      kind: "wait-for-review"
+    };
+  }
+
+  return execution.reason === "commit"
+    ? {
+        kind: "auto-commit"
+      }
+    : {
+        kind: "auto-complete"
+      };
+}
+
 // 自动恢复决策统一进入 Runtime: 先选择可恢复失败, 再只记录不可自动处理的暂停原因。
 export function resolveAgentRuntimeAutoFailureRecoveryStep(
   input: SelectAutoFailureRecoveryCandidateInput

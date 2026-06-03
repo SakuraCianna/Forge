@@ -48,7 +48,11 @@ import {
   appendAgentActionOutcomeRecord,
   appendAgentActionRunRecord,
   appendAgentCompletionSummaryIfDone as appendAgentCompletionSummaryIfDoneToThreads,
-  applyAgentActionDecisionStatus
+  appendAgentManualGateWaitEvent,
+  appendAgentPermissionDeniedEvent,
+  applyAgentActionDecisionStatus,
+  formatAgentManualGateRequiredNotice,
+  formatAgentPermissionDeniedNotice
 } from "@/agent/agentActionLifecycle";
 import {
   appendAgentToolResultEvent,
@@ -68,6 +72,7 @@ import { improveAgentPlanActions } from "@/agent/agentPlanQuality";
 import {
   resolveAgentRuntimeAutoFailureRecoveryStep,
   resolveAgentRuntimeCommandDecision,
+  resolveAgentRuntimeManualGateStep,
   resolveAgentRuntimePreflightDecision,
   runAgentRuntimeExecution
 } from "@/agent/agentRuntimeOrchestrator";
@@ -2769,7 +2774,7 @@ export function App(): ReactElement {
 
     if (runtimeDecision.kind === "permission-denied") {
       const createdAt = new Date().toISOString();
-      const message = formatAgentPermissionDenied(
+      const message = formatAgentPermissionDeniedNotice(
         settings.language,
         activeAgentProfile.name,
         runtimeDecision.permission.tool
@@ -2778,26 +2783,28 @@ export function App(): ReactElement {
       updateAgentActionStatus(threadId, actionToRun.id, "failed");
       setTaskNotice(message);
       setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-permission-denied-${actionToRun.id}-${createdAt}`,
-            kind: "error",
-            message,
-            createdAt
-          }
-        ], "blocked")
+        appendAgentPermissionDeniedEvent(current, {
+          threadId,
+          action: actionToRun,
+          message,
+          createdAt
+        })
       );
       return "failed";
     }
 
     if (runtimeDecision.kind === "manual-gate") {
       const createdAt = new Date().toISOString();
+      const gateStep = resolveAgentRuntimeManualGateStep({
+        execution: runtimeDecision.execution,
+        fullAccess: threadFullAccessMode
+      });
 
-      if (threadFullAccessMode) {
+      if (gateStep.kind !== "wait-for-review") {
         appendAgentActionRunEvent(threadId, actionToRun, { status: "started", startedAt: createdAt });
         updateAgentActionStatus(threadId, actionToRun.id, "running");
         const outcome =
-          runtimeDecision.execution.reason === "commit"
+          gateStep.kind === "auto-commit"
             ? await commitFullAccessAgentAction(threadId, actionToRun)
             : completeFullAccessManualGateAction(threadId, actionToRun, createdAt);
 
@@ -2806,23 +2813,14 @@ export function App(): ReactElement {
         return outcome;
       }
 
-      setTaskNotice(
-        settings.language === "zh-CN"
-          ? "需要先完成审查门禁, Forge 不会自动越过人工确认"
-          : "Manual review is required before Forge can continue."
-      );
+      setTaskNotice(formatAgentManualGateRequiredNotice(settings.language));
       setThreads((current) =>
-        appendThreadEvents(current, threadId, [
-          {
-            id: `${threadId}-manual-gate-${actionToRun.id}-${createdAt}`,
-            kind: "plan",
-            message:
-              settings.language === "zh-CN"
-                ? `等待人工审查: ${actionToRun.label}`
-                : `Waiting for manual review: ${actionToRun.label}`,
-            createdAt
-          }
-        ])
+        appendAgentManualGateWaitEvent(current, {
+          threadId,
+          action: actionToRun,
+          language: settings.language,
+          createdAt
+        })
       );
       return "pending";
     }
@@ -4213,26 +4211,6 @@ function formatAgentRuntimeError(
   const prefix = kind === "file" ? "File action" : kind === "command" ? "Command execution" : "Agent action";
 
   return `${prefix} failed: ${detail}`;
-}
-
-// 将工具权限拒绝转成用户可读提示, 执行层仍使用稳定英文工具名
-function formatAgentPermissionDenied(
-  language: Language,
-  profileName: string,
-  tool: "read" | "edit" | "command" | "git"
-): string {
-  if (language === "zh-CN") {
-    const toolLabel = {
-      read: "读取文件",
-      edit: "编辑文件",
-      command: "运行命令",
-      git: "Git 操作"
-    }[tool];
-
-    return `智能体配置 ${profileName} 未允许${toolLabel}`;
-  }
-
-  return `Agent profile ${profileName} does not allow ${tool} actions`;
 }
 
 // 重复项目名加序号, 侧边栏展示时保持可区分
