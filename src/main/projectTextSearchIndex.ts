@@ -9,6 +9,11 @@ import type {
 } from "../shared/fileTypes.js";
 import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
 import { createProjectIgnoreMatcher } from "./projectIgnore.js";
+import {
+  createProjectTextSearchIndexCache,
+  type ProjectTextSearchIndexCache,
+  type ProjectTextSearchIndexCacheEntry
+} from "./projectTextSearchIndexCache.js";
 
 type ProjectTextIndexEntry = {
   lowerLines: string[];
@@ -27,6 +32,15 @@ type ProjectTextSearchIndex = {
 const maxSearchPreviewChars = 240;
 const maxCachedProjectTextSearchIndexes = 6;
 const projectTextSearchIndexes = new Map<string, ProjectTextSearchIndex>();
+let projectTextSearchIndexCache: ProjectTextSearchIndexCache | null = null;
+
+export function configureProjectTextSearchIndex({
+  directory
+}: {
+  directory: string | null;
+}): void {
+  projectTextSearchIndexCache = directory ? createProjectTextSearchIndexCache({ directory }) : null;
+}
 
 export async function searchProjectTextFiles({
   projectRoot,
@@ -75,8 +89,15 @@ async function buildProjectTextSearchIndex(
 ): Promise<ProjectTextSearchIndex> {
   const normalizedMaxFileBytes = Math.max(1, Math.round(maxFileBytes));
   const cacheKey = createTextSearchIndexCacheKey(resolvedProjectRoot, normalizedMaxFileBytes);
+  const memoryIndex = projectTextSearchIndexes.get(cacheKey);
+  const persistedIndex = memoryIndex
+    ? null
+    : await projectTextSearchIndexCache
+        ?.read(resolvedProjectRoot, normalizedMaxFileBytes)
+        .catch(() => null);
   const previousEntries = new Map(
-    projectTextSearchIndexes.get(cacheKey)?.entries.map((entry) => [entry.relativePath, entry]) ?? []
+    (memoryIndex?.entries ?? createProjectTextIndexEntriesFromCache(persistedIndex?.entries ?? []))
+      .map((entry) => [entry.relativePath, entry])
   );
   const ignoreMatcher = await createProjectIgnoreMatcher(resolvedProjectRoot);
   const entries: ProjectTextIndexEntry[] = [];
@@ -124,6 +145,11 @@ async function buildProjectTextSearchIndex(
   };
 
   rememberProjectTextSearchIndex(cacheKey, index);
+  void projectTextSearchIndexCache?.write({
+    entries: createProjectTextSearchIndexCacheEntries(entries),
+    maxFileBytes: normalizedMaxFileBytes,
+    rootPath: resolvedProjectRoot
+  }).catch(() => undefined);
   return index;
 }
 
@@ -163,6 +189,26 @@ async function readTextIndexEntry(
     relativePath,
     size: fileStat.size
   };
+}
+
+function createProjectTextIndexEntriesFromCache(
+  entries: ProjectTextSearchIndexCacheEntry[]
+): ProjectTextIndexEntry[] {
+  return entries.map((entry) => ({
+    ...entry,
+    lowerLines: entry.lines.map((line) => line.toLocaleLowerCase())
+  }));
+}
+
+function createProjectTextSearchIndexCacheEntries(
+  entries: ProjectTextIndexEntry[]
+): ProjectTextSearchIndexCacheEntry[] {
+  return entries.map((entry) => ({
+    lines: entry.lines,
+    modifiedAtMs: entry.modifiedAtMs,
+    relativePath: entry.relativePath,
+    size: entry.size
+  }));
 }
 
 function collectSearchMatchesFromIndexEntry(

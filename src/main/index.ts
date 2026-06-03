@@ -35,6 +35,7 @@ import {
 } from "./projectFileService.js";
 import { pickProjectDirectory } from "./projectPicker.js";
 import { scanProjectFiles } from "./projectScanner.js";
+import { configureProjectTextSearchIndex } from "./projectTextSearchIndex.js";
 import { createOpenRouterModelCatalog } from "./openRouterModelCatalog.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
 import { registerProviderModelHandlers } from "./providerModelsIpc.js";
@@ -153,6 +154,9 @@ void app.whenReady().then(() => {
   });
   const projectIndexCache = createProjectIndexCache({
     directory: join(app.getPath("userData"), "project-indexes")
+  });
+  configureProjectTextSearchIndex({
+    directory: join(app.getPath("userData"), "project-text-indexes")
   });
 
   registerKeyVaultHandlers(keyVault, (channel, handler) => {
