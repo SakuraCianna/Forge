@@ -63,6 +63,7 @@ Forge 要从可用原型推进到产品级本地工程工作台: 用户提出真
   - 失败恢复计划的发起前校验, 起始事件, 恢复尝试记录和恢复提示词已经迁入 `agentFailureRecoveryPlan.ts`。
   - 完成总结触发通过 `resolveAgentRuntimePostActionStep` 决定, `agentActionLifecycle.ts` 负责实际追加总结事件。
 - `agentRuntimeQueue.ts` 已承接动作预约, 取消检查和批量队列推进, `App.tsx` 只注入已预约动作的真实执行逻辑。
+- `agentPlanLifecycle.ts` 已承接计划生成完成后的就绪事件, 质量预检提示, 空计划总结和线程状态选择, `App.tsx` 不再内联拼装 planner 完成文案。
 - `App.tsx` 仍负责真实副作用: 文件读取, 文件修改生成, 命令执行, Git 操作, 线程事件和 UI 状态。
 - 完成总结会汇总创建, 编辑, 删除, 读取, 失败恢复和耗时统计, 主界面只保留简短结果。
 

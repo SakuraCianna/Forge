@@ -59,6 +59,7 @@ import {
   useAgentToolResults,
   type AgentToolResultEventKind
 } from "@/agent/agentToolResults";
+import { createAgentPlanReadyEvents } from "@/agent/agentPlanLifecycle";
 import {
   createAgentAskRequestPayload,
   createAgentFileChangeRequestPayload,
@@ -79,10 +80,6 @@ import {
   runAgentRuntimeQueuedActionBatch,
   type AgentRuntimeQueueCoordinator
 } from "@/agent/agentRuntimeQueue";
-import {
-  appendSourceUrlsToAgentSummary,
-  extractSourceUrlsFromText,
-} from "@/agent/agentSources";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
 import {
@@ -2088,64 +2085,23 @@ export function App(): ReactElement {
         fullAccess: getThreadFullAccessMode(threadId),
         rules: generalPreferences.commandSafetyRules
       });
-      const planMessage =
-        runnableAgentActions.length > 0
-          ? generalPreferences.autoRunSafeActions
-            ? settings.language === "zh-CN"
-              ? "已生成执行计划, Forge 正在准备自动执行安全步骤。"
-              : "Execution plan created. Forge will auto-run safe steps."
-            : settings.language === "zh-CN"
-              ? "已生成执行计划, 等你确认继续运行安全步骤。"
-              : "Execution plan created. Continue when you want Forge to run safe steps."
-          : agentActions.length > 0
-            ? settings.language === "zh-CN"
-              ? "已生成执行计划, 但下一步需要你先确认。"
-              : "Execution plan created, but the next step needs your review."
-          : settings.language === "zh-CN"
-            ? "已生成执行计划, 但没有可执行步骤。"
-            : "Execution plan created, but no executable steps were found.";
-      const planEvents = [
-        {
-          id: `${threadId}-plan-ready-${plan.createdAt}`,
-          kind: "plan" as const,
-          message: planMessage,
-          createdAt: plan.createdAt
-        },
-        ...planQuality.notices.map((message, index) => ({
-          id: `${threadId}-plan-quality-${index + 1}-${plan.createdAt}`,
-          kind: "plan" as const,
-          message,
-          createdAt: plan.createdAt
-        })),
-        ...(agentActions.length === 0
-          ? [
-              {
-                id: `${threadId}-plan-empty-summary-${plan.createdAt}`,
-                kind: "result" as const,
-                message: appendSourceUrlsToAgentSummary(
-                  settings.language === "zh-CN"
-                    ? "已完成分析, 但没有生成可执行步骤。具体模型输出已折叠在“已处理”里。"
-                    : "Analysis finished, but no executable steps were generated. Model output is folded into Processed.",
-                  extractSourceUrlsFromText(plan.text),
-                  settings.language
-                ),
-                createdAt: plan.createdAt,
-                completedAt: plan.createdAt
-              }
-            ]
-          : [])
-      ];
+      const planReadyState = createAgentPlanReadyEvents({
+        threadId,
+        planCreatedAt: plan.createdAt,
+        planText: plan.text,
+        agentActions,
+        runnableActionCount: runnableAgentActions.length,
+        autoRunSafeActions: generalPreferences.autoRunSafeActions,
+        qualityNotices: planQuality.notices,
+        language: settings.language
+      });
       setThreads((current) =>
         attachThreadAgentActions(
           appendThreadEvents(
             current,
             threadId,
-            planEvents,
-            runnableAgentActions.length > 0
-              ? "planned"
-              : agentActions.length > 0
-                ? "blocked"
-                : "completed"
+            planReadyState.events,
+            planReadyState.status
           ),
           threadId,
           agentActions
