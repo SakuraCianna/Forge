@@ -1,4 +1,5 @@
 // 本文件说明: 扫描项目文件和规则说明, 为 Agent 提供轻量上下文
+import type { Stats } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type {
@@ -10,6 +11,7 @@ import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
 
 type ScanOptions = {
   limit?: number;
+  previousIndex?: ProjectScanResult | null;
 };
 
 const maxInstructionFileChars = 12_000;
@@ -33,8 +35,9 @@ export async function scanProjectFiles(
 ): Promise<ProjectScanResult> {
   const limit = normalizeOptionalLimit(options.limit);
   const files: ProjectFile[] = [];
+  const previousFilesByPath = createPreviousFileMap(rootPath, options.previousIndex);
   let truncated = false;
-  let rootStat: Awaited<ReturnType<typeof stat>>;
+  let rootStat: Stats;
 
   try {
     rootStat = await stat(rootPath);
@@ -92,10 +95,7 @@ export async function scanProjectFiles(
       }
 
       const fileStat = await stat(filePath);
-      files.push({
-        relativePath,
-        size: fileStat.size
-      });
+      files.push(createProjectFileEntry(relativePath, fileStat, previousFilesByPath));
     }
   }
 
@@ -110,6 +110,40 @@ export async function scanProjectFiles(
 }
 
 // 汇总 AGENTS, README 和规则文件内容, 作为模型的项目说明
+function createPreviousFileMap(
+  rootPath: string,
+  previousIndex: ProjectScanResult | null | undefined
+): Map<string, ProjectFile> {
+  if (!previousIndex || previousIndex.rootPath !== rootPath) {
+    return new Map();
+  }
+
+  return new Map(previousIndex.files.map((file) => [file.relativePath, file]));
+}
+
+function createProjectFileEntry(
+  relativePath: string,
+  fileStat: Stats,
+  previousFilesByPath: ReadonlyMap<string, ProjectFile>
+): ProjectFile {
+  const modifiedAtMs = fileStat.mtimeMs;
+  const previousFile = previousFilesByPath.get(relativePath);
+
+  if (
+    previousFile &&
+    previousFile.size === fileStat.size &&
+    previousFile.modifiedAtMs === modifiedAtMs
+  ) {
+    return previousFile;
+  }
+
+  return {
+    modifiedAtMs,
+    relativePath,
+    size: fileStat.size
+  };
+}
+
 async function readProjectInstructionFiles(rootPath: string): Promise<ProjectInstructionFile[]> {
   const candidatePaths = await collectInstructionFilePaths(rootPath);
   const instructionFiles: ProjectInstructionFile[] = [];

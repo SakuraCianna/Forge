@@ -41,6 +41,7 @@ export type ProjectTextSearchRequest = {
 };
 
 export type ProjectDirectoryListRequest = {
+  includeGitIgnored?: boolean;
   projectRoot: string;
   relativePath?: string;
   limit?: number;

@@ -7,18 +7,26 @@ import { ProjectFolderIcon } from "./ProjectFolderIcon";
 
 type ProjectFileTreeProps = {
   expandedFolders: ReadonlySet<string>;
+  loadingFolders?: ReadonlySet<string>;
+  loadingLabel?: string;
   nodes: ProjectFileTreeNode[];
   onPreviewFile: (relativePath: string) => void;
   onToggleFolder: (relativePath: string) => void;
   selectedPath: string | null;
+  truncatedFolders?: ReadonlySet<string>;
+  truncatedLabel?: string;
 };
 
 export function ProjectFileTree({
   expandedFolders,
+  loadingFolders = new Set(),
+  loadingLabel = "Loading...",
   nodes,
   onPreviewFile,
   onToggleFolder,
-  selectedPath
+  selectedPath,
+  truncatedFolders = new Set(),
+  truncatedLabel = "Result truncated"
 }: ProjectFileTreeProps): ReactElement {
   function renderProjectFileTreeNodes(
     treeNodes: ProjectFileTreeNode[],
@@ -29,6 +37,19 @@ export function ProjectFileTree({
 
       if (node.kind === "directory") {
         const expanded = expandedFolders.has(node.relativePath);
+        const directoryChildren = expanded ? renderProjectFileTreeNodes(node.children, depth + 1) : [];
+        const statusRows =
+          expanded && (loadingFolders.has(node.relativePath) || truncatedFolders.has(node.relativePath))
+            ? [
+                <div
+                  key={`${node.relativePath}:status`}
+                  className="truncate py-1 pr-2 text-[11px] text-[#8e8ea0]"
+                  style={{ paddingLeft: 8 + (depth + 1) * 14 + 28 }}
+                >
+                  {loadingFolders.has(node.relativePath) ? loadingLabel : truncatedLabel}
+                </div>
+              ]
+            : [];
 
         return [
           <button
@@ -48,7 +69,8 @@ export function ProjectFileTree({
             <ProjectFolderIcon expanded={expanded} relativePath={node.relativePath} />
             <span className="min-w-0 truncate">{node.name}</span>
           </button>,
-          ...(expanded ? renderProjectFileTreeNodes(node.children, depth + 1) : [])
+          ...directoryChildren,
+          ...statusRows
         ];
       }
 

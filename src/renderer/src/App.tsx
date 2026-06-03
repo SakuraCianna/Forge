@@ -1,6 +1,6 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
-import { Suspense, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
 import type {
   AgentAttachmentContext,
@@ -131,9 +131,12 @@ import {
 import { useAgentRunState } from "@/state/agentRunState";
 import { useComposerSignals } from "@/state/composerSignals";
 import {
-  buildProjectFileTree,
-  getProjectFileParentPaths
-} from "@/state/projectFileTree";
+  addUniquePath,
+  mergeProjectFileTreeDirectoryEntries,
+  normalizeLazyDirectoryPath,
+  removePath
+} from "@/state/lazyProjectFileTree";
+import { getProjectFileParentPaths, type ProjectFileTreeNode } from "@/state/projectFileTree";
 import {
   addRecentProject,
   createProjectFromPath,
@@ -235,7 +238,7 @@ type FailureFixPlanOptions = Pick<
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
-const emptyProjectFiles: ProjectScanResult["files"] = [];
+const fileTreeDirectoryEntryLimit = 2000;
 
 function selectInitialProjectFromPreferences(
   projects: ForgeProject[],
@@ -284,6 +287,11 @@ export function App(): ReactElement {
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
   const [filePreview, setFilePreview] = useState<ProjectFilePreview | null>(null);
   const [expandedFileTreeFolders, setExpandedFileTreeFolders] = useState<string[]>([]);
+  const [lazyFileTreeNodes, setLazyFileTreeNodes] = useState<ProjectFileTreeNode[]>([]);
+  const [loadedFileTreeFolders, setLoadedFileTreeFolders] = useState<string[]>([]);
+  const [loadingFileTreeFolders, setLoadingFileTreeFolders] = useState<string[]>([]);
+  const [truncatedFileTreeFolders, setTruncatedFileTreeFolders] = useState<string[]>([]);
+  const [fileTreeNotice, setFileTreeNotice] = useState<string | null>(null);
   const [fileFormatterMode, setFileFormatterMode] = useState<CodeFormatterMode>("raw");
   const [formattedPreview, setFormattedPreview] = useState<CodeFormatResult | null>(null);
   const [missingProjectPath, setMissingProjectPath] = useState<string | null>(null);
@@ -368,12 +376,14 @@ export function App(): ReactElement {
   const activeAutoFailureFixKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixAttemptedKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
+  const currentProjectPathRef = useRef<string | null>(currentProject?.path ?? null);
   const {
     clearAgentToolResults,
     getRecentAgentToolResults,
     rememberAgentToolResult
   } = useAgentToolResults();
   threadsRef.current = threads;
+  currentProjectPathRef.current = currentProject?.path ?? null;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
   const heroSuggestionInput = {
@@ -390,16 +400,21 @@ export function App(): ReactElement {
   const activeHeroPrompts = createHeroPromptSuggestions(heroSuggestionInput);
   const activeHeroPrompt =
     activeHeroPrompts[heroPromptIndex % activeHeroPrompts.length] ?? activeHeroPrompts[0];
-  // Large repositories can produce thousands of files; defer tree building to keep the composer responsive.
-  const projectFilesForTree = projectScanResult?.files ?? emptyProjectFiles;
-  const deferredProjectFilesForTree = useDeferredValue(projectFilesForTree);
-  const projectFileTree = useMemo(
-    () => buildProjectFileTree(deferredProjectFilesForTree),
-    [deferredProjectFilesForTree]
-  );
   const expandedFileTreeFolderSet = useMemo(
     () => new Set(expandedFileTreeFolders),
     [expandedFileTreeFolders]
+  );
+  const loadedFileTreeFolderSet = useMemo(
+    () => new Set(loadedFileTreeFolders),
+    [loadedFileTreeFolders]
+  );
+  const loadingFileTreeFolderSet = useMemo(
+    () => new Set(loadingFileTreeFolders),
+    [loadingFileTreeFolders]
+  );
+  const truncatedFileTreeFolderSet = useMemo(
+    () => new Set(truncatedFileTreeFolders),
+    [truncatedFileTreeFolders]
   );
   const heroComposerPlaceholder = createHeroComposerPlaceholder(
     heroSuggestionInput,
@@ -969,6 +984,7 @@ export function App(): ReactElement {
 
     const project = createProjectFromPath(projectPath);
     setMissingProjectPath(null);
+    currentProjectPathRef.current = project.path;
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, project));
     setActiveView("workspace");
@@ -983,6 +999,7 @@ export function App(): ReactElement {
     }
 
     setMissingProjectPath(null);
+    currentProjectPathRef.current = project.path;
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, { ...project, openedAt: new Date().toISOString() }));
     setSelectedThreadId(
@@ -997,6 +1014,7 @@ export function App(): ReactElement {
 
     if (currentProject?.path === projectPath) {
       setMissingProjectPath(null);
+      currentProjectPathRef.current = null;
       setCurrentProject(null);
     }
   }
@@ -1099,12 +1117,96 @@ export function App(): ReactElement {
       return;
     }
 
+    currentProjectPathRef.current = recentProject.path;
     setCurrentProject(recentProject);
     setMissingProjectPath(null);
     setActiveView("workspace");
   }
 
   // 读取项目文件索引, 供文件页和 Agent 上下文共用
+  function resetLazyProjectFileTree(): void {
+    setLazyFileTreeNodes([]);
+    setLoadedFileTreeFolders([]);
+    setLoadingFileTreeFolders([]);
+    setTruncatedFileTreeFolders([]);
+    setFileTreeNotice(null);
+  }
+
+  async function loadProjectFileTreeDirectory(
+    projectPath: string,
+    relativePath = ".",
+    options: { force?: boolean } = {}
+  ): Promise<void> {
+    const normalizedRelativePath = normalizeLazyDirectoryPath(relativePath);
+
+    if (
+      !options.force &&
+      (loadedFileTreeFolderSet.has(normalizedRelativePath) ||
+        loadingFileTreeFolderSet.has(normalizedRelativePath))
+    ) {
+      return;
+    }
+
+    setLoadingFileTreeFolders((current) => addUniquePath(current, normalizedRelativePath));
+    setFileTreeNotice(null);
+
+    try {
+      const result = await window.forge.files.listDirectory({
+        includeGitIgnored: true,
+        projectRoot: projectPath,
+        relativePath: normalizedRelativePath,
+        limit: fileTreeDirectoryEntryLimit
+      });
+
+      if (currentProjectPathRef.current !== projectPath) {
+        return;
+      }
+
+      setLazyFileTreeNodes((current) =>
+        mergeProjectFileTreeDirectoryEntries(current, normalizedRelativePath, result.entries)
+      );
+      setLoadedFileTreeFolders((current) => addUniquePath(current, normalizedRelativePath));
+      setTruncatedFileTreeFolders((current) =>
+        result.truncated
+          ? addUniquePath(current, normalizedRelativePath)
+          : removePath(current, normalizedRelativePath)
+      );
+    } catch (error) {
+      if (currentProjectPathRef.current === projectPath) {
+        setFileTreeNotice(formatRuntimeError(settings.language, error));
+      }
+    } finally {
+      setLoadingFileTreeFolders((current) => removePath(current, normalizedRelativePath));
+    }
+  }
+
+  function toggleProjectFileTreeFolder(relativePath: string): void {
+    const normalizedRelativePath = normalizeLazyDirectoryPath(relativePath);
+    const willExpand = !expandedFileTreeFolderSet.has(normalizedRelativePath);
+
+    setExpandedFileTreeFolders((current) =>
+      current.includes(normalizedRelativePath)
+        ? current.filter((path) => path !== normalizedRelativePath)
+        : [...current, normalizedRelativePath]
+    );
+
+    if (willExpand && currentProject && !loadedFileTreeFolderSet.has(normalizedRelativePath)) {
+      void loadProjectFileTreeDirectory(currentProject.path, normalizedRelativePath);
+    }
+  }
+
+  async function loadProjectFileTreeParents(projectPath: string, relativePath: string): Promise<void> {
+    const parentPaths = getProjectFileParentPaths(relativePath);
+
+    setExpandedFileTreeFolders((current) => [
+      ...new Set([...current, ...parentPaths])
+    ]);
+
+    for (const parentPath of [".", ...parentPaths]) {
+      await loadProjectFileTreeDirectory(projectPath, parentPath);
+    }
+  }
+
   async function scanProject(projectPath: string): Promise<boolean> {
     try {
       const result = await window.forge.projects.scan(projectPath);
@@ -1115,6 +1217,8 @@ export function App(): ReactElement {
       setFormattedPreview(null);
       setMissingProjectPath(null);
       setChangePreviews([]);
+      resetLazyProjectFileTree();
+      void loadProjectFileTreeDirectory(projectPath, ".", { force: true });
       return true;
     } catch (error) {
       setProjectScanResult(null);
@@ -1124,6 +1228,7 @@ export function App(): ReactElement {
       setFormattedPreview(null);
       setChangePreviews([]);
       setGitStatus(null);
+      resetLazyProjectFileTree();
 
       if (isMissingProjectError(error)) {
         setMissingProjectPath(projectPath);
@@ -1275,9 +1380,7 @@ export function App(): ReactElement {
       return null;
     }
 
-    setExpandedFileTreeFolders((current) => [
-      ...new Set([...current, ...getProjectFileParentPaths(relativePath)])
-    ]);
+    void loadProjectFileTreeParents(currentProject.path, relativePath);
 
     const projectFilePreview = await window.forge.files.preview({
       projectRoot: currentProject.path,
@@ -3508,20 +3611,27 @@ export function App(): ReactElement {
         ) : (
           <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
             <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
-              {projectFileTree.length > 0 ? (
+              {fileTreeNotice ? (
+                <div className="mb-2 rounded-[10px] border border-[#fdecc8] bg-[#fff7ed] px-3 py-2 text-[12px] text-[#b45309]">
+                  {fileTreeNotice}
+                </div>
+              ) : null}
+              {lazyFileTreeNodes.length > 0 ? (
                 <ProjectFileTree
                   expandedFolders={expandedFileTreeFolderSet}
-                  nodes={projectFileTree}
+                  loadingFolders={loadingFileTreeFolderSet}
+                  loadingLabel={settings.language === "zh-CN" ? "姝ｅ湪鍔犺浇" : "Loading..."}
+                  nodes={lazyFileTreeNodes}
                   selectedPath={filePreview?.relativePath ?? null}
+                  truncatedFolders={truncatedFileTreeFolderSet}
+                  truncatedLabel={settings.language === "zh-CN" ? "姝ょ洰褰曠粨鏋滃凡鎴柇" : "Directory result truncated"}
                   onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
-                  onToggleFolder={(relativePath) =>
-                    setExpandedFileTreeFolders((current) =>
-                      current.includes(relativePath)
-                        ? current.filter((path) => path !== relativePath)
-                        : [...current, relativePath]
-                    )
-                  }
+                  onToggleFolder={toggleProjectFileTreeFolder}
                 />
+              ) : loadingFileTreeFolderSet.has(".") ? (
+                <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">
+                  {settings.language === "zh-CN" ? "姝ｅ湪鍔犺浇椤圭洰鏂囦欢" : "Loading project files..."}
+                </div>
               ) : (
                 <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">{t("files.pickFile")}</div>
               )}

@@ -121,6 +121,7 @@ declare global {
           maxBytes?: number;
         }) => Promise<ProjectFilePreview>;
         listDirectory: (request: {
+          includeGitIgnored?: boolean;
           projectRoot: string;
           relativePath?: string;
           limit?: number;

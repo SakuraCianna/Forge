@@ -34,6 +34,24 @@ describe("scanProjectFiles", () => {
       await rm(projectRoot, { recursive: true, force: true });
     }
   });
+
+  it("reuses unchanged file metadata from a previous index", async () => {
+    const projectRoot = await createTempProject();
+
+    try {
+      await writeFile(join(projectRoot, "README.md"), "# Project\n", "utf8");
+
+      const firstScan = await scanProjectFiles(projectRoot);
+      const secondScan = await scanProjectFiles(projectRoot, { previousIndex: firstScan });
+      const firstFile = firstScan.files.find((file) => file.relativePath === "README.md");
+      const secondFile = secondScan.files.find((file) => file.relativePath === "README.md");
+
+      expect(firstFile?.modifiedAtMs).toEqual(expect.any(Number));
+      expect(secondFile).toBe(firstFile);
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 async function createTempProject(): Promise<string> {

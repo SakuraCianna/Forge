@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { deleteProjectFile, previewProjectTextFileUpdate } from "./projectFileService";
+import { deleteProjectFile, listProjectDirectory, previewProjectTextFileUpdate } from "./projectFileService";
 
 describe("previewProjectTextFileUpdate", () => {
   it("marks missing files as create previews", async () => {
@@ -86,6 +86,34 @@ describe("deleteProjectFile", () => {
     } finally {
       await rm(projectRoot, { recursive: true, force: true });
       await rm(outsideRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("listProjectDirectory", () => {
+  it("keeps Agent directory lists gitignore-aware by default but can show ignored files for UI navigation", async () => {
+    const projectRoot = await createTempProject();
+
+    try {
+      await writeFile(join(projectRoot, ".gitignore"), "ignored.txt\n.env\n", "utf8");
+      await writeFile(join(projectRoot, "README.md"), "# Project\n", "utf8");
+      await writeFile(join(projectRoot, "ignored.txt"), "visible only for the file tree\n", "utf8");
+      await writeFile(join(projectRoot, ".env"), "SECRET=keep-local\n", "utf8");
+
+      const agentResult = await listProjectDirectory({ projectRoot });
+      const uiResult = await listProjectDirectory({ projectRoot, includeGitIgnored: true });
+
+      expect(agentResult.entries.map((entry) => entry.relativePath)).toEqual([
+        ".gitignore",
+        "README.md"
+      ]);
+      expect(uiResult.entries.map((entry) => entry.relativePath)).toEqual([
+        ".gitignore",
+        "ignored.txt",
+        "README.md"
+      ]);
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
     }
   });
 });

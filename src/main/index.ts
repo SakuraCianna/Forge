@@ -22,6 +22,7 @@ import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
+import { createProjectIndexCache } from "./projectIndexCache.js";
 import {
   deleteProjectFile,
   globProjectFiles,
@@ -150,6 +151,9 @@ void app.whenReady().then(() => {
   const openRouterCatalog = createOpenRouterModelCatalog({
     directory: app.getPath("userData")
   });
+  const projectIndexCache = createProjectIndexCache({
+    directory: join(app.getPath("userData"), "project-indexes")
+  });
 
   registerKeyVaultHandlers(keyVault, (channel, handler) => {
     ipcMain.handle(channel, handler);
@@ -179,7 +183,14 @@ void app.whenReady().then(() => {
 
   registerProjectHandlers(
     () => pickProjectDirectory(() => dialog.showOpenDialog({ properties: ["openDirectory"] })),
-    (rootPath) => scanProjectFiles(rootPath),
+    async (rootPath) => {
+      const previousIndex = await projectIndexCache.read(rootPath).catch(() => null);
+      const scanResult = await scanProjectFiles(rootPath, { previousIndex });
+
+      void projectIndexCache.write(scanResult).catch(() => undefined);
+
+      return scanResult;
+    },
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

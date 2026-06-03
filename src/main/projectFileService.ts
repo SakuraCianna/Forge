@@ -166,6 +166,7 @@ export async function previewProjectTextFileUpdate({
 
 // 列出项目内单个目录, 供 Agent inspect 目录时使用, 不读取文件内容
 export async function listProjectDirectory({
+  includeGitIgnored = false,
   projectRoot,
   relativePath = ".",
   limit
@@ -173,7 +174,7 @@ export async function listProjectDirectory({
   const resolvedProjectRoot = await realpath(projectRoot);
   const normalizedRelativePath = normalizeDirectoryRelativePath(relativePath);
   const resultLimit = normalizeOptionalResultLimit(limit, 300);
-  const ignoreMatcher = await createProjectIgnoreMatcher(resolvedProjectRoot);
+  const ignoreMatcher = includeGitIgnored ? null : await createProjectIgnoreMatcher(resolvedProjectRoot);
 
   if (normalizedRelativePath !== ".") {
     assertProjectPathNotSensitive(normalizedRelativePath);
@@ -211,7 +212,7 @@ export async function listProjectDirectory({
       continue;
     }
 
-    if (ignoreMatcher(entryRelativePath, entry.isDirectory())) {
+    if (ignoreMatcher?.(entryRelativePath, entry.isDirectory())) {
       continue;
     }
 

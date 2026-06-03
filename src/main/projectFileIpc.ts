@@ -105,6 +105,7 @@ function assertListDirectoryRequest(value: unknown): ProjectDirectoryListRequest
   }
 
   return {
+    includeGitIgnored: typeof value.includeGitIgnored === "boolean" ? value.includeGitIgnored : undefined,
     projectRoot: value.projectRoot,
     relativePath: typeof value.relativePath === "string" ? value.relativePath : undefined,
     limit: typeof value.limit === "number" ? value.limit : undefined
