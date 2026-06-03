@@ -1,0 +1,477 @@
+// 本文件说明: 为空项目脚手架计划补齐缺失工程层, 不在入口质量文件里堆叠框架细节。
+import type { AgentAction } from "@shared/agentExecutionPlan";
+import type { Language } from "@shared/modelTypes";
+
+export type ScaffoldLayer =
+  | "foundation"
+  | "backendEntry"
+  | "domainModel"
+  | "api"
+  | "runtimeConfig"
+  | "frontendConfig"
+  | "frontendEntry"
+  | "frontendPage"
+  | "verification";
+
+type ScaffoldStack = {
+  springBoot: boolean;
+  vue: boolean;
+  react: boolean;
+  vite: boolean;
+  frontend: boolean;
+  backend: boolean;
+  separated: boolean;
+};
+
+type ScaffoldCompletionCandidate = {
+  layer: ScaffoldLayer;
+  kind: "edit-file" | "run-command";
+  label: string;
+  target?: string;
+  command?: string;
+};
+
+// 空项目是 Forge 最容易显得“没工程意识”的场景: 模型可能只计划 pom.xml 或一个入口文件。
+// 这里不生成具体代码内容, 只补齐缺失的受控 edit/verify 动作, 后续仍由文件编辑器逐个生成 diff。
+export function supplementBareProjectScaffoldActions({
+  actions,
+  bareProject,
+  isCreationTask,
+  prompt
+}: {
+  actions: AgentAction[];
+  bareProject: boolean;
+  isCreationTask: boolean;
+  prompt: string;
+}): {
+  actions: AgentAction[];
+  addedActions: number;
+  missingLayers: ScaffoldLayer[];
+} {
+  if (!isCreationTask || !bareProject) {
+    return {
+      actions,
+      addedActions: 0,
+      missingLayers: []
+    };
+  }
+
+  const expectedLayers = getExpectedScaffoldLayers(prompt);
+
+  if (expectedLayers.length === 0) {
+    return {
+      actions,
+      addedActions: 0,
+      missingLayers: []
+    };
+  }
+
+  const coveredLayers = detectCoveredScaffoldLayers(actions);
+  const missingLayers = expectedLayers.filter((layer) => !coveredLayers.has(layer));
+  const completionActions = createScaffoldCompletionActions(prompt, missingLayers, actions);
+
+  if (completionActions.length === 0) {
+    return {
+      actions,
+      addedActions: 0,
+      missingLayers
+    };
+  }
+
+  return {
+    actions: [...actions, ...completionActions],
+    addedActions: completionActions.length,
+    missingLayers
+  };
+}
+
+export function formatScaffoldLayerLabels(layers: ScaffoldLayer[], language: Language): string {
+  const labels = layers.map((layer) => formatScaffoldLayerLabel(layer, language));
+
+  return labels.length > 0
+    ? labels.join(language === "zh-CN" ? "、" : ", ")
+    : language === "zh-CN"
+      ? "关键层"
+      : "key layers";
+}
+
+function getExpectedScaffoldLayers(prompt: string): ScaffoldLayer[] {
+  const stack = detectScaffoldStack(prompt);
+  const layers = new Set<ScaffoldLayer>();
+
+  if (stack.backend || stack.springBoot) {
+    layers.add("foundation");
+    layers.add("backendEntry");
+    layers.add("domainModel");
+    layers.add("api");
+    layers.add("runtimeConfig");
+    layers.add("verification");
+  }
+
+  if (stack.frontend || stack.vue || stack.react || stack.vite) {
+    layers.add("frontendConfig");
+    layers.add("frontendEntry");
+    layers.add("frontendPage");
+    layers.add("verification");
+  }
+
+  return [...layers];
+}
+
+function detectCoveredScaffoldLayers(actions: AgentAction[]): Set<ScaffoldLayer> {
+  const coveredLayers = new Set<ScaffoldLayer>();
+
+  for (const action of actions) {
+    const target = normalizeProjectPath(action.target ?? "");
+    const command = action.command?.trim() ?? "";
+    const isFrontendTarget = /(^|\/)(frontend|client|web)\//iu.test(target);
+
+    if (
+      /(^|\/)(pom\.xml|build\.gradle(?:\.kts)?|go\.mod|pyproject\.toml)$/iu.test(target) ||
+      (!isFrontendTarget && /(^|\/)package\.json$/iu.test(target))
+    ) {
+      coveredLayers.add("foundation");
+    }
+
+    if (/(^|\/)(frontend|client|web)\/(?:package\.json|vite\.config\.[jt]s)$/iu.test(target)) {
+      coveredLayers.add("frontendConfig");
+    }
+
+    if (/(^|\/)src\/main\/(?:java|kotlin)\/.*application\.(?:java|kt)$/iu.test(target)) {
+      coveredLayers.add("backendEntry");
+    }
+
+    if (/(^|\/)(entity|model|domain)\/[^/]+\.(?:java|kt|ts|js|py)$/iu.test(target)) {
+      coveredLayers.add("domainModel");
+    }
+
+    if (/(^|\/)(controller|routes?|api)\/[^/]+\.(?:java|kt|ts|js|py)$/iu.test(target)) {
+      coveredLayers.add("api");
+    }
+
+    if (/(^|\/)(application\.(?:ya?ml|properties)|\.env(?:\.example)?|config\/[^/]+)$/iu.test(target)) {
+      coveredLayers.add("runtimeConfig");
+    }
+
+    if (/(^|\/)(frontend|client|web)\/src\/main\.[jt]s$/iu.test(target)) {
+      coveredLayers.add("frontendEntry");
+    }
+
+    if (
+      /(^|\/)(frontend|client|web)\/src\/(?:App\.vue|App\.[jt]sx?|components\/[^/]+\.(?:vue|[jt]sx?))$/iu.test(
+        target
+      )
+    ) {
+      coveredLayers.add("frontendPage");
+    }
+
+    if (
+      action.kind === "run-command" &&
+      /(test|build|lint|typecheck|verify|mvn|gradle|npm|pnpm|yarn)/iu.test(command)
+    ) {
+      coveredLayers.add("verification");
+    }
+  }
+
+  return coveredLayers;
+}
+
+function createScaffoldCompletionActions(
+  prompt: string,
+  missingLayers: ScaffoldLayer[],
+  actions: AgentAction[]
+): AgentAction[] {
+  const stack = detectScaffoldStack(prompt);
+  const projectSlug = inferProjectSlug(prompt);
+  const backendRoot = stack.separated ? "backend/" : "";
+  const javaRoot = `${backendRoot}src/main/java/com/example/${projectSlug}`;
+  const frontendRoot = stack.separated || stack.backend ? "frontend/" : "";
+  const existingTargets = new Set(
+    actions.flatMap((action) => [action.target, action.command]).filter((value): value is string => Boolean(value))
+  );
+  const candidates: ScaffoldCompletionCandidate[] = [];
+
+  for (const layer of missingLayers) {
+    candidates.push(
+      ...createScaffoldLayerCandidates(layer, {
+        stack,
+        projectSlug,
+        backendRoot,
+        javaRoot,
+        frontendRoot
+      })
+    );
+  }
+
+  return candidates
+    .filter((candidate) => {
+      const key = candidate.target ?? candidate.command;
+
+      return typeof key === "string" && !existingTargets.has(key);
+    })
+    .map((candidate, index) => ({
+      id: `plan-quality-scaffold-${index + 1}`,
+      stepId: "plan-quality-scaffold",
+      kind: candidate.kind,
+      label: candidate.label,
+      status: "pending",
+      target: candidate.target,
+      command: candidate.command
+    }));
+}
+
+function createScaffoldLayerCandidates(
+  layer: ScaffoldLayer,
+  context: {
+    stack: ScaffoldStack;
+    projectSlug: string;
+    backendRoot: string;
+    javaRoot: string;
+    frontendRoot: string;
+  }
+): ScaffoldCompletionCandidate[] {
+  const { stack, projectSlug, backendRoot, javaRoot, frontendRoot } = context;
+  const entityName = inferDomainEntityName(projectSlug);
+
+  switch (layer) {
+    case "foundation":
+      return stack.springBoot
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${backendRoot}pom.xml`,
+              target: `${backendRoot}pom.xml`
+            }
+          ]
+        : [];
+    case "backendEntry":
+      return stack.springBoot
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${javaRoot}/${toPascalCase(projectSlug)}Application.java`,
+              target: `${javaRoot}/${toPascalCase(projectSlug)}Application.java`
+            }
+          ]
+        : [];
+    case "domainModel":
+      return stack.backend || stack.springBoot
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${javaRoot}/entity/${entityName}.java`,
+              target: `${javaRoot}/entity/${entityName}.java`
+            },
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${javaRoot}/repository/${entityName}Repository.java`,
+              target: `${javaRoot}/repository/${entityName}Repository.java`
+            }
+          ]
+        : [];
+    case "api":
+      return stack.backend || stack.springBoot
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${javaRoot}/controller/${entityName}Controller.java`,
+              target: `${javaRoot}/controller/${entityName}Controller.java`
+            }
+          ]
+        : [];
+    case "runtimeConfig":
+      return stack.springBoot
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${backendRoot}src/main/resources/application.yml`,
+              target: `${backendRoot}src/main/resources/application.yml`
+            }
+          ]
+        : [];
+    case "frontendConfig":
+      return stack.frontend || stack.vue || stack.react || stack.vite
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${frontendRoot}package.json`,
+              target: `${frontendRoot}package.json`
+            },
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${frontendRoot}vite.config.ts`,
+              target: `${frontendRoot}vite.config.ts`
+            },
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${frontendRoot}index.html`,
+              target: `${frontendRoot}index.html`
+            }
+          ]
+        : [];
+    case "frontendEntry":
+      return stack.frontend || stack.vue || stack.react || stack.vite
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${frontendRoot}src/main.ts`,
+              target: `${frontendRoot}src/main.ts`
+            }
+          ]
+        : [];
+    case "frontendPage":
+      return stack.frontend || stack.vue
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${frontendRoot}src/App.vue`,
+              target: `${frontendRoot}src/App.vue`
+            }
+          ]
+        : [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${frontendRoot}src/App.tsx`,
+              target: `${frontendRoot}src/App.tsx`
+            }
+          ];
+    case "verification":
+      return createVerificationCandidates(stack, backendRoot, frontendRoot);
+  }
+}
+
+function createVerificationCandidates(
+  stack: ScaffoldStack,
+  backendRoot: string,
+  frontendRoot: string
+): ScaffoldCompletionCandidate[] {
+  const candidates: ScaffoldCompletionCandidate[] = [];
+
+  if (stack.springBoot) {
+    const command = backendRoot ? `mvn -f ${backendRoot}pom.xml test` : "mvn test";
+
+    candidates.push({
+      layer: "verification",
+      kind: "run-command",
+      label: `运行命令 ${command}`,
+      command
+    });
+  }
+
+  if (stack.frontend || stack.vue || stack.react || stack.vite) {
+    const command = frontendRoot ? `npm --prefix ${frontendRoot.replace(/\/$/u, "")} run build` : "npm run build";
+
+    candidates.push({
+      layer: "verification",
+      kind: "run-command",
+      label: `运行命令 ${command}`,
+      command
+    });
+  }
+
+  return candidates;
+}
+
+function detectScaffoldStack(prompt: string): ScaffoldStack {
+  const normalizedPrompt = prompt.toLocaleLowerCase();
+  const springBoot = /spring\s*boot|springboot/u.test(normalizedPrompt);
+  const vue = /\bvue\b|vue3|vue\s*3/u.test(normalizedPrompt);
+  const react = /\breact\b/u.test(normalizedPrompt);
+  const vite = /\bvite\b/u.test(normalizedPrompt) || vue || react;
+  const frontend = /(前端|frontend|front-end|client|页面)/iu.test(prompt) || vue || react || vite;
+  const backend = /(后端|backend|back-end|server|接口|api|数据库|database)/iu.test(prompt) || springBoot;
+  const separated = /(前后端分离|frontend.*backend|backend.*frontend|client.*server|server.*client)/iu.test(prompt);
+
+  return {
+    springBoot,
+    vue,
+    react,
+    vite,
+    frontend,
+    backend,
+    separated
+  };
+}
+
+function inferProjectSlug(prompt: string): string {
+  if (/(学生|student)/iu.test(prompt)) {
+    return "studentmanager";
+  }
+
+  if (/(用户|user)/iu.test(prompt)) {
+    return "usermanager";
+  }
+
+  if (/(订单|order)/iu.test(prompt)) {
+    return "ordermanager";
+  }
+
+  return "app";
+}
+
+function inferDomainEntityName(projectSlug: string): string {
+  if (projectSlug === "studentmanager") {
+    return "Student";
+  }
+
+  if (projectSlug === "usermanager") {
+    return "User";
+  }
+
+  if (projectSlug === "ordermanager") {
+    return "Order";
+  }
+
+  return "Item";
+}
+
+function toPascalCase(value: string): string {
+  return value
+    .split(/[^a-z0-9]+/iu)
+    .filter(Boolean)
+    .map((segment) => `${segment.charAt(0).toLocaleUpperCase()}${segment.slice(1)}`)
+    .join("");
+}
+
+function formatScaffoldLayerLabel(layer: ScaffoldLayer, language: Language): string {
+  const zhLabels: Record<ScaffoldLayer, string> = {
+    foundation: "依赖/构建配置",
+    backendEntry: "后端入口",
+    domainModel: "领域模型",
+    api: "API",
+    runtimeConfig: "运行配置",
+    frontendConfig: "前端配置",
+    frontendEntry: "前端入口",
+    frontendPage: "页面组件",
+    verification: "验证命令"
+  };
+  const enLabels: Record<ScaffoldLayer, string> = {
+    foundation: "build config",
+    backendEntry: "backend entrypoint",
+    domainModel: "domain model",
+    api: "API",
+    runtimeConfig: "runtime config",
+    frontendConfig: "frontend config",
+    frontendEntry: "frontend entrypoint",
+    frontendPage: "UI page",
+    verification: "verification command"
+  };
+
+  return language === "zh-CN" ? zhLabels[layer] : enLabels[layer];
+}
+
+function normalizeProjectPath(value: string): string {
+  return value.trim().replace(/\\/gu, "/").replace(/^\.\/+/u, "").replace(/\/+/gu, "/");
+}
