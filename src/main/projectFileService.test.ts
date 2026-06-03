@@ -116,6 +116,41 @@ describe("listProjectDirectory", () => {
       await rm(projectRoot, { recursive: true, force: true });
     }
   });
+
+  it("paginates visible directory entries after sensitive path filtering", async () => {
+    const projectRoot = await createTempProject();
+
+    try {
+      await writeFile(join(projectRoot, ".env"), "SECRET=skip\n", "utf8");
+      await writeFile(join(projectRoot, "a.txt"), "A", "utf8");
+      await writeFile(join(projectRoot, "b.txt"), "B", "utf8");
+      await writeFile(join(projectRoot, "c.txt"), "C", "utf8");
+
+      const firstPage = await listProjectDirectory({
+        projectRoot,
+        limit: 1,
+        offset: 1
+      });
+      const secondPage = await listProjectDirectory({
+        projectRoot,
+        limit: 1,
+        offset: firstPage.nextOffset
+      });
+
+      expect(firstPage).toMatchObject({
+        entries: [{ relativePath: "b.txt" }],
+        nextOffset: 2,
+        truncated: true
+      });
+      expect(secondPage).toMatchObject({
+        entries: [{ relativePath: "c.txt" }],
+        truncated: false
+      });
+      expect(secondPage.nextOffset).toBeUndefined();
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 async function createTempProject(): Promise<string> {

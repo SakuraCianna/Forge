@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld("forge", {
       projectRoot: string;
       relativePath?: string;
       limit?: number;
+      offset?: number;
     }): Promise<ProjectDirectoryListResult> =>
       ipcRenderer.invoke(fileChannels.listDirectory, request),
     globFiles: (request: {

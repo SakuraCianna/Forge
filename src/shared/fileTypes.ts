@@ -45,6 +45,7 @@ export type ProjectDirectoryListRequest = {
   projectRoot: string;
   relativePath?: string;
   limit?: number;
+  offset?: number;
 };
 
 export type ProjectDirectoryEntry = {
@@ -58,6 +59,7 @@ export type ProjectDirectoryListResult = {
   relativePath: string;
   entries: ProjectDirectoryEntry[];
   truncated: boolean;
+  nextOffset?: number;
 };
 
 export type ProjectFileGlobRequest = {

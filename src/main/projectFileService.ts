@@ -169,11 +169,13 @@ export async function listProjectDirectory({
   includeGitIgnored = false,
   projectRoot,
   relativePath = ".",
-  limit
+  limit,
+  offset
 }: ProjectDirectoryListRequest): Promise<ProjectDirectoryListResult> {
   const resolvedProjectRoot = await realpath(projectRoot);
   const normalizedRelativePath = normalizeDirectoryRelativePath(relativePath);
   const resultLimit = normalizeOptionalResultLimit(limit, 300);
+  const resultOffset = normalizeOptionalResultOffset(offset);
   const ignoreMatcher = includeGitIgnored ? null : await createProjectIgnoreMatcher(resolvedProjectRoot);
 
   if (normalizedRelativePath !== ".") {
@@ -203,6 +205,7 @@ export async function listProjectDirectory({
 
   const entries: ProjectDirectoryEntry[] = [];
   let truncated = false;
+  let visibleEntryIndex = 0;
 
   for (const entry of await readSortedDirectoryEntries(resolvedDirectoryPath)) {
     const absolutePath = `${resolvedDirectoryPath}${sep}${entry.name}`;
@@ -220,10 +223,17 @@ export async function listProjectDirectory({
       continue;
     }
 
+    if (visibleEntryIndex < resultOffset) {
+      visibleEntryIndex += 1;
+      continue;
+    }
+
     if (hasReachedLimit(entries.length, resultLimit)) {
       truncated = true;
       break;
     }
+
+    visibleEntryIndex += 1;
 
     entries.push(
       entry.isDirectory()
@@ -244,7 +254,8 @@ export async function listProjectDirectory({
   return {
     relativePath: normalizedRelativePath,
     entries,
-    truncated
+    truncated,
+    nextOffset: truncated ? resultOffset + entries.length : undefined
   };
 }
 
@@ -709,6 +720,15 @@ function normalizeOptionalResultLimit(limit: number | undefined, maxLimit: numbe
   }
 
   return Math.min(maxLimit, Math.max(1, Math.round(limit)));
+}
+
+// offset 针对过滤后的可见目录项计算, 避免敏感文件和 gitignore 规则改变分页位置
+function normalizeOptionalResultOffset(offset: number | undefined): number {
+  if (typeof offset !== "number" || !Number.isFinite(offset)) {
+    return 0;
+  }
+
+  return Math.min(1_000_000, Math.max(0, Math.round(offset)));
 }
 
 // null 表示没有人为数量上限, 其它数字按调用方配置截断

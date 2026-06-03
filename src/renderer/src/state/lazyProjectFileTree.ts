@@ -24,13 +24,14 @@ export function createProjectFileTreeNodesFromDirectoryEntries(
 export function mergeProjectFileTreeDirectoryEntries(
   nodes: ProjectFileTreeNode[],
   directoryPath: string,
-  entries: ProjectDirectoryEntry[]
+  entries: ProjectDirectoryEntry[],
+  options: { append?: boolean } = {}
 ): ProjectFileTreeNode[] {
   const normalizedDirectoryPath = normalizeLazyDirectoryPath(directoryPath);
   const nextChildren = createProjectFileTreeNodesFromDirectoryEntries(entries);
 
   if (normalizedDirectoryPath === ".") {
-    return nextChildren;
+    return options.append ? appendProjectFileTreeNodes(nodes, nextChildren) : nextChildren;
   }
 
   return nodes.map((node) => {
@@ -41,7 +42,9 @@ export function mergeProjectFileTreeDirectoryEntries(
     if (node.relativePath === normalizedDirectoryPath) {
       return {
         ...node,
-        children: nextChildren
+        children: options.append
+          ? appendProjectFileTreeNodes(node.children, nextChildren)
+          : nextChildren
       };
     }
 
@@ -54,10 +57,41 @@ export function mergeProjectFileTreeDirectoryEntries(
       children: mergeProjectFileTreeDirectoryEntries(
         node.children,
         normalizedDirectoryPath,
-        entries
+        entries,
+        options
       )
     };
   });
+}
+
+// 分页追加时只补新节点, 已经加载过的目录节点保留 children, 避免折叠/展开状态丢失
+function appendProjectFileTreeNodes(
+  currentNodes: ProjectFileTreeNode[],
+  nextNodes: ProjectFileTreeNode[]
+): ProjectFileTreeNode[] {
+  const nextByPath = new Map(nextNodes.map((node) => [node.relativePath, node]));
+  const existingPaths = new Set(currentNodes.map((node) => node.relativePath));
+  const mergedNodes = currentNodes.map((currentNode) => {
+    const nextNode = nextByPath.get(currentNode.relativePath);
+
+    if (!nextNode) {
+      return currentNode;
+    }
+
+    if (currentNode.kind === "directory" && nextNode.kind === "directory") {
+      return {
+        ...nextNode,
+        children: currentNode.children
+      };
+    }
+
+    return nextNode;
+  });
+
+  return [
+    ...mergedNodes,
+    ...nextNodes.filter((node) => !existingPaths.has(node.relativePath))
+  ];
 }
 
 export function normalizeLazyDirectoryPath(relativePath: string): string {

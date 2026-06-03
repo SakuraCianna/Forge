@@ -7,9 +7,12 @@ import { ProjectFolderIcon } from "./ProjectFolderIcon";
 
 type ProjectFileTreeProps = {
   expandedFolders: ReadonlySet<string>;
+  hasMoreFolders?: ReadonlySet<string>;
   loadingFolders?: ReadonlySet<string>;
+  loadMoreLabel?: string;
   loadingLabel?: string;
   nodes: ProjectFileTreeNode[];
+  onLoadMoreFolder?: (relativePath: string) => void;
   onPreviewFile: (relativePath: string) => void;
   onToggleFolder: (relativePath: string) => void;
   selectedPath: string | null;
@@ -19,9 +22,12 @@ type ProjectFileTreeProps = {
 
 export function ProjectFileTree({
   expandedFolders,
+  hasMoreFolders = new Set(),
   loadingFolders = new Set(),
+  loadMoreLabel = "Load more",
   loadingLabel = "Loading...",
   nodes,
+  onLoadMoreFolder,
   onPreviewFile,
   onToggleFolder,
   selectedPath,
@@ -38,15 +44,29 @@ export function ProjectFileTree({
       if (node.kind === "directory") {
         const expanded = expandedFolders.has(node.relativePath);
         const directoryChildren = expanded ? renderProjectFileTreeNodes(node.children, depth + 1) : [];
+        const hasMore = hasMoreFolders.has(node.relativePath);
+        const loading = loadingFolders.has(node.relativePath);
         const statusRows =
-          expanded && (loadingFolders.has(node.relativePath) || truncatedFolders.has(node.relativePath))
+          expanded && (loading || hasMore || truncatedFolders.has(node.relativePath))
             ? [
                 <div
                   key={`${node.relativePath}:status`}
                   className="truncate py-1 pr-2 text-[11px] text-[#8e8ea0]"
                   style={{ paddingLeft: 8 + (depth + 1) * 14 + 28 }}
                 >
-                  {loadingFolders.has(node.relativePath) ? loadingLabel : truncatedLabel}
+                  {loading ? (
+                    loadingLabel
+                  ) : hasMore && onLoadMoreFolder ? (
+                    <button
+                      type="button"
+                      className="rounded-[8px] px-1.5 py-0.5 text-left text-[#2563eb] hover:bg-[#eff6ff]"
+                      onClick={() => onLoadMoreFolder(node.relativePath)}
+                    >
+                      {loadMoreLabel}
+                    </button>
+                  ) : (
+                    truncatedLabel
+                  )}
                 </div>
               ]
             : [];

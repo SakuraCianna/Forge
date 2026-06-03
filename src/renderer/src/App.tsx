@@ -291,6 +291,7 @@ export function App(): ReactElement {
   const [loadedFileTreeFolders, setLoadedFileTreeFolders] = useState<string[]>([]);
   const [loadingFileTreeFolders, setLoadingFileTreeFolders] = useState<string[]>([]);
   const [truncatedFileTreeFolders, setTruncatedFileTreeFolders] = useState<string[]>([]);
+  const [fileTreeDirectoryNextOffsets, setFileTreeDirectoryNextOffsets] = useState<Record<string, number>>({});
   const [fileTreeNotice, setFileTreeNotice] = useState<string | null>(null);
   const [fileFormatterMode, setFileFormatterMode] = useState<CodeFormatterMode>("raw");
   const [formattedPreview, setFormattedPreview] = useState<CodeFormatResult | null>(null);
@@ -415,6 +416,10 @@ export function App(): ReactElement {
   const truncatedFileTreeFolderSet = useMemo(
     () => new Set(truncatedFileTreeFolders),
     [truncatedFileTreeFolders]
+  );
+  const hasMoreFileTreeFolderSet = useMemo(
+    () => new Set(Object.keys(fileTreeDirectoryNextOffsets)),
+    [fileTreeDirectoryNextOffsets]
   );
   const heroComposerPlaceholder = createHeroComposerPlaceholder(
     heroSuggestionInput,
@@ -804,6 +809,7 @@ export function App(): ReactElement {
     setPreviewFile(null);
     setFilePreview(null);
     setExpandedFileTreeFolders([]);
+    resetLazyProjectFileTree();
     setFileFormatterMode("raw");
     setFormattedPreview(null);
     setMissingProjectPath(null);
@@ -1129,21 +1135,28 @@ export function App(): ReactElement {
     setLoadedFileTreeFolders([]);
     setLoadingFileTreeFolders([]);
     setTruncatedFileTreeFolders([]);
+    setFileTreeDirectoryNextOffsets({});
     setFileTreeNotice(null);
   }
 
   async function loadProjectFileTreeDirectory(
     projectPath: string,
     relativePath = ".",
-    options: { force?: boolean } = {}
+    options: { append?: boolean; force?: boolean } = {}
   ): Promise<void> {
     const normalizedRelativePath = normalizeLazyDirectoryPath(relativePath);
+    const nextOffset = fileTreeDirectoryNextOffsets[normalizedRelativePath];
 
     if (
-      !options.force &&
-      (loadedFileTreeFolderSet.has(normalizedRelativePath) ||
-        loadingFileTreeFolderSet.has(normalizedRelativePath))
+      loadingFileTreeFolderSet.has(normalizedRelativePath) ||
+      (!options.force &&
+        !options.append &&
+        loadedFileTreeFolderSet.has(normalizedRelativePath))
     ) {
+      return;
+    }
+
+    if (options.append && typeof nextOffset !== "number") {
       return;
     }
 
@@ -1155,7 +1168,8 @@ export function App(): ReactElement {
         includeGitIgnored: true,
         projectRoot: projectPath,
         relativePath: normalizedRelativePath,
-        limit: fileTreeDirectoryEntryLimit
+        limit: fileTreeDirectoryEntryLimit,
+        offset: options.append ? nextOffset : 0
       });
 
       if (currentProjectPathRef.current !== projectPath) {
@@ -1163,7 +1177,9 @@ export function App(): ReactElement {
       }
 
       setLazyFileTreeNodes((current) =>
-        mergeProjectFileTreeDirectoryEntries(current, normalizedRelativePath, result.entries)
+        mergeProjectFileTreeDirectoryEntries(current, normalizedRelativePath, result.entries, {
+          append: options.append
+        })
       );
       setLoadedFileTreeFolders((current) => addUniquePath(current, normalizedRelativePath));
       setTruncatedFileTreeFolders((current) =>
@@ -1171,6 +1187,17 @@ export function App(): ReactElement {
           ? addUniquePath(current, normalizedRelativePath)
           : removePath(current, normalizedRelativePath)
       );
+      setFileTreeDirectoryNextOffsets((current) => {
+        const updatedOffsets = { ...current };
+
+        if (typeof result.nextOffset === "number") {
+          updatedOffsets[normalizedRelativePath] = result.nextOffset;
+        } else {
+          delete updatedOffsets[normalizedRelativePath];
+        }
+
+        return updatedOffsets;
+      });
     } catch (error) {
       if (currentProjectPathRef.current === projectPath) {
         setFileTreeNotice(formatRuntimeError(settings.language, error));
@@ -1193,6 +1220,14 @@ export function App(): ReactElement {
     if (willExpand && currentProject && !loadedFileTreeFolderSet.has(normalizedRelativePath)) {
       void loadProjectFileTreeDirectory(currentProject.path, normalizedRelativePath);
     }
+  }
+
+  function loadMoreProjectFileTreeDirectory(relativePath: string): void {
+    if (!currentProject) {
+      return;
+    }
+
+    void loadProjectFileTreeDirectory(currentProject.path, relativePath, { append: true });
   }
 
   async function loadProjectFileTreeParents(projectPath: string, relativePath: string): Promise<void> {
@@ -3617,20 +3652,41 @@ export function App(): ReactElement {
                 </div>
               ) : null}
               {lazyFileTreeNodes.length > 0 ? (
-                <ProjectFileTree
-                  expandedFolders={expandedFileTreeFolderSet}
-                  loadingFolders={loadingFileTreeFolderSet}
-                  loadingLabel={settings.language === "zh-CN" ? "姝ｅ湪鍔犺浇" : "Loading..."}
-                  nodes={lazyFileTreeNodes}
-                  selectedPath={filePreview?.relativePath ?? null}
-                  truncatedFolders={truncatedFileTreeFolderSet}
-                  truncatedLabel={settings.language === "zh-CN" ? "姝ょ洰褰曠粨鏋滃凡鎴柇" : "Directory result truncated"}
-                  onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
-                  onToggleFolder={toggleProjectFileTreeFolder}
-                />
+                <>
+                  <ProjectFileTree
+                    expandedFolders={expandedFileTreeFolderSet}
+                    hasMoreFolders={hasMoreFileTreeFolderSet}
+                    loadingFolders={loadingFileTreeFolderSet}
+                    loadingLabel={settings.language === "zh-CN" ? "正在加载" : "Loading..."}
+                    loadMoreLabel={settings.language === "zh-CN" ? "加载更多" : "Load more"}
+                    nodes={lazyFileTreeNodes}
+                    selectedPath={filePreview?.relativePath ?? null}
+                    truncatedFolders={truncatedFileTreeFolderSet}
+                    truncatedLabel={settings.language === "zh-CN" ? "此目录结果已截断" : "Directory result truncated"}
+                    onLoadMoreFolder={loadMoreProjectFileTreeDirectory}
+                    onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
+                    onToggleFolder={toggleProjectFileTreeFolder}
+                  />
+                  {hasMoreFileTreeFolderSet.has(".") ? (
+                    <button
+                      type="button"
+                      disabled={loadingFileTreeFolderSet.has(".")}
+                      className="mt-2 w-full rounded-[10px] px-3 py-2 text-left text-[12px] text-[#2563eb] hover:bg-[#eff6ff] disabled:text-[#8e8ea0]"
+                      onClick={() => loadMoreProjectFileTreeDirectory(".")}
+                    >
+                      {loadingFileTreeFolderSet.has(".")
+                        ? settings.language === "zh-CN"
+                          ? "正在加载"
+                          : "Loading..."
+                        : settings.language === "zh-CN"
+                          ? "加载更多"
+                          : "Load more"}
+                    </button>
+                  ) : null}
+                </>
               ) : loadingFileTreeFolderSet.has(".") ? (
                 <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">
-                  {settings.language === "zh-CN" ? "姝ｅ湪鍔犺浇椤圭洰鏂囦欢" : "Loading project files..."}
+                  {settings.language === "zh-CN" ? "正在加载项目文件" : "Loading project files..."}
                 </div>
               ) : (
                 <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">{t("files.pickFile")}</div>
