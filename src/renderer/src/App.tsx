@@ -42,7 +42,7 @@ import {
 } from "@/agent/autoFailureRecovery";
 import {
   appendAgentFailureFixPlanStartEvent,
-  prepareAgentFailureFixPlan,
+  resolveAgentFailureFixPlanStart,
   type FailureFixPlanOptions
 } from "@/agent/agentFailureRecoveryPlan";
 import {
@@ -2160,61 +2160,49 @@ export function App(): ReactElement {
     commandResultOverride: CommandRunResult | null = null,
     options: FailureFixPlanOptions = { source: "manual" }
   ): Promise<void> {
-    const thread = selectThreadById(threads, threadId);
-
-    if (!thread) {
-      return;
-    }
-
-    if (!currentProject || !projectScanResult) {
-      setTaskNotice(t("projects.required"));
-      appendThreadError(
-        threadId,
-        settings.language === "zh-CN"
-          ? "需要先打开并索引项目, 才能根据失败动作生成修复计划"
-          : "Open and scan a project before generating a fix plan for a failed action."
-      );
-      return;
-    }
-
-    const model = settings.models.find((candidate) => candidate.id === thread.modelId);
-    const provider = model
-      ? settings.providers.find((candidate) => candidate.id === model.providerId)
-      : null;
-
-    if (!model || !provider) {
-      appendThreadError(
-        threadId,
-        settings.language === "zh-CN"
-          ? "未找到当前模型或提供商配置"
-          : "Current model or provider configuration was not found."
-      );
-      return;
-    }
-
-    const preparedPlan = prepareAgentFailureFixPlan({
-      thread,
+    const startDecision = resolveAgentFailureFixPlanStart({
+      threads,
+      threadId,
       action,
       language: settings.language,
+      models: settings.models,
+      providers: settings.providers,
+      projectScan: currentProject ? projectScanResult : null,
       commandResultOverride,
       options
     });
+
+    if (startDecision.kind === "missing-thread") {
+      return;
+    }
+
+    if (startDecision.kind === "missing-project") {
+      setTaskNotice(t(startDecision.noticeKey));
+      appendThreadError(threadId, startDecision.errorMessage);
+      return;
+    }
+
+    if (startDecision.kind === "missing-model-provider") {
+      appendThreadError(threadId, startDecision.errorMessage);
+      return;
+    }
+
     setTaskNotice(null);
     setThreads((current) =>
       appendAgentFailureFixPlanStartEvent(current, {
         threadId,
-        startEvent: preparedPlan.startEvent
+        startEvent: startDecision.preparedPlan.startEvent
       })
     );
 
     await generateThreadPlan({
       threadId,
-      taskPrompt: preparedPlan.taskPrompt,
-      model,
-      provider,
-      attachments: resolveVisionAttachments(model, thread.attachments),
-      attachmentContexts: thread.attachmentContexts,
-      projectScan: projectScanResult
+      taskPrompt: startDecision.preparedPlan.taskPrompt,
+      model: startDecision.model,
+      provider: startDecision.provider,
+      attachments: resolveVisionAttachments(startDecision.model, startDecision.thread.attachments),
+      attachmentContexts: startDecision.thread.attachmentContexts,
+      projectScan: startDecision.projectScan
     });
   }
 
