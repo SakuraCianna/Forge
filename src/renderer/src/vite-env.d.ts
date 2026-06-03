@@ -121,9 +121,11 @@ declare global {
           maxBytes?: number;
         }) => Promise<ProjectFilePreview>;
         listDirectory: (request: {
+          includeGitIgnored?: boolean;
           projectRoot: string;
           relativePath?: string;
           limit?: number;
+          offset?: number;
         }) => Promise<ProjectDirectoryListResult>;
         globFiles: (request: {
           projectRoot: string;

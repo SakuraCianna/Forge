@@ -7,10 +7,12 @@ export function createContinuationPlanTaskPrompt(thread: TaskThread): string {
   const actionQueueContext = formatActionQueueContext(thread.agentActions ?? []);
   const controlledToolContext = formatControlledToolResultContext(thread.events);
   const recentExecutionContext = formatRecentExecutionContext(thread.events);
+  const runtimePolicyContext = formatRuntimePolicyContext(thread);
 
   return [
     `Original task: ${thread.prompt}`,
     `Current thread status: ${thread.status}`,
+    runtimePolicyContext,
     actionQueueContext ? `Action queue:\n${actionQueueContext}` : null,
     controlledToolContext ? `Prior controlled tool results:\n${controlledToolContext}` : null,
     recentExecutionContext ? `Recent execution context:\n${recentExecutionContext}` : null,
@@ -21,10 +23,28 @@ export function createContinuationPlanTaskPrompt(thread: TaskThread): string {
     "Prefer controlled read tools before edits: read files, list directories, glob files, search text, and inspect Git status instead of shelling out for those tasks.",
     'Return a JSON object with a "steps" array when possible. Each step must include "kind", "description", and optional "target".',
     'Allowed step kinds are "inspect", "edit", "verify", "commit", and "other".',
-    "Keep the plan safe: stop before manual review, risky commands, and commits."
+    "Continue with executable inspect, edit, verify, and commit steps instead of adding vague manual review steps.",
+    thread.agentProfile?.permissionMode === "full"
+      ? "This thread is running with full access: do not add manual review gates unless a real external blocker prevents automation."
+      : "Keep the plan safe: stop before risky commands and commits when normal approval is required."
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function formatRuntimePolicyContext(thread: TaskThread): string {
+  const profile = thread.agentProfile;
+
+  if (!profile) {
+    return "Runtime policy: default controlled agent permissions";
+  }
+
+  return [
+    `Runtime policy: permissionMode=${profile.permissionMode}`,
+    `tools=${profile.enabledTools.join(",") || "none"}`,
+    `verification=${profile.verificationPolicy}`,
+    `failureRecovery=${profile.failureRecoveryPolicy}`
+  ].join(", ");
 }
 
 // 压缩动作队列, 让模型看到哪些步骤已经完成, 跳过, 失败或仍在等待

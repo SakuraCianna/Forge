@@ -16,7 +16,7 @@ git status --short
 npm run release:check
 ```
 
-该命令会依次运行 ESLint, Vitest 和 Electron/Vite 构建。
+该命令会依次运行 ESLint 和 Electron/Vite 构建。
 
 ## 生成 Windows 安装包
 

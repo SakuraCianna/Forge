@@ -22,6 +22,7 @@ import {
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { ProjectFileIcon } from "@/components/ProjectFileIcon";
 import { ProjectFileTree } from "@/components/ProjectFileTree";
+import { SourceDiffPreview } from "@/components/SourceDiffPreview";
 import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import {
@@ -131,9 +132,12 @@ import {
 import { useAgentRunState } from "@/state/agentRunState";
 import { useComposerSignals } from "@/state/composerSignals";
 import {
-  buildProjectFileTree,
-  getProjectFileParentPaths
-} from "@/state/projectFileTree";
+  addUniquePath,
+  mergeProjectFileTreeDirectoryEntries,
+  normalizeLazyDirectoryPath,
+  removePath
+} from "@/state/lazyProjectFileTree";
+import { getProjectFileParentPaths, type ProjectFileTreeNode } from "@/state/projectFileTree";
 import {
   addRecentProject,
   createProjectFromPath,
@@ -157,6 +161,7 @@ import {
   cancelThread,
   completeNextPendingAgentAction,
   createCommandApprovalEvent,
+  deleteThread,
   restoreThread,
   toggleThreadPinned,
   updateThreadAgentActionFromFileChangePreview,
@@ -235,6 +240,7 @@ type FailureFixPlanOptions = Pick<
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
+const fileTreeDirectoryEntryLimit = 2000;
 
 function selectInitialProjectFromPreferences(
   projects: ForgeProject[],
@@ -283,6 +289,12 @@ export function App(): ReactElement {
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
   const [filePreview, setFilePreview] = useState<ProjectFilePreview | null>(null);
   const [expandedFileTreeFolders, setExpandedFileTreeFolders] = useState<string[]>([]);
+  const [lazyFileTreeNodes, setLazyFileTreeNodes] = useState<ProjectFileTreeNode[]>([]);
+  const [loadedFileTreeFolders, setLoadedFileTreeFolders] = useState<string[]>([]);
+  const [loadingFileTreeFolders, setLoadingFileTreeFolders] = useState<string[]>([]);
+  const [truncatedFileTreeFolders, setTruncatedFileTreeFolders] = useState<string[]>([]);
+  const [fileTreeDirectoryNextOffsets, setFileTreeDirectoryNextOffsets] = useState<Record<string, number>>({});
+  const [fileTreeNotice, setFileTreeNotice] = useState<string | null>(null);
   const [fileFormatterMode, setFileFormatterMode] = useState<CodeFormatterMode>("raw");
   const [formattedPreview, setFormattedPreview] = useState<CodeFormatResult | null>(null);
   const [missingProjectPath, setMissingProjectPath] = useState<string | null>(null);
@@ -367,12 +379,14 @@ export function App(): ReactElement {
   const activeAutoFailureFixKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixAttemptedKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
+  const currentProjectPathRef = useRef<string | null>(currentProject?.path ?? null);
   const {
     clearAgentToolResults,
     getRecentAgentToolResults,
     rememberAgentToolResult
   } = useAgentToolResults();
   threadsRef.current = threads;
+  currentProjectPathRef.current = currentProject?.path ?? null;
   const currentProjectMissing =
     Boolean(currentProject) && missingProjectPath === currentProject?.path;
   const heroSuggestionInput = {
@@ -389,19 +403,31 @@ export function App(): ReactElement {
   const activeHeroPrompts = createHeroPromptSuggestions(heroSuggestionInput);
   const activeHeroPrompt =
     activeHeroPrompts[heroPromptIndex % activeHeroPrompts.length] ?? activeHeroPrompts[0];
-  const projectFileTree = useMemo(
-    () => buildProjectFileTree(projectScanResult?.files ?? []),
-    [projectScanResult?.files]
-  );
   const expandedFileTreeFolderSet = useMemo(
     () => new Set(expandedFileTreeFolders),
     [expandedFileTreeFolders]
+  );
+  const loadedFileTreeFolderSet = useMemo(
+    () => new Set(loadedFileTreeFolders),
+    [loadedFileTreeFolders]
+  );
+  const loadingFileTreeFolderSet = useMemo(
+    () => new Set(loadingFileTreeFolders),
+    [loadingFileTreeFolders]
+  );
+  const truncatedFileTreeFolderSet = useMemo(
+    () => new Set(truncatedFileTreeFolders),
+    [truncatedFileTreeFolders]
+  );
+  const hasMoreFileTreeFolderSet = useMemo(
+    () => new Set(Object.keys(fileTreeDirectoryNextOffsets)),
+    [fileTreeDirectoryNextOffsets]
   );
   const heroComposerPlaceholder = createHeroComposerPlaceholder(
     heroSuggestionInput,
     t("composer.heroPlaceholder")
   );
-  const activeAgentProfileContext = applyGeneralPermissionModeToAgentProfile(
+  const activeAgentProfileContext = applyGeneralPreferencesToAgentProfile(
     getActiveAgentProfileContext(agentProfiles, settings.language),
     generalPreferences
   );
@@ -785,6 +811,7 @@ export function App(): ReactElement {
     setPreviewFile(null);
     setFilePreview(null);
     setExpandedFileTreeFolders([]);
+    resetLazyProjectFileTree();
     setFileFormatterMode("raw");
     setFormattedPreview(null);
     setMissingProjectPath(null);
@@ -965,6 +992,7 @@ export function App(): ReactElement {
 
     const project = createProjectFromPath(projectPath);
     setMissingProjectPath(null);
+    currentProjectPathRef.current = project.path;
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, project));
     setActiveView("workspace");
@@ -979,6 +1007,7 @@ export function App(): ReactElement {
     }
 
     setMissingProjectPath(null);
+    currentProjectPathRef.current = project.path;
     setCurrentProject(project);
     setRecentProjects((current) => addRecentProject(current, { ...project, openedAt: new Date().toISOString() }));
     setSelectedThreadId(
@@ -993,6 +1022,7 @@ export function App(): ReactElement {
 
     if (currentProject?.path === projectPath) {
       setMissingProjectPath(null);
+      currentProjectPathRef.current = null;
       setCurrentProject(null);
     }
   }
@@ -1095,12 +1125,125 @@ export function App(): ReactElement {
       return;
     }
 
+    currentProjectPathRef.current = recentProject.path;
     setCurrentProject(recentProject);
     setMissingProjectPath(null);
     setActiveView("workspace");
   }
 
   // 读取项目文件索引, 供文件页和 Agent 上下文共用
+  function resetLazyProjectFileTree(): void {
+    setLazyFileTreeNodes([]);
+    setLoadedFileTreeFolders([]);
+    setLoadingFileTreeFolders([]);
+    setTruncatedFileTreeFolders([]);
+    setFileTreeDirectoryNextOffsets({});
+    setFileTreeNotice(null);
+  }
+
+  async function loadProjectFileTreeDirectory(
+    projectPath: string,
+    relativePath = ".",
+    options: { append?: boolean; force?: boolean } = {}
+  ): Promise<void> {
+    const normalizedRelativePath = normalizeLazyDirectoryPath(relativePath);
+    const nextOffset = fileTreeDirectoryNextOffsets[normalizedRelativePath];
+
+    if (
+      loadingFileTreeFolderSet.has(normalizedRelativePath) ||
+      (!options.force &&
+        !options.append &&
+        loadedFileTreeFolderSet.has(normalizedRelativePath))
+    ) {
+      return;
+    }
+
+    if (options.append && typeof nextOffset !== "number") {
+      return;
+    }
+
+    setLoadingFileTreeFolders((current) => addUniquePath(current, normalizedRelativePath));
+    setFileTreeNotice(null);
+
+    try {
+      const result = await window.forge.files.listDirectory({
+        includeGitIgnored: true,
+        projectRoot: projectPath,
+        relativePath: normalizedRelativePath,
+        limit: fileTreeDirectoryEntryLimit,
+        offset: options.append ? nextOffset : 0
+      });
+
+      if (currentProjectPathRef.current !== projectPath) {
+        return;
+      }
+
+      setLazyFileTreeNodes((current) =>
+        mergeProjectFileTreeDirectoryEntries(current, normalizedRelativePath, result.entries, {
+          append: options.append
+        })
+      );
+      setLoadedFileTreeFolders((current) => addUniquePath(current, normalizedRelativePath));
+      setTruncatedFileTreeFolders((current) =>
+        result.truncated
+          ? addUniquePath(current, normalizedRelativePath)
+          : removePath(current, normalizedRelativePath)
+      );
+      setFileTreeDirectoryNextOffsets((current) => {
+        const updatedOffsets = { ...current };
+
+        if (typeof result.nextOffset === "number") {
+          updatedOffsets[normalizedRelativePath] = result.nextOffset;
+        } else {
+          delete updatedOffsets[normalizedRelativePath];
+        }
+
+        return updatedOffsets;
+      });
+    } catch (error) {
+      if (currentProjectPathRef.current === projectPath) {
+        setFileTreeNotice(formatRuntimeError(settings.language, error));
+      }
+    } finally {
+      setLoadingFileTreeFolders((current) => removePath(current, normalizedRelativePath));
+    }
+  }
+
+  function toggleProjectFileTreeFolder(relativePath: string): void {
+    const normalizedRelativePath = normalizeLazyDirectoryPath(relativePath);
+    const willExpand = !expandedFileTreeFolderSet.has(normalizedRelativePath);
+
+    setExpandedFileTreeFolders((current) =>
+      current.includes(normalizedRelativePath)
+        ? current.filter((path) => path !== normalizedRelativePath)
+        : [...current, normalizedRelativePath]
+    );
+
+    if (willExpand && currentProject && !loadedFileTreeFolderSet.has(normalizedRelativePath)) {
+      void loadProjectFileTreeDirectory(currentProject.path, normalizedRelativePath);
+    }
+  }
+
+  function loadMoreProjectFileTreeDirectory(relativePath: string): void {
+    if (!currentProject) {
+      return;
+    }
+
+    void loadProjectFileTreeDirectory(currentProject.path, relativePath, { append: true });
+  }
+
+  async function loadProjectFileTreeParents(projectPath: string, relativePath: string): Promise<void> {
+    const parentPaths = getProjectFileParentPaths(relativePath);
+
+    setExpandedFileTreeFolders((current) => [
+      ...new Set([...current, ...parentPaths])
+    ]);
+
+    for (const parentPath of [".", ...parentPaths]) {
+      await loadProjectFileTreeDirectory(projectPath, parentPath);
+    }
+  }
+
   async function scanProject(projectPath: string): Promise<boolean> {
     try {
       const result = await window.forge.projects.scan(projectPath);
@@ -1111,6 +1254,8 @@ export function App(): ReactElement {
       setFormattedPreview(null);
       setMissingProjectPath(null);
       setChangePreviews([]);
+      resetLazyProjectFileTree();
+      void loadProjectFileTreeDirectory(projectPath, ".", { force: true });
       return true;
     } catch (error) {
       setProjectScanResult(null);
@@ -1120,6 +1265,7 @@ export function App(): ReactElement {
       setFormattedPreview(null);
       setChangePreviews([]);
       setGitStatus(null);
+      resetLazyProjectFileTree();
 
       if (isMissingProjectError(error)) {
         setMissingProjectPath(projectPath);
@@ -1271,9 +1417,16 @@ export function App(): ReactElement {
       return null;
     }
 
-    setExpandedFileTreeFolders((current) => [
-      ...new Set([...current, ...getProjectFileParentPaths(relativePath)])
-    ]);
+    if (currentProjectMissing) {
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? "当前项目路径不存在, 请重新选择项目后再预览文件。"
+          : "The current project path no longer exists. Pick the project again before previewing files."
+      );
+      return null;
+    }
+
+    void loadProjectFileTreeParents(currentProject.path, relativePath);
 
     const projectFilePreview = await window.forge.files.preview({
       projectRoot: currentProject.path,
@@ -2924,6 +3077,18 @@ export function App(): ReactElement {
       return "failed";
     }
 
+    if (currentProjectMissing) {
+      const message =
+        settings.language === "zh-CN"
+          ? "当前项目路径不存在, 请重新选择项目后再继续 Agent 任务。"
+          : "The current project path no longer exists. Pick the project again before continuing the Agent task.";
+
+      setTaskNotice(message);
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(threadId, message);
+      return "failed";
+    }
+
     try {
       const result = await window.forge.files.listDirectory({
         projectRoot: currentProject.path,
@@ -3068,20 +3233,16 @@ export function App(): ReactElement {
     }
 
     try {
-      let file: ProjectTextFile;
-
-      try {
-        file = await window.forge.files.readText({
-          projectRoot: currentProject.path,
-          relativePath
-        });
-      } catch (error) {
-        if (!isMissingProjectFileError(error)) {
-          throw error;
-        }
-
-        file = createEmptyProjectTextFile(relativePath);
-      }
+      const currentSnapshot = await window.forge.files.previewTextUpdate({
+        projectRoot: currentProject.path,
+        relativePath,
+        nextContent: ""
+      });
+      const file: ProjectTextFile = {
+        relativePath: currentSnapshot.relativePath,
+        content: currentSnapshot.currentContent,
+        size: currentSnapshot.currentContent.length
+      };
 
       setPreviewFile(file);
       setFilePreview(createTextFilePreview(file));
@@ -3504,20 +3665,48 @@ export function App(): ReactElement {
         ) : (
           <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
             <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
-              {projectFileTree.length > 0 ? (
-                <ProjectFileTree
-                  expandedFolders={expandedFileTreeFolderSet}
-                  nodes={projectFileTree}
-                  selectedPath={filePreview?.relativePath ?? null}
-                  onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
-                  onToggleFolder={(relativePath) =>
-                    setExpandedFileTreeFolders((current) =>
-                      current.includes(relativePath)
-                        ? current.filter((path) => path !== relativePath)
-                        : [...current, relativePath]
-                    )
-                  }
-                />
+              {fileTreeNotice ? (
+                <div className="mb-2 rounded-[10px] border border-[#fdecc8] bg-[#fff7ed] px-3 py-2 text-[12px] text-[#b45309]">
+                  {fileTreeNotice}
+                </div>
+              ) : null}
+              {lazyFileTreeNodes.length > 0 ? (
+                <>
+                  <ProjectFileTree
+                    expandedFolders={expandedFileTreeFolderSet}
+                    hasMoreFolders={hasMoreFileTreeFolderSet}
+                    loadingFolders={loadingFileTreeFolderSet}
+                    loadingLabel={settings.language === "zh-CN" ? "正在加载" : "Loading..."}
+                    loadMoreLabel={settings.language === "zh-CN" ? "加载更多" : "Load more"}
+                    nodes={lazyFileTreeNodes}
+                    selectedPath={filePreview?.relativePath ?? null}
+                    truncatedFolders={truncatedFileTreeFolderSet}
+                    truncatedLabel={settings.language === "zh-CN" ? "此目录结果已截断" : "Directory result truncated"}
+                    onLoadMoreFolder={loadMoreProjectFileTreeDirectory}
+                    onPreviewFile={(relativePath) => void previewProjectFile(relativePath)}
+                    onToggleFolder={toggleProjectFileTreeFolder}
+                  />
+                  {hasMoreFileTreeFolderSet.has(".") ? (
+                    <button
+                      type="button"
+                      disabled={loadingFileTreeFolderSet.has(".")}
+                      className="mt-2 w-full rounded-[10px] px-3 py-2 text-left text-[12px] text-[#2563eb] hover:bg-[#eff6ff] disabled:text-[#8e8ea0]"
+                      onClick={() => loadMoreProjectFileTreeDirectory(".")}
+                    >
+                      {loadingFileTreeFolderSet.has(".")
+                        ? settings.language === "zh-CN"
+                          ? "正在加载"
+                          : "Loading..."
+                        : settings.language === "zh-CN"
+                          ? "加载更多"
+                          : "Load more"}
+                    </button>
+                  ) : null}
+                </>
+              ) : loadingFileTreeFolderSet.has(".") ? (
+                <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">
+                  {settings.language === "zh-CN" ? "正在加载项目文件" : "Loading project files..."}
+                </div>
               ) : (
                 <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">{t("files.pickFile")}</div>
               )}
@@ -3817,9 +4006,7 @@ export function App(): ReactElement {
                 </p>
               </div>
               {selectedChange && selectedChange.diff.trim() ? (
-                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-6 text-[#202123]">
-                  {renderDiffPreview(selectedChange.diff)}
-                </pre>
+                <SourceDiffPreview diff={selectedChange.diff} />
               ) : (
                 <div className="flex h-[calc(100%-58px)] min-h-[520px] items-center justify-center px-4 text-center text-sm text-[#6e6e80]">
                   {t("source.noDiffPreview")}
@@ -3890,6 +4077,12 @@ export function App(): ReactElement {
             onUpdateProviderLabel={(providerId, label) =>
               setSettings((current) => updateProviderLabel(current, providerId, label))
             }
+            onDeleteArchivedThread={(threadId) => {
+              setThreads((current) => deleteThread(current, threadId));
+              if (selectedThreadId === threadId) {
+                setSelectedThreadId(null);
+              }
+            }}
             onRestoreArchivedThread={(threadId) => {
               setThreads((current) => restoreThread(current, threadId));
               setSelectedThreadId(threadId);
@@ -3950,6 +4143,12 @@ export function App(): ReactElement {
         }
       }}
       onCreateProjectWorktree={createProjectWorktree}
+      onDeleteThread={(threadId) => {
+        setThreads((current) => deleteThread(current, threadId));
+        if (selectedThreadId === threadId) {
+          setSelectedThreadId(null);
+        }
+      }}
       onNavigate={setActiveView}
       onNewTask={() => {
         setActiveView("workspace");
@@ -4086,48 +4285,6 @@ function createGitOperationNotice(
   return language === "zh-CN" ? `已在 ${branch} 创建 Git 提交` : `Created Git commit on ${branch}`;
 }
 
-function renderDiffPreview(diff: string): ReactElement[] {
-  const lines = diff.split(/\r?\n/);
-  const visibleLines = lines.slice(0, 600);
-  const truncated = lines.length > visibleLines.length;
-  const renderedLines = visibleLines.map((line, index) => (
-    <span key={`${index}-${line}`} className={`block whitespace-pre ${getDiffLineClass(line)}`}>
-      {line || " "}
-    </span>
-  ));
-
-  if (truncated) {
-    renderedLines.push(
-      <span key="diff-truncated" className="block whitespace-pre text-[#8e8ea0]">
-        ... diff truncated
-      </span>
-    );
-  }
-
-  return renderedLines;
-}
-
-// 根据 diff 前缀返回行样式, 不在渲染处散落判断
-function getDiffLineClass(line: string): string {
-  if (line.startsWith("+") && !line.startsWith("+++")) {
-    return "bg-[#eefaf3] text-[#087443]";
-  }
-
-  if (line.startsWith("-") && !line.startsWith("---")) {
-    return "bg-[#fff1f2] text-[#b42318]";
-  }
-
-  if (line.startsWith("@@")) {
-    return "bg-[#f0f5ff] text-[#3451b2]";
-  }
-
-  if (line.startsWith("diff --git")) {
-    return "font-semibold text-[#202123]";
-  }
-
-  return "text-[#565869]";
-}
-
 // 合并索引和工作区状态字母, 空状态用占位符对齐
 function formatGitStatusLetter(status: string): string {
   if (status === "??") {
@@ -4201,19 +4358,27 @@ function formatPreviewStatus(
 }
 
 // Read-only mode is enforced at runtime by narrowing writable agent permissions.
-function applyGeneralPermissionModeToAgentProfile(
+function applyGeneralPreferencesToAgentProfile(
   agentProfile: AgentProfileContext,
   generalPreferences: GeneralPreferences
 ): AgentProfileContext {
-  if (!generalPreferences.readOnly) {
-    return agentProfile;
+  if (generalPreferences.readOnly) {
+    return {
+      ...agentProfile,
+      permissionMode: "auto",
+      enabledTools: agentProfile.enabledTools.filter((tool) => tool === "read")
+    };
   }
 
-  return {
-    ...agentProfile,
-    permissionMode: "auto",
-    enabledTools: agentProfile.enabledTools.filter((tool) => tool === "read")
-  };
+  if (generalPreferences.fullAccess) {
+    return {
+      ...agentProfile,
+      permissionMode: "full",
+      enabledTools: ["read", "edit", "command", "git"]
+    };
+  }
+
+  return agentProfile;
 }
 
 // 渲染轻量提示条, 不把提示样式散落在多个视图

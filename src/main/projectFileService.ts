@@ -12,10 +12,7 @@ import type {
   ProjectFileDeleteResult,
   ProjectFilePreview,
   ProjectFileChangePreview,
-  ProjectTextFile,
-  ProjectTextSearchMatch,
-  ProjectTextSearchRequest,
-  ProjectTextSearchResult
+  ProjectTextFile
 } from "../shared/fileTypes.js";
 import {
   assertProjectPathNotSensitive,
@@ -23,6 +20,7 @@ import {
 } from "../shared/sensitiveProjectFiles.js";
 import { createLineDiff } from "../shared/textDiff.js";
 import { createProjectIgnoreMatcher } from "./projectIgnore.js";
+export { searchProjectTextFiles } from "./projectTextSearchIndex.js";
 
 type ReadProjectTextFileOptions = {
   projectRoot: string;
@@ -34,7 +32,6 @@ type ProjectTextFileSnapshot = ProjectTextFile & {
   exists: boolean;
 };
 
-const maxSearchPreviewChars = 240;
 const maxInlinePreviewBytes = 40 * 1024 * 1024;
 
 // 读取文本文件前检查路径边界和大小, 防止大文件拖慢预览
@@ -65,10 +62,27 @@ export async function previewProjectFile({
   relativePath,
   maxBytes = 256000
 }: ReadProjectTextFileOptions): Promise<ProjectFilePreview> {
-  const { fileStat, normalizedRelativePath, resolvedFilePath } = await resolveProjectFileForRead(
-    projectRoot,
-    relativePath
-  );
+  // 先确认项目根目录存在。后面的 ENOENT 才能被安全理解为“这个文件没了”。
+  await realpath(projectRoot);
+  let resolvedFile: ResolvedProjectFileForRead;
+
+  try {
+    resolvedFile = await resolveProjectFileForRead(projectRoot, relativePath);
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error;
+    }
+
+    return createUnavailablePreview(
+      normalizeRelativePath(relativePath),
+      0,
+      "application/octet-stream",
+      "unsupported",
+      "File no longer exists. Refresh the project file tree."
+    );
+  }
+
+  const { fileStat, normalizedRelativePath, resolvedFilePath } = resolvedFile;
   const media = resolvePreviewMedia(normalizedRelativePath);
 
   if (media.kind === "text") {
@@ -166,14 +180,17 @@ export async function previewProjectTextFileUpdate({
 
 // 列出项目内单个目录, 供 Agent inspect 目录时使用, 不读取文件内容
 export async function listProjectDirectory({
+  includeGitIgnored = false,
   projectRoot,
   relativePath = ".",
-  limit
+  limit,
+  offset
 }: ProjectDirectoryListRequest): Promise<ProjectDirectoryListResult> {
   const resolvedProjectRoot = await realpath(projectRoot);
   const normalizedRelativePath = normalizeDirectoryRelativePath(relativePath);
   const resultLimit = normalizeOptionalResultLimit(limit, 300);
-  const ignoreMatcher = await createProjectIgnoreMatcher(resolvedProjectRoot);
+  const resultOffset = normalizeOptionalResultOffset(offset);
+  const ignoreMatcher = includeGitIgnored ? null : await createProjectIgnoreMatcher(resolvedProjectRoot);
 
   if (normalizedRelativePath !== ".") {
     assertProjectPathNotSensitive(normalizedRelativePath);
@@ -202,6 +219,7 @@ export async function listProjectDirectory({
 
   const entries: ProjectDirectoryEntry[] = [];
   let truncated = false;
+  let visibleEntryIndex = 0;
 
   for (const entry of await readSortedDirectoryEntries(resolvedDirectoryPath)) {
     const absolutePath = `${resolvedDirectoryPath}${sep}${entry.name}`;
@@ -211,7 +229,7 @@ export async function listProjectDirectory({
       continue;
     }
 
-    if (ignoreMatcher(entryRelativePath, entry.isDirectory())) {
+    if (ignoreMatcher?.(entryRelativePath, entry.isDirectory())) {
       continue;
     }
 
@@ -219,10 +237,17 @@ export async function listProjectDirectory({
       continue;
     }
 
+    if (visibleEntryIndex < resultOffset) {
+      visibleEntryIndex += 1;
+      continue;
+    }
+
     if (hasReachedLimit(entries.length, resultLimit)) {
       truncated = true;
       break;
     }
+
+    visibleEntryIndex += 1;
 
     entries.push(
       entry.isDirectory()
@@ -243,80 +268,8 @@ export async function listProjectDirectory({
   return {
     relativePath: normalizedRelativePath,
     entries,
-    truncated
-  };
-}
-
-// 在项目内执行受控文本搜索, 用于 Agent inspect/search 动作
-export async function searchProjectTextFiles({
-  projectRoot,
-  query,
-  limit = 80,
-  maxFileBytes = 256000
-}: ProjectTextSearchRequest): Promise<ProjectTextSearchResult> {
-  const normalizedQuery = normalizeSearchQuery(query);
-  const resultLimit = Math.min(200, Math.max(1, Math.round(limit)));
-  const resolvedProjectRoot = await realpath(projectRoot);
-  const ignoreMatcher = await createProjectIgnoreMatcher(resolvedProjectRoot);
-  const matches: ProjectTextSearchMatch[] = [];
-  let truncated = false;
-
-  // 递归搜索时跳过敏感路径, 大文件和构建产物, 避免把搜索工具变成无限制读文件入口
-  async function walk(directoryPath: string): Promise<void> {
-    if (hasReachedLimit(matches.length, resultLimit)) {
-      truncated = true;
-      return;
-    }
-
-    const entries = await readSortedDirectoryEntries(directoryPath);
-
-    for (const entry of entries) {
-      if (hasReachedLimit(matches.length, resultLimit)) {
-        truncated = true;
-        return;
-      }
-
-      const absolutePath = `${directoryPath}${sep}${entry.name}`;
-      const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
-
-      if (entry.isDirectory()) {
-        if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, true)) {
-          continue;
-        }
-
-        await walk(absolutePath);
-        continue;
-      }
-
-      if (!entry.isFile() || isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
-        continue;
-      }
-
-      const fileStat = await stat(absolutePath);
-
-      if (fileStat.size > maxFileBytes) {
-        continue;
-      }
-
-      const content = await readFile(absolutePath, "utf8");
-
-      if (content.includes("\u0000")) {
-        continue;
-      }
-
-      if (collectSearchMatches(relativePath, content, normalizedQuery, matches, resultLimit)) {
-        truncated = true;
-        return;
-      }
-    }
-  }
-
-  await walk(resolvedProjectRoot);
-
-  return {
-    query: normalizedQuery,
-    matches,
-    truncated
+    truncated,
+    nextOffset: truncated ? resultOffset + entries.length : undefined
   };
 }
 
@@ -470,6 +423,8 @@ async function readProjectTextFileOrEmpty({
   const normalizedRelativePath = normalizeRelativePath(relativePath);
 
   assertProjectPathNotSensitive(normalizedRelativePath);
+  // 新文件创建允许目标文件不存在, 但项目根目录本身缺失必须继续报错。
+  await realpath(projectRoot);
 
   try {
     const file = await readProjectTextFile({ projectRoot, relativePath: normalizedRelativePath, maxBytes });
@@ -710,6 +665,15 @@ function normalizeOptionalResultLimit(limit: number | undefined, maxLimit: numbe
   return Math.min(maxLimit, Math.max(1, Math.round(limit)));
 }
 
+// offset 针对过滤后的可见目录项计算, 避免敏感文件和 gitignore 规则改变分页位置
+function normalizeOptionalResultOffset(offset: number | undefined): number {
+  if (typeof offset !== "number" || !Number.isFinite(offset)) {
+    return 0;
+  }
+
+  return Math.min(1_000_000, Math.max(0, Math.round(offset)));
+}
+
 // null 表示没有人为数量上限, 其它数字按调用方配置截断
 function hasReachedLimit(count: number, limit: number | null): boolean {
   return limit !== null && count >= limit;
@@ -789,47 +753,6 @@ function globPatternToRegexSource(pattern: string): string {
   }
 
   return source;
-}
-
-// 把搜索关键词收敛成非空短文本, 防止意外全仓库匹配
-function normalizeSearchQuery(query: string): string {
-  const normalized = query.trim().slice(0, 160);
-
-  if (!normalized) {
-    throw new Error("Search query is required");
-  }
-
-  return normalized;
-}
-
-// 从单个文本文件收集搜索命中, 按行返回有限预览
-function collectSearchMatches(
-  relativePath: string,
-  content: string,
-  query: string,
-  matches: ProjectTextSearchMatch[],
-  limit: number
-): boolean {
-  const normalizedQuery = query.toLocaleLowerCase();
-  const lines = content.split(/\r?\n/u);
-
-  for (const [index, line] of lines.entries()) {
-    if (!line.toLocaleLowerCase().includes(normalizedQuery)) {
-      continue;
-    }
-
-    if (matches.length >= limit) {
-      return true;
-    }
-
-    matches.push({
-      relativePath,
-      lineNumber: index + 1,
-      preview: line.trim().slice(0, maxSearchPreviewChars)
-    });
-  }
-
-  return false;
 }
 
 // 转义正则字符, 供 glob 编译保留普通路径字符语义

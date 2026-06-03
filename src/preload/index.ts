@@ -157,9 +157,11 @@ contextBridge.exposeInMainWorld("forge", {
       maxBytes?: number;
     }): Promise<ProjectFilePreview> => ipcRenderer.invoke(fileChannels.preview, request),
     listDirectory: (request: {
+      includeGitIgnored?: boolean;
       projectRoot: string;
       relativePath?: string;
       limit?: number;
+      offset?: number;
     }): Promise<ProjectDirectoryListResult> =>
       ipcRenderer.invoke(fileChannels.listDirectory, request),
     globFiles: (request: {

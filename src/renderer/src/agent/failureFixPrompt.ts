@@ -11,6 +11,7 @@ export function createFailureFixTaskPrompt(
   const actionQueueContext = formatActionQueueContext(thread.agentActions ?? [], action.id);
   const controlledToolContext = formatControlledToolResultContext(thread.events);
   const recentExecutionContext = formatRecentExecutionContext(thread.events);
+  const runtimePolicyContext = formatRuntimePolicyContext(thread);
   const failureDetails = [
     `Failed action: ${action.label}`,
     `Action kind: ${action.kind}`,
@@ -24,6 +25,7 @@ export function createFailureFixTaskPrompt(
     `Current thread status: ${thread.status}`,
     "",
     ...failureDetails,
+    runtimePolicyContext,
     actionQueueContext ? `Action queue:\n${actionQueueContext}` : null,
     controlledToolContext ? `Prior controlled tool results:\n${controlledToolContext}` : null,
     recentExecutionContext ? `Recent execution context:\n${recentExecutionContext}` : null,
@@ -33,11 +35,29 @@ export function createFailureFixTaskPrompt(
     'Return a JSON object with a "steps" array when possible. Each step must include "kind", "description", and optional "target".',
     'Allowed step kinds are "inspect", "edit", "verify", "commit", and "other".',
     "Reuse completed work. Do not repeat already completed inspect or edit actions unless the failure output specifically points back to them.",
-    "If the likely fix requires installing dependencies, changing package manifests, or elevated permissions, stop at an approval/manual step and explain why instead of bypassing the gate.",
-    "Keep the plan safe: do not skip tests, do not hide the failure, and stop before any manual review or commit step."
+    "Do not turn ordinary fixable failures into manual review steps. Keep repairing automatically until a real external blocker appears.",
+    "Only use an approval/manual step for missing credentials, unavailable local dependencies, elevated OS permissions, destructive operations outside the project, or other work Forge cannot safely execute itself.",
+    thread.agentProfile?.permissionMode === "full"
+      ? "This thread is running with full access: do not add manual review or commit gates unless an explicit deny rule, missing credential, or unavailable dependency makes automation impossible."
+      : "Keep the plan safe: stop before risky commands and final commit steps when normal approval is required."
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function formatRuntimePolicyContext(thread: TaskThread): string {
+  const profile = thread.agentProfile;
+
+  if (!profile) {
+    return "Runtime policy: default controlled agent permissions";
+  }
+
+  return [
+    `Runtime policy: permissionMode=${profile.permissionMode}`,
+    `tools=${profile.enabledTools.join(",") || "none"}`,
+    `failureRecovery=${profile.failureRecoveryPolicy}`,
+    `maxRecoveryAttempts=${profile.maxFailureRecoveryAttempts}`
+  ].join(", ");
 }
 
 // 提取最近的受控读取工具结果, 让失败恢复计划能复用真实项目上下文

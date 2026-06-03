@@ -266,19 +266,24 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number): ReactElement 
 }
 
 // 渲染代码块, 异步切换到 Shiki 生成的编辑器风格高亮 HTML
-function CodePreview({
+export function CodePreview({
   compact = false,
   content,
+  frame = "default",
   path
 }: {
   compact?: boolean;
   content: string;
+  frame?: "default" | "embedded";
   path: string;
 }): ReactElement {
   const [highlightState, setHighlightState] = useState<CodeHighlightState>({ kind: "loading" });
-  const containerClassName = `min-h-0 overflow-auto rounded-[14px] border border-[#ececf1] bg-white font-mono text-[12px] leading-6 text-[#202123] ${
-    compact ? "p-3" : "p-4"
-  }`;
+  const containerClassName =
+    frame === "embedded"
+      ? "h-full min-h-0 overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-6 text-[#202123]"
+      : `min-h-0 overflow-auto rounded-[14px] border border-[#ececf1] bg-white font-mono text-[12px] leading-6 text-[#202123] ${
+          compact ? "p-3" : "p-4"
+        }`;
 
   useEffect(() => {
     let didCancel = false;

@@ -100,6 +100,13 @@ const maxFilesBySpeed = {
 const maxStreamContinuations = 1;
 const structuredStepArrayKeys = ["steps", "actions", "tasks"] as const;
 const structuredPlanObjectKeys = ["plan", "executionPlan", "execution_plan"] as const;
+const projectEngineeringPresetInstructions = [
+  "Think like a project engineer: understand the stack, repository layout, entrypoints, package managers, and existing conventions before editing.",
+  "For feature requests, plan the smallest complete product slice: data/model changes, backend/API changes, frontend/UI changes, configuration, and verification when those layers are relevant.",
+  "For full-stack requests, include both server and client entrypoints plus the integration contract between them.",
+  "Do not satisfy app-building requests with only a dependency file or one isolated source file unless the existing project truly requires no other files.",
+  "When the user names a framework or architecture, use the framework's normal project structure instead of inventing a flat demo."
+] as const;
 
 // 生成可执行计划并解析成步骤, 这里只请求模型不直接改文件
 export async function generateAgentPlan({
@@ -461,12 +468,15 @@ function createAgentPlanInstructions(personalization?: string): string {
   return appendPersonalization([
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
+    ...projectEngineeringPresetInstructions,
     "Keep the plan small and respect the Agent profile plan step limit from the request context.",
     "Follow the Agent profile verification policy from the request context.",
-    'Prefer a JSON object with a "steps" array. Each step must include "kind", "description", and optional "target".',
+    'Prefer JSON only: return a JSON object with a "steps" array and no prose before or after it. Each step must include "kind", "description", and optional "target".',
     'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "git_status", "bash", or "edit".',
     'For one step that edits multiple files, use a "files" string array so Forge can expand it into separate file actions.',
     "For edit steps, the target must be exactly one project-relative file path only. Put comparison notes or reasoning in description, never in target.",
+    "For inspect steps, target must be one file, folder, glob pattern, or search query. Do not combine several unrelated paths in one target string.",
+    "For verify steps, target must be a runnable command such as npm run build, npm run typecheck, mvn test, or git status --short.",
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
     'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for text search queries, and "git_status" for git status or diff checks.',
     "Do not use shell commands for directory listing, file globbing, text search, or git status/diff when a controlled tool can express the same step.",
@@ -497,6 +507,9 @@ function createAskInstructions(personalization?: string, workMode: AgentWorkMode
     "Answer the user's question directly and concisely.",
     "If project context is provided, use it to answer project questions without turning the answer into an execution plan.",
     "Do not claim you edited files, ran commands, or inspected the workspace.",
+    "Do not expose raw internal logs, hidden reasoning, or provider/tool implementation details unless the user asks for debugging details.",
+    "When summarizing completed work, mention concrete files, checks, and remaining risks instead of generic success phrases.",
+    "Use clean Markdown with short paragraphs and compact bullets only when they improve readability.",
     "Do not output scaffolding labels such as plan, steps, validation, or logs unless the user asks for them.",
     ...getWorkModeInstructionLines(workMode),
     "Prefer Chinese when the user writes Chinese. Keep answers concise and useful."
@@ -1141,17 +1154,18 @@ function clampPlanStepLimit(value: number): number {
 // 优先解析模型输出的结构化 JSON steps, 失败时让自然语言列表解析接管
 function parseStructuredAgentPlanSteps(text: string): ParsedPlanStepDraft[] {
   for (const candidate of readJsonPlanCandidates(text)) {
-    try {
-      const value = JSON.parse(candidate) as unknown;
-      const steps = readStructuredStepsArray(value)
-        .flatMap(normalizeStructuredPlanStep)
-        .filter((step): step is ParsedPlanStepDraft => Boolean(step));
+    const value = parseJsonPlanCandidate(candidate);
 
-      if (steps.length > 0) {
-        return steps;
-      }
-    } catch {
+    if (!value.ok) {
       continue;
+    }
+
+    const steps = readStructuredStepsArray(value.value)
+      .flatMap(normalizeStructuredPlanStep)
+      .filter((step): step is ParsedPlanStepDraft => Boolean(step));
+
+    if (steps.length > 0) {
+      return steps;
     }
   }
 
@@ -1190,7 +1204,88 @@ function readJsonPlanCandidates(text: string): string[] {
     candidates.push(trimmed.slice(arrayStart, arrayEnd + 1));
   }
 
+  const balancedObject = readBalancedJsonCandidate(trimmed, "{", "}");
+
+  if (balancedObject) {
+    candidates.push(balancedObject);
+  }
+
+  const balancedArray = readBalancedJsonCandidate(trimmed, "[", "]");
+
+  if (balancedArray) {
+    candidates.push(balancedArray);
+  }
+
   return [...new Set(candidates)];
+}
+
+// 解析计划 JSON 时允许常见模型瑕疵, 例如尾逗号和 BOM
+function parseJsonPlanCandidate(
+  candidate: string
+): { ok: true; value: unknown } | { ok: false } {
+  const normalized = candidate.trim().replace(/^\uFEFF/u, "");
+
+  for (const value of [
+    normalized,
+    normalized.replace(/,\s*([}\]])/gu, "$1")
+  ]) {
+    try {
+      return { ok: true, value: JSON.parse(value) as unknown };
+    } catch {
+      continue;
+    }
+  }
+
+  return { ok: false };
+}
+
+// 从混合文本里读取第一个平衡 JSON 片段, 避免 lastIndexOf 把解释文字吞进去
+function readBalancedJsonCandidate(
+  text: string,
+  openChar: "{" | "[",
+  closeChar: "}" | "]"
+): string | null {
+  const start = text.indexOf(openChar);
+
+  if (start < 0) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === openChar) {
+      depth += 1;
+    } else if (char === closeChar) {
+      depth -= 1;
+
+      if (depth === 0) {
+        return text.slice(start, index + 1);
+      }
+    }
+  }
+
+  return null;
 }
 
 // 兼容 { steps: [...] }, { plan: { steps: [...] } } 和直接返回数组等结构化计划
@@ -1274,7 +1369,7 @@ function readStringField(value: Record<string, unknown>, keys: string[]): string
     const fieldValue = value[key];
 
     if (typeof fieldValue === "string" && fieldValue.trim()) {
-      return fieldValue.trim();
+      return normalizePlanTargetText(fieldValue);
     }
   }
 
@@ -1297,7 +1392,7 @@ function readStringArrayField(value: Record<string, unknown>, keys: string[]): s
         continue;
       }
 
-      const normalized = item.trim();
+      const normalized = normalizePlanTargetText(item);
 
       if (normalized) {
         targets.push(normalized);
@@ -1353,7 +1448,9 @@ function normalizeStructuredToolTarget(
   rawTarget: string | undefined,
   fallbackTarget: string | undefined
 ): string | undefined {
-  const target = rawTarget?.trim() || fallbackTarget?.trim();
+  const target =
+    (rawTarget ? normalizePlanTargetText(rawTarget) : "") ||
+    (fallbackTarget ? normalizePlanTargetText(fallbackTarget) : "");
 
   if (toolHint === "list-directory") {
     return target || ".";
@@ -1368,6 +1465,16 @@ function normalizeStructuredToolTarget(
   }
 
   return target || undefined;
+}
+
+// 目标字段必须可执行或可定位, 这里只清理包装字符, 不把普通句子猜成路径
+function normalizePlanTargetText(value: string): string {
+  return value
+    .trim()
+    .replace(/^["'`“”‘’]+/u, "")
+    .replace(/["'`“”‘’]+$/u, "")
+    .replace(/[。；;，,]+$/u, "")
+    .trim();
 }
 
 // 支持模型常见 kind 别名, 没有可信 kind 时回退到文本推断
@@ -1436,16 +1543,16 @@ function inferStepKind(description: string): AgentPlanStepKind {
     return "inspect";
   }
 
+  if (/(commit|git commit|提交)/.test(normalized)) {
+    return "commit";
+  }
+
   if (/(test|verify|build|lint|typecheck|run|validate|测试|验证|构建|运行|检查)/.test(normalized)) {
     return "verify";
   }
 
   if (/(modify|edit|change|implement|add|remove|refactor|update|create|write|save|修改|实现|新增|删除|重构|更新|创建|新建|写|写入|保存)/.test(normalized)) {
     return "edit";
-  }
-
-  if (/(commit|git|提交)/.test(normalized)) {
-    return "commit";
   }
 
   return "other";

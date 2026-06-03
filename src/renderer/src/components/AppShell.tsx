@@ -40,6 +40,7 @@ type AppShellProps = {
   onArchiveProjectChats?: (projectPath: string) => void;
   onArchiveThread?: (threadId: string) => void;
   onCreateProjectWorktree?: (projectPath: string) => void;
+  onDeleteThread?: (threadId: string) => void;
   onNavigate: (view: WorkbenchView) => void;
   onNewTask?: () => void;
   onNewProjectChat?: (projectPath: string) => void;
@@ -75,6 +76,7 @@ type ShellCopy = {
   archiveConversation: string;
   archiveProjectChats: string;
   currentProjectChat: string;
+  deleteConversation: string;
   editMenu: string;
   fileMenu: string;
   filesView: string;
@@ -121,6 +123,7 @@ export function AppShell({
   onArchiveProjectChats,
   onArchiveThread,
   onCreateProjectWorktree,
+  onDeleteThread,
   onNavigate,
   onNewTask,
   onNewProjectChat,
@@ -571,17 +574,15 @@ export function AppShell({
                     className="ml-6 min-w-0 space-y-0.5 overflow-hidden border-l border-[#ececf1] pl-1.5"
                   >
                     {projectThreads.map((thread) => (
-                      <button
+                      <ThreadSidebarRow
                         key={thread.id}
-                        type="button"
-                        data-testid={`sidebar-thread-row-${thread.id}`}
-                        onClick={() => onSelectThread?.(thread.id)}
-                        className="flex h-7 w-full min-w-0 items-center gap-2 overflow-hidden rounded-[9px] px-2 text-left text-[12px] text-[#565869] transition hover:bg-[#f1f1f4]"
-                      >
-                        <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-[#202123]">{thread.title}</span>
-                        {thread.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
-                      </button>
+                        copy={copy}
+                        thread={thread}
+                        onArchiveThread={onArchiveThread}
+                        onDeleteThread={onDeleteThread}
+                        onSelectThread={onSelectThread}
+                        onTogglePinThread={onTogglePinThread}
+                      />
                     ))}
                   </div>
                 ) : null}
@@ -622,44 +623,15 @@ export function AppShell({
         <div className="mb-0.5 px-2.5 text-[10px] text-[#8e8ea0]">{copy.conversations}</div>
         <div role="group" aria-label="Global conversations" className="space-y-0.5">
           {globalThreads.map((thread) => (
-            <div
+            <ThreadSidebarRow
               key={thread.id}
-              className="group grid h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-[9px] pr-0.5 transition hover:bg-[#f1f1f4]"
-            >
-              <button
-                type="button"
-                data-testid={`sidebar-thread-row-${thread.id}`}
-                onClick={() => onSelectThread?.(thread.id)}
-                className="flex h-7 w-full min-w-0 items-center gap-2 overflow-hidden rounded-[9px] px-2 text-left text-[12px] text-[#565869]"
-              >
-                <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-[#202123]">{thread.title}</span>
-                {thread.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
-              </button>
-              <DropdownMenu.Root>
-                <Tooltip align="end" label={copy.threadOptions(thread.title)}>
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      type="button"
-                      aria-label={copy.threadOptions(thread.title)}
-                      className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-[#f7f7f8] hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
-                    >
-                      <Ellipsis className="h-4 w-4" />
-                    </button>
-                  </DropdownMenu.Trigger>
-                </Tooltip>
-                <MenuContent align="start" sideOffset={6}>
-                  <MenuItem onSelect={() => onTogglePinThread?.(thread.id)}>
-                    <Pin className="h-4 w-4" />
-                    {copy.pinConversation}
-                  </MenuItem>
-                  <MenuItem onSelect={() => onArchiveThread?.(thread.id)}>
-                    <Archive className="h-4 w-4" />
-                    {copy.archiveConversation}
-                  </MenuItem>
-                </MenuContent>
-              </DropdownMenu.Root>
-            </div>
+              copy={copy}
+              thread={thread}
+              onArchiveThread={onArchiveThread}
+              onDeleteThread={onDeleteThread}
+              onSelectThread={onSelectThread}
+              onTogglePinThread={onTogglePinThread}
+            />
           ))}
         </div>
       </section>
@@ -689,6 +661,65 @@ function TitleBarMenu({
         {children}
       </MenuContent>
     </DropdownMenu.Root>
+  );
+}
+
+// 项目会话和全局会话共用同一行组件, 避免归档/删除入口不一致
+function ThreadSidebarRow({
+  copy,
+  onArchiveThread,
+  onDeleteThread,
+  onSelectThread,
+  onTogglePinThread,
+  thread
+}: {
+  copy: ShellCopy;
+  onArchiveThread?: (threadId: string) => void;
+  onDeleteThread?: (threadId: string) => void;
+  onSelectThread?: (threadId: string) => void;
+  onTogglePinThread?: (threadId: string) => void;
+  thread: TaskThread;
+}): ReactElement {
+  return (
+    <div className="group grid h-7 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-[9px] pr-0.5 transition hover:bg-[#f1f1f4]">
+      <button
+        type="button"
+        data-testid={`sidebar-thread-row-${thread.id}`}
+        onClick={() => onSelectThread?.(thread.id)}
+        className="flex h-7 w-full min-w-0 items-center gap-2 overflow-hidden rounded-[9px] px-2 text-left text-[12px] text-[#565869]"
+      >
+        <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-[#202123]">{thread.title}</span>
+        {thread.pinned ? <Pin className="h-3 w-3 shrink-0 text-[#6e6e80]" /> : null}
+      </button>
+      <DropdownMenu.Root>
+        <Tooltip align="end" label={copy.threadOptions(thread.title)}>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              aria-label={copy.threadOptions(thread.title)}
+              className="flex h-6 w-6 items-center justify-center rounded-[8px] text-[#6e6e80] opacity-100 transition hover:bg-[#f7f7f8] hover:text-[#202123] md:opacity-0 md:group-hover:opacity-100"
+            >
+              <Ellipsis className="h-4 w-4" />
+            </button>
+          </DropdownMenu.Trigger>
+        </Tooltip>
+        <MenuContent align="start" sideOffset={6}>
+          <MenuItem onSelect={() => onTogglePinThread?.(thread.id)}>
+            <Pin className="h-4 w-4" />
+            {copy.pinConversation}
+          </MenuItem>
+          <MenuItem onSelect={() => onArchiveThread?.(thread.id)}>
+            <Archive className="h-4 w-4" />
+            {copy.archiveConversation}
+          </MenuItem>
+          <MenuItem onSelect={() => onDeleteThread?.(thread.id)} variant="danger">
+            <Trash2 className="h-4 w-4" />
+            {copy.deleteConversation}
+          </MenuItem>
+        </MenuContent>
+      </DropdownMenu.Root>
+    </div>
   );
 }
 
@@ -800,6 +831,7 @@ function getShellCopy(language: Language): ShellCopy {
       conversations: "对话",
       createWorktree: "创建永久工作树",
       currentProjectChat: "当前项目新对话",
+      deleteConversation: "删除对话",
       editMenu: "编辑",
       fileMenu: "文件",
       filesView: "文件",
@@ -844,6 +876,7 @@ function getShellCopy(language: Language): ShellCopy {
     conversations: "Conversations",
     createWorktree: "Create permanent worktree",
     currentProjectChat: "New chat in current project",
+    deleteConversation: "Delete conversation",
     editMenu: "Edit",
     fileMenu: "File",
     filesView: "Files",

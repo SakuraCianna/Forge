@@ -1,4 +1,5 @@
 // 本文件说明: 扫描项目文件和规则说明, 为 Agent 提供轻量上下文
+import type { Stats } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type {
@@ -7,10 +8,10 @@ import type {
   ProjectScanResult
 } from "../shared/projectTypes.js";
 import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
-import { createProjectIgnoreMatcher, type ProjectIgnoreMatcher } from "./projectIgnore.js";
 
 type ScanOptions = {
   limit?: number;
+  previousIndex?: ProjectScanResult | null;
 };
 
 const maxInstructionFileChars = 12_000;
@@ -34,8 +35,9 @@ export async function scanProjectFiles(
 ): Promise<ProjectScanResult> {
   const limit = normalizeOptionalLimit(options.limit);
   const files: ProjectFile[] = [];
+  const previousFilesByPath = createPreviousFileMap(rootPath, options.previousIndex);
   let truncated = false;
-  let rootStat: Awaited<ReturnType<typeof stat>>;
+  let rootStat: Stats;
 
   try {
     rootStat = await stat(rootPath);
@@ -51,10 +53,11 @@ export async function scanProjectFiles(
     throw new Error(`Project path is not a directory: ${rootPath}`);
   }
 
-  const ignoreMatcher = await createProjectIgnoreMatcher(rootPath);
-  const instructionFiles = await readProjectInstructionFiles(rootPath, ignoreMatcher);
+  const instructionFiles = await readProjectInstructionFiles(rootPath);
 
   // 递归遍历目录时保留数量和大小限制, 避免扫描拖垮界面
+  // File tree scans are user-visible navigation data, so they include files ignored by Git.
+  // Sensitive project paths still stay hidden; Agent search/glob tools keep their own .gitignore filter.
   async function walk(directoryPath: string): Promise<void> {
     if (hasReachedLimit(files.length, limit)) {
       truncated = true;
@@ -72,10 +75,7 @@ export async function scanProjectFiles(
       if (entry.isDirectory()) {
         const relativeDirectoryPath = normalizeRelativePath(relative(rootPath, `${directoryPath}${sep}${entry.name}`));
 
-        if (
-          isSensitiveProjectPath(relativeDirectoryPath) ||
-          ignoreMatcher(relativeDirectoryPath, true)
-        ) {
+        if (isSensitiveProjectPath(relativeDirectoryPath)) {
           continue;
         }
 
@@ -90,15 +90,12 @@ export async function scanProjectFiles(
       const filePath = `${directoryPath}${sep}${entry.name}`;
       const relativePath = normalizeRelativePath(relative(rootPath, filePath));
 
-      if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
+      if (isSensitiveProjectPath(relativePath)) {
         continue;
       }
 
       const fileStat = await stat(filePath);
-      files.push({
-        relativePath,
-        size: fileStat.size
-      });
+      files.push(createProjectFileEntry(relativePath, fileStat, previousFilesByPath));
     }
   }
 
@@ -113,10 +110,41 @@ export async function scanProjectFiles(
 }
 
 // 汇总 AGENTS, README 和规则文件内容, 作为模型的项目说明
-async function readProjectInstructionFiles(
+function createPreviousFileMap(
   rootPath: string,
-  ignoreMatcher: ProjectIgnoreMatcher
-): Promise<ProjectInstructionFile[]> {
+  previousIndex: ProjectScanResult | null | undefined
+): Map<string, ProjectFile> {
+  if (!previousIndex || previousIndex.rootPath !== rootPath) {
+    return new Map();
+  }
+
+  return new Map(previousIndex.files.map((file) => [file.relativePath, file]));
+}
+
+function createProjectFileEntry(
+  relativePath: string,
+  fileStat: Stats,
+  previousFilesByPath: ReadonlyMap<string, ProjectFile>
+): ProjectFile {
+  const modifiedAtMs = fileStat.mtimeMs;
+  const previousFile = previousFilesByPath.get(relativePath);
+
+  if (
+    previousFile &&
+    previousFile.size === fileStat.size &&
+    previousFile.modifiedAtMs === modifiedAtMs
+  ) {
+    return previousFile;
+  }
+
+  return {
+    modifiedAtMs,
+    relativePath,
+    size: fileStat.size
+  };
+}
+
+async function readProjectInstructionFiles(rootPath: string): Promise<ProjectInstructionFile[]> {
   const candidatePaths = await collectInstructionFilePaths(rootPath);
   const instructionFiles: ProjectInstructionFile[] = [];
 
@@ -126,10 +154,6 @@ async function readProjectInstructionFiles(
     }
 
     try {
-      if (ignoreMatcher(relativePath, false)) {
-        continue;
-      }
-
       const filePath = toProjectFilePath(rootPath, relativePath);
       const fileStat = await stat(filePath);
 

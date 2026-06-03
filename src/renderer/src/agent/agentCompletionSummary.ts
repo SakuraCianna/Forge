@@ -16,6 +16,8 @@ export type AgentRecoverySummaryStats = {
   paused: AutoFailureRecoverySkipRecord[];
 };
 
+type AgentFileStatKind = "created" | "edited" | "deleted" | "read";
+
 export function createAgentCompletionSummaryMessage(
   thread: TaskThread,
   language: Language,
@@ -27,7 +29,8 @@ export function createAgentCompletionSummaryMessage(
   const stats = collectAgentFileChangeStats(thread, actions);
   const recoveryStats = collectAgentRecoverySummaryStats(thread);
   const timing = collectAgentCompletionTimingStats(thread, completedAt);
-  const fileParts = formatAgentFileChangeSummaryParts(stats, language);
+  const primaryFileStatKind = getPrimaryAgentFileStatKind(stats);
+  const fileParts = formatAgentFileChangeSummaryParts(stats, language, primaryFileStatKind);
   const recoveryPart = formatAgentRecoverySummaryPart(recoveryStats, language);
   const summaryParts = recoveryPart ? [...fileParts, recoveryPart] : fileParts;
   const skippedPart =
@@ -49,10 +52,14 @@ export function createAgentCompletionSummaryMessage(
   const concreteResult = formatAgentConcreteResult(stats, completed, language);
 
   if (language === "zh-CN") {
-    return `${concreteResult}：${summaryParts.join("，")}${skippedPart}，${detailPart}。查看详情可展开“已处理”。`;
+    const summaryText = summaryParts.length > 0 ? `，${summaryParts.join("，")}` : "";
+
+    return `${concreteResult}${summaryText}${skippedPart}，${detailPart}。查看详情可展开“已处理”。`;
   }
 
-  return `${concreteResult}: ${summaryParts.join(", ")}${skippedPart}, ${detailPart}. View details in Processed.`;
+  const summaryText = summaryParts.length > 0 ? `, ${summaryParts.join(", ")}` : "";
+
+  return `${concreteResult}${summaryText}${skippedPart}, ${detailPart}. View details in Processed.`;
 }
 
 export function collectAgentFileChangeStats(
@@ -162,22 +169,62 @@ function collectAgentActionTargets(actions: AgentAction[], kind: AgentAction["ki
   );
 }
 
-function formatAgentFileChangeSummaryParts(stats: AgentFileChangeStats, language: Language): string[] {
+function formatAgentFileChangeSummaryParts(
+  stats: AgentFileChangeStats,
+  language: Language,
+  omitKind: AgentFileStatKind | null
+): string[] {
   if (language === "zh-CN") {
     return [
-      `创建了 ${stats.createdFiles.length} 个文件`,
-      `编辑了 ${stats.editedFiles.length} 个文件`,
-      `删除了 ${stats.deletedFiles.length} 个文件`,
-      `读取了 ${stats.readFiles.length} 个文件`
-    ];
+      stats.createdFiles.length > 0 && omitKind !== "created"
+        ? `创建了 ${stats.createdFiles.length} 个文件`
+        : null,
+      stats.editedFiles.length > 0 && omitKind !== "edited"
+        ? `编辑了 ${stats.editedFiles.length} 个文件`
+        : null,
+      stats.deletedFiles.length > 0 && omitKind !== "deleted"
+        ? `删除了 ${stats.deletedFiles.length} 个文件`
+        : null,
+      stats.readFiles.length > 0 && omitKind !== "read"
+        ? `读取了 ${stats.readFiles.length} 个文件`
+        : null
+    ].filter((part): part is string => Boolean(part));
   }
 
   return [
-    `created ${stats.createdFiles.length} file${stats.createdFiles.length === 1 ? "" : "s"}`,
-    `edited ${stats.editedFiles.length} file${stats.editedFiles.length === 1 ? "" : "s"}`,
-    `deleted ${stats.deletedFiles.length} file${stats.deletedFiles.length === 1 ? "" : "s"}`,
-    `read ${stats.readFiles.length} file${stats.readFiles.length === 1 ? "" : "s"}`
-  ];
+    stats.createdFiles.length > 0 && omitKind !== "created"
+      ? `created ${stats.createdFiles.length} file${stats.createdFiles.length === 1 ? "" : "s"}`
+      : null,
+    stats.editedFiles.length > 0 && omitKind !== "edited"
+      ? `edited ${stats.editedFiles.length} file${stats.editedFiles.length === 1 ? "" : "s"}`
+      : null,
+    stats.deletedFiles.length > 0 && omitKind !== "deleted"
+      ? `deleted ${stats.deletedFiles.length} file${stats.deletedFiles.length === 1 ? "" : "s"}`
+      : null,
+    stats.readFiles.length > 0 && omitKind !== "read"
+      ? `read ${stats.readFiles.length} file${stats.readFiles.length === 1 ? "" : "s"}`
+      : null
+  ].filter((part): part is string => Boolean(part));
+}
+
+function getPrimaryAgentFileStatKind(stats: AgentFileChangeStats): AgentFileStatKind | null {
+  if (stats.createdFiles.length > 0) {
+    return "created";
+  }
+
+  if (stats.editedFiles.length > 0) {
+    return "edited";
+  }
+
+  if (stats.deletedFiles.length > 0) {
+    return "deleted";
+  }
+
+  if (stats.readFiles.length > 0) {
+    return "read";
+  }
+
+  return null;
 }
 
 function parseAutoFailureRecoverySkipEvent(
