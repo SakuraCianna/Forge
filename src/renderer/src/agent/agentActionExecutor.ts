@@ -7,7 +7,7 @@ import {
 import type { AgentProfileContext } from "@shared/agentTypes";
 import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "@/state/generalPreferences";
 
-type AgentActionExecution =
+export type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }
   | { kind: "list-directory"; relativePath: string }
   | { kind: "glob-project"; pattern: string }
@@ -19,13 +19,13 @@ type AgentActionExecution =
   | { kind: "manual-gate"; reason: "review" | "commit" }
   | { kind: "complete" };
 
-type AgentToolPermission = "read" | "edit" | "command" | "git";
+export type AgentToolPermission = "read" | "edit" | "command" | "git";
 
 export type AgentActionPermissionResult =
   | { ok: true }
   | { ok: false; tool: AgentToolPermission; message: string };
 
-type AgentCommandRisk =
+export type AgentCommandRisk =
   | { level: "allow" }
   | { level: "ask" | "deny"; reason: string };
 

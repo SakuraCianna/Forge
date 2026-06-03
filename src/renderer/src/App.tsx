@@ -26,9 +26,6 @@ import { SourceDiffPreview } from "@/components/SourceDiffPreview";
 import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import {
-  resolveAgentCommandRisk,
-  resolveAgentActionPermission,
-  resolveAgentActionExecution,
   getRunnablePendingAgentActions,
   runAgentActionBatch,
   resolveMissingInspectFileFallback,
@@ -70,6 +67,10 @@ import {
   formatFailureFixPlanStartMessage
 } from "@/agent/agentRunMessages";
 import { improveAgentPlanActions } from "@/agent/agentPlanQuality";
+import {
+  resolveAgentRuntimeCommandDecision,
+  resolveAgentRuntimePreflightDecision
+} from "@/agent/agentRuntimeOrchestrator";
 import {
   appendSourceUrlsToAgentSummary,
   extractSourceUrlsFromText,
@@ -2755,36 +2756,26 @@ export function App(): ReactElement {
       return { status: "pending", continueBatch: false };
     }
 
-    const liveAction = getLiveAgentAction(threadId, action.id);
-
-    if (liveAction && liveAction.status !== "pending") {
-      if (liveAction.status === "completed" || liveAction.status === "skipped") {
-        return { status: "completed", continueBatch: true };
-      }
-
-      return { status: liveAction.status, continueBatch: false };
-    }
-
-    const actionToRun = liveAction ?? action;
-
-    if (actionToRun.status !== "pending") {
-      if (actionToRun.status === "completed" || actionToRun.status === "skipped") {
-        return { status: "completed", continueBatch: true };
-      }
-
-      return { status: actionToRun.status, continueBatch: false };
-    }
-
     const activeAgentProfile = getThreadAgentProfileContext(threadId);
     const threadFullAccessMode = getThreadFullAccessMode(threadId);
-    const permission = resolveAgentActionPermission(actionToRun, activeAgentProfile);
+    const runtimeDecision = resolveAgentRuntimePreflightDecision({
+      action,
+      liveAction: getLiveAgentAction(threadId, action.id),
+      agentProfile: activeAgentProfile
+    });
 
-    if (!permission.ok) {
+    if (runtimeDecision.kind === "reuse-status") {
+      return runtimeDecision.outcome;
+    }
+
+    const actionToRun = runtimeDecision.action;
+
+    if (runtimeDecision.kind === "permission-denied") {
       const createdAt = new Date().toISOString();
       const message = formatAgentPermissionDenied(
         settings.language,
         activeAgentProfile.name,
-        permission.tool
+        runtimeDecision.permission.tool
       );
 
       updateAgentActionStatus(threadId, actionToRun.id, "failed");
@@ -2802,16 +2793,14 @@ export function App(): ReactElement {
       return "failed";
     }
 
-    const execution = resolveAgentActionExecution(actionToRun);
-
-    if (execution.kind === "manual-gate") {
+    if (runtimeDecision.kind === "manual-gate") {
       const createdAt = new Date().toISOString();
 
       if (threadFullAccessMode) {
         appendAgentActionRunEvent(threadId, actionToRun, { status: "started", startedAt: createdAt });
         updateAgentActionStatus(threadId, actionToRun.id, "running");
         const outcome =
-          execution.reason === "commit"
+          runtimeDecision.execution.reason === "commit"
             ? await commitFullAccessAgentAction(threadId, actionToRun)
             : completeFullAccessManualGateAction(threadId, actionToRun, createdAt);
 
@@ -2841,6 +2830,7 @@ export function App(): ReactElement {
       return "pending";
     }
 
+    const execution = runtimeDecision.execution;
     const startedAt = new Date().toISOString();
     appendAgentActionRunEvent(threadId, actionToRun, { status: "started", startedAt });
     updateAgentActionStatus(threadId, actionToRun.id, "running");
@@ -2861,29 +2851,33 @@ export function App(): ReactElement {
       } else if (execution.kind === "generate-file-change") {
         outcome = await generateAgentFileChangeAction(threadId, actionToRun, execution.relativePath);
       } else if (execution.kind === "run-command") {
-        const commandRisk = resolveAgentCommandRisk(execution.command, {
-          fullAccess: threadFullAccessMode,
-          rules: generalPreferences.commandSafetyRules
+        const commandDecision = resolveAgentRuntimeCommandDecision({
+          command: execution.command,
+          policy: {
+            fullAccess: threadFullAccessMode,
+            rules: generalPreferences.commandSafetyRules
+          },
+          approvedCommand: options.approvedCommand
         });
 
-        if (commandRisk.level === "deny") {
+        if (commandDecision.kind === "deny") {
           outcome = blockAgentCommandAction(
             threadId,
             actionToRun,
             formatAgentCommandDenied(
               settings.language,
-              commandRisk.reason
+              commandDecision.risk.reason
             ),
             "failed"
           );
-        } else if (commandRisk.level === "ask" && !threadFullAccessMode && !options.approvedCommand) {
+        } else if (commandDecision.kind === "approval-required") {
           outcome = blockAgentCommandAction(
             threadId,
             actionToRun,
             formatAgentCommandNeedsApproval(
               settings.language,
               execution.command,
-              commandRisk.reason
+              commandDecision.risk.reason
             ),
             "pending"
           );
@@ -2989,12 +2983,15 @@ export function App(): ReactElement {
   async function approveAgentCommandAction(threadId: string, action: AgentAction): Promise<void> {
     if (action.kind === "run-command" && action.command) {
       const command = action.command;
-      const commandRisk = resolveAgentCommandRisk(command, {
-        fullAccess: getThreadFullAccessMode(threadId),
-        rules: generalPreferences.commandSafetyRules
+      const commandDecision = resolveAgentRuntimeCommandDecision({
+        command,
+        policy: {
+          fullAccess: getThreadFullAccessMode(threadId),
+          rules: generalPreferences.commandSafetyRules
+        }
       });
 
-      if (commandRisk.level === "ask") {
+      if (commandDecision.kind === "approval-required") {
         const createdAt = new Date().toISOString();
 
         setThreads((current) =>
@@ -3006,7 +3003,7 @@ export function App(): ReactElement {
                 threadId,
                 actionId: action.id,
                 command,
-                reason: commandRisk.reason,
+                reason: commandDecision.risk.reason,
                 createdAt
               })
             ],
