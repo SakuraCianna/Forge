@@ -41,9 +41,10 @@ import {
   createAutoFailureRecoverySkipEvent
 } from "@/agent/autoFailureRecovery";
 import {
-  createFailureFixTaskPrompt,
-  findLatestCommandResultForAction
-} from "@/agent/failureFixPrompt";
+  appendAgentFailureFixPlanStartEvent,
+  prepareAgentFailureFixPlan,
+  type FailureFixPlanOptions
+} from "@/agent/agentFailureRecoveryPlan";
 import {
   appendAgentActionOutcomeRecord,
   appendAgentActionRunRecord,
@@ -65,9 +66,6 @@ import {
   createAgentPlanRequestPayload,
   type AgentRequestRuntimeContext
 } from "@/agent/agentRequestPayloads";
-import {
-  formatFailureFixPlanStartMessage
-} from "@/agent/agentRunMessages";
 import { improveAgentPlanActions } from "@/agent/agentPlanQuality";
 import {
   resolveAgentRuntimeAutoFailureRecoveryStep,
@@ -175,7 +173,6 @@ import {
   updateThreadAgentActionStatus,
   type AgentActionRunRecord,
   type CommandRunResult,
-  type FailureRecoveryAttemptRecord,
   type TaskThread
 } from "@/state/taskThreads";
 import {
@@ -239,11 +236,6 @@ type ProviderKeyStatus = {
   hasKey: boolean;
   last4: string | null;
 };
-
-type FailureFixPlanOptions = Pick<
-  FailureRecoveryAttemptRecord,
-  "source" | "attempt" | "limit"
->;
 
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
@@ -2200,43 +2192,24 @@ export function App(): ReactElement {
       return;
     }
 
-    const createdAt = new Date().toISOString();
-    const failureRecoveryAttempt: FailureRecoveryAttemptRecord = {
-      actionId: action.id,
-      label: action.label,
-      source: options.source,
-      ...(options.attempt === undefined ? {} : { attempt: options.attempt }),
-      ...(options.limit === undefined ? {} : { limit: options.limit })
-    };
+    const preparedPlan = prepareAgentFailureFixPlan({
+      thread,
+      action,
+      language: settings.language,
+      commandResultOverride,
+      options
+    });
     setTaskNotice(null);
     setThreads((current) =>
-      appendThreadEvents(
-        current,
+      appendAgentFailureFixPlanStartEvent(current, {
         threadId,
-        [
-          {
-            id: `${threadId}-failure-fix-${action.id}-${createdAt}`,
-            kind: "plan",
-            message: formatFailureFixPlanStartMessage(
-              settings.language,
-              action,
-              failureRecoveryAttempt
-            ),
-            createdAt,
-            failureRecoveryAttempt
-          }
-        ],
-        "running"
-      )
+        startEvent: preparedPlan.startEvent
+      })
     );
 
     await generateThreadPlan({
       threadId,
-      taskPrompt: createFailureFixTaskPrompt(
-        thread,
-        action,
-        commandResultOverride ?? findLatestCommandResultForAction(thread.events, action)
-      ),
+      taskPrompt: preparedPlan.taskPrompt,
       model,
       provider,
       attachments: resolveVisionAttachments(model, thread.attachments),
