@@ -2,6 +2,16 @@
 
 本文档记录 Forge Agent Runtime 从 UI 内联逻辑走向产品级运行内核的路线。这里不把规划写成已完成能力。
 
+## 长期产品化 Goal
+
+Forge 要从可用原型推进到产品级本地工程工作台: 用户提出真实项目任务后, Agent 能先理解工程结构, 生成可执行计划, 在权限策略内自动读取, 编辑, 运行命令和自修复, 最后输出可审查的变更摘要和验证证据。除缺少密钥, 依赖安装, 外部权限, 高风险删除, 生产发布等必须人工介入的情况外, Forge 应尽量自己处理失败和续跑。
+
+这个 Goal 分三条主线推进:
+
+- Runtime 内核: 把计划预检, 权限/风险判断, 队列推进, 工具执行, 失败恢复和完成总结从 `App.tsx` 迁入可测试模块。
+- 工程体验: 把主界面输出, 确认队列, 已处理摘要, 命令历史, Git 证据和附件上下文做成稳定清晰的审计流。
+- 大项目性能: 持续推进懒加载文件树, 持久化索引, 增量刷新, 本地全文索引, 可选语义检索和大文件分块预览。
+
 ## 外部产品参考
 
 - Codex: 借鉴审批模式, Full Auto, 隔离运行环境, 可验证终端日志和测试输出证据。
@@ -10,13 +20,31 @@
 
 参考资料:
 
-- https://help.openai.com/en/articles/11096431
-- https://openai.com/index/introducing-codex/
+- https://developers.openai.com/codex/
 - https://opencode.ai/docs/agents/
 - https://opencode.ai/docs/permissions/
-- https://code.claude.com/docs/en/permission-modes
-- https://code.claude.com/docs/en/sub-agents
-- https://code.claude.com/docs/en/configuration
+- https://docs.anthropic.com/en/docs/claude-code/overview
+- https://docs.anthropic.com/en/docs/claude-code/sub-agents
+- https://docs.anthropic.com/en/docs/claude-code/hooks
+
+## 2026-06-03 代码扫描结论
+
+本轮扫描覆盖 `package.json`, README, `docs/PERFORMANCE.md`, `docs/AGENT_RUNTIME.md`, `src/main`, `src/shared`, `src/renderer/src/agent`, `src/renderer/src/state` 和主要 React 组件。当前最高收益不是继续堆 UI 小功能, 而是先把 Agent 运行闭环稳定下来。
+
+当前最大文件:
+
+- `src/renderer/src/App.tsx`: 4385 行, 仍混合项目选择, 线程状态, Agent 执行, 文件树, Git, 命令和设置入口。
+- `src/renderer/src/components/ThreadWorkspace.tsx`: 4280 行, 仍混合主输出, 已处理摘要, 确认队列, 命令历史, Agent 详情和日志视图。
+- `src/renderer/src/components/SettingsPanel.tsx`: 3073 行, 仍混合常规设置, Provider, Agent Profile, 隐私, 记忆和归档对话。
+- `src/main/agentPlanService.ts`: 1624 行, 负责模型计划提示, 计划解析和文件编辑内容生成, 后续需要拆出 prompt preset, plan parser 和 edit generator。
+
+近期优先级:
+
+1. 继续拆 `App.tsx` 的 Agent 队列状态机, 先把 `runAgentAction` 和 `runAgentActions` 周边的运行状态, reservation, cancellation, post action 调度收进 Runtime/生命周期模块。
+2. 拆 `ThreadWorkspace.tsx` 的 Agent 运行视图, 优先分离确认队列, 命令历史, 已处理摘要和 Agent action details, 修复主界面文字/按钮对齐与输出稳定性。
+3. 拆 `agentPlanService.ts` 的提示词和计划解析, 固化工程意识预设: 空项目要先脚手架, 全栈任务要覆盖前端, 后端, 配置, 启动和验证。
+4. 在 Runtime 决策层补单元测试, 先覆盖完全访问权限, allow/ask/deny 命令策略, 缺失文件创建兜底, 自动恢复暂停原因和完成总结触发。
+5. 性能线继续接 `docs/PERFORMANCE.md`: 增量扫描 v2, 本地全文索引 v3, 可选向量检索, 大文件分块和文件树虚拟滚动。
 
 ## 当前已落地
 
