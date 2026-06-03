@@ -27,6 +27,12 @@ type ProjectTextSearchIndex = {
   entries: ProjectTextIndexEntry[];
   maxFileBytes: number;
   rootPath: string;
+  tokenLineReferences: Map<string, ProjectTextLineReference[]>;
+};
+
+type ProjectTextLineReference = {
+  entryIndex: number;
+  lineIndex: number;
 };
 
 const maxSearchPreviewChars = 240;
@@ -53,19 +59,11 @@ export async function searchProjectTextFiles({
   const resolvedProjectRoot = await realpath(projectRoot);
   const index = await buildProjectTextSearchIndex(resolvedProjectRoot, maxFileBytes);
   const matches: ProjectTextSearchMatch[] = [];
-  let truncated = false;
-
-  for (const entry of index.entries) {
-    if (collectSearchMatchesFromIndexEntry(entry, normalizedQuery, matches, resultLimit)) {
-      truncated = true;
-      break;
-    }
-  }
 
   return {
     query: normalizedQuery,
     matches,
-    truncated
+    truncated: collectSearchMatchesFromIndex(index, normalizedQuery, matches, resultLimit)
   };
 }
 
@@ -141,7 +139,8 @@ async function buildProjectTextSearchIndex(
   const index = {
     entries,
     maxFileBytes: normalizedMaxFileBytes,
-    rootPath: resolvedProjectRoot
+    rootPath: resolvedProjectRoot,
+    tokenLineReferences: createTokenLineReferences(entries)
   };
 
   rememberProjectTextSearchIndex(cacheKey, index);
@@ -191,6 +190,25 @@ async function readTextIndexEntry(
   };
 }
 
+function createTokenLineReferences(
+  entries: ProjectTextIndexEntry[]
+): Map<string, ProjectTextLineReference[]> {
+  const references = new Map<string, ProjectTextLineReference[]>();
+
+  for (const [entryIndex, entry] of entries.entries()) {
+    for (const [lineIndex, lowerLine] of entry.lowerLines.entries()) {
+      // 同一行重复出现同一词只需要一个候选引用, 搜索结果仍以行作为最小单位
+      for (const token of new Set(extractAsciiSearchTokens(lowerLine))) {
+        const tokenReferences = references.get(token) ?? [];
+        tokenReferences.push({ entryIndex, lineIndex });
+        references.set(token, tokenReferences);
+      }
+    }
+  }
+
+  return references;
+}
+
 function createProjectTextIndexEntriesFromCache(
   entries: ProjectTextSearchIndexCacheEntry[]
 ): ProjectTextIndexEntry[] {
@@ -211,6 +229,92 @@ function createProjectTextSearchIndexCacheEntries(
   }));
 }
 
+function collectSearchMatchesFromIndex(
+  index: ProjectTextSearchIndex,
+  query: string,
+  matches: ProjectTextSearchMatch[],
+  limit: number
+): boolean {
+  const normalizedQuery = query.toLocaleLowerCase();
+  const candidateLineReferences = selectCandidateLineReferences(index, normalizedQuery);
+
+  if (candidateLineReferences) {
+    return collectSearchMatchesFromCandidateLines(
+      index,
+      candidateLineReferences,
+      normalizedQuery,
+      matches,
+      limit
+    );
+  }
+
+  return collectSearchMatchesByFullScan(index.entries, normalizedQuery, matches, limit);
+}
+
+function selectCandidateLineReferences(
+  index: ProjectTextSearchIndex,
+  normalizedQuery: string
+): ProjectTextLineReference[] | null {
+  const queryTokens = extractAsciiSearchTokens(normalizedQuery);
+
+  if (queryTokens.length === 0) {
+    return null;
+  }
+
+  let rarestTokenReferences: ProjectTextLineReference[] | null = null;
+
+  for (const token of queryTokens) {
+    const tokenReferences = index.tokenLineReferences.get(token);
+
+    if (!tokenReferences) {
+      return [];
+    }
+
+    if (!rarestTokenReferences || tokenReferences.length < rarestTokenReferences.length) {
+      rarestTokenReferences = tokenReferences;
+    }
+  }
+
+  return rarestTokenReferences ?? null;
+}
+
+function collectSearchMatchesFromCandidateLines(
+  index: ProjectTextSearchIndex,
+  candidateLineReferences: ProjectTextLineReference[],
+  normalizedQuery: string,
+  matches: ProjectTextSearchMatch[],
+  limit: number
+): boolean {
+  for (const reference of candidateLineReferences) {
+    const entry = index.entries[reference.entryIndex];
+
+    if (entry.lowerLines[reference.lineIndex]?.includes(normalizedQuery)) {
+      pushSearchMatch(entry, reference.lineIndex, matches);
+
+      if (matches.length >= limit) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function collectSearchMatchesByFullScan(
+  entries: ProjectTextIndexEntry[],
+  normalizedQuery: string,
+  matches: ProjectTextSearchMatch[],
+  limit: number
+): boolean {
+  for (const entry of entries) {
+    if (collectSearchMatchesFromIndexEntry(entry, normalizedQuery, matches, limit)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function collectSearchMatchesFromIndexEntry(
   entry: ProjectTextIndexEntry,
   query: string,
@@ -228,14 +332,22 @@ function collectSearchMatchesFromIndexEntry(
       return true;
     }
 
-    matches.push({
-      relativePath: entry.relativePath,
-      lineNumber: index + 1,
-      preview: entry.lines[index].trim().slice(0, maxSearchPreviewChars)
-    });
+    pushSearchMatch(entry, index, matches);
   }
 
   return false;
+}
+
+function pushSearchMatch(
+  entry: ProjectTextIndexEntry,
+  lineIndex: number,
+  matches: ProjectTextSearchMatch[]
+): void {
+  matches.push({
+    relativePath: entry.relativePath,
+    lineNumber: lineIndex + 1,
+    preview: entry.lines[lineIndex].trim().slice(0, maxSearchPreviewChars)
+  });
 }
 
 function rememberProjectTextSearchIndex(cacheKey: string, index: ProjectTextSearchIndex): void {
@@ -251,6 +363,10 @@ function rememberProjectTextSearchIndex(cacheKey: string, index: ProjectTextSear
 
     projectTextSearchIndexes.delete(oldestCacheKey);
   }
+}
+
+function extractAsciiSearchTokens(value: string): string[] {
+  return [...new Set(value.match(/[a-z0-9_]{2,}/giu)?.map((token) => token.toLocaleLowerCase()) ?? [])];
 }
 
 function normalizeSearchQuery(query: string): string {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -202,6 +202,59 @@ describe("searchProjectTextFiles", () => {
           preview: "second needle line"
         }
       ]);
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refreshes indexed lines when a matched file changes", async () => {
+    const projectRoot = await createTempProject();
+
+    try {
+      const filePath = join(projectRoot, "notes.md");
+      await writeFile(filePath, "alpha line\n", "utf8");
+
+      await expect(
+        searchProjectTextFiles({ projectRoot, query: "alpha", limit: 5 })
+      ).resolves.toMatchObject({
+        matches: [{ relativePath: "notes.md", lineNumber: 1, preview: "alpha line" }]
+      });
+
+      await writeFile(filePath, "bravo line\n", "utf8");
+      await utimes(filePath, new Date(), new Date(Date.now() + 5000));
+
+      await expect(searchProjectTextFiles({ projectRoot, query: "alpha", limit: 5 })).resolves.toMatchObject({
+        matches: []
+      });
+      await expect(
+        searchProjectTextFiles({ projectRoot, query: "bravo", limit: 5 })
+      ).resolves.toMatchObject({
+        matches: [{ relativePath: "notes.md", lineNumber: 1, preview: "bravo line" }]
+      });
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to exact line scanning for Chinese queries", async () => {
+    const projectRoot = await createTempProject();
+
+    try {
+      await writeFile(join(projectRoot, "说明.md"), "这是项目说明内容\n", "utf8");
+
+      await expect(
+        searchProjectTextFiles({ projectRoot, query: "项目说明", limit: 5 })
+      ).resolves.toEqual({
+        query: "项目说明",
+        matches: [
+          {
+            relativePath: "说明.md",
+            lineNumber: 1,
+            preview: "这是项目说明内容"
+          }
+        ],
+        truncated: false
+      });
     } finally {
       await rm(projectRoot, { recursive: true, force: true });
     }
