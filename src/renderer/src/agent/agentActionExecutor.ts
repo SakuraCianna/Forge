@@ -351,7 +351,13 @@ function isCommonScaffoldFileTarget(target: string): boolean {
       target
     ) ||
     /(^|\/)src\/main\/(?:java|kotlin|resources)\//iu.test(target) ||
-    /(^|\/)(src|frontend|client|app)\/(?:main|app|index|router|views|components)\./iu.test(target)
+    /(^|\/)(src|frontend|client|app)\/(?:main|app|index|router|views|components)\./iu.test(target) ||
+    /(^|\/)(frontend|client|web)\/(?:index\.html|package\.json|vite\.config\.[jt]s|src\/(?:main\.[jt]s|App\.vue|App\.[jt]sx?|components\/[^/]+\.(?:vue|[jt]sx?)))$/iu.test(
+      target
+    ) ||
+    /(^|\/)(backend|server|api)\/(?:pom\.xml|build\.gradle|src\/main\/(?:java|kotlin|resources)\/)/iu.test(
+      target
+    )
   );
 }
 
