@@ -11,7 +11,6 @@ import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
 import { createProjectIgnoreMatcher } from "./projectIgnore.js";
 
 type ProjectTextIndexEntry = {
-  content: string;
   lowerLines: string[];
   modifiedAtMs: number;
   relativePath: string;
@@ -26,6 +25,7 @@ type ProjectTextSearchIndex = {
 };
 
 const maxSearchPreviewChars = 240;
+const maxCachedProjectTextSearchIndexes = 6;
 const projectTextSearchIndexes = new Map<string, ProjectTextSearchIndex>();
 
 export async function searchProjectTextFiles({
@@ -123,7 +123,7 @@ async function buildProjectTextSearchIndex(
     rootPath: resolvedProjectRoot
   };
 
-  projectTextSearchIndexes.set(cacheKey, index);
+  rememberProjectTextSearchIndex(cacheKey, index);
   return index;
 }
 
@@ -157,7 +157,6 @@ async function readTextIndexEntry(
   const lines = content.split(/\r?\n/u);
 
   return {
-    content,
     lines,
     lowerLines: lines.map((line) => line.toLocaleLowerCase()),
     modifiedAtMs,
@@ -191,6 +190,21 @@ function collectSearchMatchesFromIndexEntry(
   }
 
   return false;
+}
+
+function rememberProjectTextSearchIndex(cacheKey: string, index: ProjectTextSearchIndex): void {
+  projectTextSearchIndexes.delete(cacheKey);
+  projectTextSearchIndexes.set(cacheKey, index);
+
+  while (projectTextSearchIndexes.size > maxCachedProjectTextSearchIndexes) {
+    const oldestCacheKey = projectTextSearchIndexes.keys().next().value;
+
+    if (typeof oldestCacheKey !== "string") {
+      return;
+    }
+
+    projectTextSearchIndexes.delete(oldestCacheKey);
+  }
 }
 
 function normalizeSearchQuery(query: string): string {
