@@ -3,6 +3,7 @@ import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { AgentProfileContext } from "@shared/agentTypes";
 import type { Language } from "@shared/modelTypes";
 import type { AgentActionRunOutcome, AgentToolPermission } from "@/agent/agentActionExecutor";
+import type { AgentRuntimePostActionStep } from "@/agent/agentRuntimeOrchestrator";
 import {
   createAgentCompletionSummaryMessage,
   getAgentCompletionWorkStartedAt
@@ -348,6 +349,28 @@ export function appendAgentCompletionSummaryIfDone(
         }
       ]
     };
+  });
+}
+
+export function applyAgentRuntimePostActionStep(
+  threads: TaskThread[],
+  {
+    threadId,
+    language,
+    step
+  }: {
+    threadId: string;
+    language: Language;
+    step: AgentRuntimePostActionStep;
+  }
+): TaskThread[] {
+  if (step.kind !== "append-completion-summary") {
+    return threads;
+  }
+
+  return appendAgentCompletionSummaryIfDone(threads, {
+    threadId,
+    language
   });
 }
 

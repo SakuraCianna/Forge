@@ -99,6 +99,14 @@ export type AgentRuntimeManualGateStep =
       kind: "wait-for-review";
     };
 
+export type AgentRuntimePostActionStep =
+  | {
+      kind: "append-completion-summary";
+    }
+  | {
+      kind: "idle";
+    };
+
 // 完全访问权限下, 人工门禁由 Runtime 明确接管; 受控模式下仍停在用户审查点。
 export function resolveAgentRuntimeManualGateStep({
   execution,
@@ -120,6 +128,25 @@ export function resolveAgentRuntimeManualGateStep({
     : {
         kind: "auto-complete"
       };
+}
+
+// 动作结束后的收尾也先过 Runtime 决策, 避免 UI 主文件直接判断何时追加完成总结。
+export function resolveAgentRuntimePostActionStep({
+  outcome
+}: {
+  outcome: AgentActionRunOutcome;
+}): AgentRuntimePostActionStep {
+  const status = typeof outcome === "string" ? outcome : outcome.status;
+
+  if (status === "completed") {
+    return {
+      kind: "append-completion-summary"
+    };
+  }
+
+  return {
+    kind: "idle"
+  };
 }
 
 // 自动恢复决策统一进入 Runtime: 先选择可恢复失败, 再只记录不可自动处理的暂停原因。

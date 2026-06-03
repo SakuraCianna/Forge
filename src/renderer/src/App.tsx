@@ -48,9 +48,9 @@ import {
 import {
   appendAgentActionOutcomeRecord,
   appendAgentActionRunRecord,
-  appendAgentCompletionSummaryIfDone as appendAgentCompletionSummaryIfDoneToThreads,
   appendAgentManualGateWaitEvent,
   appendAgentPermissionDeniedEvent,
+  applyAgentRuntimePostActionStep,
   applyAgentActionDecisionStatus,
   formatAgentManualGateRequiredNotice,
   formatAgentPermissionDeniedNotice
@@ -71,6 +71,7 @@ import {
   resolveAgentRuntimeAutoFailureRecoveryStep,
   resolveAgentRuntimeCommandDecision,
   resolveAgentRuntimeManualGateStep,
+  resolveAgentRuntimePostActionStep,
   resolveAgentRuntimePreflightDecision,
   runAgentRuntimeExecution
 } from "@/agent/agentRuntimeOrchestrator";
@@ -2770,7 +2771,7 @@ export function App(): ReactElement {
             : completeFullAccessManualGateAction(threadId, actionToRun, createdAt);
 
         appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, createdAt);
-        window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
+        scheduleAgentPostActionStep(threadId, outcome);
         return outcome;
       }
 
@@ -2854,7 +2855,7 @@ export function App(): ReactElement {
     }
 
     appendAgentActionOutcomeEvent(threadId, actionToRun, outcome, startedAt);
-    window.setTimeout(() => appendAgentCompletionSummaryIfDone(threadId), 0);
+    scheduleAgentPostActionStep(threadId, outcome);
     return outcome;
   }
 
@@ -2887,14 +2888,26 @@ export function App(): ReactElement {
     return "failed";
   }
 
-  // 队列完成后只在正文留下简短总结, 具体执行细节继续折叠在“已处理”
-  function appendAgentCompletionSummaryIfDone(threadId: string): void {
-    setThreads((current) =>
-      appendAgentCompletionSummaryIfDoneToThreads(current, {
-        threadId,
-        language: settings.language
-      })
-    );
+  // 动作收尾交给 Runtime 决定是否需要追加完成总结, App 只负责异步调度线程更新。
+  function scheduleAgentPostActionStep(
+    threadId: string,
+    outcome: AgentActionRunOutcome
+  ): void {
+    const step = resolveAgentRuntimePostActionStep({ outcome });
+
+    if (step.kind === "idle") {
+      return;
+    }
+
+    window.setTimeout(() => {
+      setThreads((current) =>
+        applyAgentRuntimePostActionStep(current, {
+          threadId,
+          language: settings.language,
+          step
+        })
+      );
+    }, 0);
   }
 
   // 阻止高风险命令继续执行, 并把原因写入线程时间线
