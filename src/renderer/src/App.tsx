@@ -27,7 +27,6 @@ import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import {
   getRunnablePendingAgentActions,
-  runAgentActionBatch,
   resolveMissingInspectFileFallback,
   type AgentActionRunOutcome
 } from "@/agent/agentActionExecutor";
@@ -75,6 +74,11 @@ import {
   resolveAgentRuntimePreflightDecision,
   runAgentRuntimeExecution
 } from "@/agent/agentRuntimeOrchestrator";
+import {
+  runAgentRuntimeQueuedAction,
+  runAgentRuntimeQueuedActionBatch,
+  type AgentRuntimeQueueCoordinator
+} from "@/agent/agentRuntimeQueue";
 import {
   appendSourceUrlsToAgentSummary,
   extractSourceUrlsFromText,
@@ -372,6 +376,14 @@ export function App(): ReactElement {
     pausedThreadIds,
     reserveAgentActionBatch
   } = useAgentRunState();
+  const agentRuntimeQueueCoordinator = useMemo<AgentRuntimeQueueCoordinator>(
+    () => ({
+      hasReservedAgentAction,
+      isThreadCancelled: (threadId) => cancelledThreadIdsRef.current.has(threadId),
+      reserveAgentActionBatch
+    }),
+    [cancelledThreadIdsRef, hasReservedAgentAction, reserveAgentActionBatch]
+  );
   const { t } = useI18n(settings.language);
   const threadsRef = useRef<TaskThread[]>(threads);
   const activePlanStreamRequestIdsRef = useRef<Map<string, string>>(new Map());
@@ -2699,27 +2711,22 @@ export function App(): ReactElement {
     action: AgentAction,
     options: { approvedCommand?: boolean; skipReservation?: boolean } = {}
   ): Promise<AgentActionRunOutcome> {
-    if (!options.skipReservation) {
-      if (hasReservedAgentAction(threadId, [action])) {
-        return { status: "running", continueBatch: false };
-      }
+    return runAgentRuntimeQueuedAction({
+      threadId,
+      action,
+      options,
+      coordinator: agentRuntimeQueueCoordinator,
+      runReservedAction: (reservedAction, runtimeOptions) =>
+        runReservedAgentAction(threadId, reservedAction, runtimeOptions)
+    });
+  }
 
-      const releaseReservation = reserveAgentActionBatch(threadId, [action]);
-
-      try {
-        return await runAgentAction(threadId, action, {
-          ...options,
-          skipReservation: true
-        });
-      } finally {
-        releaseReservation();
-      }
-    }
-
-    if (cancelledThreadIdsRef.current.has(threadId)) {
-      return { status: "pending", continueBatch: false };
-    }
-
+  // 已经过 Runtime 队列层预约的动作, 这里只处理权限, 门禁和真实副作用。
+  async function runReservedAgentAction(
+    threadId: string,
+    action: AgentAction,
+    options: { approvedCommand?: boolean } = {}
+  ): Promise<AgentActionRunOutcome> {
     const activeAgentProfile = getThreadAgentProfileContext(threadId);
     const threadFullAccessMode = getThreadFullAccessMode(threadId);
     const runtimeDecision = resolveAgentRuntimePreflightDecision({
@@ -3017,23 +3024,12 @@ export function App(): ReactElement {
 
   // 批量执行动作队列, 每一步都通过线程事件回写进度
   async function runAgentActions(threadId: string, actions: AgentAction[]): Promise<void> {
-    if (actions.length === 0 || hasReservedAgentAction(threadId, actions)) {
-      return;
-    }
-
-    const releaseReservation = reserveAgentActionBatch(threadId, actions);
-
-    try {
-      await runAgentActionBatch(actions, (action) => {
-        if (cancelledThreadIdsRef.current.has(threadId)) {
-          return { status: "pending", continueBatch: false };
-        }
-
-        return runAgentAction(threadId, action, { skipReservation: true });
-      });
-    } finally {
-      releaseReservation();
-    }
+    await runAgentRuntimeQueuedActionBatch({
+      threadId,
+      actions,
+      coordinator: agentRuntimeQueueCoordinator,
+      runReservedAction: (action) => runReservedAgentAction(threadId, action)
+    });
   }
 
   // 执行受控目录列表动作, 只返回一层目录条目和文件大小
