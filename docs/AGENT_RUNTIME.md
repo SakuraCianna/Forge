@@ -28,6 +28,7 @@
   - 人工门禁和 commit 门禁在完全访问权限下可以被运行时接管。
   - 命令门禁统一返回 `run`, `approval-required` 或 `deny`。
   - 执行分派已经通过 `runAgentRuntimeExecution` 收拢到 Runtime, `App.tsx` 只注入文件, 命令, Git 和线程事件等副作用 handler。
+  - 自动失败恢复通过 `resolveAgentRuntimeAutoFailureRecoveryStep` 先决策恢复候选, 暂停通知或空闲状态, `App.tsx` 只负责写事件和触发修复计划。
 - `App.tsx` 仍负责真实副作用: 文件读取, 文件修改生成, 命令执行, Git 操作, 线程事件和 UI 状态。
 - 完成总结会汇总创建, 编辑, 删除, 读取, 失败恢复和耗时统计, 主界面只保留简短结果。
 
@@ -40,7 +41,7 @@
 - `resolve`: 选择下一动作, 判断是否可运行。
 - `gate`: 处理权限, 文件审查, 命令审批, commit 门禁。
 - `execute`: 调度受控工具和真实副作用, 当前已完成第一层 handler 分派。
-- `recover`: 自动生成失败恢复计划或暂停等待必要人工输入。
+- `recover`: 自动生成失败恢复计划或暂停等待必要人工输入, 当前已收拢自动恢复步骤选择。
 - `summarize`: 在队列结束时生成稳定结果摘要。
 
 ### 2. 权限策略升级

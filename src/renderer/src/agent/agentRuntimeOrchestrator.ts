@@ -11,6 +11,13 @@ import {
   type AgentCommandRisk,
   type AgentCommandSafetyPolicy
 } from "@/agent/agentActionExecutor";
+import {
+  selectAutoFailureRecoveryCandidate,
+  selectAutoFailureRecoverySkipNotice,
+  type AutoFailureRecoveryCandidate,
+  type AutoFailureRecoverySkipNotice,
+  type SelectAutoFailureRecoveryCandidateInput
+} from "@/agent/autoFailureRecovery";
 
 type DeniedPermission = Extract<AgentActionPermissionResult, { ok: false }>;
 type ManualGateExecution = Extract<AgentActionExecution, { kind: "manual-gate" }>;
@@ -67,6 +74,46 @@ export type AgentRuntimeCommandDecision =
       kind: "approval-required";
       risk: ApprovalCommandRisk;
     };
+
+export type AgentRuntimeAutoFailureRecoveryStep =
+  | {
+      kind: "start-recovery";
+      candidate: AutoFailureRecoveryCandidate;
+    }
+  | {
+      kind: "write-skip-notice";
+      skipNotice: AutoFailureRecoverySkipNotice;
+    }
+  | {
+      kind: "idle";
+    };
+
+// 自动恢复决策统一进入 Runtime: 先选择可恢复失败, 再只记录不可自动处理的暂停原因。
+export function resolveAgentRuntimeAutoFailureRecoveryStep(
+  input: SelectAutoFailureRecoveryCandidateInput
+): AgentRuntimeAutoFailureRecoveryStep {
+  const candidate = selectAutoFailureRecoveryCandidate(input);
+
+  if (candidate) {
+    return {
+      kind: "start-recovery",
+      candidate
+    };
+  }
+
+  const skipNotice = selectAutoFailureRecoverySkipNotice(input);
+
+  if (skipNotice) {
+    return {
+      kind: "write-skip-notice",
+      skipNotice
+    };
+  }
+
+  return {
+    kind: "idle"
+  };
+}
 
 // 执行分派只选择哪个副作用 handler 被调用, handler 本身仍由 App 注入, 方便后续单测 Runtime。
 export async function runAgentRuntimeExecution({

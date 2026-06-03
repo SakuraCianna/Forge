@@ -38,9 +38,7 @@ import {
   createCommandStartedEvent
 } from "@/agent/commandEvents";
 import {
-  createAutoFailureRecoverySkipEvent,
-  selectAutoFailureRecoveryCandidate,
-  selectAutoFailureRecoverySkipNotice
+  createAutoFailureRecoverySkipEvent
 } from "@/agent/autoFailureRecovery";
 import {
   createFailureFixTaskPrompt,
@@ -68,6 +66,7 @@ import {
 } from "@/agent/agentRunMessages";
 import { improveAgentPlanActions } from "@/agent/agentPlanQuality";
 import {
+  resolveAgentRuntimeAutoFailureRecoveryStep,
   resolveAgentRuntimeCommandDecision,
   resolveAgentRuntimePreflightDecision,
   runAgentRuntimeExecution
@@ -614,7 +613,7 @@ export function App(): ReactElement {
       return;
     }
 
-    const candidate = selectAutoFailureRecoveryCandidate({
+    const recoveryStep = resolveAgentRuntimeAutoFailureRecoveryStep({
       threads,
       currentProjectPath: currentProject.path,
       cancelledThreadIds: cancelledThreadIdsRef.current,
@@ -624,43 +623,40 @@ export function App(): ReactElement {
       getThreadFailureRecoveryLimit
     });
 
-    if (!candidate) {
-      const skipNotice = selectAutoFailureRecoverySkipNotice({
-        threads,
-        currentProjectPath: currentProject.path,
-        cancelledThreadIds: cancelledThreadIdsRef.current
-      });
-
-      if (skipNotice) {
-        const createdAt = new Date().toISOString();
-        const event = createAutoFailureRecoverySkipEvent({
-          threadId: skipNotice.thread.id,
-          action: skipNotice.failedAction,
-          decision: skipNotice.decision,
-          language: settings.language,
-          createdAt
-        });
-
-        setThreads((current) =>
-          current.map((thread) => {
-            if (
-              thread.id !== skipNotice.thread.id ||
-              thread.events.some((threadEvent) => threadEvent.id === event.id)
-            ) {
-              return thread;
-            }
-
-            return {
-              ...thread,
-              events: [...thread.events, event]
-            };
-          })
-        );
-      }
-
+    if (recoveryStep.kind === "idle") {
       return;
     }
 
+    if (recoveryStep.kind === "write-skip-notice") {
+      const { skipNotice } = recoveryStep;
+      const createdAt = new Date().toISOString();
+      const event = createAutoFailureRecoverySkipEvent({
+        threadId: skipNotice.thread.id,
+        action: skipNotice.failedAction,
+        decision: skipNotice.decision,
+        language: settings.language,
+        createdAt
+      });
+
+      setThreads((current) =>
+        current.map((thread) => {
+          if (
+            thread.id !== skipNotice.thread.id ||
+            thread.events.some((threadEvent) => threadEvent.id === event.id)
+          ) {
+            return thread;
+          }
+
+          return {
+            ...thread,
+            events: [...thread.events, event]
+          };
+        })
+      );
+      return;
+    }
+
+    const { candidate } = recoveryStep;
     activeAutoFailureFixKeysRef.current.add(candidate.key);
     autoFailureFixAttemptedKeysRef.current.add(candidate.key);
     autoFailureFixCountsRef.current.set(candidate.thread.id, candidate.attempt);
