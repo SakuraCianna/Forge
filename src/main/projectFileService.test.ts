@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { deleteProjectFile, listProjectDirectory, previewProjectTextFileUpdate } from "./projectFileService";
+import {
+  deleteProjectFile,
+  listProjectDirectory,
+  previewProjectTextFileUpdate,
+  searchProjectTextFiles
+} from "./projectFileService";
 
 describe("previewProjectTextFileUpdate", () => {
   it("marks missing files as create previews", async () => {
@@ -147,6 +152,56 @@ describe("listProjectDirectory", () => {
         truncated: false
       });
       expect(secondPage.nextOffset).toBeUndefined();
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("searchProjectTextFiles", () => {
+  it("uses the local text index while preserving gitignore and sensitive path filters", async () => {
+    const projectRoot = await createTempProject();
+
+    try {
+      await mkdir(join(projectRoot, "docs"), { recursive: true });
+      await writeFile(join(projectRoot, ".gitignore"), "ignored.md\n", "utf8");
+      await writeFile(join(projectRoot, ".env"), "NEEDLE=secret\n", "utf8");
+      await writeFile(join(projectRoot, "ignored.md"), "needle hidden\n", "utf8");
+      await writeFile(
+        join(projectRoot, "docs", "visible.md"),
+        "needle first line\nsecond needle line\n",
+        "utf8"
+      );
+
+      const firstResult = await searchProjectTextFiles({
+        projectRoot,
+        query: "needle",
+        limit: 1
+      });
+      const secondResult = await searchProjectTextFiles({
+        projectRoot,
+        query: "second",
+        limit: 5
+      });
+
+      expect(firstResult).toEqual({
+        query: "needle",
+        matches: [
+          {
+            relativePath: "docs/visible.md",
+            lineNumber: 1,
+            preview: "needle first line"
+          }
+        ],
+        truncated: true
+      });
+      expect(secondResult.matches).toEqual([
+        {
+          relativePath: "docs/visible.md",
+          lineNumber: 2,
+          preview: "second needle line"
+        }
+      ]);
     } finally {
       await rm(projectRoot, { recursive: true, force: true });
     }

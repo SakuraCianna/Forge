@@ -12,10 +12,7 @@ import type {
   ProjectFileDeleteResult,
   ProjectFilePreview,
   ProjectFileChangePreview,
-  ProjectTextFile,
-  ProjectTextSearchMatch,
-  ProjectTextSearchRequest,
-  ProjectTextSearchResult
+  ProjectTextFile
 } from "../shared/fileTypes.js";
 import {
   assertProjectPathNotSensitive,
@@ -23,6 +20,7 @@ import {
 } from "../shared/sensitiveProjectFiles.js";
 import { createLineDiff } from "../shared/textDiff.js";
 import { createProjectIgnoreMatcher } from "./projectIgnore.js";
+export { searchProjectTextFiles } from "./projectTextSearchIndex.js";
 
 type ReadProjectTextFileOptions = {
   projectRoot: string;
@@ -34,7 +32,6 @@ type ProjectTextFileSnapshot = ProjectTextFile & {
   exists: boolean;
 };
 
-const maxSearchPreviewChars = 240;
 const maxInlinePreviewBytes = 40 * 1024 * 1024;
 
 // 读取文本文件前检查路径边界和大小, 防止大文件拖慢预览
@@ -256,79 +253,6 @@ export async function listProjectDirectory({
     entries,
     truncated,
     nextOffset: truncated ? resultOffset + entries.length : undefined
-  };
-}
-
-// 在项目内执行受控文本搜索, 用于 Agent inspect/search 动作
-export async function searchProjectTextFiles({
-  projectRoot,
-  query,
-  limit = 80,
-  maxFileBytes = 256000
-}: ProjectTextSearchRequest): Promise<ProjectTextSearchResult> {
-  const normalizedQuery = normalizeSearchQuery(query);
-  const resultLimit = Math.min(200, Math.max(1, Math.round(limit)));
-  const resolvedProjectRoot = await realpath(projectRoot);
-  const ignoreMatcher = await createProjectIgnoreMatcher(resolvedProjectRoot);
-  const matches: ProjectTextSearchMatch[] = [];
-  let truncated = false;
-
-  // 递归搜索时跳过敏感路径, 大文件和构建产物, 避免把搜索工具变成无限制读文件入口
-  async function walk(directoryPath: string): Promise<void> {
-    if (hasReachedLimit(matches.length, resultLimit)) {
-      truncated = true;
-      return;
-    }
-
-    const entries = await readSortedDirectoryEntries(directoryPath);
-
-    for (const entry of entries) {
-      if (hasReachedLimit(matches.length, resultLimit)) {
-        truncated = true;
-        return;
-      }
-
-      const absolutePath = `${directoryPath}${sep}${entry.name}`;
-      const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
-
-      if (entry.isDirectory()) {
-        if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, true)) {
-          continue;
-        }
-
-        await walk(absolutePath);
-        continue;
-      }
-
-      if (!entry.isFile() || isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
-        continue;
-      }
-
-      const fileStat = await stat(absolutePath);
-
-      if (fileStat.size > maxFileBytes) {
-        continue;
-      }
-
-      const content = await readFile(absolutePath, "utf8");
-
-      if (content.includes("\u0000")) {
-        continue;
-      }
-
-      if (collectSearchMatches(relativePath, content, normalizedQuery, matches, resultLimit)) {
-        truncated = true;
-        return;
-      }
-    }
-  }
-
-  await walk(resolvedProjectRoot);
-
-  return {
-    query: normalizedQuery,
-    matches,
-    truncated
   };
 }
 
@@ -810,47 +734,6 @@ function globPatternToRegexSource(pattern: string): string {
   }
 
   return source;
-}
-
-// 把搜索关键词收敛成非空短文本, 防止意外全仓库匹配
-function normalizeSearchQuery(query: string): string {
-  const normalized = query.trim().slice(0, 160);
-
-  if (!normalized) {
-    throw new Error("Search query is required");
-  }
-
-  return normalized;
-}
-
-// 从单个文本文件收集搜索命中, 按行返回有限预览
-function collectSearchMatches(
-  relativePath: string,
-  content: string,
-  query: string,
-  matches: ProjectTextSearchMatch[],
-  limit: number
-): boolean {
-  const normalizedQuery = query.toLocaleLowerCase();
-  const lines = content.split(/\r?\n/u);
-
-  for (const [index, line] of lines.entries()) {
-    if (!line.toLocaleLowerCase().includes(normalizedQuery)) {
-      continue;
-    }
-
-    if (matches.length >= limit) {
-      return true;
-    }
-
-    matches.push({
-      relativePath,
-      lineNumber: index + 1,
-      preview: line.trim().slice(0, maxSearchPreviewChars)
-    });
-  }
-
-  return false;
 }
 
 // 转义正则字符, 供 glob 编译保留普通路径字符语义
