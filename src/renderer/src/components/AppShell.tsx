@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Minimize2,
   Pin,
+  Plug,
   Plus,
   Play,
   Settings,
@@ -59,7 +60,7 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-export type WorkbenchView = "workspace" | "files" | "source" | "settings";
+export type WorkbenchView = "workspace" | "files" | "source" | "plugins" | "settings";
 
 type NavItem = {
   key: WorkbenchView;
@@ -99,6 +100,7 @@ type ShellCopy = {
   openInSource: string;
   pinConversation: string;
   pinProject: string;
+  pluginsView: string;
   projectOptions: string;
   removeProject: string;
   renameProject: string;
@@ -146,7 +148,8 @@ export function AppShell({
   const [sidebarWidth, setSidebarWidth] = useState(() => getInitialSidebarWidth());
   const navItems: NavItem[] = [
     { key: "files", label: t("nav.files"), icon: FileCode2 },
-    { key: "source", label: t("nav.sourceControl"), icon: GitBranch }
+    { key: "source", label: t("nav.sourceControl"), icon: GitBranch },
+    { key: "plugins", label: copy.pluginsView, icon: Plug }
   ];
   const visibleThreads = useMemo(
     () =>
@@ -393,6 +396,10 @@ export function AppShell({
           <MenuItem onSelect={() => onNavigate("source")}>
             <GitBranch className="h-4 w-4" />
             {copy.sourceView}
+          </MenuItem>
+          <MenuItem onSelect={() => onNavigate("plugins")}>
+            <Plug className="h-4 w-4" />
+            {copy.pluginsView}
           </MenuItem>
         </TitleBarMenu>
 
@@ -846,6 +853,7 @@ function getShellCopy(language: Language): ShellCopy {
       pinCurrentProject: "置顶当前项目",
       pinConversation: "置顶对话",
       pinProject: "置顶项目",
+      pluginsView: "插件",
       projectSource: "源代码管理",
       projectOptions: "项目更多选项",
       resetSidebar: "重置侧边栏宽度",
@@ -891,6 +899,7 @@ function getShellCopy(language: Language): ShellCopy {
     pinCurrentProject: "Pin current project",
     pinConversation: "Pin conversation",
     pinProject: "Pin project",
+    pluginsView: "Plugins",
     projectSource: "Source control",
     projectOptions: "Project options",
     resetSidebar: "Reset sidebar width",

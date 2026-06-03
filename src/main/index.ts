@@ -20,6 +20,8 @@ import {
 } from "./gitService.js";
 import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
+import { registerLocalSkillHandlers } from "./localSkillIpc.js";
+import { scanLocalSkills } from "./localSkillScanner.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
 import { createProjectIndexCache } from "./projectIndexCache.js";
@@ -39,7 +41,7 @@ import { configureProjectTextSearchIndex } from "./projectTextSearchIndex.js";
 import { createOpenRouterModelCatalog } from "./openRouterModelCatalog.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
 import { registerProviderModelHandlers } from "./providerModelsIpc.js";
-import { windowChannels } from "../shared/ipcChannels.js";
+import { systemChannels, windowChannels } from "../shared/ipcChannels.js";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
 
@@ -74,17 +76,28 @@ function closeSenderWindow(event: Electron.IpcMainEvent | Electron.IpcMainInvoke
 }
 
 // 只允许浏览器打开普通网页链接, 避免渲染层把 file:, shell: 或自定义协议交给系统处理
-function openTrustedExternalUrl(url: string): void {
+function openTrustedExternalUrl(url: unknown): boolean {
+  if (typeof url !== "string") {
+    return false;
+  }
+
   try {
     const parsedUrl = new URL(url);
 
-    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-      return;
+    if (
+      (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") ||
+      !parsedUrl.hostname ||
+      parsedUrl.username ||
+      parsedUrl.password
+    ) {
+      return false;
     }
 
     void shell.openExternal(parsedUrl.toString());
+    return true;
   } catch {
     // 忽略无效 URL, 主窗口仍会拒绝创建新窗口
+    return false;
   }
 }
 
@@ -173,6 +186,10 @@ void app.whenReady().then(() => {
 
   void openRouterCatalog.refresh();
 
+  registerLocalSkillHandlers(scanLocalSkills, (channel, handler) => {
+    ipcMain.handle(channel, handler);
+  });
+
   // Agent 调用统一经过主进程, 避免把 provider key 暴露给前端页面
   registerAgentHandlers(
     (request) => generateAgentPlan({ request, keyVault }),
@@ -236,6 +253,9 @@ void app.whenReady().then(() => {
   ipcMain.handle(windowChannels.minimize, (event) => minimizeSenderWindow(event));
   ipcMain.handle(windowChannels.toggleMaximize, (event) => toggleSenderWindowMaximize(event));
   ipcMain.handle(windowChannels.close, (event) => closeSenderWindow(event));
+  ipcMain.handle(systemChannels.openExternal, (_event, url: unknown) =>
+    openTrustedExternalUrl(url)
+  );
   ipcMain.on(windowChannels.minimize, (event) => minimizeSenderWindow(event));
   ipcMain.on(windowChannels.toggleMaximize, (event) => toggleSenderWindowMaximize(event));
   ipcMain.on(windowChannels.close, (event) => closeSenderWindow(event));

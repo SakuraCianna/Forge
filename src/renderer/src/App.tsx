@@ -9,6 +9,7 @@ import type {
 } from "@shared/agentTypes";
 import type { ProjectGitCommitResult, ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
+import type { LocalSkillScanResult } from "@shared/pluginSkillTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
@@ -22,9 +23,11 @@ import {
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { ProjectFileIcon } from "@/components/ProjectFileIcon";
 import { ProjectFileTree } from "@/components/ProjectFileTree";
+import { PluginLibraryPanel } from "@/components/PluginLibraryPanel";
 import { SourceDiffPreview } from "@/components/SourceDiffPreview";
 import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
+import type { ComposerSlashCommandId } from "@/state/pluginSkills";
 import {
   getRunnablePendingAgentActions,
   resolveMissingInspectFileFallback,
@@ -136,6 +139,7 @@ import {
   createHeroComposerPlaceholder,
   createHeroPromptSuggestions
 } from "@/state/contextSuggestions";
+import { createDefaultPluginCatalog } from "@/state/pluginSkills";
 import { useAgentRunState } from "@/state/agentRunState";
 import { useComposerSignals } from "@/state/composerSignals";
 import {
@@ -239,6 +243,15 @@ type ProviderKeyStatus = {
   last4: string | null;
 };
 
+type CommandDialogState = {
+  title: string;
+  description: string;
+  rows: Array<{
+    label: string;
+    value: string;
+  }>;
+};
+
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
 const fileTreeDirectoryEntryLimit = 2000;
@@ -309,6 +322,9 @@ export function App(): ReactElement {
   const [pushAfterCommit, setPushAfterCommit] = useState(false);
   const [gitRemote, setGitRemote] = useState("origin");
   const [threads, setThreads] = useState<TaskThread[]>([]);
+  const [localSkillScan, setLocalSkillScan] = useState<LocalSkillScanResult | null>(null);
+  const [commandDialog, setCommandDialog] = useState<CommandDialogState | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [taskNotice, setTaskNotice] = useState<string | null>(null);
   const [providerFetchStates, setProviderFetchStates] = useState<Record<string, ProviderFetchState>>({});
@@ -440,6 +456,10 @@ export function App(): ReactElement {
     getActiveAgentProfileContext(agentProfiles, settings.language),
     generalPreferences
   );
+  const pluginCatalog = useMemo(
+    () => createDefaultPluginCatalog(settings.language, localSkillScan?.skills ?? []),
+    [localSkillScan?.skills, settings.language]
+  );
   const fullAccessMode =
     !generalPreferences.readOnly &&
     (generalPreferences.fullAccess || activeAgentProfileContext.permissionMode === "full");
@@ -548,6 +568,38 @@ export function App(): ReactElement {
       })
       .catch(() => {
         // OpenRouter 参考目录是静默增强, 启动失败不打扰用户主流程
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void window.forge.skills
+      .scanLocal()
+      .then((result) => {
+        if (!disposed) {
+          setLocalSkillScan(result);
+        }
+      })
+      .catch((error) => {
+        if (disposed) {
+          return;
+        }
+
+        setLocalSkillScan({
+          skills: [],
+          scannedRoots: [],
+          errors: [
+            {
+              root: "local skills",
+              message: error instanceof Error ? error.message : String(error)
+            }
+          ]
+        });
       });
 
     return () => {
@@ -1977,6 +2029,57 @@ export function App(): ReactElement {
       case "project-scanning":
         return t("projects.scanning");
     }
+  }
+
+  function runComposerCommand(commandId: ComposerSlashCommandId): void {
+    if (commandId === "feedback") {
+      setFeedbackDialogOpen(true);
+      return;
+    }
+
+    if (commandId === "persona" || commandId === "model") {
+      setActiveView("settings");
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? commandId === "persona"
+            ? "已打开个性化设置"
+            : "已打开模型配置"
+          : commandId === "persona"
+            ? "Opened personalization settings"
+            : "Opened model settings"
+      );
+      return;
+    }
+
+    if (commandId === "quick") {
+      setSettings((current) => setSpeed(current, "fast"));
+      setTaskNotice(settings.language === "zh-CN" ? "已切换到快速模式" : "Switched to quick mode");
+      return;
+    }
+
+    if (commandId === "reasoning") {
+      setSettings((current) => setIntelligence(current, "xhigh"));
+      setTaskNotice(
+        settings.language === "zh-CN" ? "已切换到超高推理模式" : "Switched to ultra reasoning"
+      );
+      return;
+    }
+
+    if (commandId === "mcp") {
+      setCommandDialog(createMcpCommandDialog(settings.language, localSkillScan));
+      return;
+    }
+
+    setCommandDialog(
+      createStatusCommandDialog(settings.language, {
+        currentProjectName: currentProject?.name ?? null,
+        currentProjectPath: currentProject?.path ?? null,
+        currentModelId: settings.currentModelId,
+        indexedFileCount: projectScanResult?.files.length ?? 0,
+        localSkillCount: localSkillScan?.skills.length ?? 0,
+        threadCount: threads.filter((thread) => !thread.archived).length
+      })
+    );
   }
 
   // 为线程请求 Agent 计划, 生成动作队列前先注入当前记忆
@@ -3444,6 +3547,8 @@ export function App(): ReactElement {
         busy={activeThread?.status === "running"}
         settings={settings}
         generalPreferences={generalPreferences}
+        pluginCatalog={pluginCatalog}
+        projectFiles={projectScanResult?.files ?? []}
         focusSignal={composerFocusSignal}
         placeholder={variant === "hero" ? heroComposerPlaceholder : undefined}
         submitSignal={composerSubmitSignal}
@@ -3451,6 +3556,7 @@ export function App(): ReactElement {
         onCancelTask={cancelActiveThread}
         onOpenSettings={() => setActiveView("settings")}
         onPickProject={() => void pickProject()}
+        onRunCommand={runComposerCommand}
         onUpdateGeneralPreferences={setGeneralPreferences}
         onSelectModel={(modelId) => setSettings((current) => setCurrentModel(current, modelId))}
         onSelectIntelligence={(level) => setSettings((current) => setIntelligence(current, level))}
@@ -4029,10 +4135,25 @@ export function App(): ReactElement {
     );
   }
 
+  // 渲染插件和技能目录, 当前阶段作为输入框上下文来源
+  function renderPluginsView(): ReactElement {
+    return (
+      <PluginLibraryPanel
+        language={settings.language}
+        plugins={pluginCatalog}
+        onOpenExternal={(url) => void window.forge.system.openExternal(url)}
+      />
+    );
+  }
+
   // 根据侧边栏选中项决定主内容, 设置默认进入常规页
   function renderActiveView(): ReactElement {
     if (activeView === "settings") {
       return renderSettingsView();
+    }
+
+    if (activeView === "plugins") {
+      return renderPluginsView();
     }
 
     if (activeView === "files") {
@@ -4047,77 +4168,361 @@ export function App(): ReactElement {
   }
 
   return (
-    <AppShell
-      language={settings.language}
-      activeView={activeView}
-      currentProjectName={currentProject?.name}
-      currentProjectPath={currentProject?.path}
-      projects={recentProjects}
-      threads={threads}
-      onArchiveAllChats={() => {
-        setThreads((current) => archiveAllThreads(current));
-        setSelectedThreadId(null);
-      }}
-      onArchiveProjectChats={archiveProjectConversations}
-      onArchiveThread={(threadId) => {
-        setThreads((current) => archiveThread(current, threadId));
-        if (selectedThreadId === threadId) {
+    <>
+      <AppShell
+        language={settings.language}
+        activeView={activeView}
+        currentProjectName={currentProject?.name}
+        currentProjectPath={currentProject?.path}
+        projects={recentProjects}
+        threads={threads}
+        onArchiveAllChats={() => {
+          setThreads((current) => archiveAllThreads(current));
           setSelectedThreadId(null);
-        }
-      }}
-      onCreateProjectWorktree={createProjectWorktree}
-      onDeleteThread={(threadId) => {
-        setThreads((current) => deleteThread(current, threadId));
-        if (selectedThreadId === threadId) {
-          setSelectedThreadId(null);
-        }
-      }}
-      onNavigate={setActiveView}
-      onNewTask={() => {
-        setActiveView("workspace");
-        setSelectedThreadId(null);
-        focusComposer();
-      }}
-      onNewProjectChat={(projectPath) => {
-        selectProject(projectPath);
-        setSelectedThreadId(null);
-        focusComposer();
-      }}
-      onRun={() => {
-        setActiveView("workspace");
-        submitComposer();
-      }}
-      onMinimizeWindow={() => void window.forge.windowControls.minimize()}
-      onToggleMaximizeWindow={() => void window.forge.windowControls.toggleMaximize()}
-      onPickProject={() => void pickProject()}
-      onRemoveProject={removeProjectRecord}
-      onRenameProject={renameProject}
-      onSelectProject={selectProject}
-      onSelectThread={(threadId) => {
-        const thread = selectThreadById(threads, threadId);
-
-        if (thread?.projectPath) {
-          const project = recentProjects.find((candidate) => candidate.path === thread.projectPath);
-
-          if (project) {
-            setCurrentProject(project);
-            setRecentProjects((current) =>
-              addRecentProject(current, { ...project, openedAt: new Date().toISOString() })
-            );
+        }}
+        onArchiveProjectChats={archiveProjectConversations}
+        onArchiveThread={(threadId) => {
+          setThreads((current) => archiveThread(current, threadId));
+          if (selectedThreadId === threadId) {
+            setSelectedThreadId(null);
           }
-        }
+        }}
+        onCreateProjectWorktree={createProjectWorktree}
+        onDeleteThread={(threadId) => {
+          setThreads((current) => deleteThread(current, threadId));
+          if (selectedThreadId === threadId) {
+            setSelectedThreadId(null);
+          }
+        }}
+        onNavigate={setActiveView}
+        onNewTask={() => {
+          setActiveView("workspace");
+          setSelectedThreadId(null);
+          focusComposer();
+        }}
+        onNewProjectChat={(projectPath) => {
+          selectProject(projectPath);
+          setSelectedThreadId(null);
+          focusComposer();
+        }}
+        onRun={() => {
+          setActiveView("workspace");
+          submitComposer();
+        }}
+        onMinimizeWindow={() => void window.forge.windowControls.minimize()}
+        onToggleMaximizeWindow={() => void window.forge.windowControls.toggleMaximize()}
+        onPickProject={() => void pickProject()}
+        onRemoveProject={removeProjectRecord}
+        onRenameProject={renameProject}
+        onSelectProject={selectProject}
+        onSelectThread={(threadId) => {
+          const thread = selectThreadById(threads, threadId);
 
-        setSelectedThreadId(threadId);
-        setActiveView("workspace");
-      }}
-      onTogglePinProject={togglePinnedProject}
-      onTogglePinThread={(threadId) => setThreads((current) => toggleThreadPinned(current, threadId))}
-      backgroundImageDataUrl={generalPreferences.backgroundImageDataUrl}
-      backgroundOpacity={generalPreferences.backgroundOpacity}
-    >
-      {renderActiveView()}
-    </AppShell>
+          if (thread?.projectPath) {
+            const project = recentProjects.find((candidate) => candidate.path === thread.projectPath);
+
+            if (project) {
+              setCurrentProject(project);
+              setRecentProjects((current) =>
+                addRecentProject(current, { ...project, openedAt: new Date().toISOString() })
+              );
+            }
+          }
+
+          setSelectedThreadId(threadId);
+          setActiveView("workspace");
+        }}
+        onTogglePinProject={togglePinnedProject}
+        onTogglePinThread={(threadId) => setThreads((current) => toggleThreadPinned(current, threadId))}
+        backgroundImageDataUrl={generalPreferences.backgroundImageDataUrl}
+        backgroundOpacity={generalPreferences.backgroundOpacity}
+      >
+        {renderActiveView()}
+      </AppShell>
+      {commandDialog ? (
+        <CommandDialog
+          dialog={commandDialog}
+          language={settings.language}
+          onClose={() => setCommandDialog(null)}
+        />
+      ) : null}
+      {feedbackDialogOpen ? (
+        <FeedbackDialog
+          language={settings.language}
+          onClose={() => setFeedbackDialogOpen(false)}
+          onSubmit={(category, detail, includeStatus) => {
+            const url = createFeedbackIssueUrl({
+              category,
+              currentProjectName: currentProject?.name ?? null,
+              currentModelId: settings.currentModelId,
+              detail,
+              includeStatus,
+              localSkillCount: localSkillScan?.skills.length ?? 0,
+              threadCount: threads.filter((thread) => !thread.archived).length
+            });
+
+            setFeedbackDialogOpen(false);
+            void window.forge.system.openExternal(url);
+          }}
+        />
+      ) : null}
+    </>
   );
+}
+
+function CommandDialog({
+  dialog,
+  language,
+  onClose
+}: {
+  dialog: CommandDialogState;
+  language: Language;
+  onClose: () => void;
+}): ReactElement {
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/20 px-6">
+      <div className="w-full max-w-[520px] rounded-[22px] border border-[#ececf1] bg-white p-5 shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <span className="min-w-0">
+            <h2 className="text-[20px] font-semibold text-[#202123]">{dialog.title}</h2>
+            <p className="mt-1 text-[12px] leading-5 text-[#6e6e80]">{dialog.description}</p>
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123]"
+            aria-label={language === "zh-CN" ? "关闭" : "Close"}
+          >
+            ×
+          </button>
+        </div>
+        <div className="space-y-2">
+          {dialog.rows.map((row) => (
+            <div
+              key={row.label}
+              className="grid grid-cols-[130px_minmax(0,1fr)] gap-3 rounded-[12px] bg-[#f7f7f8] px-3 py-2.5 text-[12px]"
+            >
+              <span className="text-[#6e6e80]">{row.label}</span>
+              <span className="min-w-0 break-words text-[#202123]">{row.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackDialog({
+  language,
+  onClose,
+  onSubmit
+}: {
+  language: Language;
+  onClose: () => void;
+  onSubmit: (category: string, detail: string, includeStatus: boolean) => void;
+}): ReactElement {
+  const [category, setCategory] = useState(language === "zh-CN" ? "错误" : "Bug");
+  const [detail, setDetail] = useState("");
+  const [includeStatus, setIncludeStatus] = useState(true);
+  const copy = getFeedbackDialogCopy(language);
+  const canSubmit = detail.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/20 px-6">
+      <div className="w-full max-w-[860px] rounded-[22px] border border-[#ececf1] bg-white p-6 shadow-[0_24px_70px_rgba(0,0,0,0.22)]">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <h2 className="text-[24px] font-semibold text-[#202123]">{copy.title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-[10px] text-[#565869] transition hover:bg-[#f7f7f8] hover:text-[#202123]"
+            aria-label={copy.close}
+          >
+            ×
+          </button>
+        </div>
+        <div className="mb-4 flex flex-wrap gap-3">
+          {copy.categories.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setCategory(item)}
+              className={`h-11 rounded-full border px-5 text-[14px] transition ${
+                category === item
+                  ? "border-[#202123] bg-[#202123] text-white"
+                  : "border-[#d9d9e3] bg-white text-[#202123] hover:bg-[#f7f7f8]"
+              }`}
+            >
+              + {item}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={detail}
+          onChange={(event) => setDetail(event.currentTarget.value)}
+          placeholder={copy.placeholder}
+          className="h-44 w-full resize-none rounded-[18px] border border-[#2563eb] bg-white px-4 py-3 text-[15px] leading-6 text-[#202123] outline-none placeholder:text-[#8e8ea0]"
+        />
+        <label className="mt-4 flex items-center gap-2 text-[14px] text-[#6e6e80]">
+          <input
+            type="checkbox"
+            checked={includeStatus}
+            onChange={(event) => setIncludeStatus(event.currentTarget.checked)}
+            className="h-4 w-4 rounded border-[#d9d9e3]"
+          />
+          {copy.includeStatus}
+        </label>
+        <button
+          type="button"
+          disabled={!canSubmit}
+          onClick={() => onSubmit(category, detail, includeStatus)}
+          className="mt-6 h-12 w-full rounded-[14px] bg-[#202123] text-[15px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-[#a3a3a3]"
+        >
+          {copy.submit}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function createMcpCommandDialog(
+  language: Language,
+  localSkillScan: LocalSkillScanResult | null
+): CommandDialogState {
+  const isChinese = language === "zh-CN";
+
+  return {
+    title: isChinese ? "MCP 状态" : "MCP Status",
+    description: isChinese
+      ? "Forge 当前还没有接入 MCP 运行时, 本页只显示本机可用上下文能力。"
+      : "Forge has not connected an MCP runtime yet. This only reports local context capabilities.",
+    rows: [
+      {
+        label: isChinese ? "Forge MCP" : "Forge MCP",
+        value: isChinese ? "未接入" : "Not connected"
+      },
+      {
+        label: isChinese ? "本机 Skills" : "Local skills",
+        value: `${localSkillScan?.skills.length ?? 0}`
+      },
+      {
+        label: isChinese ? "扫描目录" : "Scanned roots",
+        value: localSkillScan?.scannedRoots.join("\n") || (isChinese ? "未发现" : "None found")
+      }
+    ]
+  };
+}
+
+function createStatusCommandDialog(
+  language: Language,
+  input: {
+    currentModelId: string | null;
+    currentProjectName: string | null;
+    currentProjectPath: string | null;
+    indexedFileCount: number;
+    localSkillCount: number;
+    threadCount: number;
+  }
+): CommandDialogState {
+  const isChinese = language === "zh-CN";
+
+  return {
+    title: isChinese ? "当前状态" : "Current Status",
+    description: isChinese ? "Forge 当前工作区和上下文状态。" : "Current Forge workspace and context status.",
+    rows: [
+      {
+        label: isChinese ? "项目" : "Project",
+        value: input.currentProjectName || (isChinese ? "未选择" : "Not selected")
+      },
+      {
+        label: isChinese ? "项目路径" : "Project path",
+        value: input.currentProjectPath || "-"
+      },
+      {
+        label: isChinese ? "模型" : "Model",
+        value: input.currentModelId || (isChinese ? "未选择" : "Not selected")
+      },
+      {
+        label: isChinese ? "索引文件" : "Indexed files",
+        value: `${input.indexedFileCount}`
+      },
+      {
+        label: isChinese ? "本机 Skills" : "Local skills",
+        value: `${input.localSkillCount}`
+      },
+      {
+        label: isChinese ? "可见对话" : "Visible chats",
+        value: `${input.threadCount}`
+      }
+    ]
+  };
+}
+
+function createFeedbackIssueUrl({
+  category,
+  currentModelId,
+  currentProjectName,
+  detail,
+  includeStatus,
+  localSkillCount,
+  threadCount
+}: {
+  category: string;
+  currentModelId: string | null;
+  currentProjectName: string | null;
+  detail: string;
+  includeStatus: boolean;
+  localSkillCount: number;
+  threadCount: number;
+}): string {
+  const title = `[Feedback] ${category}`;
+  const statusBlock = includeStatus
+    ? [
+        "",
+        "## Forge status",
+        `- Project: ${currentProjectName ?? "Not selected"}`,
+        `- Model: ${currentModelId ?? "Not selected"}`,
+        `- Local skills: ${localSkillCount}`,
+        `- Visible chats: ${threadCount}`
+      ].join("\n")
+    : "";
+  const body = [`## Category`, category, "", "## Detail", detail.trim(), statusBlock].join("\n");
+  const params = new URLSearchParams({
+    title,
+    body,
+    labels: "feedback"
+  });
+
+  return `https://github.com/SakuraCianna/Forge/issues/new?${params.toString()}`;
+}
+
+function getFeedbackDialogCopy(language: Language): {
+  categories: string[];
+  close: string;
+  includeStatus: string;
+  placeholder: string;
+  submit: string;
+  title: string;
+} {
+  if (language === "zh-CN") {
+    return {
+      categories: ["错误", "结果异常", "结果正常", "安全检查", "其他"],
+      close: "关闭",
+      includeStatus: "包含当前 Forge 状态摘要",
+      placeholder: "填写详情（必填）",
+      submit: "提交",
+      title: "提交反馈"
+    };
+  }
+
+  return {
+    categories: ["Bug", "Unexpected result", "Good result", "Safety check", "Other"],
+    close: "Close",
+    includeStatus: "Include current Forge status summary",
+    placeholder: "Describe the feedback (required)",
+    submit: "Submit",
+    title: "Submit Feedback"
+  };
 }
 
 // 把运行时错误收敛成一行中文提示, 隐藏 HTML 响应噪音

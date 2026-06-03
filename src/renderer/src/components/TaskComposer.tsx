@@ -1,16 +1,20 @@
 // 本文件说明: 渲染统一输入框, 附件菜单, 权限选择和模型入口
 import type {
   ComponentType,
+  KeyboardEvent as ReactKeyboardEvent,
   ReactElement
 } from "react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowUp,
+  Box,
   Check,
   ChevronDown,
+  Command,
   Eye,
   File,
+  FileCode2,
   FileImage,
   FileSpreadsheet,
   FileText,
@@ -22,10 +26,12 @@ import {
   ShieldCheck,
   Square,
   Target,
+  WandSparkles,
   X
 } from "lucide-react";
 import type { AgentAttachmentContext, AgentImageAttachment } from "@shared/agentTypes";
 import type { IntelligenceLevel, ModelSettings, SpeedMode } from "@shared/modelTypes";
+import type { ProjectFile as ProjectScanFile } from "@shared/projectTypes";
 import { useI18n } from "@/i18n/useI18n";
 import {
   createDefaultGeneralPreferences,
@@ -38,7 +44,18 @@ import {
   type ComposerAttachment,
   type ComposerAttachmentKind
 } from "@/state/composerAttachments";
+import {
+  createComposerContextAttachmentContexts,
+  createComposerSuggestions,
+  getContextKindLabel,
+  type ComposerContextKind,
+  type ComposerContextReference,
+  type ComposerSuggestion,
+  type ComposerSlashCommandId,
+  type ForgePlugin
+} from "@/state/pluginSkills";
 import { ModelSelector } from "./ModelSelector";
+import { ProjectFileIcon } from "./ProjectFileIcon";
 import { useTaskComposerState } from "./useTaskComposerState";
 
 type ComposerPermissionMode = "read-only" | "auto" | "full";
@@ -47,6 +64,8 @@ type TaskComposerProps = {
   busy?: boolean;
   settings: ModelSettings;
   generalPreferences?: GeneralPreferences;
+  pluginCatalog?: ForgePlugin[];
+  projectFiles?: ProjectScanFile[];
   onCancelTask?: () => void;
   onSelectModel: (modelId: string) => void;
   onSelectIntelligence: (level: IntelligenceLevel) => void;
@@ -58,6 +77,7 @@ type TaskComposerProps = {
   ) => void;
   onOpenSettings?: () => void;
   onPickProject?: () => void;
+  onRunCommand?: (commandId: ComposerSlashCommandId) => void;
   onUpdateGeneralPreferences?: (preferences: GeneralPreferences) => void;
   focusSignal?: number;
   placeholder?: string;
@@ -70,6 +90,8 @@ export function TaskComposer({
   busy = false,
   settings,
   generalPreferences,
+  pluginCatalog = [],
+  projectFiles = [],
   onCancelTask,
   onSelectModel,
   onSelectIntelligence,
@@ -77,6 +99,7 @@ export function TaskComposer({
   onSubmitTask,
   onOpenSettings,
   onUpdateGeneralPreferences,
+  onRunCommand,
   focusSignal = 0,
   placeholder,
   submitSignal = 0,
@@ -92,6 +115,16 @@ export function TaskComposer({
     [settings.currentModelId, settings.models]
   );
   const supportsImageAttachments = currentModel?.capabilities.vision === true;
+  const [composerContexts, setComposerContexts] = useState<ComposerContextReference[]>([]);
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(0);
+  const [dismissedSuggestionKey, setDismissedSuggestionKey] = useState<string | null>(null);
+  const composerContextAttachmentContexts = useMemo(
+    () => createComposerContextAttachmentContexts(composerContexts, settings.language),
+    [composerContexts, settings.language]
+  );
+  const clearComposerContextsAfterSubmit = useCallback((): void => {
+    setComposerContexts([]);
+  }, []);
 
   const {
     attachments,
@@ -121,12 +154,183 @@ export function TaskComposer({
       attachmentUnsupported: copy.attachmentUnsupported,
       sensitiveAttachmentsSkipped: copy.sensitiveAttachmentsSkipped
     },
+    extraAttachmentContexts: composerContextAttachmentContexts,
     focusSignal,
+    onSubmitted: clearComposerContextsAfterSubmit,
     onSubmitTask,
     submitShortcut: resolvedGeneralPreferences.composerSubmitShortcut,
     submitSignal,
     supportsImageAttachments
   });
+
+  const promptTrigger = useMemo(
+    () => resolvePromptTrigger(prompt, textareaRef.current?.selectionStart ?? prompt.length),
+    [prompt, textareaRef]
+  );
+  const composerSuggestions = useMemo(
+    () =>
+      promptTrigger
+        ? createComposerSuggestions({
+            language: settings.language,
+            pluginCatalog,
+            projectFiles,
+            query: promptTrigger.query,
+            trigger: promptTrigger.trigger
+          })
+        : [],
+    [pluginCatalog, projectFiles, promptTrigger, settings.language]
+  );
+  const addMenuContextSuggestions = useMemo(
+    () =>
+      createComposerSuggestions({
+        language: settings.language,
+        pluginCatalog,
+        projectFiles: [],
+        query: "",
+        trigger: "@",
+        limit: 200
+      }).filter((suggestion) => suggestion.kind === "plugin" || suggestion.kind === "skill"),
+    [pluginCatalog, settings.language]
+  );
+  const addMenuPluginSuggestions = addMenuContextSuggestions.filter(
+    (suggestion) => suggestion.kind === "plugin"
+  );
+  const addMenuSkillSuggestions = addMenuContextSuggestions.filter(
+    (suggestion) => suggestion.kind === "skill"
+  );
+  const suggestionKey = promptTrigger
+    ? `${promptTrigger.start}:${promptTrigger.end}:${promptTrigger.trigger}:${promptTrigger.query}`
+    : null;
+  const showSuggestions =
+    Boolean(promptTrigger) &&
+    composerSuggestions.length > 0 &&
+    suggestionKey !== dismissedSuggestionKey;
+
+  useEffect(() => {
+    setHighlightedSuggestionIndex(0);
+  }, [suggestionKey]);
+
+  const addComposerContext = useCallback((context: ComposerContextReference): void => {
+    setComposerContexts((current) =>
+      current.some((item) => item.id === context.id) ? current : [...current, context]
+    );
+  }, []);
+
+  const addContextFromMenu = useCallback(
+    (suggestion: ComposerSuggestion): void => {
+      if (suggestion.context) {
+        addComposerContext(suggestion.context);
+      }
+
+      const mention = suggestion.insertText || `@${suggestion.label} `;
+      const nextPrompt = prompt.trim().length > 0 && !prompt.endsWith(" ")
+        ? `${prompt} ${mention}`
+        : `${prompt}${mention}`;
+      const nextCursor = nextPrompt.length;
+
+      setPrompt(nextPrompt);
+      window.requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+      });
+    },
+    [addComposerContext, prompt, setPrompt, textareaRef]
+  );
+
+  const removeComposerContext = useCallback((contextId: string): void => {
+    setComposerContexts((current) => current.filter((context) => context.id !== contextId));
+  }, []);
+
+  const insertPromptFragment = useCallback(
+    (start: number, end: number, fragment: string): void => {
+      const nextPrompt = `${prompt.slice(0, start)}${fragment}${prompt.slice(end)}`;
+      const nextCursor = start + fragment.length;
+
+      setPrompt(nextPrompt);
+      setDismissedSuggestionKey(null);
+      window.requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+      });
+    },
+    [prompt, setPrompt, textareaRef]
+  );
+
+  const applyComposerSuggestion = useCallback(
+    (suggestion: ComposerSuggestion): void => {
+      if (!promptTrigger) {
+        return;
+      }
+
+      if (suggestion.kind === "command" && suggestion.actionId) {
+        insertPromptFragment(promptTrigger.start, promptTrigger.end, "");
+        onRunCommand?.(suggestion.actionId);
+        return;
+      }
+
+      if (suggestion.context) {
+        addComposerContext(suggestion.context);
+      }
+
+      insertPromptFragment(promptTrigger.start, promptTrigger.end, suggestion.insertText);
+      setDismissedSuggestionKey(`${promptTrigger.start}:${promptTrigger.start + suggestion.insertText.length}`);
+    },
+    [addComposerContext, insertPromptFragment, onRunCommand, promptTrigger]
+  );
+
+  const handlePromptChange = useCallback(
+    (value: string): void => {
+      setPrompt(value);
+      setDismissedSuggestionKey(null);
+    },
+    [setPrompt]
+  );
+
+  const handleComposerPromptKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
+      if (showSuggestions && composerSuggestions.length > 0) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setHighlightedSuggestionIndex((current) => (current + 1) % composerSuggestions.length);
+          return;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setHighlightedSuggestionIndex(
+            (current) => (current - 1 + composerSuggestions.length) % composerSuggestions.length
+          );
+          return;
+        }
+
+        if (event.key === "Enter" || event.key === "Tab") {
+          event.preventDefault();
+          const selectedSuggestion = composerSuggestions[highlightedSuggestionIndex] ?? composerSuggestions[0];
+
+          if (selectedSuggestion) {
+            applyComposerSuggestion(selectedSuggestion);
+          }
+          return;
+        }
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setDismissedSuggestionKey(suggestionKey);
+          return;
+        }
+      }
+
+      handlePromptKeyDown(event);
+    },
+    [
+      applyComposerSuggestion,
+      composerSuggestions,
+      handlePromptKeyDown,
+      highlightedSuggestionIndex,
+      showSuggestions,
+      suggestionKey
+    ]
+  );
 
   const handlePrimaryAction = useCallback((): void => {
     if (busy) {
@@ -161,6 +365,7 @@ export function TaskComposer({
         className="hidden"
         aria-label={copy.addAttachments}
       />
+      {renderComposerSuggestionPanel()}
       {attachments.length > 0 ? (
         <div className="mb-1 flex flex-wrap gap-1.5 px-1">
           {attachments.map((attachment) =>
@@ -174,11 +379,22 @@ export function TaskComposer({
       {attachmentNotice ? (
         <p className="mb-1 px-1 text-[10px] leading-4 text-[#b45309]">{attachmentNotice}</p>
       ) : null}
+      {composerContexts.length > 0 ? (
+        <div className="mb-1 flex flex-wrap gap-1.5 px-1">
+          {composerContexts.map((context) =>
+            renderComposerContextChip(context, {
+              copy,
+              language: settings.language,
+              onRemove: removeComposerContext
+            })
+          )}
+        </div>
+      ) : null}
       <textarea
         ref={textareaRef}
         value={prompt}
-        onChange={(event) => setPrompt(event.currentTarget.value)}
-        onKeyDown={handlePromptKeyDown}
+        onChange={(event) => handlePromptChange(event.currentTarget.value)}
+        onKeyDown={handleComposerPromptKeyDown}
         onPaste={handlePromptPaste}
         className={`w-full resize-none bg-transparent px-1.5 py-0.5 text-[10px] leading-4 outline-none placeholder:text-[#b4b4bf] ${
           isHero ? "min-h-[28px]" : "min-h-[22px]"
@@ -236,6 +452,59 @@ export function TaskComposer({
       <div className="mx-auto max-w-[880px]">{inputPanel}</div>
     </section>
   );
+
+  // 渲染 / 和 @ 触发的上下文列表, 列表项可键盘选择或鼠标点击
+  function renderComposerSuggestionPanel(): ReactElement | null {
+    if (!showSuggestions) {
+      return null;
+    }
+
+    let suggestionIndex = 0;
+
+    return (
+      <div
+        data-testid="composer-suggestion-panel"
+        className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-40 max-h-[360px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-2 text-[#202123] shadow-[0_18px_50px_rgba(0,0,0,0.16)]"
+      >
+        {groupComposerSuggestions(composerSuggestions).map((group) => (
+          <div key={group.category} className="mb-3 last:mb-0">
+            <div className="px-2 pb-1.5 pt-1 text-[11px] text-[#8e8ea0]">{group.category}</div>
+            {group.items.map((suggestion) => {
+              const currentIndex = suggestionIndex;
+              const active = currentIndex === highlightedSuggestionIndex;
+
+              suggestionIndex += 1;
+
+              return (
+                <button
+                  key={suggestion.id}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applyComposerSuggestion(suggestion)}
+                  className={`grid min-h-12 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[12px] px-2.5 py-1.5 text-left transition ${
+                    active ? "bg-[#ececf1]" : "hover:bg-[#f7f7f8]"
+                  }`}
+                >
+                  {renderSuggestionIcon(suggestion)}
+                  <span className="min-w-0">
+                    <span className="block truncate text-[14px] leading-5 text-[#202123]">
+                      {suggestion.label}
+                    </span>
+                    <span className="block truncate text-[12px] leading-5 text-[#8e8ea0]">
+                      {suggestion.description}
+                    </span>
+                  </span>
+                  <span className="text-[11px] text-[#8e8ea0]">
+                    {suggestion.kind === "command" ? "/" : "@"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   // 渲染权限模式菜单, 对齐代码 Agent 常见的只读, 审查和完全访问三档
   function renderPermissionSelector(): ReactElement {
@@ -320,40 +589,208 @@ export function TaskComposer({
               <span>{copy.addAttachments}</span>
             </DropdownMenu.Item>
             <DropdownMenu.Separator className="my-1 h-px bg-[#ececf1]" />
-            {[
-              { key: "goal", Icon: Target, label: copy.goalMode },
-              { key: "plugins", Icon: Plug, label: copy.pluginSystem }
-            ].map((item) => (
-              <DropdownMenu.Item
-                key={item.key}
-                disabled
-                className="flex h-9 cursor-default items-center justify-between gap-2 rounded-[10px] px-2 text-[#8e8ea0] outline-none data-[disabled]:opacity-100"
+            <DropdownMenu.Item
+              disabled
+              className="flex h-9 cursor-default items-center justify-between gap-2 rounded-[10px] px-2 text-[#8e8ea0] outline-none data-[disabled]:opacity-100"
+            >
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <Target className="h-4 w-4 shrink-0" />
+                <span className="truncate">{copy.goalMode}</span>
+              </span>
+              <span
+                aria-hidden="true"
+                data-testid="add-menu-goal-switch"
+                className="flex h-5 w-9 items-center rounded-full bg-[#e5e5ea] px-0.5"
               >
-                <span className="inline-flex min-w-0 items-center gap-2">
-                  <item.Icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </span>
                 <span
-                  aria-hidden="true"
-                  data-testid={`add-menu-${item.key}-switch`}
-                  className="flex h-5 w-9 items-center rounded-full bg-[#e5e5ea] px-0.5"
-                >
-                  <span
-                    data-testid={`add-menu-${item.key}-switch-knob`}
-                    className="h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
-                  />
-                </span>
-              </DropdownMenu.Item>
-            ))}
+                  data-testid="add-menu-goal-switch-knob"
+                  className="h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+                />
+              </span>
+            </DropdownMenu.Item>
+            {renderContextSubMenu({
+              Icon: Plug,
+              items: addMenuPluginSuggestions,
+              label: copy.addPlugin,
+              testId: "plugins"
+            })}
+            {renderContextSubMenu({
+              Icon: Box,
+              items: addMenuSkillSuggestions,
+              label: copy.addSkill,
+              testId: "skills"
+            })}
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
     );
   }
+
+  // 渲染加号菜单里的插件和技能二级菜单
+  function renderContextSubMenu({
+    Icon,
+    items,
+    label,
+    testId
+  }: {
+    Icon: ComponentType<{ className?: string }>;
+    items: ComposerSuggestion[];
+    label: string;
+    testId: string;
+  }): ReactElement {
+    return (
+      <DropdownMenu.Sub>
+        <DropdownMenu.SubTrigger className="flex h-9 cursor-default items-center justify-between gap-2 rounded-[10px] px-2 outline-none data-[highlighted]:bg-[#f7f7f8]">
+          <span className="inline-flex min-w-0 items-center gap-2">
+            <Icon className="h-4 w-4 shrink-0 text-[#565869]" />
+            <span className="truncate">{label}</span>
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 -rotate-90 text-[#8e8ea0]" />
+        </DropdownMenu.SubTrigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.SubContent
+            sideOffset={8}
+            alignOffset={-4}
+            className="forge-dropdown-content forge-dropdown-fast z-50 max-h-80 w-80 overflow-auto rounded-[14px] border border-[#d9d9e3] bg-white p-2 text-[13px] text-[#202123] shadow-[0_16px_40px_rgba(0,0,0,0.16)]"
+          >
+            {items.map((item) => (
+              <DropdownMenu.Item
+                key={item.id}
+                onSelect={() => addContextFromMenu(item)}
+                data-testid={`add-menu-${testId}-${item.id}`}
+                className="grid min-h-12 cursor-default grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-[12px] px-2.5 py-1.5 outline-none data-[highlighted]:bg-[#f7f7f8]"
+              >
+                {renderSuggestionIcon(item)}
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] leading-5 text-[#202123]">{item.label}</span>
+                  <span className="block truncate text-[11px] leading-5 text-[#8e8ea0]">{item.description}</span>
+                </span>
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.SubContent>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Sub>
+    );
+  }
+}
+
+type ComposerPromptTrigger = {
+  end: number;
+  query: string;
+  start: number;
+  trigger: "/" | "@";
+};
+
+function renderComposerContextChip(
+  context: ComposerContextReference,
+  options: {
+    copy: ReturnType<typeof getComposerCopy>;
+    language: ModelSettings["language"];
+    onRemove: (id: string) => void;
+  }
+): ReactElement {
+  return (
+    <span
+      key={context.id}
+      className="group inline-flex h-8 max-w-[260px] items-center gap-1.5 rounded-[10px] border border-[#cfe2ff] bg-[#eef6ff] px-2.5 font-medium text-[#0b5cab]"
+      title={`${getContextKindLabel(context.kind, options.language)}: ${context.label}\n${context.detail}`}
+    >
+      {renderContextChipIcon(context.kind)}
+      <span className="min-w-0 truncate">@{context.label}</span>
+      <button
+        type="button"
+        aria-label={options.copy.removeContext}
+        onClick={() => options.onRemove(context.id)}
+        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[#5b7fa8] opacity-70 transition hover:bg-[#dbeafe] hover:text-[#0b5cab] group-hover:opacity-100"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
+function renderSuggestionIcon(suggestion: ComposerSuggestion): ReactElement {
+  if (suggestion.kind === "file") {
+    return (
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] bg-[#f7f7f8]">
+        <ProjectFileIcon
+          className="h-4 w-4 shrink-0"
+          relativePath={suggestion.insertText.slice(1).trim()}
+        />
+      </span>
+    );
+  }
+
+  const Icon = getSuggestionIcon(suggestion.kind);
+
+  return (
+    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] bg-[#f7f7f8] text-[#565869]">
+      <Icon className="h-3.5 w-3.5" />
+    </span>
+  );
+}
+
+function renderContextChipIcon(kind: ComposerContextKind): ReactElement {
+  const Icon = getSuggestionIcon(kind);
+
+  return <Icon className="h-3.5 w-3.5 shrink-0" />;
+}
+
+function getSuggestionIcon(kind: ComposerSuggestion["kind"]): ComponentType<{ className?: string }> {
+  if (kind === "command") {
+    return Command;
+  }
+
+  if (kind === "plugin") {
+    return Plug;
+  }
+
+  if (kind === "skill") {
+    return WandSparkles;
+  }
+
+  return FileCode2;
+}
+
+function groupComposerSuggestions(
+  suggestions: ComposerSuggestion[]
+): Array<{ category: string; items: ComposerSuggestion[] }> {
+  const groups = new Map<string, ComposerSuggestion[]>();
+
+  suggestions.forEach((suggestion) => {
+    groups.set(suggestion.category, [...(groups.get(suggestion.category) ?? []), suggestion]);
+  });
+
+  return Array.from(groups, ([category, items]) => ({ category, items }));
+}
+
+function resolvePromptTrigger(prompt: string, cursorIndex: number): ComposerPromptTrigger | null {
+  const beforeCursor = prompt.slice(0, cursorIndex);
+  const match = /(^|\s)([/@])([^\s/@]*)$/u.exec(beforeCursor);
+
+  if (!match) {
+    return null;
+  }
+
+  const trigger = match[2];
+  const query = match[3] ?? "";
+
+  if (trigger !== "/" && trigger !== "@") {
+    return null;
+  }
+
+  return {
+    end: cursorIndex,
+    query,
+    start: cursorIndex - trigger.length - query.length,
+    trigger
+  };
 }
 
 // 根据语言返回输入框文案, 让组件主体只关心布局
 function getComposerCopy(language: ModelSettings["language"]): {
+  addPlugin: string;
+  addSkill: string;
   addAttachments: string;
   attachmentContextHeader: string;
   attachmentContextIntro: string;
@@ -371,11 +808,14 @@ function getComposerCopy(language: ModelSettings["language"]): {
   pluginSystem: string;
   readOnlyPermission: string;
   removeAttachment: string;
+  removeContext: string;
   sensitiveAttachmentsSkipped: (count: number) => string;
   stopResponse: string;
 } {
   if (language === "zh-CN") {
     return {
+      addPlugin: "引入插件",
+      addSkill: "引入技能",
       addAttachments: "添加照片和文件",
       attachmentContextHeader: "附件本地解析内容:",
       attachmentContextIntro:
@@ -394,12 +834,15 @@ function getComposerCopy(language: ModelSettings["language"]): {
       pluginSystem: "插件系统",
       readOnlyPermission: "只读模式",
       removeAttachment: "移除附件",
+      removeContext: "移除上下文",
       sensitiveAttachmentsSkipped: (count) => `${count} 个敏感附件已跳过。`,
       stopResponse: "停止回答"
     };
   }
 
   return {
+    addPlugin: "Add plugin",
+    addSkill: "Add skill",
     addAttachments: "Add photos and files",
     attachmentContextHeader: "Local attachment context:",
     attachmentContextIntro:
@@ -418,6 +861,7 @@ function getComposerCopy(language: ModelSettings["language"]): {
     pluginSystem: "Plugin system",
     readOnlyPermission: "Read only",
     removeAttachment: "Remove attachment",
+    removeContext: "Remove context",
     sensitiveAttachmentsSkipped: (count) => `${count} sensitive attachments were skipped.`,
     stopResponse: "Stop response"
   };

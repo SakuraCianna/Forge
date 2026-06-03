@@ -53,8 +53,8 @@ button:focus-visible,
 }
 
 ::-webkit-scrollbar {
-  width: 11px;
-  height: 11px;
+  width: 18px;
+  height: 18px;
 }
 
 ::-webkit-scrollbar-track {
@@ -62,16 +62,61 @@ button:focus-visible,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.18);
-  border: 3px solid transparent;
+  background: rgba(0, 0, 0, 0.16);
+  border: 5px solid transparent;
   border-radius: 999px;
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.28);
-  border: 3px solid transparent;
+  background: rgba(0, 0, 0, 0.24);
+  border: 5px solid transparent;
   background-clip: content-box;
+}
+
+::-webkit-scrollbar-button {
+  width: 18px;
+  height: 18px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 9px 9px;
+}
+
+::-webkit-scrollbar-button:vertical:decrement {
+  background-image: linear-gradient(135deg, transparent 50%, #dedee3 50%),
+    linear-gradient(45deg, #dedee3 50%, transparent 50%);
+  background-size: 7px 7px;
+  background-position:
+    calc(50% - 3px) 50%,
+    calc(50% + 3px) 50%;
+}
+
+::-webkit-scrollbar-button:vertical:increment {
+  background-image: linear-gradient(45deg, transparent 50%, #dedee3 50%),
+    linear-gradient(135deg, #dedee3 50%, transparent 50%);
+  background-size: 7px 7px;
+  background-position:
+    calc(50% - 3px) 50%,
+    calc(50% + 3px) 50%;
+}
+
+::-webkit-scrollbar-button:horizontal:decrement {
+  background-image: linear-gradient(45deg, transparent 50%, #dedee3 50%),
+    linear-gradient(135deg, transparent 50%, #dedee3 50%);
+  background-size: 7px 7px;
+  background-position:
+    50% calc(50% - 3px),
+    50% calc(50% + 3px);
+}
+
+::-webkit-scrollbar-button:horizontal:increment {
+  background-image: linear-gradient(135deg, #dedee3 50%, transparent 50%),
+    linear-gradient(45deg, #dedee3 50%, transparent 50%);
+  background-size: 7px 7px;
+  background-position:
+    50% calc(50% - 3px),
+    50% calc(50% + 3px);
 }
 
 .drag-region {
