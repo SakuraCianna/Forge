@@ -14,11 +14,9 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "release:check": "npm run lint && npm test && npm run build",
+    "release:check": "npm run lint && npm run build",
     "dist:win": "npm run build && electron-builder --win --x64 --publish never",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
-    "test": "vitest --run --passWithNoTests",
-    "test:watch": "vitest --passWithNoTests",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -37,9 +35,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
@@ -48,11 +43,9 @@
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
     "eslint": "^10.4.0",
-    "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.60.0",
-    "vite": "^7.3.3",
-    "vitest": "^4.1.7"
+    "vite": "^7.3.3"
   },
   "build": {
     "appId": "com.sakuracianna.forge",

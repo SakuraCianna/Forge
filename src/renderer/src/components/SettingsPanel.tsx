@@ -108,6 +108,7 @@ type SettingsPanelProps = {
   onUpdateProviderBaseUrl: (providerId: string, baseUrl: string) => void;
   onUpdateProviderLabel: (providerId: string, label: string) => void;
   onUpdateUsageRate: (rateKey: string, rate: UsageRate) => void;
+  onDeleteArchivedThread: (threadId: string) => void;
   onRestoreArchivedThread: (threadId: string) => void;
   onSelectModel: (modelId: string) => void;
   personalization: PersonalizationSettings;
@@ -162,6 +163,7 @@ export function SettingsPanel({
   onUpdateProviderBaseUrl,
   onUpdateProviderLabel,
   onUpdateUsageRate,
+  onDeleteArchivedThread,
   onRestoreArchivedThread,
   onSelectModel,
   personalization,
@@ -2006,14 +2008,24 @@ export function SettingsPanel({
                   <span className="block truncate font-medium text-[#202123]">{thread.title}</span>
                   <span className="mt-1 block truncate text-xs text-[#6e6e80]">{thread.createdAt}</span>
                 </span>
-                <button
-                  type="button"
-                  aria-label={`Restore ${thread.title}`}
-                  onClick={() => onRestoreArchivedThread(thread.id)}
-                  className="h-9 shrink-0 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] transition hover:bg-[#f7f7f8]"
-                >
-                  {settings.language === "zh-CN" ? "恢复" : "Restore"}
-                </button>
+                <span className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label={`Restore ${thread.title}`}
+                    onClick={() => onRestoreArchivedThread(thread.id)}
+                    className="h-9 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] transition hover:bg-[#f7f7f8]"
+                  >
+                    {settings.language === "zh-CN" ? "恢复" : "Restore"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${thread.title}`}
+                    onClick={() => onDeleteArchivedThread(thread.id)}
+                    className="h-9 rounded-[12px] border border-[#f1b8b0] bg-white px-3 text-sm text-[#b42318] transition hover:bg-[#fff5f3]"
+                  >
+                    {settings.language === "zh-CN" ? "删除" : "Delete"}
+                  </button>
+                </span>
               </div>
             ))
           ) : (

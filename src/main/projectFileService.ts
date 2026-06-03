@@ -62,10 +62,27 @@ export async function previewProjectFile({
   relativePath,
   maxBytes = 256000
 }: ReadProjectTextFileOptions): Promise<ProjectFilePreview> {
-  const { fileStat, normalizedRelativePath, resolvedFilePath } = await resolveProjectFileForRead(
-    projectRoot,
-    relativePath
-  );
+  // 先确认项目根目录存在。后面的 ENOENT 才能被安全理解为“这个文件没了”。
+  await realpath(projectRoot);
+  let resolvedFile: ResolvedProjectFileForRead;
+
+  try {
+    resolvedFile = await resolveProjectFileForRead(projectRoot, relativePath);
+  } catch (error) {
+    if (!isFileNotFoundError(error)) {
+      throw error;
+    }
+
+    return createUnavailablePreview(
+      normalizeRelativePath(relativePath),
+      0,
+      "application/octet-stream",
+      "unsupported",
+      "File no longer exists. Refresh the project file tree."
+    );
+  }
+
+  const { fileStat, normalizedRelativePath, resolvedFilePath } = resolvedFile;
   const media = resolvePreviewMedia(normalizedRelativePath);
 
   if (media.kind === "text") {
@@ -406,6 +423,8 @@ async function readProjectTextFileOrEmpty({
   const normalizedRelativePath = normalizeRelativePath(relativePath);
 
   assertProjectPathNotSensitive(normalizedRelativePath);
+  // 新文件创建允许目标文件不存在, 但项目根目录本身缺失必须继续报错。
+  await realpath(projectRoot);
 
   try {
     const file = await readProjectTextFile({ projectRoot, relativePath: normalizedRelativePath, maxBytes });

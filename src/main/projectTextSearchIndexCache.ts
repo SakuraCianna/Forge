@@ -1,6 +1,6 @@
 // 本文件说明: 持久化受控文本搜索索引, 让应用重启后也能复用未变化文件的行级快照
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export type ProjectTextSearchIndexCacheEntry = {
@@ -27,6 +27,9 @@ export type ProjectTextSearchIndexCache = {
 };
 
 const projectTextSearchIndexCacheVersion = 1;
+const maxPersistedTextSearchIndexEntries = 20_000;
+const maxPersistedTextSearchIndexChars = 8_000_000;
+const maxPersistedTextSearchIndexFiles = 24;
 
 export function createProjectTextSearchIndexCache({
   directory
@@ -69,8 +72,9 @@ async function writeProjectTextSearchIndexCache(
 ): Promise<void> {
   await mkdir(directory, { recursive: true });
 
+  const compactedPayload = compactProjectTextSearchIndexCachePayload(payload);
   const cacheFile: ProjectTextSearchIndexCacheFile = {
-    ...payload,
+    ...compactedPayload,
     cacheVersion: projectTextSearchIndexCacheVersion,
     indexedAt: new Date().toISOString()
   };
@@ -80,6 +84,67 @@ async function writeProjectTextSearchIndexCache(
     `${JSON.stringify(cacheFile)}\n`,
     "utf8"
   );
+
+  void pruneProjectTextSearchIndexCacheDirectory(directory).catch(() => undefined);
+}
+
+function compactProjectTextSearchIndexCachePayload(
+  payload: ProjectTextSearchIndexCachePayload
+): ProjectTextSearchIndexCachePayload {
+  const entries: ProjectTextSearchIndexCacheEntry[] = [];
+  let persistedChars = 0;
+
+  for (const entry of payload.entries) {
+    if (entries.length >= maxPersistedTextSearchIndexEntries) {
+      break;
+    }
+
+    const entryChars = measureProjectTextSearchIndexCacheEntry(entry);
+
+    // 持久化缓存只是加速重启后的首轮搜索, 被预算裁掉的文件会在下一次搜索时重新按需读取。
+    if (entryChars > maxPersistedTextSearchIndexChars) {
+      continue;
+    }
+
+    if (persistedChars + entryChars > maxPersistedTextSearchIndexChars) {
+      break;
+    }
+
+    entries.push(entry);
+    persistedChars += entryChars;
+  }
+
+  return {
+    ...payload,
+    entries
+  };
+}
+
+function measureProjectTextSearchIndexCacheEntry(entry: ProjectTextSearchIndexCacheEntry): number {
+  return entry.lines.reduce((total, line) => total + line.length + 1, 0);
+}
+
+async function pruneProjectTextSearchIndexCacheDirectory(directory: string): Promise<void> {
+  const files = await Promise.all(
+    (await readdir(directory))
+      .filter((fileName) => fileName.endsWith(".json"))
+      .map(async (fileName) => {
+        const filePath = join(directory, fileName);
+        const fileStat = await stat(filePath);
+
+        return { filePath, modifiedAtMs: fileStat.mtimeMs };
+      })
+  );
+
+  if (files.length <= maxPersistedTextSearchIndexFiles) {
+    return;
+  }
+
+  const staleFiles = files
+    .sort((left, right) => right.modifiedAtMs - left.modifiedAtMs)
+    .slice(maxPersistedTextSearchIndexFiles);
+
+  await Promise.all(staleFiles.map((file) => unlink(file.filePath).catch(() => undefined)));
 }
 
 function parseProjectTextSearchIndexCacheFile(rawValue: string): ProjectTextSearchIndexCacheFile | null {

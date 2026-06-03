@@ -22,6 +22,7 @@ import {
 import { ProjectMissingNotice } from "@/components/ProjectMissingNotice";
 import { ProjectFileIcon } from "@/components/ProjectFileIcon";
 import { ProjectFileTree } from "@/components/ProjectFileTree";
+import { SourceDiffPreview } from "@/components/SourceDiffPreview";
 import type { ProviderFetchState } from "@/components/SettingsPanel";
 import { TaskComposer } from "@/components/TaskComposer";
 import {
@@ -160,6 +161,7 @@ import {
   cancelThread,
   completeNextPendingAgentAction,
   createCommandApprovalEvent,
+  deleteThread,
   restoreThread,
   toggleThreadPinned,
   updateThreadAgentActionFromFileChangePreview,
@@ -425,7 +427,7 @@ export function App(): ReactElement {
     heroSuggestionInput,
     t("composer.heroPlaceholder")
   );
-  const activeAgentProfileContext = applyGeneralPermissionModeToAgentProfile(
+  const activeAgentProfileContext = applyGeneralPreferencesToAgentProfile(
     getActiveAgentProfileContext(agentProfiles, settings.language),
     generalPreferences
   );
@@ -1412,6 +1414,15 @@ export function App(): ReactElement {
 
   async function previewProjectFile(relativePath: string): Promise<ProjectTextFile | null> {
     if (!currentProject) {
+      return null;
+    }
+
+    if (currentProjectMissing) {
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? "当前项目路径不存在, 请重新选择项目后再预览文件。"
+          : "The current project path no longer exists. Pick the project again before previewing files."
+      );
       return null;
     }
 
@@ -3066,6 +3077,18 @@ export function App(): ReactElement {
       return "failed";
     }
 
+    if (currentProjectMissing) {
+      const message =
+        settings.language === "zh-CN"
+          ? "当前项目路径不存在, 请重新选择项目后再继续 Agent 任务。"
+          : "The current project path no longer exists. Pick the project again before continuing the Agent task.";
+
+      setTaskNotice(message);
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(threadId, message);
+      return "failed";
+    }
+
     try {
       const result = await window.forge.files.listDirectory({
         projectRoot: currentProject.path,
@@ -3210,20 +3233,16 @@ export function App(): ReactElement {
     }
 
     try {
-      let file: ProjectTextFile;
-
-      try {
-        file = await window.forge.files.readText({
-          projectRoot: currentProject.path,
-          relativePath
-        });
-      } catch (error) {
-        if (!isMissingProjectFileError(error)) {
-          throw error;
-        }
-
-        file = createEmptyProjectTextFile(relativePath);
-      }
+      const currentSnapshot = await window.forge.files.previewTextUpdate({
+        projectRoot: currentProject.path,
+        relativePath,
+        nextContent: ""
+      });
+      const file: ProjectTextFile = {
+        relativePath: currentSnapshot.relativePath,
+        content: currentSnapshot.currentContent,
+        size: currentSnapshot.currentContent.length
+      };
 
       setPreviewFile(file);
       setFilePreview(createTextFilePreview(file));
@@ -3987,9 +4006,7 @@ export function App(): ReactElement {
                 </p>
               </div>
               {selectedChange && selectedChange.diff.trim() ? (
-                <pre className="h-[calc(100%-58px)] min-h-[520px] overflow-auto bg-[#fafafa] p-4 font-mono text-[12px] leading-6 text-[#202123]">
-                  {renderDiffPreview(selectedChange.diff)}
-                </pre>
+                <SourceDiffPreview diff={selectedChange.diff} />
               ) : (
                 <div className="flex h-[calc(100%-58px)] min-h-[520px] items-center justify-center px-4 text-center text-sm text-[#6e6e80]">
                   {t("source.noDiffPreview")}
@@ -4060,6 +4077,12 @@ export function App(): ReactElement {
             onUpdateProviderLabel={(providerId, label) =>
               setSettings((current) => updateProviderLabel(current, providerId, label))
             }
+            onDeleteArchivedThread={(threadId) => {
+              setThreads((current) => deleteThread(current, threadId));
+              if (selectedThreadId === threadId) {
+                setSelectedThreadId(null);
+              }
+            }}
             onRestoreArchivedThread={(threadId) => {
               setThreads((current) => restoreThread(current, threadId));
               setSelectedThreadId(threadId);
@@ -4120,6 +4143,12 @@ export function App(): ReactElement {
         }
       }}
       onCreateProjectWorktree={createProjectWorktree}
+      onDeleteThread={(threadId) => {
+        setThreads((current) => deleteThread(current, threadId));
+        if (selectedThreadId === threadId) {
+          setSelectedThreadId(null);
+        }
+      }}
       onNavigate={setActiveView}
       onNewTask={() => {
         setActiveView("workspace");
@@ -4256,48 +4285,6 @@ function createGitOperationNotice(
   return language === "zh-CN" ? `已在 ${branch} 创建 Git 提交` : `Created Git commit on ${branch}`;
 }
 
-function renderDiffPreview(diff: string): ReactElement[] {
-  const lines = diff.split(/\r?\n/);
-  const visibleLines = lines.slice(0, 600);
-  const truncated = lines.length > visibleLines.length;
-  const renderedLines = visibleLines.map((line, index) => (
-    <span key={`${index}-${line}`} className={`block whitespace-pre ${getDiffLineClass(line)}`}>
-      {line || " "}
-    </span>
-  ));
-
-  if (truncated) {
-    renderedLines.push(
-      <span key="diff-truncated" className="block whitespace-pre text-[#8e8ea0]">
-        ... diff truncated
-      </span>
-    );
-  }
-
-  return renderedLines;
-}
-
-// 根据 diff 前缀返回行样式, 不在渲染处散落判断
-function getDiffLineClass(line: string): string {
-  if (line.startsWith("+") && !line.startsWith("+++")) {
-    return "bg-[#eefaf3] text-[#087443]";
-  }
-
-  if (line.startsWith("-") && !line.startsWith("---")) {
-    return "bg-[#fff1f2] text-[#b42318]";
-  }
-
-  if (line.startsWith("@@")) {
-    return "bg-[#f0f5ff] text-[#3451b2]";
-  }
-
-  if (line.startsWith("diff --git")) {
-    return "font-semibold text-[#202123]";
-  }
-
-  return "text-[#565869]";
-}
-
 // 合并索引和工作区状态字母, 空状态用占位符对齐
 function formatGitStatusLetter(status: string): string {
   if (status === "??") {
@@ -4371,19 +4358,27 @@ function formatPreviewStatus(
 }
 
 // Read-only mode is enforced at runtime by narrowing writable agent permissions.
-function applyGeneralPermissionModeToAgentProfile(
+function applyGeneralPreferencesToAgentProfile(
   agentProfile: AgentProfileContext,
   generalPreferences: GeneralPreferences
 ): AgentProfileContext {
-  if (!generalPreferences.readOnly) {
-    return agentProfile;
+  if (generalPreferences.readOnly) {
+    return {
+      ...agentProfile,
+      permissionMode: "auto",
+      enabledTools: agentProfile.enabledTools.filter((tool) => tool === "read")
+    };
   }
 
-  return {
-    ...agentProfile,
-    permissionMode: "auto",
-    enabledTools: agentProfile.enabledTools.filter((tool) => tool === "read")
-  };
+  if (generalPreferences.fullAccess) {
+    return {
+      ...agentProfile,
+      permissionMode: "full",
+      enabledTools: ["read", "edit", "command", "git"]
+    };
+  }
+
+  return agentProfile;
 }
 
 // 渲染轻量提示条, 不把提示样式散落在多个视图

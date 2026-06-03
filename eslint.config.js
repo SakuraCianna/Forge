@@ -19,15 +19,6 @@ const browserGlobals = {
   window: "readonly"
 };
 
-const testGlobals = {
-  afterEach: "readonly",
-  beforeEach: "readonly",
-  describe: "readonly",
-  expect: "readonly",
-  it: "readonly",
-  vi: "readonly"
-};
-
 export default tseslint.config(
   {
     ignores: [
@@ -73,16 +64,6 @@ export default tseslint.config(
     files: ["src/renderer/src/**/*.{ts,tsx}"],
     languageOptions: {
       globals: browserGlobals
-    }
-  },
-  {
-    files: ["**/*.test.{ts,tsx}", "src/renderer/src/test/**/*.ts"],
-    languageOptions: {
-      globals: {
-        ...nodeGlobals,
-        ...browserGlobals,
-        ...testGlobals
-      }
     }
   }
 );

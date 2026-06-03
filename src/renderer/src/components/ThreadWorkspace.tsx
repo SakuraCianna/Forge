@@ -56,6 +56,7 @@ import {
 import { getAutoFailureRecoverySkipEventPrefix } from "@/agent/autoFailureRecovery";
 import { getFailureRecoveryAttemptsForAction } from "@/agent/failureRecoveryAttempts";
 import { getProcessedRecoverySummary } from "@/agent/processedRecoverySummary";
+import { extractSourceUrlsFromText } from "@/agent/agentSources";
 import { getThreadActivitySummary as getThreadActivitySummaryFromEvents } from "@/agent/threadActivitySummary";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
@@ -66,7 +67,7 @@ import type {
   TaskThreadEvent
 } from "@/state/taskThreads";
 import { AgentActionDetailsPanel } from "./AgentActionDetailsPanel";
-import { MarkdownPreview } from "./FilePreviewRenderer";
+import { MarkdownPreview } from "./MarkdownPreview";
 import { ProjectFileIcon } from "./ProjectFileIcon";
 import { Tooltip } from "./Tooltip";
 
@@ -3924,7 +3925,7 @@ function compactProcessedDetail(value: string): string {
 }
 
 function extractSourceUrlsFromEvents(events: TaskThreadEvent[]): string[] {
-  return mergeUniqueStrings(events.flatMap((event) => extractSourceUrls(event.message)));
+  return mergeUniqueStrings(events.flatMap((event) => extractSourceUrlsFromText(event.message)));
 }
 
 function stripAssistantSourceBlock(message: string): string {
@@ -3937,9 +3938,7 @@ function stripAssistantSourceBlock(message: string): string {
 }
 
 function extractSourceUrls(value: string): string[] {
-  const matches = value.match(/https?:\/\/[^\s<>)\]]+/giu) ?? [];
-
-  return mergeUniqueStrings(matches.map((url) => url.replace(/[.,;:，。；：]+$/u, "")));
+  return extractSourceUrlsFromText(value);
 }
 
 function mergeUniqueStrings(values: string[]): string[] {

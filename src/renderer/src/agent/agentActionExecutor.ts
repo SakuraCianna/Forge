@@ -214,7 +214,7 @@ export function resolveMissingInspectFileFallback(
     return "continue-existing-edit";
   }
 
-  if (hasCreateFileIntent(taskPrompt, action.target)) {
+  if (hasCreateFileIntent(taskPrompt, action.target) || hasProjectScaffoldFileIntent(taskPrompt, action.target)) {
     return "generate-file-change";
   }
 
@@ -319,6 +319,39 @@ function hasCreateFileIntent(taskPrompt: string, target: string | undefined): bo
 
   return /写|撰写|创建|新建|生成|新增|帮我做|帮我写|create|write|generate|draft|make|add/iu.test(
     normalizedPrompt
+  );
+}
+
+// 空项目脚手架创建时, 用户通常不会逐个点名 pom.xml/package.json 等骨架文件
+function hasProjectScaffoldFileIntent(taskPrompt: string, target: string | undefined): boolean {
+  if (!taskPrompt || !target) {
+    return false;
+  }
+
+  const normalizedPrompt = taskPrompt.toLocaleLowerCase();
+  const normalizedTarget = target.replace(/\\/g, "/").toLocaleLowerCase();
+
+  if (
+    !/(项目|工程|系统|应用|前后端|前端|后端|project|app|application|system)/iu.test(
+      normalizedPrompt
+    ) ||
+    !/(创建|新建|生成|搭建|做一个|实现|create|generate|scaffold|build|make)/iu.test(
+      normalizedPrompt
+    )
+  ) {
+    return false;
+  }
+
+  return isCommonScaffoldFileTarget(normalizedTarget);
+}
+
+function isCommonScaffoldFileTarget(target: string): boolean {
+  return (
+    /(^|\/)(pom\.xml|build\.gradle|settings\.gradle|package\.json|vite\.config\.[jt]s|tsconfig\.json)$/iu.test(
+      target
+    ) ||
+    /(^|\/)src\/main\/(?:java|kotlin|resources)\//iu.test(target) ||
+    /(^|\/)(src|frontend|client|app)\/(?:main|app|index|router|views|components)\./iu.test(target)
   );
 }
 

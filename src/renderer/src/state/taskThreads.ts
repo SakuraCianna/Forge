@@ -553,15 +553,18 @@ function updateThreadActionStatus(
 
   return {
     ...thread,
-    status: getThreadStatusForAgentActions(agentActions, thread.status),
+    status: getThreadStatusForAgentActions(agentActions, thread.status, {
+      fullAccess: thread.agentProfile?.permissionMode === "full"
+    }),
     agentActions
   };
 }
 
-// 从动作队列推导线程状态, 失败优先于运行中和完成态
+// 从动作队列推导线程状态; full access 线程里的 manual/commit 只是可自动完成的动作, 不应提前把线程标成 blocked。
 function getThreadStatusForAgentActions(
   actions: AgentAction[] | undefined,
-  currentStatus: TaskThreadStatus
+  currentStatus: TaskThreadStatus,
+  options: { fullAccess?: boolean } = {}
 ): TaskThreadStatus {
   if (!actions || actions.length === 0) {
     return currentStatus;
@@ -584,6 +587,7 @@ function getThreadStatusForAgentActions(
   );
 
   if (
+    !options.fullAccess &&
     nextIncompleteAction?.status === "pending" &&
     (nextIncompleteAction.kind === "manual" || nextIncompleteAction.kind === "commit")
   ) {
@@ -605,6 +609,11 @@ export function archiveThread(threads: TaskThread[], threadId: string): TaskThre
   return threads.map((thread) =>
     thread.id === threadId ? { ...thread, archived: true, pinned: false } : thread
   );
+}
+
+// 永久移除单个会话记录, 不触碰项目文件和执行产物
+export function deleteThread(threads: TaskThread[], threadId: string): TaskThread[] {
+  return threads.filter((thread) => thread.id !== threadId);
 }
 
 // 从归档恢复会话, 只恢复可见性不自动恢复置顶
