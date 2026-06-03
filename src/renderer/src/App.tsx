@@ -69,6 +69,7 @@ import {
 import {
   formatFailureFixPlanStartMessage
 } from "@/agent/agentRunMessages";
+import { improveAgentPlanActions } from "@/agent/agentPlanQuality";
 import {
   appendSourceUrlsToAgentSummary,
   extractSourceUrlsFromText,
@@ -2068,7 +2069,13 @@ export function App(): ReactElement {
         usage: plan.usage,
         createdAt: plan.createdAt
       });
-      const agentActions = createAgentActionsFromPlanSteps(plan.steps ?? []);
+      const planQuality = improveAgentPlanActions({
+        actions: createAgentActionsFromPlanSteps(plan.steps ?? []),
+        language: settings.language,
+        projectScan,
+        prompt: getLiveThread(threadId)?.prompt ?? taskPrompt
+      });
+      const agentActions = planQuality.actions;
       const runnableAgentActions = getRunnablePendingAgentActions(agentActions, {
         fullAccess: getThreadFullAccessMode(threadId),
         rules: generalPreferences.commandSafetyRules
@@ -2096,6 +2103,12 @@ export function App(): ReactElement {
           message: planMessage,
           createdAt: plan.createdAt
         },
+        ...planQuality.notices.map((message, index) => ({
+          id: `${threadId}-plan-quality-${index + 1}-${plan.createdAt}`,
+          kind: "plan" as const,
+          message,
+          createdAt: plan.createdAt
+        })),
         ...(agentActions.length === 0
           ? [
               {
