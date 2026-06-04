@@ -14,6 +14,15 @@ import type {
 } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type {
+  ExtensionConfirmInvocationRequest,
+  ExtensionInvocationLogRecord,
+  ExtensionInvocationRequest,
+  ExtensionInvocationResult,
+  ExtensionRegistrySnapshot,
+  ExtensionSecretSaveRequest,
+  ExtensionSettingsPatch
+} from "@shared/extensionTypes";
+import type {
   LocalSkillFileContent,
   LocalSkillScanResult
 } from "@shared/pluginSkillTypes";
@@ -62,6 +71,20 @@ declare global {
       skills: {
         scanLocal: () => Promise<LocalSkillScanResult>;
         readFile: (filePath: string) => Promise<LocalSkillFileContent>;
+      };
+      extensions: {
+        getRegistry: () => Promise<ExtensionRegistrySnapshot>;
+        updateSettings: (patch: ExtensionSettingsPatch) => Promise<ExtensionRegistrySnapshot>;
+        saveSecret: (request: ExtensionSecretSaveRequest) => Promise<ExtensionRegistrySnapshot>;
+        deleteSecret: (
+          extensionId: string,
+          fieldId: string
+        ) => Promise<ExtensionRegistrySnapshot>;
+        invoke: (request: ExtensionInvocationRequest) => Promise<ExtensionInvocationResult>;
+        confirmInvocation: (
+          request: ExtensionConfirmInvocationRequest
+        ) => Promise<ExtensionInvocationResult>;
+        listLogs: (limit?: number) => Promise<ExtensionInvocationLogRecord[]>;
       };
       system: {
         openExternal: (url: string) => Promise<boolean>;

@@ -57,6 +57,16 @@ export const localSkillChannels = {
   readFile: "forge:local-skills:read-file"
 } as const;
 
+export const extensionChannels = {
+  registry: "forge:extensions:registry",
+  updateSettings: "forge:extensions:update-settings",
+  saveSecret: "forge:extensions:save-secret",
+  deleteSecret: "forge:extensions:delete-secret",
+  invoke: "forge:extensions:invoke",
+  confirmInvocation: "forge:extensions:confirm-invocation",
+  logs: "forge:extensions:logs"
+} as const;
+
 export const systemChannels = {
   openExternal: "forge:system:open-external"
 } as const;

@@ -11,6 +11,10 @@ import {
 } from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
 import { cancelProjectCommand, runProjectCommand } from "./commandRunner.js";
+import { registerExtensionHandlers } from "./extensionIpc.js";
+import { createExtensionInvocationLogStore } from "./extensions/extensionInvocationLog.js";
+import { createExtensionRegistry } from "./extensions/extensionRegistry.js";
+import { createExtensionStore } from "./extensions/extensionStore.js";
 import { registerGitHandlers } from "./gitIpc.js";
 import {
   commitProjectChanges,
@@ -168,6 +172,18 @@ void app.whenReady().then(() => {
   const projectIndexCache = createProjectIndexCache({
     directory: join(app.getPath("userData"), "project-indexes")
   });
+  const extensionDirectory = join(app.getPath("userData"), "extensions");
+  const extensionStore = createExtensionStore({
+    directory: extensionDirectory
+  });
+  const extensionLogStore = createExtensionInvocationLogStore({
+    directory: extensionDirectory
+  });
+  const extensionRegistry = createExtensionRegistry({
+    logStore: extensionLogStore,
+    store: extensionStore,
+    vault: keyVault
+  });
   configureProjectTextSearchIndex({
     directory: join(app.getPath("userData"), "project-text-indexes")
   });
@@ -187,6 +203,10 @@ void app.whenReady().then(() => {
   void openRouterCatalog.refresh();
 
   registerLocalSkillHandlers(scanLocalSkills, readLocalSkillFileContent, (channel, handler) => {
+    ipcMain.handle(channel, handler);
+  });
+
+  registerExtensionHandlers(extensionRegistry, (channel, handler) => {
     ipcMain.handle(channel, handler);
   });
 

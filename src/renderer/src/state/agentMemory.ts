@@ -85,14 +85,7 @@ export function selectRelevantAgentMemories(
   const queryTokens = tokenizeMemoryText(query);
 
   return memories
-    .filter(
-      (memory) =>
-        memory.scope === "global" ||
-        (normalizedProjectPath &&
-          memory.scope === "project" &&
-          normalizeProjectPathForCompare(memory.projectPath) ===
-            normalizeProjectPathForCompare(normalizedProjectPath))
-    )
+    .filter((memory) => isMemoryInActiveScope(memory, normalizedProjectPath))
     .sort((left, right) => {
       const scoreDifference =
         scoreMemoryForQuery(right, queryTokens) - scoreMemoryForQuery(left, queryTokens);
@@ -104,6 +97,22 @@ export function selectRelevantAgentMemories(
       return compareMemoryFreshness(right, left);
     })
     .slice(0, limit);
+}
+
+// 项目任务只允许注入当前项目记忆, 避免全局或其他项目知识串进当前项目上下文
+function isMemoryInActiveScope(
+  memory: AgentMemoryEntry,
+  normalizedProjectPath: string | null
+): boolean {
+  if (!normalizedProjectPath) {
+    return memory.scope === "global";
+  }
+
+  return (
+    memory.scope === "project" &&
+    normalizeProjectPathForCompare(memory.projectPath) ===
+      normalizeProjectPathForCompare(normalizedProjectPath)
+  );
 }
 
 // 写入记忆时先按作用域和内容去重, 已存在的记录只刷新时间和来源

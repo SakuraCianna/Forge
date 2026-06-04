@@ -249,7 +249,8 @@ export function formatAgentPermissionDeniedNotice(
       read: "读取文件",
       edit: "编辑文件",
       command: "运行命令",
-      git: "Git 操作"
+      git: "Git 操作",
+      extension: "外部扩展"
     }[tool];
 
     return `智能体配置 ${profileName} 未允许${toolLabel}`;

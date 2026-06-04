@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Archive,
+  Box,
   Edit3,
   Ellipsis,
   FileCode2,
@@ -60,7 +61,13 @@ type AppShellProps = {
   children: ReactNode;
 };
 
-export type WorkbenchView = "workspace" | "files" | "source" | "plugins" | "settings";
+export type WorkbenchView =
+  | "workspace"
+  | "files"
+  | "source"
+  | "extensions"
+  | "plugins"
+  | "settings";
 
 type NavItem = {
   key: WorkbenchView;
@@ -81,6 +88,7 @@ type ShellCopy = {
   editMenu: string;
   fileMenu: string;
   filesView: string;
+  extensionsView: string;
   helpMenu: string;
   helpCenter: string;
   authorLine: string;
@@ -149,7 +157,8 @@ export function AppShell({
   const navItems: NavItem[] = [
     { key: "files", label: t("nav.files"), icon: FileCode2 },
     { key: "source", label: t("nav.sourceControl"), icon: GitBranch },
-    { key: "plugins", label: copy.pluginsView, icon: Plug }
+    { key: "extensions", label: copy.extensionsView, icon: Plug },
+    { key: "plugins", label: copy.pluginsView, icon: Box }
   ];
   const visibleThreads = useMemo(
     () =>
@@ -398,8 +407,12 @@ export function AppShell({
             {copy.sourceView}
           </MenuItem>
           <MenuItem onSelect={() => onNavigate("plugins")}>
-            <Plug className="h-4 w-4" />
+            <Box className="h-4 w-4" />
             {copy.pluginsView}
+          </MenuItem>
+          <MenuItem onSelect={() => onNavigate("extensions")}>
+            <Plug className="h-4 w-4" />
+            {copy.extensionsView}
           </MenuItem>
         </TitleBarMenu>
 
@@ -796,25 +809,24 @@ function MenuNote({
 
 // 读取初始侧边栏宽度, 无存储值时使用默认宽度
 function getInitialSidebarWidth(): number {
-  return getSidebarMaxWidth();
+  return clampSidebarWidth(260, getSidebarMaxWidth());
 }
 
 // 根据窗口宽度计算侧边栏最大宽度
 function getSidebarMaxWidth(): number {
   if (typeof window === "undefined") {
-    return 220;
+    return 280;
   }
 
-  const screenWidth = window.screen?.width || window.innerWidth || 1760;
-  const screenMaxWidth = Math.floor(screenWidth / 6);
-  const viewportMaxWidth = Math.floor((window.innerWidth || screenWidth) * 0.34);
+  const viewportWidth = window.innerWidth || window.screen?.width || 1280;
+  const viewportMaxWidth = Math.floor(viewportWidth * 0.28);
 
-  return Math.max(148, Math.min(screenMaxWidth, viewportMaxWidth));
+  return Math.max(148, Math.min(320, viewportMaxWidth));
 }
 
 // 将侧边栏宽度限制在最小和最大范围内
 function clampSidebarWidth(width: number, maxWidth: number): number {
-  const minWidth = Math.min(176, maxWidth);
+  const minWidth = Math.min(160, maxWidth);
 
   return Math.min(Math.max(width, minWidth), maxWidth);
 }
@@ -840,6 +852,7 @@ function getShellCopy(language: Language): ShellCopy {
       currentProjectChat: "当前项目新对话",
       deleteConversation: "删除对话",
       editMenu: "编辑",
+      extensionsView: "扩展",
       fileMenu: "文件",
       filesView: "文件",
       helpMenu: "帮助",
@@ -853,7 +866,7 @@ function getShellCopy(language: Language): ShellCopy {
       pinCurrentProject: "置顶当前项目",
       pinConversation: "置顶对话",
       pinProject: "置顶项目",
-      pluginsView: "插件",
+      pluginsView: "技能",
       projectSource: "源代码管理",
       projectOptions: "项目更多选项",
       resetSidebar: "重置侧边栏宽度",
@@ -886,6 +899,7 @@ function getShellCopy(language: Language): ShellCopy {
     currentProjectChat: "New chat in current project",
     deleteConversation: "Delete conversation",
     editMenu: "Edit",
+    extensionsView: "Extensions",
     fileMenu: "File",
     filesView: "Files",
     helpMenu: "Help",
@@ -899,7 +913,7 @@ function getShellCopy(language: Language): ShellCopy {
     pinCurrentProject: "Pin current project",
     pinConversation: "Pin conversation",
     pinProject: "Pin project",
-    pluginsView: "Plugins",
+    pluginsView: "Skills",
     projectSource: "Source control",
     projectOptions: "Project options",
     resetSidebar: "Reset sidebar width",

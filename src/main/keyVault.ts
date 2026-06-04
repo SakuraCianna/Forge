@@ -18,6 +18,7 @@ type SecretRecord = {
 };
 
 type SecretFile = {
+  extensionSecrets: Record<string, Record<string, SecretRecord>>;
   providerKeys: Record<string, SecretRecord>;
 };
 
@@ -33,6 +34,13 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
   getProviderKeyStatus: (providerId: string) => Promise<ProviderKeyStatus>;
   deleteProviderKey: (providerId: string) => Promise<void>;
   clearProviderKeys: () => Promise<void>;
+  saveExtensionSecret: (extensionId: string, fieldId: string, value: string) => Promise<void>;
+  readExtensionSecret: (extensionId: string, fieldId: string) => Promise<string | null>;
+  getExtensionSecretStatus: (
+    extensionId: string,
+    fieldIds: string[]
+  ) => Promise<Record<string, ProviderKeyStatus>>;
+  deleteExtensionSecret: (extensionId: string, fieldId: string) => Promise<void>;
 } {
   const filePath = join(directory, "forge-secrets.json");
 
@@ -78,7 +86,73 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
 
   // 一键清理隐私数据时清空所有供应商密钥, 不保留历史 providerId 痕迹
   async function clearProviderKeys(): Promise<void> {
-    await writeSecretFile(directory, filePath, { providerKeys: {} });
+    const secrets = await readSecretFile(filePath);
+    await writeSecretFile(directory, filePath, { ...secrets, providerKeys: {} });
+  }
+
+  async function saveExtensionSecret(
+    extensionId: string,
+    fieldId: string,
+    value: string
+  ): Promise<void> {
+    const secrets = await readSecretFile(filePath);
+    const encryptedValue = codec.encryptString(value).toString("base64");
+    const extensionSecrets = secrets.extensionSecrets[extensionId] ?? {};
+
+    extensionSecrets[fieldId] = {
+      encryptedValue,
+      last4: value.slice(-4)
+    };
+    secrets.extensionSecrets[extensionId] = extensionSecrets;
+
+    await writeSecretFile(directory, filePath, secrets);
+  }
+
+  async function readExtensionSecret(
+    extensionId: string,
+    fieldId: string
+  ): Promise<string | null> {
+    const secrets = await readSecretFile(filePath);
+    const secret = secrets.extensionSecrets[extensionId]?.[fieldId];
+
+    if (!secret) {
+      return null;
+    }
+
+    return codec.decryptString(Buffer.from(secret.encryptedValue, "base64"));
+  }
+
+  async function getExtensionSecretStatus(
+    extensionId: string,
+    fieldIds: string[]
+  ): Promise<Record<string, ProviderKeyStatus>> {
+    const secrets = await readSecretFile(filePath);
+    const extensionSecrets = secrets.extensionSecrets[extensionId] ?? {};
+    const status: Record<string, ProviderKeyStatus> = {};
+
+    for (const fieldId of fieldIds) {
+      const secret = extensionSecrets[fieldId];
+      status[fieldId] = secret
+        ? { hasKey: true, last4: secret.last4 }
+        : { hasKey: false, last4: null };
+    }
+
+    return status;
+  }
+
+  async function deleteExtensionSecret(extensionId: string, fieldId: string): Promise<void> {
+    const secrets = await readSecretFile(filePath);
+    const extensionSecrets = secrets.extensionSecrets[extensionId];
+
+    if (extensionSecrets) {
+      delete extensionSecrets[fieldId];
+
+      if (Object.keys(extensionSecrets).length === 0) {
+        delete secrets.extensionSecrets[extensionId];
+      }
+    }
+
+    await writeSecretFile(directory, filePath, secrets);
   }
 
   return {
@@ -86,7 +160,11 @@ export function createKeyVault({ directory, codec }: KeyVaultOptions): {
     readProviderKey,
     getProviderKeyStatus,
     deleteProviderKey,
-    clearProviderKeys
+    clearProviderKeys,
+    saveExtensionSecret,
+    readExtensionSecret,
+    getExtensionSecretStatus,
+    deleteExtensionSecret
   };
 }
 
@@ -96,10 +174,11 @@ async function readSecretFile(filePath: string): Promise<SecretFile> {
     const rawValue = await readFile(filePath, "utf8");
     const parsed = JSON.parse(rawValue) as SecretFile;
     return {
+      extensionSecrets: parsed.extensionSecrets ?? {},
       providerKeys: parsed.providerKeys ?? {}
     };
   } catch {
-    return { providerKeys: {} };
+    return { extensionSecrets: {}, providerKeys: {} };
   }
 }
 

@@ -24,7 +24,6 @@ export function createAgentCompletionSummaryMessage(
   completedAt: string
 ): string {
   const actions = thread.agentActions ?? [];
-  const completed = actions.filter((action) => action.status === "completed").length;
   const skipped = actions.filter((action) => action.status === "skipped").length;
   const stats = collectAgentFileChangeStats(thread, actions);
   const recoveryStats = collectAgentRecoverySummaryStats(thread);
@@ -49,7 +48,7 @@ export function createAgentCompletionSummaryMessage(
           timing.waitingMs,
           language
         )}, total ${formatAgentSummaryDuration(timing.totalMs, language)}`;
-  const concreteResult = formatAgentConcreteResult(stats, completed, language);
+  const concreteResult = formatAgentConcreteResult(stats, actions, language);
 
   if (language === "zh-CN") {
     const summaryText = summaryParts.length > 0 ? `，${summaryParts.join("，")}` : "";
@@ -349,9 +348,11 @@ function collectAgentCompletionTimingStats(
 
 function formatAgentConcreteResult(
   stats: AgentFileChangeStats,
-  completed: number,
+  actions: AgentAction[],
   language: Language
 ): string {
+  const completed = actions.filter((action) => action.status === "completed").length;
+  const completedActionSummary = formatCompletedActionSummary(actions, language);
   const changedFiles = [
     ...stats.createdFiles,
     ...stats.editedFiles,
@@ -373,6 +374,10 @@ function formatAgentConcreteResult(
 
     if (stats.readFiles.length > 0) {
       return `本次已完成，查看了 ${formatCompactFileList(stats.readFiles, language)}`;
+    }
+
+    if (completedActionSummary) {
+      return `本次已完成：${completedActionSummary}`;
     }
 
     return `本次已完成 ${completed} 个步骤`;
@@ -398,7 +403,45 @@ function formatAgentConcreteResult(
     return `Completed file changes for ${formatCompactFileList(changedFiles, language)}`;
   }
 
+  if (completedActionSummary) {
+    return `Completed: ${completedActionSummary}`;
+  }
+
   return `Completed ${completed} step${completed === 1 ? "" : "s"}`;
+}
+
+function formatCompletedActionSummary(actions: AgentAction[], language: Language): string | null {
+  const summaries = actions
+    .filter((action) => action.status === "completed")
+    .map((action) => sanitizeActionSummary(action.label || action.target || action.command || ""))
+    .filter(Boolean);
+
+  if (summaries.length === 0) {
+    return null;
+  }
+
+  if (summaries.length === 1) {
+    return summaries[0] ?? null;
+  }
+
+  const visibleSummaries = summaries.slice(0, 3);
+
+  if (language === "zh-CN") {
+    return `${visibleSummaries.join("；")}${summaries.length > visibleSummaries.length ? ` 等 ${summaries.length} 项` : ""}`;
+  }
+
+  return `${visibleSummaries.join("; ")}${summaries.length > visibleSummaries.length ? ` and ${summaries.length - visibleSummaries.length} more` : ""}`;
+}
+
+function sanitizeActionSummary(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const maxLength = 180;
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 function formatCompactFileList(files: string[], language: Language): string {

@@ -26,6 +26,8 @@ import {
   createPersonalizationPrompt,
   type PersonalizationSettings
 } from "@/state/personalization";
+import type { ExtensionRegistrySnapshot } from "@shared/extensionTypes";
+import { formatExtensionActionSchemaForPrompt } from "@/state/extensions";
 import { resolveVisionAttachments } from "@/state/threadSelectors";
 
 export type AgentRequestRuntimeContext = {
@@ -38,6 +40,7 @@ export type AgentRequestRuntimeContext = {
   workMode: AgentWorkMode;
   agentRuntime: AgentRuntime;
   language: Language;
+  extensions: ExtensionRegistrySnapshot;
 };
 
 export type AgentRequestPayload<TRequest> = {
@@ -169,6 +172,7 @@ function createCommonAgentRequestFields(
   | "speed"
   | "workMode"
   | "agentRuntime"
+  | "extensionContext"
   | "attachments"
 > {
   return {
@@ -180,6 +184,7 @@ function createCommonAgentRequestFields(
     speed: runtime.speed,
     workMode: runtime.workMode,
     agentRuntime: runtime.agentRuntime,
+    extensionContext: formatExtensionActionSchemaForPrompt(runtime.extensions),
     // 视觉附件由统一出口过滤, 避免非视觉模型收到 data URL 造成无效请求或额外 token 开销。
     attachments: resolveVisionAttachments(runtime.model, attachments)
   };

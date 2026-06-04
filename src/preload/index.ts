@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
   agentChannels,
   commandChannels,
+  extensionChannels,
   fileChannels,
   gitChannels,
   keyVaultChannels,
@@ -23,6 +24,15 @@ import type {
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
+import type {
+  ExtensionConfirmInvocationRequest,
+  ExtensionInvocationLogRecord,
+  ExtensionInvocationRequest,
+  ExtensionInvocationResult,
+  ExtensionRegistrySnapshot,
+  ExtensionSecretSaveRequest,
+  ExtensionSettingsPatch
+} from "../shared/extensionTypes.js";
 import type {
   LocalSkillFileContent,
   LocalSkillScanResult
@@ -84,6 +94,24 @@ contextBridge.exposeInMainWorld("forge", {
       ipcRenderer.invoke(localSkillChannels.scan),
     readFile: (filePath: string): Promise<LocalSkillFileContent> =>
       ipcRenderer.invoke(localSkillChannels.readFile, filePath)
+  },
+  extensions: {
+    getRegistry: (): Promise<ExtensionRegistrySnapshot> =>
+      ipcRenderer.invoke(extensionChannels.registry),
+    updateSettings: (patch: ExtensionSettingsPatch): Promise<ExtensionRegistrySnapshot> =>
+      ipcRenderer.invoke(extensionChannels.updateSettings, patch),
+    saveSecret: (request: ExtensionSecretSaveRequest): Promise<ExtensionRegistrySnapshot> =>
+      ipcRenderer.invoke(extensionChannels.saveSecret, request),
+    deleteSecret: (extensionId: string, fieldId: string): Promise<ExtensionRegistrySnapshot> =>
+      ipcRenderer.invoke(extensionChannels.deleteSecret, extensionId, fieldId),
+    invoke: (request: ExtensionInvocationRequest): Promise<ExtensionInvocationResult> =>
+      ipcRenderer.invoke(extensionChannels.invoke, request),
+    confirmInvocation: (
+      request: ExtensionConfirmInvocationRequest
+    ): Promise<ExtensionInvocationResult> =>
+      ipcRenderer.invoke(extensionChannels.confirmInvocation, request),
+    listLogs: (limit?: number): Promise<ExtensionInvocationLogRecord[]> =>
+      ipcRenderer.invoke(extensionChannels.logs, limit)
   },
   system: {
     openExternal: (url: string): Promise<boolean> =>

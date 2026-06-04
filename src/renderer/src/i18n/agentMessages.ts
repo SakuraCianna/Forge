@@ -28,6 +28,10 @@ const agentToolLabels: Record<AgentToolPermission, { zh: string; en: string }> =
   git: {
     zh: "Git 操作",
     en: "git"
+  },
+  extension: {
+    zh: "扩展操作",
+    en: "extension"
   }
 };
 

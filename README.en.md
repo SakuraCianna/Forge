@@ -50,6 +50,16 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - The GitHub extension entry can open repositories in `https://github.com/owner/repo` or `owner/repo` format.
 - The current version does not automatically clone, install, or execute third-party plugin code.
 
+### Extensions
+
+- The sidebar includes a dedicated Extensions page separate from plugins and skills.
+- Extensions connect external services and can read, create, or modify real data outside Forge.
+- The built-in QQ Mail extension can list inbox messages, read email, search email, create drafts, and send email.
+- Extension credentials are stored through secure storage on the Electron main-process side. The UI only shows configuration status and last-four hints.
+- Extension permissions support allow, ask, and deny. Invocation logs store sanitized input and output summaries.
+- The agent can call enabled extensions as tool actions, but calls must pass agent-profile tool permissions and extension permissions.
+- `sendEmail` always requires explicit confirmation. Forge does not let the agent silently send email.
+
 ### Models And Providers
 
 Forge includes provider presets for OpenAI, Anthropic, Gemini, OpenRouter, DeepSeek, Kimi, DashScope, Z.AI, MiniMax, SiliconFlow, Volcengine, Qianfan, Hunyuan, Groq, Together AI, Mistral AI, xAI, Fireworks AI, Cerebras, StepFun, ModelScope, Xiaomi MiMo, GitHub Models / Copilot, and Ollama.
@@ -98,6 +108,9 @@ The model picker supports:
 - PDF.js
 - Mammoth
 - read-excel-file
+- ImapFlow
+- Nodemailer
+- Mailparser
 - Prettier
 - ESLint
 
@@ -137,6 +150,7 @@ The installer is written to the `release` directory. The current Windows install
 ## Checks
 
 ```powershell
+npm test
 npm run typecheck
 npm run lint
 npm run build
@@ -148,7 +162,7 @@ For release checks:
 npm run release:check
 ```
 
-The project currently does not include a separate `npm test` script.
+`npm test` compiles lightweight regression tests first and then runs Node.js tests for core logic such as Agent context isolation.
 
 ## Environment Variables
 
@@ -166,6 +180,7 @@ src/
   shared/      Shared types, provider adapters, and request logic
 docs/
   AGENT_RUNTIME.md   Agent Runtime productization roadmap
+  EXTENSIONS.md      Extensions system guide
   PERFORMANCE.md     Performance strategy and large-project roadmap
   RELEASE.md         Windows installer release workflow
 ```
@@ -176,13 +191,15 @@ docs/
 2. Open settings and choose UI language, preferences, and an agent profile.
 3. Configure provider API keys, base URLs, and models.
 4. Select a local project directory.
-5. Add attachment, file, plugin, or skill context through the add menu, `/`, or `@` when needed.
-6. Enter a task and choose a model.
-7. Review the agent plan and action queue.
-8. Review AI-generated file diffs.
-9. Run verification commands when needed.
-10. Review Git status, enter a commit message, and create a commit.
-11. Push explicitly if needed.
+5. Configure Extensions when needed, such as saving a QQ Mail address and authorization code.
+6. Add attachment, file, plugin, or skill context through the add menu, `/`, or `@` when needed.
+7. Enter a task and choose a model.
+8. Review the agent plan and action queue.
+9. Review AI-generated file diffs.
+10. Review extension confirmation items, such as the second confirmation before sending email.
+11. Run verification commands when needed.
+12. Review Git status, enter a commit message, and create a commit.
+13. Push explicitly if needed.
 
 ## Safety Boundaries
 
@@ -192,6 +209,7 @@ docs/
 - Sensitive files and sensitive attachments are skipped by default.
 - Git commit and push require explicit user action.
 - The current version does not automatically install or execute third-party GitHub plugin code.
+- External-service write actions are constrained by extension permissions and confirmation policies. Sending email always requires a second confirmation.
 - Forge does not automatically publish, deploy, or delete files outside the project.
 
 ## FAQ
@@ -208,6 +226,10 @@ No. The current GitHub extension entry only opens repositories for manual inspec
 
 No. Forge does not push without confirmation. Users can explicitly push from source control or choose push during commit.
 
+### Does Forge send email automatically?
+
+No. QQ Mail `sendEmail` is a high-risk extension action, and the main process enforces a second confirmation.
+
 ### Does local development require `.env`?
 
 No. API keys are saved in the app settings.
@@ -218,7 +240,7 @@ Forge uses Shiki highlighting for common engineering languages. Less common lang
 
 ## Status
 
-Forge is currently in the 0.1.x stage. The core workflow is usable, including local project indexing, provider configuration, agent planning, file review, command execution, Git operations, plugin and skill context, agent profiles, memory, usage tracking, and localized error messages.
+Forge is currently in the 0.1.x stage. The core workflow is usable, including local project indexing, provider configuration, agent planning, file review, command execution, Git operations, plugin and skill context, Extensions, agent profiles, memory, usage tracking, and localized error messages.
 
 Ongoing work includes:
 

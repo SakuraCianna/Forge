@@ -97,6 +97,7 @@ type ThreadWorkspaceProps = {
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
   onAllowAgentCommand?: (threadId: string, action: AgentAction) => void;
+  onConfirmAgentExtension?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onGenerateContinuationPlan?: (threadId: string) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
@@ -202,6 +203,7 @@ export function ThreadWorkspace({
   onRunAgentActions,
   onApproveAgentCommand,
   onAllowAgentCommand,
+  onConfirmAgentExtension,
   onGenerateCommandFix,
   onGenerateContinuationPlan,
   onCompleteAgentAction,
@@ -420,6 +422,7 @@ export function ThreadWorkspace({
             language={language}
             threadId={selectedThread.id}
             onApproveAgentCommand={onApproveAgentCommand}
+            onConfirmAgentExtension={onConfirmAgentExtension}
             onCompleteAgentAction={onCompleteAgentAction}
             onOpenFiles={onOpenFiles}
             onOpenSourceControl={onOpenSourceControl}
@@ -1162,8 +1165,11 @@ export function ThreadWorkspace({
             manualGateBody: (label: string) => `请先处理 ${label}, Forge 不会自动越过这个门禁`,
             reviewGate: "审查门禁",
             approveCommand: "批准命令",
+            approveExtension: "确认扩展操作",
             commandNeedsApproval: "命令需要批准",
             commandBlocked: "命令已被安全策略阻止",
+            extensionNeedsConfirmation: "扩展操作需要确认",
+            extensionGateBody: (label: string) => `请确认 ${label}, Forge 不会静默执行外部服务写操作`,
             markReviewComplete: "完成审查",
             skipAction: "跳过动作",
             openSourceControl: "打开源代码管理",
@@ -1194,8 +1200,12 @@ export function ThreadWorkspace({
               `Handle ${label} before Forge continues. This gate will not be auto-run.`,
             reviewGate: "Review gate",
             approveCommand: "Approve command",
+            approveExtension: "Confirm extension",
             commandNeedsApproval: "Command needs approval",
             commandBlocked: "Command blocked by policy",
+            extensionNeedsConfirmation: "Extension action needs confirmation",
+            extensionGateBody: (label: string) =>
+              `Confirm ${label}. Forge will not silently run external write actions.`,
             markReviewComplete: "Mark review complete",
             skipAction: "Skip action",
             openSourceControl: "Open source control",
@@ -1560,7 +1570,25 @@ export function ThreadWorkspace({
             }}
             className="mt-2 h-7 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
           >
-            {actionQueueCopy.run}
+          {actionQueueCopy.run}
+          </button>
+        );
+      }
+
+      if (
+        action.kind === "invoke-extension" &&
+        action.extensionConfirmation &&
+        selectedThread &&
+        onConfirmAgentExtension
+      ) {
+        return (
+          <button
+            type="button"
+            aria-label={`Confirm extension action ${action.label}`}
+            onClick={() => onConfirmAgentExtension(selectedThread.id, action)}
+            className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {actionQueueCopy.approveExtension}
           </button>
         );
       }
@@ -1606,6 +1634,10 @@ export function ThreadWorkspace({
         )}`;
       }
 
+      if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+        return actionQueueCopy.extensionGateBody(action.label);
+      }
+
       if (isRunnableAgentAction(action, commandSafetyPolicy)) {
         return actionDetailsCopy.ready;
       }
@@ -1625,6 +1657,10 @@ export function ThreadWorkspace({
         return actionQueueCopy.commandBlocked;
       }
 
+      if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+        return actionQueueCopy.extensionNeedsConfirmation;
+      }
+
       return fullAccess ? actionQueueCopy.ready : actionQueueCopy.manualGate;
     }
 
@@ -1638,6 +1674,10 @@ export function ThreadWorkspace({
 
       if (commandRisk?.level === "deny") {
         return actionDetailsCopy.commandBlocked;
+      }
+
+      if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+        return actionQueueCopy.extensionGateBody(action.label);
       }
 
       return fullAccess ? actionDetailsCopy.ready : actionQueueCopy.manualGateBody(action.label);
@@ -1680,6 +1720,24 @@ export function ThreadWorkspace({
             className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
           >
             {actionQueueCopy.openSourceControl}
+          </button>
+        );
+      }
+
+      if (
+        action.status === "pending" &&
+        action.kind === "invoke-extension" &&
+        action.extensionConfirmation &&
+        onConfirmAgentExtension
+      ) {
+        controls.push(
+          <button
+            key="confirm-extension"
+            type="button"
+            onClick={() => onConfirmAgentExtension(selectedThread.id, action)}
+            className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {actionQueueCopy.approveExtension}
           </button>
         );
       }
@@ -2053,6 +2111,7 @@ export function ThreadWorkspace({
             onAllowAgentCommand={onAllowAgentCommand}
             onApplyAllChanges={onApplyAllChanges}
             onApproveAgentCommand={onApproveAgentCommand}
+            onConfirmAgentExtension={onConfirmAgentExtension}
             onCompleteAgentAction={onCompleteAgentAction}
             onDiscardAllChanges={onDiscardAllChanges}
             onOpenChangesTab={() => setActiveTab("changes")}
@@ -2225,6 +2284,18 @@ export function ThreadWorkspace({
                     className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
                   >
                     {actionQueueCopy.openSourceControl}
+                  </button>
+                ) : null}
+                {activeGateAction.kind === "invoke-extension" &&
+                activeGateAction.extensionConfirmation &&
+                selectedThread &&
+                onConfirmAgentExtension ? (
+                  <button
+                    type="button"
+                    onClick={() => onConfirmAgentExtension(selectedThread.id, activeGateAction)}
+                    className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+                  >
+                    {actionQueueCopy.approveExtension}
                   </button>
                 ) : null}
                 {activeGateAction.kind === "manual" && selectedThread && onCompleteAgentAction ? (

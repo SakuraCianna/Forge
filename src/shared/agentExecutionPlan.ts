@@ -1,5 +1,6 @@
 // 本文件说明: 将模型计划步骤转成前端可执行动作队列
 import type { AgentPlanStep } from "./agentTypes.js";
+import type { ExtensionActionConfirmation, ExtensionActionRisk } from "./extensionTypes.js";
 
 type AgentActionKind =
   | "inspect-file"
@@ -9,6 +10,7 @@ type AgentActionKind =
   | "git-status"
   | "edit-file"
   | "run-command"
+  | "invoke-extension"
   | "commit"
   | "manual";
 
@@ -22,6 +24,12 @@ export type AgentAction = {
   status: AgentActionStatus;
   target?: string;
   command?: string;
+  extensionId?: string;
+  extensionActionId?: string;
+  extensionInput?: Record<string, unknown>;
+  extensionRisk?: ExtensionActionRisk;
+  extensionConfirmation?: ExtensionActionConfirmation;
+  requiresConfirmation?: boolean;
 };
 
 type AgentActionDraft = Omit<AgentAction, "id">;
@@ -59,6 +67,20 @@ function createAgentActionDrafts(step: AgentPlanStep): AgentActionDraft[] {
 // 先把单个计划步骤转换成未编号动作, 过滤说明步后再统一编号
 function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
   const normalizedTarget = normalizeActionTarget(step.target);
+
+  if (step.extensionId && step.extensionActionId) {
+    return {
+      stepId: step.id,
+      kind: "invoke-extension",
+      label: step.title.trim() || step.description.trim() || `调用扩展 ${step.extensionActionId}`,
+      status: "pending",
+      extensionId: step.extensionId,
+      extensionActionId: step.extensionActionId,
+      extensionInput: step.extensionInput ?? {},
+      extensionRisk: step.extensionRisk,
+      requiresConfirmation: step.requiresConfirmation
+    };
+  }
 
   if (
     (step.kind === "inspect" || step.kind === "verify") &&

@@ -15,11 +15,17 @@ export type AgentActionExecution =
   | { kind: "git-status" }
   | { kind: "generate-file-change"; relativePath: string }
   | { kind: "run-command"; command: string }
+  | {
+      kind: "invoke-extension";
+      actionId: string;
+      extensionId: string;
+      input: Record<string, unknown>;
+    }
   | { kind: "invalid-target"; reason: string }
   | { kind: "manual-gate"; reason: "review" | "commit" }
   | { kind: "complete" };
 
-export type AgentToolPermission = "read" | "edit" | "command" | "git";
+export type AgentToolPermission = "read" | "edit" | "command" | "git" | "extension";
 
 export type AgentActionPermissionResult =
   | { ok: true }
@@ -84,6 +90,15 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
 
   if (action.kind === "run-command" && action.command) {
     return { kind: "run-command", command: action.command };
+  }
+
+  if (action.kind === "invoke-extension" && action.extensionId && action.extensionActionId) {
+    return {
+      kind: "invoke-extension",
+      actionId: action.extensionActionId,
+      extensionId: action.extensionId,
+      input: action.extensionInput ?? {}
+    };
   }
 
   return { kind: "complete" };
@@ -396,6 +411,14 @@ export function isRunnableAgentAction(
     return risk.level === "allow" || (policy.fullAccess === true && risk.level === "ask");
   }
 
+  if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+    return false;
+  }
+
+  if (action.kind === "invoke-extension" && action.extensionId && action.extensionActionId) {
+    return true;
+  }
+
   return false;
 }
 
@@ -420,6 +443,10 @@ function getRequiredToolForAction(action: AgentAction): AgentToolPermission | nu
 
   if (action.kind === "git-status" || action.kind === "commit") {
     return "git";
+  }
+
+  if (action.kind === "invoke-extension") {
+    return "extension";
   }
 
   return null;

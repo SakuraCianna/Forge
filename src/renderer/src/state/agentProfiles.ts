@@ -11,7 +11,7 @@ export const maxAgentFailureRecoveryAttempts = 5;
 type AgentProfilePermissionMode = "auto" | "full";
 type AgentProfileVerificationPolicy = "suggest" | "require" | "skip";
 type AgentProfileFailureRecoveryPolicy = "manual" | "suggest" | "auto";
-export type AgentProfileTool = "read" | "edit" | "command" | "git";
+export type AgentProfileTool = "read" | "edit" | "command" | "git" | "extension";
 
 type AgentProfileTools = Record<AgentProfileTool, boolean>;
 
@@ -112,7 +112,8 @@ const defaultProfiles: AgentProfile[] = [
       read: true,
       edit: true,
       command: true,
-      git: true
+      git: true,
+      extension: true
     },
     contextBudget: 12000,
     planStepLimit: 10,
@@ -133,7 +134,8 @@ const defaultProfiles: AgentProfile[] = [
       read: true,
       edit: false,
       command: false,
-      git: true
+      git: true,
+      extension: false
     },
     contextBudget: 16000,
     planStepLimit: 4,
@@ -154,7 +156,8 @@ const defaultProfiles: AgentProfile[] = [
       read: true,
       edit: true,
       command: false,
-      git: false
+      git: false,
+      extension: false
     },
     contextBudget: 10000,
     planStepLimit: 5,
@@ -469,13 +472,14 @@ function normalizeTools(tools: AgentProfileTools): AgentProfileTools {
     read: Boolean(tools.read),
     edit: Boolean(tools.edit),
     command: Boolean(tools.command),
-    git: Boolean(tools.git)
+    git: Boolean(tools.git),
+    extension: Boolean(tools.extension)
   };
 }
 
 // 将工具开关转成模型可读的工具名称数组
 function getEnabledAgentTools(tools: AgentProfileTools): string[] {
-  return (["read", "edit", "command", "git"] as const).filter((tool) => tools[tool]);
+  return (["read", "edit", "command", "git", "extension"] as const).filter((tool) => tools[tool]);
 }
 
 // 压缩文本空白并限制长度, 防止设置页输入撑爆提示词
