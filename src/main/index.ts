@@ -21,7 +21,7 @@ import {
 import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerLocalSkillHandlers } from "./localSkillIpc.js";
-import { scanLocalSkills } from "./localSkillScanner.js";
+import { readLocalSkillFileContent, scanLocalSkills } from "./localSkillScanner.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
 import { createProjectIndexCache } from "./projectIndexCache.js";
@@ -186,7 +186,7 @@ void app.whenReady().then(() => {
 
   void openRouterCatalog.refresh();
 
-  registerLocalSkillHandlers(scanLocalSkills, (channel, handler) => {
+  registerLocalSkillHandlers(scanLocalSkills, readLocalSkillFileContent, (channel, handler) => {
     ipcMain.handle(channel, handler);
   });
 

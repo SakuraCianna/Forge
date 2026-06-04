@@ -13,7 +13,10 @@ import type {
   GenerateAgentPlanRequest
 } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
-import type { LocalSkillScanResult } from "@shared/pluginSkillTypes";
+import type {
+  LocalSkillFileContent,
+  LocalSkillScanResult
+} from "@shared/pluginSkillTypes";
 import type {
   ProjectDirectoryListResult,
   ProjectFileChangePreview,
@@ -58,6 +61,7 @@ declare global {
       };
       skills: {
         scanLocal: () => Promise<LocalSkillScanResult>;
+        readFile: (filePath: string) => Promise<LocalSkillFileContent>;
       };
       system: {
         openExternal: (url: string) => Promise<boolean>;
