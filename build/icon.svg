@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Forge icon">
+  <circle cx="128" cy="128" r="112" fill="#172033"/>
+  <g transform="rotate(-38 128 128)" fill="#f8fafc">
+    <rect x="73" y="67" width="110" height="34" rx="8"/>
+    <rect x="92" y="58" width="30" height="52" rx="6"/>
+    <rect x="114" y="94" width="28" height="106" rx="10"/>
+  </g>
+  <path d="M176 43v18M167 52h18M193 62l-10 10" stroke="#35d399" stroke-width="10" stroke-linecap="round"/>
+</svg>
