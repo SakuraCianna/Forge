@@ -411,10 +411,10 @@ function isPackageScriptCommand(command: string): boolean {
   const normalized = command.trim().replace(/\s+/gu, " ").toLowerCase();
 
   return (
-    /^npm\s+(?:(?:--prefix|-c)\s+\S+\s+)*(?:test|t|run\s+\S+)/u.test(normalized) ||
-    /^pnpm\s+(?:(?:--dir|--cwd|-c)\s+\S+\s+)*(?:test|run\s+\S+)/u.test(normalized) ||
-    /^yarn\s+(?:(?:--cwd|-c)\s+\S+\s+)*(?:test|run\s+\S+|(?:test|lint|typecheck|build))/u.test(normalized) ||
-    /^bun\s+(?:(?:--cwd|-c)\s+\S+\s+)*(?:test|run\s+\S+)/u.test(normalized)
+    /^npm\s+(?:(?:--prefix|-c)(?:=|\s+)\S+\s+)*(?:test|t|run\s+\S+)/u.test(normalized) ||
+    /^pnpm\s+(?:(?:--dir|--cwd|-c)(?:=|\s+)\S+\s+)*(?:test|run\s+\S+)/u.test(normalized) ||
+    /^yarn\s+(?:(?:--cwd|-c)(?:=|\s+)\S+\s+)*(?:test|run\s+\S+|(?:test|lint|typecheck|build))/u.test(normalized) ||
+    /^bun\s+(?:(?:--cwd|-c)(?:=|\s+)\S+\s+)*(?:test|run\s+\S+)/u.test(normalized)
   );
 }
 
@@ -424,7 +424,7 @@ function isRecoverablePackageScriptDependencyFailure(value: string): boolean {
   }
 
   const missingToolMatch = value.match(
-    /['"]?([a-z][a-z0-9_.-]*)['"]?\s+(?:is not recognized as an internal or external command|is not recognized as the name of|command not found)/iu
+    /(?:^|[\s:'"`])([a-z][a-z0-9_.-]*)['"`]?:?\s+(?:is not recognized as an internal or external command|is not recognized as the name of|command not found)/imu
   );
   const toolName = missingToolMatch?.[1]?.toLocaleLowerCase();
 

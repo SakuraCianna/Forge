@@ -20,9 +20,12 @@ type AgentPlanQualityResult = {
   notices: string[];
 };
 
+type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+
 type PackageVerificationCommand = {
   installCommand: string;
   packageRoot: string;
+  manager: PackageManager;
 };
 
 const CREATE_TASK_PATTERN =
@@ -237,44 +240,114 @@ function getPackageRootFromManifestPath(filePath: string): string | null {
 
 function parsePackageVerificationCommand(command: string): PackageVerificationCommand | null {
   const normalizedCommand = normalizeCommand(command);
-  const npmPrefixMatch = normalizedCommand.match(
-    /^npm\s+--prefix(?:=|\s+)(\S+)\s+(?:(?:run|run-script)\s+)?(build|test|lint|typecheck|t)\b/iu
-  );
+  const packageCommand = parsePackageCommand(normalizedCommand);
 
-  if (npmPrefixMatch?.[1]) {
-    const packageRoot = normalizePackageRoot(npmPrefixMatch[1]);
-
-    return {
-      packageRoot,
-      installCommand: packageRoot === "." ? "npm install" : `npm --prefix ${packageRoot} install`
-    };
+  if (!packageCommand || !isPackageVerificationSubcommand(packageCommand.manager, packageCommand.subcommand)) {
+    return null;
   }
 
-  if (/^npm\s+(?:(?:run|run-script)\s+)?(?:build|test|lint|typecheck|t)\b/iu.test(normalizedCommand)) {
-    return {
-      packageRoot: ".",
-      installCommand: "npm install"
-    };
+  return {
+    packageRoot: packageCommand.packageRoot,
+    manager: packageCommand.manager,
+    installCommand: createPackageInstallCommand(packageCommand.manager, packageCommand.packageRoot)
+  };
+}
+
+function parsePackageInstallCommandRoot(command: string): string | null {
+  const normalizedCommand = normalizeCommand(command);
+  const packageCommand = parsePackageCommand(normalizedCommand);
+
+  if (packageCommand && isPackageInstallSubcommand(packageCommand.subcommand)) {
+    return packageCommand.packageRoot;
   }
 
   return null;
 }
 
-function parsePackageInstallCommandRoot(command: string): string | null {
-  const normalizedCommand = normalizeCommand(command);
-  const npmPrefixMatch = normalizedCommand.match(
-    /^npm\s+--prefix(?:=|\s+)(\S+)\s+(?:i|install|ci)\b/iu
-  );
+function parsePackageCommand(command: string): {
+  manager: PackageManager;
+  packageRoot: string;
+  subcommand: string;
+} | null {
+  const managerMatch = command.match(/^(npm|pnpm|yarn|bun)\b/iu);
+  const manager = managerMatch?.[1]?.toLocaleLowerCase() as PackageManager | undefined;
 
-  if (npmPrefixMatch?.[1]) {
-    return normalizePackageRoot(npmPrefixMatch[1]);
+  if (!manager) {
+    return null;
   }
 
-  if (/^npm\s+(?:i|install|ci)\b/iu.test(normalizedCommand)) {
-    return ".";
+  const withoutManager = command.slice(managerMatch![0].length).trim();
+  const prefixPattern = createPackageRootOptionPattern(manager);
+  const prefixMatch = withoutManager.match(prefixPattern);
+  const packageRoot = prefixMatch ? normalizePackageRoot(readFirstMatchedGroup(prefixMatch)) : ".";
+  const commandTail = prefixMatch
+    ? withoutManager.slice(prefixMatch[0].length).trim()
+    : withoutManager;
+  const subcommand = commandTail.toLocaleLowerCase();
+
+  if (!subcommand) {
+    return null;
   }
 
-  return null;
+  return {
+    manager,
+    packageRoot,
+    subcommand
+  };
+}
+
+function createPackageRootOptionPattern(manager: PackageManager): RegExp {
+  const optionNames = {
+    npm: ["--prefix", "-c"],
+    pnpm: ["--dir", "--cwd", "-c"],
+    yarn: ["--cwd", "-c"],
+    bun: ["--cwd", "-c"]
+  }[manager];
+  const optionPattern = optionNames.map(escapeRegExp).join("|");
+  const valuePattern = `"([^"]+)"|'([^']+)'|(\\S+)`;
+
+  return new RegExp(`^(?:${optionPattern})(?:=|\\s+)${valuePattern}\\s+`, "iu");
+}
+
+function isPackageVerificationSubcommand(
+  manager: PackageManager,
+  subcommand: string
+): boolean {
+  if (manager === "npm") {
+    return /^(?:test|t|(?:run|run-script)\s+(?:build|test|lint|typecheck))\b/iu.test(subcommand);
+  }
+
+  if (manager === "pnpm" || manager === "bun") {
+    return /^(?:test|run\s+(?:build|test|lint|typecheck))\b/iu.test(subcommand);
+  }
+
+  return /^(?:test|(?:run\s+)?(?:build|test|lint|typecheck))\b/iu.test(subcommand);
+}
+
+function isPackageInstallSubcommand(subcommand: string): boolean {
+  return /^(?:i|install|ci)\b/iu.test(subcommand);
+}
+
+function createPackageInstallCommand(manager: PackageManager, packageRoot: string): string {
+  if (packageRoot === ".") {
+    return `${manager} install`;
+  }
+
+  const packageRootArgument = formatPackageRootArgument(packageRoot);
+
+  if (manager === "npm") {
+    return `npm --prefix ${packageRootArgument} install`;
+  }
+
+  if (manager === "pnpm") {
+    return `pnpm --dir ${packageRootArgument} install`;
+  }
+
+  return `${manager} --cwd ${packageRootArgument} install`;
+}
+
+function formatPackageRootArgument(packageRoot: string): string {
+  return /\s/u.test(packageRoot) ? `"${packageRoot.replace(/"/gu, '\\"')}"` : packageRoot;
 }
 
 function createPackageInstallAction(
@@ -548,6 +621,10 @@ function normalizePackageRoot(value: string): string {
   const normalized = normalizeProjectPath(value.replace(/^["']|["']$/gu, "")).replace(/\/+$/gu, "");
 
   return normalized || ".";
+}
+
+function readFirstMatchedGroup(match: RegExpMatchArray): string {
+  return match.slice(1).find((value): value is string => Boolean(value)) ?? ".";
 }
 
 function isSafeRelativeProjectPath(value: string): boolean {

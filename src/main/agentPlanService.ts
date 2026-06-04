@@ -479,7 +479,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "For edit steps, the target must be exactly one project-relative file path only. Put comparison notes or reasoning in description, never in target.",
     "For inspect steps, target must be one file, folder, glob pattern, or search query. Do not combine several unrelated paths in one target string.",
     "For verify steps, target must be a runnable command such as npm run build, npm run typecheck, mvn test, or git status --short.",
-    "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For subprojects prefer commands like npm --prefix frontend install before npm --prefix frontend run build.",
+    "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For subprojects prefer package-manager subdirectory commands such as npm --prefix frontend install before npm --prefix frontend run build; use the same package manager if pnpm, yarn, or bun is already chosen.",
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
     'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for text search queries, and "git_status" for git status or diff checks.',
     "Do not use shell commands for directory listing, file globbing, text search, or git status/diff when a controlled tool can express the same step.",

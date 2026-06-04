@@ -32,6 +32,7 @@ export function createFailureFixTaskPrompt(
     "",
     "Generate a recovery execution plan for this failure.",
     "First identify the likely cause using the command output when present, then inspect the smallest useful files, propose focused edits, and finish with verification commands.",
+    "If a package script failed because local tools such as tsc, vite, eslint, or vitest are missing, inspect the relevant package.json and add the package-manager install command for that package root before retrying the verification command.",
     'Return a JSON object with a "steps" array when possible. Each step must include "kind", "description", and optional "target".',
     'Allowed step kinds are "inspect", "edit", "verify", "commit", and "other".',
     "Reuse completed work. Do not repeat already completed inspect or edit actions unless the failure output specifically points back to them.",
