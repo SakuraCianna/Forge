@@ -3736,7 +3736,7 @@ export function App(): ReactElement {
                   {settings.language === "zh-CN" ? "正在加载项目文件" : "Loading project files..."}
                 </div>
               ) : (
-                <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">{t("files.pickFile")}</div>
+                <div className="px-3 py-2 text-[12px] text-[#8e8ea0]">{t("files.emptyProject")}</div>
               )}
             </div>
             <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden p-4">
