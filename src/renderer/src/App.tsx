@@ -111,7 +111,8 @@ import {
   formatProjectFileReadResultMessage,
   formatProjectGitStatusMessage,
   formatProjectGlobResultMessage,
-  formatProjectSearchResultMessage
+  formatProjectSearchResultMessage,
+  formatWebSearchResultMessage
 } from "@/agent/projectToolResultMessages";
 import {
   formatAgentCommandDenied,
@@ -3349,6 +3350,7 @@ export function App(): ReactElement {
             listAgentProjectDirectoryAction(threadId, actionToRun, relativePath),
           globProject: (pattern) => globAgentProjectAction(threadId, actionToRun, pattern),
           searchProject: (query) => searchAgentProjectAction(threadId, actionToRun, query),
+          webSearch: (query) => webSearchAgentAction(threadId, actionToRun, query),
           inspectGitStatus: () => inspectAgentGitStatusAction(threadId, actionToRun),
           generateFileChange: (relativePath) =>
             generateAgentFileChangeAction(threadId, actionToRun, relativePath),
@@ -3901,6 +3903,36 @@ export function App(): ReactElement {
       const message = formatProjectSearchResultMessage(settings.language, result);
 
       recordAgentToolResultEvent(threadId, action, "search", message, createdAt);
+      return "completed";
+    } catch (error) {
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(
+        threadId,
+        formatAgentRuntimeError(
+          settings.language,
+          "file",
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+      return "failed";
+    }
+  }
+
+  // 执行内置网页搜索动作, 只返回公开网页摘要并写入受控工具上下文
+  async function webSearchAgentAction(
+    threadId: string,
+    action: AgentAction,
+    query: string
+  ): Promise<AgentAction["status"]> {
+    try {
+      const result = await window.forge.web.search({
+        query,
+        limit: 8
+      });
+      const createdAt = new Date().toISOString();
+      const message = formatWebSearchResultMessage(settings.language, result);
+
+      recordAgentToolResultEvent(threadId, action, "web-search", message, createdAt);
       return "completed";
     } catch (error) {
       updateAgentActionStatus(threadId, action.id, "failed");
@@ -5368,7 +5400,7 @@ function applyGeneralPreferencesToAgentProfile(
     return {
       ...agentProfile,
       permissionMode: "auto",
-      enabledTools: agentProfile.enabledTools.filter((tool) => tool === "read")
+      enabledTools: agentProfile.enabledTools.filter((tool) => tool === "read" || tool === "web")
     };
   }
 
@@ -5376,7 +5408,7 @@ function applyGeneralPreferencesToAgentProfile(
     return {
       ...agentProfile,
       permissionMode: "full",
-      enabledTools: ["read", "edit", "command", "git"]
+      enabledTools: ["read", "edit", "command", "git", "extension", "web"]
     };
   }
 

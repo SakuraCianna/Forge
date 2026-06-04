@@ -49,6 +49,8 @@ import { configureProjectTextSearchIndex } from "./projectTextSearchIndex.js";
 import { createOpenRouterModelCatalog } from "./openRouterModelCatalog.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
 import { registerProviderModelHandlers } from "./providerModelsIpc.js";
+import { registerWebSearchHandlers } from "./webSearchIpc.js";
+import { searchWeb } from "./webSearchService.js";
 import { systemChannels, windowChannels } from "../shared/ipcChannels.js";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
@@ -274,6 +276,13 @@ void app.whenReady().then(() => {
     (request) => listProjectDirectory(request),
     (request) => globProjectFiles(request),
     (request) => searchProjectTextFiles(request),
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
+
+  registerWebSearchHandlers(
+    (request) => searchWeb(request),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

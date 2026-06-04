@@ -82,6 +82,7 @@ type ParsedPlanStepDraft = {
   kind: AgentPlanStepKind;
   target?: string;
   title?: string;
+  tool?: StructuredToolHint;
 };
 
 type AgentVerificationPolicy = NonNullable<
@@ -93,6 +94,7 @@ type StructuredToolHint =
   | "list-directory"
   | "glob"
   | "grep"
+  | "web-search"
   | "git-status"
   | "bash"
   | "edit"
@@ -480,7 +482,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "Keep the plan small and respect the Agent profile plan step limit from the request context.",
     "Follow the Agent profile verification policy from the request context.",
     'Prefer JSON only: return a JSON object with a "steps" array and no prose before or after it. Each step must include "kind", "description", and optional "target".',
-    'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "git_status", "bash", "edit", or "invoke_extension".',
+    'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "web_search", "git_status", "bash", "edit", or "invoke_extension".',
     'For external Extensions, use kind "other", tool "invoke_extension", plus "extensionId", "actionId", and an "input" object that matches the enabled action schema.',
     'External Extensions read or modify real external-service data. Never represent Extension calls as shell commands.',
     'High-risk Extension actions such as sendEmail must remain confirmable by the user; do not claim the email has been sent in the plan response.',
@@ -490,7 +492,8 @@ function createAgentPlanInstructions(personalization?: string): string {
     "For verify steps, target must be a runnable command such as npm run build, npm run typecheck, mvn test, or git status --short.",
     "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For subprojects prefer package-manager subdirectory commands such as npm --prefix frontend install before npm --prefix frontend run build; use the same package manager if pnpm, yarn, or bun is already chosen.",
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
-    'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for text search queries, and "git_status" for git status or diff checks.',
+    'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for project text search queries, "web_search" for current external web information, and "git_status" for git status or diff checks.',
+    'Do not use "web_search" for local project files. Use it only when the user asks for current public web information, docs, package/API facts, or external references.',
     "Do not use shell commands for directory listing, file globbing, text search, or git status/diff when a controlled tool can express the same step.",
     "If you cannot produce JSON, use a numbered list of concrete steps and mention target files or commands in backticks when known.",
     "If the user asks to create, write, or save a named file, include an edit step targeting that exact file path in backticks.",
@@ -1188,6 +1191,7 @@ function parseAgentPlanSteps(
         kind,
         status: "pending" as const,
         ...(target ? { target } : {}),
+        ...(step.tool ? { tool: step.tool } : {}),
         ...(step.extensionId ? { extensionId: step.extensionId } : {}),
         ...(step.extensionActionId ? { extensionActionId: step.extensionActionId } : {}),
         ...(step.extensionInput ? { extensionInput: step.extensionInput } : {}),
@@ -1499,7 +1503,8 @@ function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft[] {
   const baseStep = {
     description: finalDescription,
     kind,
-    ...(title ? { title } : {})
+    ...(title ? { title } : {}),
+    ...(toolHint ? { tool: toolHint } : {})
   };
 
   if (targets.length === 0) {
@@ -1608,6 +1613,20 @@ function normalizeStructuredToolHint(tool: string | undefined): StructuredToolHi
     return "grep";
   }
 
+  if (
+    [
+      "web",
+      "web-search",
+      "webpage-search",
+      "internet-search",
+      "search-web",
+      "search-internet",
+      "browser-search"
+    ].includes(normalized)
+  ) {
+    return "web-search";
+  }
+
   if (["git", "git-status", "git-diff"].includes(normalized)) {
     return "git-status";
   }
@@ -1649,6 +1668,10 @@ function normalizeStructuredToolTarget(
     return "git status --short";
   }
 
+  if (toolHint === "web-search") {
+    return target || undefined;
+  }
+
   return target || undefined;
 }
 
@@ -1674,7 +1697,13 @@ function normalizePlanStepKind(
     return "verify";
   }
 
-  if (toolHint === "read" || toolHint === "list-directory" || toolHint === "glob" || toolHint === "grep") {
+  if (
+    toolHint === "read" ||
+    toolHint === "list-directory" ||
+    toolHint === "glob" ||
+    toolHint === "grep" ||
+    toolHint === "web-search"
+  ) {
     return "inspect";
   }
 

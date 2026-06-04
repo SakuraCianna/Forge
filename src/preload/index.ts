@@ -11,6 +11,7 @@ import {
   projectChannels,
   providerModelChannels,
   systemChannels,
+  webSearchChannels,
   windowChannels
 } from "../shared/ipcChannels.js";
 import type {
@@ -62,6 +63,7 @@ import type {
   ProjectGitWorktreeResult
 } from "../shared/gitTypes.js";
 import type { ProjectScanResult } from "../shared/projectTypes.js";
+import type { WebSearchRequest, WebSearchResult } from "../shared/webSearchTypes.js";
 
 contextBridge.exposeInMainWorld("forge", {
   appName: "Forge",
@@ -124,6 +126,10 @@ contextBridge.exposeInMainWorld("forge", {
   system: {
     openExternal: (url: string): Promise<boolean> =>
       ipcRenderer.invoke(systemChannels.openExternal, url)
+  },
+  web: {
+    search: (request: WebSearchRequest): Promise<WebSearchResult> =>
+      ipcRenderer.invoke(webSearchChannels.search, request)
   },
   agent: {
     generatePlan: (request: GenerateAgentPlanRequest): Promise<AgentPlanResult> =>

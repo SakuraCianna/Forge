@@ -7,6 +7,7 @@ type AgentActionKind =
   | "list-directory"
   | "glob-project"
   | "search-project"
+  | "web-search"
   | "git-status"
   | "edit-file"
   | "run-command"
@@ -51,7 +52,7 @@ export function createAgentActionsFromPlanSteps(steps: AgentPlanStep[]): AgentAc
 // 模型有时会把多个文件塞进一个 target, 这里拆成独立动作, 避免 realpath 读取一个不存在的拼接路径
 function createAgentActionDrafts(step: AgentPlanStep): AgentActionDraft[] {
   const normalizedTarget = normalizeActionTarget(step.target);
-  const targets = shouldSplitStepTarget(step.kind)
+  const targets = shouldSplitStepTarget(step)
     ? splitMultiFileTarget(normalizedTarget)
     : normalizedTarget
       ? [normalizedTarget]
@@ -67,6 +68,7 @@ function createAgentActionDrafts(step: AgentPlanStep): AgentActionDraft[] {
 // 先把单个计划步骤转换成未编号动作, 过滤说明步后再统一编号
 function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
   const normalizedTarget = normalizeActionTarget(step.target);
+  const normalizedTool = normalizeAgentPlanTool(step.tool);
 
   if (step.extensionId && step.extensionActionId) {
     return {
@@ -79,6 +81,18 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
       extensionInput: step.extensionInput ?? {},
       extensionRisk: step.extensionRisk,
       requiresConfirmation: step.requiresConfirmation
+    };
+  }
+
+  if (normalizedTool === "web-search") {
+    const query = normalizedTarget ?? normalizeActionTarget(step.description);
+
+    return {
+      stepId: step.id,
+      kind: "web-search",
+      label: query ? `搜索网页 ${query}` : "搜索网页",
+      status: "pending",
+      target: query
     };
   }
 
@@ -196,8 +210,11 @@ function normalizeActionTarget(target: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
-function shouldSplitStepTarget(kind: AgentPlanStep["kind"]): boolean {
-  return kind === "inspect" || kind === "edit" || kind === "verify";
+function shouldSplitStepTarget(step: AgentPlanStep): boolean {
+  return (
+    normalizeAgentPlanTool(step.tool) !== "web-search" &&
+    (step.kind === "inspect" || step.kind === "edit" || step.kind === "verify")
+  );
 }
 
 function splitMultiFileTarget(target: string | undefined): string[] {
@@ -288,4 +305,10 @@ function isCleanProjectPathTarget(target: string): boolean {
 
 function isLikelyFileName(fileName: string): boolean {
   return /^\.[A-Za-z0-9_.-]+$/u.test(fileName) || /\.[A-Za-z0-9][A-Za-z0-9_.-]{0,15}$/u.test(fileName);
+}
+
+function normalizeAgentPlanTool(tool: string | undefined): string | null {
+  const normalized = tool?.trim().toLowerCase().replace(/[\s_]+/g, "-");
+
+  return normalized === "web-search" ? "web-search" : null;
 }

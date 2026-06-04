@@ -50,6 +50,7 @@ import type {
   ProjectGitWorktreeResult
 } from "@shared/gitTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
+import type { WebSearchRequest, WebSearchResult } from "@shared/webSearchTypes";
 
 declare global {
   interface Window {
@@ -96,6 +97,9 @@ declare global {
       };
       system: {
         openExternal: (url: string) => Promise<boolean>;
+      };
+      web: {
+        search: (request: WebSearchRequest) => Promise<WebSearchResult>;
       };
       agent: {
         generatePlan: (request: GenerateAgentPlanRequest) => Promise<AgentPlanResult>;

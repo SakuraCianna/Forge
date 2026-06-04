@@ -30,6 +30,7 @@ export type AgentRuntimeExecutionHandlers = {
   listDirectory: (relativePath: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   globProject: (pattern: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   searchProject: (query: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
+  webSearch: (query: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   inspectGitStatus: () => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   generateFileChange: (relativePath: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   runCommand: (command: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
@@ -207,6 +208,10 @@ export async function runAgentRuntimeExecution({
 
   if (execution.kind === "search-project") {
     return handlers.searchProject(execution.query);
+  }
+
+  if (execution.kind === "web-search") {
+    return handlers.webSearch(execution.query);
   }
 
   if (execution.kind === "git-status") {

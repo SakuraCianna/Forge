@@ -16,6 +16,7 @@ export type AgentToolResultEventKind =
   | "git-status"
   | "glob"
   | "search"
+  | "web-search"
   | "read-file"
   | "extension";
 
@@ -24,6 +25,7 @@ const agentToolResultEventNameByKind: Record<AgentToolResultEventKind, string> =
   "git-status": "agent-git-status",
   glob: "agent-glob",
   search: "agent-search",
+  "web-search": "agent-web-search",
   "read-file": "agent-read-file",
   extension: "agent-extension"
 };

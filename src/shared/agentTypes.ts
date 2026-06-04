@@ -104,6 +104,7 @@ export type AgentPlanStep = {
   kind: AgentPlanStepKind;
   status: "pending";
   target?: string;
+  tool?: string;
   extensionId?: string;
   extensionActionId?: string;
   extensionInput?: Record<string, unknown>;

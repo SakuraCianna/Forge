@@ -52,6 +52,10 @@ export const fileChannels = {
   deleteFile: "forge:file:delete-file"
 } as const;
 
+export const webSearchChannels = {
+  search: "forge:web-search:search"
+} as const;
+
 export const localSkillChannels = {
   scan: "forge:local-skills:scan",
   readFile: "forge:local-skills:read-file",

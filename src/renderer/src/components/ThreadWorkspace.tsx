@@ -1015,6 +1015,7 @@ export function ThreadWorkspace({
               "list-directory": "列目录",
               "glob-project": "匹配文件",
               "search-project": "项目搜索",
+              "web-search": "网页搜索",
               "git-status": "Git 检查",
               "edit-file": "生成修改",
               "run-command": "运行命令",
@@ -1046,6 +1047,7 @@ export function ThreadWorkspace({
               "list-directory": "List directory",
               "glob-project": "Match files",
               "search-project": "Search project",
+              "web-search": "Web search",
               "git-status": "Git check",
               "edit-file": "Generate edit",
               "run-command": "Run command",
@@ -1675,6 +1677,7 @@ export function ThreadWorkspace({
         (action.kind === "list-directory" ||
           action.kind === "glob-project" ||
           action.kind === "search-project" ||
+          action.kind === "web-search" ||
           action.kind === "git-status") &&
         (action.kind === "git-status" || action.target) &&
         selectedThread &&
@@ -3543,13 +3546,14 @@ function isControlledToolResultAction(action: AgentAction): boolean {
     action.kind === "list-directory" ||
     action.kind === "glob-project" ||
     action.kind === "search-project" ||
+    action.kind === "web-search" ||
     action.kind === "git-status"
   );
 }
 
 // 只接收 Agent 读类工具写入的结果事件, 避免把普通文件日志误显示成工具观察
 function isControlledToolResultMessage(message: string): boolean {
-  return /^(文件读取完成|File read complete|目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|Git 状态完成|Git status complete):/u.test(
+  return /^(文件读取完成|File read complete|目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|网页搜索完成|Web search complete|Git 状态完成|Git status complete):/u.test(
     message.trim()
   );
 }

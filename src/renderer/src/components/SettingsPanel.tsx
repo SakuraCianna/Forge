@@ -1678,8 +1678,8 @@ export function SettingsPanel({
                       /4
                     </span>
                   </div>
-                  <div data-testid="agent-tool-grid" className="grid gap-2 sm:grid-cols-4">
-                    {(["read", "edit", "command", "git"] as const).map((tool) => (
+                  <div data-testid="agent-tool-grid" className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                    {(["read", "edit", "command", "git", "extension", "web"] as const).map((tool) => (
                       <label
                         key={tool}
                         className={`flex h-10 items-center gap-2 rounded-[12px] border px-3 text-sm transition ${
@@ -2782,7 +2782,8 @@ function getAgentProfilesCopy(language: Language): {
           edit: "编辑文件",
           command: "运行命令",
           git: "Git 操作",
-          extension: "外部扩展"
+          extension: "外部扩展",
+          web: "网页搜索"
         })[tool],
       verificationPolicy: "验证策略",
       verificationPolicyDescription: "控制计划是否需要包含测试、构建或检查步骤",
@@ -2826,7 +2827,8 @@ function getAgentProfilesCopy(language: Language): {
         edit: "Edit files",
         command: "Run commands",
         git: "Git operations",
-        extension: "External Extensions"
+        extension: "External Extensions",
+        web: "Web search"
       })[tool],
     verificationPolicy: "Verification policy",
     verificationPolicyDescription: "Controls whether plans should include test, build, or check steps",
