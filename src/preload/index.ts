@@ -29,17 +29,24 @@ import type {
   ExtensionConfirmInvocationRequest,
   ExtensionCreateRequest,
   ExtensionCreateResult,
+  ExtensionDeleteResult,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
   ExtensionRegistrySnapshot,
   ExtensionSecretSaveRequest,
-  ExtensionSettingsPatch
+  ExtensionSettingsPatch,
+  ExtensionUpdateRequest,
+  ExtensionUpdateResult
 } from "../shared/extensionTypes.js";
 import type {
   LocalSkillFileContent,
   LocalPluginSkillCreateRequest,
   LocalPluginSkillCreateResult,
+  LocalPluginSkillDeleteRequest,
+  LocalPluginSkillDeleteResult,
+  LocalPluginSkillUpdateRequest,
+  LocalPluginSkillUpdateResult,
   LocalSkillScanResult
 } from "../shared/pluginSkillTypes.js";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
@@ -101,13 +108,21 @@ contextBridge.exposeInMainWorld("forge", {
     readFile: (filePath: string): Promise<LocalSkillFileContent> =>
       ipcRenderer.invoke(localSkillChannels.readFile, filePath),
     create: (request: LocalPluginSkillCreateRequest): Promise<LocalPluginSkillCreateResult> =>
-      ipcRenderer.invoke(localSkillChannels.create, request)
+      ipcRenderer.invoke(localSkillChannels.create, request),
+    update: (request: LocalPluginSkillUpdateRequest): Promise<LocalPluginSkillUpdateResult> =>
+      ipcRenderer.invoke(localSkillChannels.update, request),
+    delete: (request: LocalPluginSkillDeleteRequest): Promise<LocalPluginSkillDeleteResult> =>
+      ipcRenderer.invoke(localSkillChannels.delete, request)
   },
   extensions: {
     getRegistry: (): Promise<ExtensionRegistrySnapshot> =>
       ipcRenderer.invoke(extensionChannels.registry),
     create: (request: ExtensionCreateRequest): Promise<ExtensionCreateResult> =>
       ipcRenderer.invoke(extensionChannels.create, request),
+    update: (request: ExtensionUpdateRequest): Promise<ExtensionUpdateResult> =>
+      ipcRenderer.invoke(extensionChannels.update, request),
+    delete: (extensionId: string): Promise<ExtensionDeleteResult> =>
+      ipcRenderer.invoke(extensionChannels.delete, extensionId),
     updateSettings: (patch: ExtensionSettingsPatch): Promise<ExtensionRegistrySnapshot> =>
       ipcRenderer.invoke(extensionChannels.updateSettings, patch),
     saveSecret: (request: ExtensionSecretSaveRequest): Promise<ExtensionRegistrySnapshot> =>

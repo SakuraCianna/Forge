@@ -5,11 +5,14 @@ import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } fr
 import type {
   ExtensionCreateRequest,
   ExtensionCreateResult,
+  ExtensionDeleteResult,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
   ExtensionRegistrySnapshot,
-  ExtensionSettingsPatch
+  ExtensionSettingsPatch,
+  ExtensionUpdateRequest,
+  ExtensionUpdateResult
 } from "@shared/extensionTypes";
 import type {
   AgentAttachmentContext,
@@ -21,6 +24,10 @@ import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type {
   LocalPluginSkillCreateRequest,
   LocalPluginSkillCreateResult,
+  LocalPluginSkillDeleteRequest,
+  LocalPluginSkillDeleteResult,
+  LocalPluginSkillUpdateRequest,
+  LocalPluginSkillUpdateResult,
   LocalSkillFileContent,
   LocalSkillScanResult
 } from "@shared/pluginSkillTypes";
@@ -823,6 +830,23 @@ export function App(): ReactElement {
     return result;
   }
 
+  async function updateCustomExtension(
+    request: ExtensionUpdateRequest
+  ): Promise<ExtensionUpdateResult> {
+    const result = await window.forge.extensions.update(request);
+
+    setExtensionRegistry(result.registry);
+    return result;
+  }
+
+  async function deleteCustomExtension(extensionId: string): Promise<ExtensionDeleteResult> {
+    const result = await window.forge.extensions.delete(extensionId);
+
+    setExtensionRegistry(result.registry);
+    setExtensionLogs(await window.forge.extensions.listLogs(80));
+    return result;
+  }
+
   function createAgentRequestRuntimeContext({
     threadId,
     model,
@@ -865,6 +889,28 @@ export function App(): ReactElement {
       request: LocalPluginSkillCreateRequest
     ): Promise<LocalPluginSkillCreateResult> => {
       const result = await window.forge.skills.create(request);
+      setLocalSkillScan(result.scanResult);
+      return result;
+    },
+    []
+  );
+
+  const updateLocalPluginSkillItem = useCallback(
+    async (
+      request: LocalPluginSkillUpdateRequest
+    ): Promise<LocalPluginSkillUpdateResult> => {
+      const result = await window.forge.skills.update(request);
+      setLocalSkillScan(result.scanResult);
+      return result;
+    },
+    []
+  );
+
+  const deleteLocalPluginSkillItem = useCallback(
+    async (
+      request: LocalPluginSkillDeleteRequest
+    ): Promise<LocalPluginSkillDeleteResult> => {
+      const result = await window.forge.skills.delete(request);
       setLocalSkillScan(result.scanResult);
       return result;
     },
@@ -4844,8 +4890,10 @@ export function App(): ReactElement {
         language={settings.language}
         plugins={pluginCatalog}
         onCreateLocalItem={createLocalPluginSkillItem}
+        onDeleteLocalItem={deleteLocalPluginSkillItem}
         onOpenExternal={openExternalUrl}
         onReadCoreFile={readLocalSkillCoreFile}
+        onUpdateLocalItem={updateLocalPluginSkillItem}
       />
     );
   }
@@ -4859,10 +4907,12 @@ export function App(): ReactElement {
         logs={extensionLogs}
         onConfirmInvocation={confirmExtensionInvocation}
         onCreateExtension={createCustomExtension}
+        onDeleteExtension={deleteCustomExtension}
         onDeleteSecret={deleteExtensionSecret}
         onInvoke={invokeExtensionAction}
         onRefresh={() => void loadExtensionsState()}
         onSaveSecret={saveExtensionSecret}
+        onUpdateExtension={updateCustomExtension}
         onUpdateSettings={updateExtensionSettings}
       />
     );

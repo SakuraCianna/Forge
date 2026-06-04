@@ -17,17 +17,24 @@ import type {
   ExtensionConfirmInvocationRequest,
   ExtensionCreateRequest,
   ExtensionCreateResult,
+  ExtensionDeleteResult,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
   ExtensionRegistrySnapshot,
   ExtensionSecretSaveRequest,
-  ExtensionSettingsPatch
+  ExtensionSettingsPatch,
+  ExtensionUpdateRequest,
+  ExtensionUpdateResult
 } from "@shared/extensionTypes";
 import type {
   LocalSkillFileContent,
   LocalPluginSkillCreateRequest,
   LocalPluginSkillCreateResult,
+  LocalPluginSkillDeleteRequest,
+  LocalPluginSkillDeleteResult,
+  LocalPluginSkillUpdateRequest,
+  LocalPluginSkillUpdateResult,
   LocalSkillScanResult
 } from "@shared/pluginSkillTypes";
 import type {
@@ -79,10 +86,18 @@ declare global {
         create: (
           request: LocalPluginSkillCreateRequest
         ) => Promise<LocalPluginSkillCreateResult>;
+        update: (
+          request: LocalPluginSkillUpdateRequest
+        ) => Promise<LocalPluginSkillUpdateResult>;
+        delete: (
+          request: LocalPluginSkillDeleteRequest
+        ) => Promise<LocalPluginSkillDeleteResult>;
       };
       extensions: {
         getRegistry: () => Promise<ExtensionRegistrySnapshot>;
         create: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
+        update: (request: ExtensionUpdateRequest) => Promise<ExtensionUpdateResult>;
+        delete: (extensionId: string) => Promise<ExtensionDeleteResult>;
         updateSettings: (patch: ExtensionSettingsPatch) => Promise<ExtensionRegistrySnapshot>;
         saveSecret: (request: ExtensionSecretSaveRequest) => Promise<ExtensionRegistrySnapshot>;
         deleteSecret: (

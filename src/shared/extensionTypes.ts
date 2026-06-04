@@ -170,6 +170,9 @@ export type ExtensionCreateRequest = {
   name: string;
   description?: string;
   category?: ExtensionManifest["category"];
+  auth?: ExtensionAuthDefinition;
+  permissions?: ExtensionPermissionDefinition[];
+  actions?: ExtensionActionDefinition[];
 };
 
 export type ExtensionCreateResult = {
@@ -178,5 +181,25 @@ export type ExtensionCreateResult = {
   manifestPath: string;
   readmePath: string;
   createdFiles: string[];
+  registry: ExtensionRegistrySnapshot;
+};
+
+export type ExtensionUpdateRequest = {
+  extensionId: string;
+  manifest: ExtensionManifest;
+};
+
+export type ExtensionUpdateResult = {
+  manifest: ExtensionManifest;
+  directoryPath: string;
+  manifestPath: string;
+  readmePath: string;
+  updatedFiles: string[];
+  registry: ExtensionRegistrySnapshot;
+};
+
+export type ExtensionDeleteResult = {
+  extensionId: string;
+  deletedPath: string;
   registry: ExtensionRegistrySnapshot;
 };

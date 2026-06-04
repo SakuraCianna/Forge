@@ -2,9 +2,11 @@
 import type {
   ExtensionConfirmInvocationRequest,
   ExtensionCreateRequest,
+  ExtensionManifest,
   ExtensionInvocationRequest,
   ExtensionSecretSaveRequest,
-  ExtensionSettingsPatch
+  ExtensionSettingsPatch,
+  ExtensionUpdateRequest
 } from "../shared/extensionTypes.js";
 import { extensionChannels } from "../shared/ipcChannels.js";
 import type { ExtensionRegistry } from "./extensions/extensionRegistry.js";
@@ -20,6 +22,12 @@ export function registerExtensionHandlers(
   registerHandler(extensionChannels.registry, async () => registry.getSnapshot());
   registerHandler(extensionChannels.create, async (_event, request) =>
     registry.createCustomExtension(assertCreateRequest(request))
+  );
+  registerHandler(extensionChannels.update, async (_event, request) =>
+    registry.updateCustomExtension(assertUpdateRequest(request))
+  );
+  registerHandler(extensionChannels.delete, async (_event, extensionId) =>
+    registry.deleteCustomExtension(assertString(extensionId))
   );
   registerHandler(extensionChannels.updateSettings, async (_event, patch) =>
     registry.updateSettings(assertSettingsPatch(patch))
@@ -49,7 +57,53 @@ function assertCreateRequest(value: unknown): ExtensionCreateRequest {
   return {
     name: value.name,
     description: readOptionalString(value.description),
-    category: isExtensionCategory(value.category) ? value.category : undefined
+    category: isExtensionCategory(value.category) ? value.category : undefined,
+    auth: isRecord(value.auth) ? (value.auth as ExtensionCreateRequest["auth"]) : undefined,
+    permissions: Array.isArray(value.permissions)
+      ? (value.permissions as ExtensionCreateRequest["permissions"])
+      : undefined,
+    actions: Array.isArray(value.actions)
+      ? (value.actions as ExtensionCreateRequest["actions"])
+      : undefined
+  };
+}
+
+function assertUpdateRequest(value: unknown): ExtensionUpdateRequest {
+  if (!isRecord(value) || typeof value.extensionId !== "string" || !isRecord(value.manifest)) {
+    throw new Error("Invalid extension update request");
+  }
+
+  return {
+    extensionId: value.extensionId,
+    manifest: assertManifest(value.manifest)
+  };
+}
+
+function assertManifest(value: Record<string, unknown>): ExtensionManifest {
+  if (
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.description !== "string" ||
+    typeof value.version !== "string" ||
+    !Array.isArray(value.permissions) ||
+    !Array.isArray(value.actions)
+  ) {
+    throw new Error("Invalid extension manifest");
+  }
+
+  return {
+    id: value.id,
+    name: value.name,
+    description: value.description,
+    version: value.version,
+    category: isExtensionCategory(value.category) ? value.category : "other",
+    builtIn: false,
+    auth:
+      isRecord(value.auth) && value.auth.type === "secret" && Array.isArray(value.auth.fields)
+        ? (value.auth as ExtensionManifest["auth"])
+        : { type: "secret", fields: [] },
+    permissions: value.permissions as ExtensionManifest["permissions"],
+    actions: value.actions as ExtensionManifest["actions"]
   };
 }
 
@@ -146,7 +200,7 @@ function isPermissionSetting(value: unknown): value is {
   );
 }
 
-function isExtensionCategory(value: unknown): value is ExtensionCreateRequest["category"] {
+function isExtensionCategory(value: unknown): value is ExtensionManifest["category"] {
   return (
     value === "mail" ||
     value === "calendar" ||

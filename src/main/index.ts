@@ -27,8 +27,10 @@ import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerLocalSkillHandlers } from "./localSkillIpc.js";
 import {
   createLocalPluginSkill,
+  deleteLocalPluginSkill,
   readLocalSkillFileContent,
-  scanLocalSkills
+  scanLocalSkills,
+  updateLocalPluginSkill
 } from "./localSkillScanner.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
@@ -213,6 +215,8 @@ void app.whenReady().then(() => {
     scanLocalSkills,
     readLocalSkillFileContent,
     createLocalPluginSkill,
+    updateLocalPluginSkill,
+    deleteLocalPluginSkill,
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

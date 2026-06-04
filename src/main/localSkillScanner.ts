@@ -1,12 +1,16 @@
 // 本文件说明: 扫描本机 Codex/Agent skill 元数据, 不执行任何 skill 脚本
-import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, sep } from "node:path";
 import type {
   LocalSkillFileContent,
   LocalSkillManifest,
   LocalPluginSkillCreateRequest,
+  LocalPluginSkillDeleteRequest,
+  LocalPluginSkillDeleteResult,
   LocalPluginSkillCreateResult,
+  LocalPluginSkillUpdateRequest,
+  LocalPluginSkillUpdateResult,
   LocalSkillScanResult,
   LocalSkillSource
 } from "../shared/pluginSkillTypes.js";
@@ -69,6 +73,7 @@ export async function scanLocalSkills(
     try {
       const markdown = await readFile(item.filePath, "utf8");
       const metadata = parseSkillMarkdown(markdown.slice(0, maxSkillMarkdownBytes));
+      const userOwned = item.root.source === "codex" || item.root.source === "plugin-local";
 
       skills.push({
         id: createLocalSkillId(item.root, item.filePath),
@@ -76,12 +81,16 @@ export async function scanLocalSkills(
         description: metadata.description,
         filePath: item.filePath,
         coreFiles: await collectSkillCoreFiles(item.filePath),
+        directoryPath: dirname(item.filePath),
+        editable: userOwned,
+        deletable: userOwned,
         source: item.root.source,
         sourceLabel: item.root.sourceLabel,
         pluginName:
           item.root.source === "plugin-cache" || item.root.source === "plugin-local"
             ? inferPluginName(item.root.root, item.filePath)
-            : undefined
+            : undefined,
+        userOwned
       });
     } catch (error) {
       errors.push({
@@ -195,6 +204,61 @@ export async function createLocalPluginSkill(
     directoryPath,
     primaryFilePath: pluginManifestPath,
     createdFiles,
+    scanResult: await scanLocalSkills({ homeDirectory: home })
+  };
+}
+
+export async function updateLocalPluginSkill(
+  request: LocalPluginSkillUpdateRequest,
+  options: { homeDirectory?: string } = {}
+): Promise<LocalPluginSkillUpdateResult> {
+  const normalizedRequest = normalizeUpdateRequest(request);
+  const home = options.homeDirectory ?? homedir();
+  const target = await resolveManagedLocalTarget(normalizedRequest, home);
+
+  if (normalizedRequest.kind === "skill") {
+    await writeFile(target.skillFilePath, createSkillMarkdown(normalizedRequest), "utf8");
+
+    return {
+      kind: "skill",
+      id: basename(target.directoryPath),
+      name: normalizedRequest.name,
+      directoryPath: target.directoryPath,
+      updatedFiles: [target.skillFilePath],
+      scanResult: await scanLocalSkills({ homeDirectory: home })
+    };
+  }
+
+  const pluginManifestPath = target.pluginManifestPath;
+  const readmePath = join(target.directoryPath, "README.md");
+  const skillSlug = basename(dirname(target.skillFilePath));
+
+  await writeFile(pluginManifestPath, createPluginManifestJson(normalizedRequest, skillSlug), "utf8");
+  await writeFile(target.skillFilePath, createSkillMarkdown(normalizedRequest), "utf8");
+  await writeFile(readmePath, createPluginReadme(normalizedRequest), "utf8");
+
+  return {
+    kind: "plugin",
+    id: basename(target.directoryPath),
+    name: normalizedRequest.name,
+    directoryPath: target.directoryPath,
+    updatedFiles: [pluginManifestPath, target.skillFilePath, readmePath],
+    scanResult: await scanLocalSkills({ homeDirectory: home })
+  };
+}
+
+export async function deleteLocalPluginSkill(
+  request: LocalPluginSkillDeleteRequest,
+  options: { homeDirectory?: string } = {}
+): Promise<LocalPluginSkillDeleteResult> {
+  const home = options.homeDirectory ?? homedir();
+  const target = await resolveManagedLocalTarget(request, home);
+
+  await rm(target.directoryPath, { recursive: true, force: true });
+
+  return {
+    kind: request.kind,
+    deletedPath: target.directoryPath,
     scanResult: await scanLocalSkills({ homeDirectory: home })
   };
 }
@@ -447,6 +511,113 @@ function normalizeCreateRequest(
     ) || "Local Forge scaffold created by the user.";
 
   return { kind, name, description };
+}
+
+function normalizeUpdateRequest(
+  request: LocalPluginSkillUpdateRequest
+): Required<LocalPluginSkillCreateRequest> & { filePath: string } {
+  const normalized = normalizeCreateRequest(request);
+  const filePath = request.filePath.trim();
+
+  if (!filePath) {
+    throw new Error("Local plugin or skill file path is required");
+  }
+
+  return {
+    ...normalized,
+    filePath
+  };
+}
+
+async function resolveManagedLocalTarget(
+  request: LocalPluginSkillDeleteRequest | (Required<LocalPluginSkillCreateRequest> & { filePath: string }),
+  home: string
+): Promise<{
+  directoryPath: string;
+  pluginManifestPath: string;
+  skillFilePath: string;
+}> {
+  const requestedPath = request.filePath.trim();
+
+  if (!requestedPath) {
+    throw new Error("Local plugin or skill file path is required");
+  }
+
+  const resolvedRequestedPath = await realpathSafe(requestedPath);
+
+  if (!resolvedRequestedPath) {
+    throw new Error("Local plugin or skill target does not exist");
+  }
+
+  if (request.kind === "skill") {
+    const root = await requireExistingRoot(join(home, ".codex", "skills"));
+
+    assertPathInsideRoot(resolvedRequestedPath, root, "Local skill target is outside the managed skill root");
+
+    if (basename(resolvedRequestedPath).toLowerCase() !== "skill.md") {
+      throw new Error("Local skill target must point to SKILL.md");
+    }
+
+    return {
+      directoryPath: dirname(resolvedRequestedPath),
+      pluginManifestPath: "",
+      skillFilePath: resolvedRequestedPath
+    };
+  }
+
+  const root = await requireExistingRoot(join(home, ".codex", "plugins", "local"));
+
+  assertPathInsideRoot(resolvedRequestedPath, root, "Local plugin target is outside the managed plugin root");
+
+  const segments = relative(root, resolvedRequestedPath).split(/[\\/]/u).filter(Boolean);
+  const pluginDirectoryName = segments[0];
+
+  if (!pluginDirectoryName || pluginDirectoryName === "..") {
+    throw new Error("Local plugin target is invalid");
+  }
+
+  const directoryPath = await requireExistingRoot(join(root, pluginDirectoryName));
+
+  assertPathInsideRoot(directoryPath, root, "Local plugin directory is outside the managed plugin root");
+
+  const pluginManifestPath = join(directoryPath, ".claude-plugin", "plugin.json");
+  const skillFiles = await findRecursiveSkillFiles(directoryPath);
+  const skillFilePath =
+    basename(resolvedRequestedPath).toLowerCase() === "skill.md"
+      ? resolvedRequestedPath
+      : skillFiles[0];
+
+  if (!(await isRegularFile(pluginManifestPath)) || !skillFilePath) {
+    throw new Error("Local plugin target is missing plugin metadata or SKILL.md");
+  }
+
+  return {
+    directoryPath,
+    pluginManifestPath,
+    skillFilePath
+  };
+}
+
+async function requireExistingRoot(path: string): Promise<string> {
+  const resolvedPath = await realpathSafe(path);
+
+  if (!resolvedPath) {
+    throw new Error(`Managed local root does not exist: ${path}`);
+  }
+
+  return resolvedPath;
+}
+
+function assertPathInsideRoot(path: string, root: string, message: string): void {
+  const normalizedPath = path.toLowerCase();
+  const normalizedRoot = root.toLowerCase();
+
+  if (
+    normalizedPath !== normalizedRoot &&
+    !normalizedPath.startsWith(`${normalizedRoot.toLowerCase()}${sep}`)
+  ) {
+    throw new Error(message);
+  }
 }
 
 async function createUniqueDirectory(root: string, slug: string): Promise<string> {

@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   KeyRound,
   Mail,
+  Pencil,
   Play,
   Plus,
   RefreshCcw,
@@ -18,13 +19,18 @@ import type {
   ExtensionConfirmationPolicy,
   ExtensionCreateRequest,
   ExtensionCreateResult,
+  ExtensionDeleteResult,
+  ExtensionActionDefinition,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
   ExtensionManifest,
+  ExtensionPermissionDefinition,
   ExtensionPermissionMode,
   ExtensionRegistrySnapshot,
-  ExtensionSettingsPatch
+  ExtensionSettingsPatch,
+  ExtensionUpdateRequest,
+  ExtensionUpdateResult
 } from "@shared/extensionTypes";
 import type { Language } from "@shared/modelTypes";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
@@ -40,10 +46,12 @@ type ExtensionsPanelProps = {
   registry: ExtensionRegistrySnapshot;
   onConfirmInvocation: (token: string) => Promise<ExtensionInvocationResult>;
   onCreateExtension: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
+  onDeleteExtension: (extensionId: string) => Promise<ExtensionDeleteResult>;
   onInvoke: (request: ExtensionInvocationRequest) => Promise<ExtensionInvocationResult>;
   onRefresh: () => void;
   onSaveSecret: (extensionId: string, fieldId: string, value: string) => Promise<void>;
   onDeleteSecret: (extensionId: string, fieldId: string) => Promise<void>;
+  onUpdateExtension: (request: ExtensionUpdateRequest) => Promise<ExtensionUpdateResult>;
   onUpdateSettings: (patch: ExtensionSettingsPatch) => Promise<void>;
 };
 
@@ -55,7 +63,50 @@ type ComposeState = {
   text: string;
 };
 
+type ExtensionSecretFieldDraft = {
+  id: string;
+  label: string;
+  description: string;
+  placeholder: string;
+};
+
+type ExtensionPermissionDraft = {
+  id: string;
+  label: string;
+  description: string;
+  defaultMode: ExtensionPermissionMode;
+};
+
+type ExtensionActionDraft = {
+  id: string;
+  label: string;
+  description: string;
+  permission: string;
+  risk: ExtensionActionRisk;
+  confirmation: ExtensionConfirmationPolicy;
+  inputFields: string;
+};
+
+type ExtensionManifestDraft = {
+  name: string;
+  description: string;
+  category: ExtensionManifest["category"];
+  fields: ExtensionSecretFieldDraft[];
+  permissions: ExtensionPermissionDraft[];
+  actions: ExtensionActionDraft[];
+};
+
+type ExtensionDraftDialogState = {
+  mode: "create" | "edit";
+  extensionId?: string;
+  draft: ExtensionManifestDraft;
+};
+
 const permissionModes: ExtensionPermissionMode[] = ["ask", "allow", "deny"];
+const draftInputClassName =
+  "h-9 min-w-0 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]";
+const draftIconButtonClassName =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]";
 
 export function ExtensionsPanel({
   language,
@@ -63,20 +114,20 @@ export function ExtensionsPanel({
   registry,
   onConfirmInvocation,
   onCreateExtension,
+  onDeleteExtension,
   onDeleteSecret,
   onInvoke,
   onRefresh,
   onSaveSecret,
+  onUpdateExtension,
   onUpdateSettings
 }: ExtensionsPanelProps): ReactElement {
   const copy = getExtensionsCopy(language);
   const [selectedExtensionId, setSelectedExtensionId] = useState(registry.manifests[0]?.id ?? "");
   const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
-  const [createBusy, setCreateBusy] = useState(false);
+  const [draftDialog, setDraftDialog] = useState<ExtensionDraftDialogState | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<ExtensionActionConfirmation | null>(null);
@@ -115,6 +166,19 @@ export function ExtensionsPanel({
       ),
     [selectedManifest]
   );
+  const groupedManifests = useMemo(
+    () => [
+      {
+        label: copy.myExtensions,
+        items: registry.manifests.filter((manifest) => !manifest.builtIn)
+      },
+      {
+        label: copy.builtInExtensions,
+        items: registry.manifests.filter((manifest) => manifest.builtIn)
+      }
+    ],
+    [copy.builtInExtensions, copy.myExtensions, registry.manifests]
+  );
 
   async function updateSelectedExtensionEnabled(enabled: boolean): Promise<void> {
     if (!selectedManifest) {
@@ -127,34 +191,79 @@ export function ExtensionsPanel({
     });
   }
 
-  async function submitCreateExtension(event: FormEvent<HTMLFormElement>): Promise<void> {
+  async function submitExtensionDraft(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
 
-    if (!createName.trim()) {
+    if (!draftDialog || !draftDialog.draft.name.trim()) {
       return;
     }
 
-    setCreateBusy(true);
+    setDraftBusy(true);
     setNotice(null);
 
     try {
-      const result = await onCreateExtension({
-        name: createName,
-        description: createDescription,
-        category: "other"
-      });
+      if (draftDialog.mode === "create") {
+        const result = await onCreateExtension(createRequestFromDraft(draftDialog.draft));
 
-      setSelectedExtensionId(result.manifest.id);
-      setCreateDialogOpen(false);
-      setCreateName("");
-      setCreateDescription("");
-      setNotice(copy.extensionCreated(result.manifestPath));
+        setSelectedExtensionId(result.manifest.id);
+        setDraftDialog(null);
+        setNotice(copy.extensionCreated(result.manifestPath));
+      } else if (selectedManifest) {
+        const result = await onUpdateExtension({
+          extensionId: draftDialog.extensionId ?? selectedManifest.id,
+          manifest: createManifestFromDraft(draftDialog.draft, selectedManifest)
+        });
+
+        setSelectedExtensionId(result.manifest.id);
+        setDraftDialog(null);
+        setNotice(copy.extensionUpdated(result.manifestPath));
+      }
     } catch (error) {
       setNotice(
-        `${copy.createFailed}: ${error instanceof Error ? error.message : String(error)}`
+        `${copy.saveFailed}: ${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
-      setCreateBusy(false);
+      setDraftBusy(false);
+    }
+  }
+
+  function openCreateExtensionDialog(): void {
+    setDraftDialog({
+      mode: "create",
+      draft: createDefaultExtensionDraft(language)
+    });
+    setNotice(null);
+  }
+
+  function openEditExtensionDialog(manifest: ExtensionManifest): void {
+    if (manifest.builtIn) {
+      return;
+    }
+
+    setDraftDialog({
+      mode: "edit",
+      extensionId: manifest.id,
+      draft: createDraftFromManifest(manifest)
+    });
+    setNotice(null);
+  }
+
+  async function deleteSelectedExtension(manifest: ExtensionManifest): Promise<void> {
+    if (manifest.builtIn || !window.confirm(copy.deleteExtensionConfirm(manifest.name))) {
+      return;
+    }
+
+    setNotice(null);
+
+    try {
+      const result = await onDeleteExtension(manifest.id);
+
+      setSelectedExtensionId(result.registry.manifests[0]?.id ?? "");
+      setNotice(copy.extensionDeleted);
+    } catch (error) {
+      setNotice(
+        `${copy.deleteFailed}: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -269,7 +378,7 @@ export function ExtensionsPanel({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setCreateDialogOpen(true)}
+              onClick={openCreateExtensionDialog}
               className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8]"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -286,40 +395,51 @@ export function ExtensionsPanel({
           </div>
         </div>
         <div className="min-h-0 space-y-2 overflow-auto pb-8">
-          {registry.manifests.map((manifest) => {
-            const settings = findExtensionSettings(registry, manifest.id);
-            const secretStatus = findExtensionSecretStatus(registry, manifest.id);
-            const active = selectedManifest?.id === manifest.id;
+          {groupedManifests.map((group) =>
+            group.items.length > 0 ? (
+              <div key={group.label} className="space-y-2">
+                <div className="px-1 pt-1 text-[11px] font-medium text-[#8e8ea0]">
+                  {group.label}
+                </div>
+                {group.items.map((manifest) => {
+                  const settings = findExtensionSettings(registry, manifest.id);
+                  const secretStatus = findExtensionSecretStatus(registry, manifest.id);
+                  const active = selectedManifest?.id === manifest.id;
 
-            return (
-              <button
-                key={manifest.id}
-                type="button"
-                onClick={() => setSelectedExtensionId(manifest.id)}
-                className={`grid min-h-[64px] w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-[12px] px-3 py-3 text-left transition ${
-                  active ? "bg-white shadow-[0_6px_18px_rgba(0,0,0,0.07)]" : "hover:bg-white/85"
-                }`}
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#202123] text-white">
-                  <Mail className="h-4 w-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[14px] font-medium text-[#202123]">
-                    {manifest.name}
-                  </span>
-                  <span className="block truncate text-[12px] text-[#8e8ea0]">
-                    {settings?.enabled ? copy.enabled : copy.disabled}
-                    {" · "}
-                    {manifest.auth.fields.length === 0
-                      ? copy.noCredentialsRequired
-                      : secretStatus?.configured
-                        ? copy.connected
-                        : copy.notConnected}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
+                  return (
+                    <button
+                      key={manifest.id}
+                      type="button"
+                      onClick={() => setSelectedExtensionId(manifest.id)}
+                      className={`grid min-h-[64px] w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 rounded-[12px] px-3 py-3 text-left transition ${
+                        active
+                          ? "bg-white shadow-[0_6px_18px_rgba(0,0,0,0.07)]"
+                          : "hover:bg-white/85"
+                      }`}
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#202123] text-white">
+                        <Mail className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[14px] font-medium text-[#202123]">
+                          {manifest.name}
+                        </span>
+                        <span className="block truncate text-[12px] text-[#8e8ea0]">
+                          {settings?.enabled ? copy.enabled : copy.disabled}
+                          {" · "}
+                          {manifest.auth.fields.length === 0
+                            ? copy.noCredentialsRequired
+                            : secretStatus?.configured
+                              ? copy.connected
+                              : copy.notConnected}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null
+          )}
         </div>
       </aside>
 
@@ -333,27 +453,49 @@ export function ExtensionsPanel({
                   {selectedManifest.description}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => void updateSelectedExtensionEnabled(!selectedSettings.enabled)}
-                aria-pressed={selectedSettings.enabled}
-                className={`inline-flex h-10 items-center gap-2 rounded-full border px-2.5 pr-3 text-sm font-semibold transition active:scale-[0.99] ${
-                  selectedSettings.enabled
-                    ? "border-[#b9ead8] bg-[#effaf6] text-[#087443] hover:bg-[#e2f7ee]"
-                    : "border-[#d9d9e3] bg-white text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
-                }`}
-              >
-                <span
-                  className={`flex h-6 w-11 items-center rounded-full p-0.5 transition ${
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {!selectedManifest.builtIn ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openEditExtensionDialog(selectedManifest)}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm font-semibold text-[#202123] transition hover:bg-[#f7f7f8]"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      {copy.edit}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteSelectedExtension(selectedManifest)}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-[#f4c7c7] bg-white px-3 text-sm font-semibold text-[#b42318] transition hover:bg-[#fff5f5]"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {copy.delete}
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void updateSelectedExtensionEnabled(!selectedSettings.enabled)}
+                  aria-pressed={selectedSettings.enabled}
+                  className={`inline-flex h-10 items-center gap-2 rounded-full border px-2.5 pr-3 text-sm font-semibold transition active:scale-[0.99] ${
                     selectedSettings.enabled
-                      ? "justify-end bg-[#10a37f]"
-                      : "justify-start bg-[#d9d9e3]"
+                      ? "border-[#b9ead8] bg-[#effaf6] text-[#087443] hover:bg-[#e2f7ee]"
+                      : "border-[#d9d9e3] bg-white text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
                   }`}
                 >
-                  <span className="h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.18)]" />
-                </span>
-                {selectedSettings.enabled ? copy.enabled : copy.enable}
-              </button>
+                  <span
+                    className={`flex h-6 w-11 items-center rounded-full p-0.5 transition ${
+                      selectedSettings.enabled
+                        ? "justify-end bg-[#10a37f]"
+                        : "justify-start bg-[#d9d9e3]"
+                    }`}
+                  >
+                    <span className="h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.18)]" />
+                  </span>
+                  {selectedSettings.enabled ? copy.enabled : copy.enable}
+                </button>
+              </div>
             </header>
 
             {notice ? (
@@ -528,16 +670,17 @@ export function ExtensionsPanel({
           </div>
         )}
       </div>
-      {createDialogOpen ? (
-        <ExtensionCreateDialog
-          busy={createBusy}
+      {draftDialog ? (
+        <ExtensionManifestDialog
+          busy={draftBusy}
           copy={copy}
-          description={createDescription}
-          name={createName}
-          onCancel={() => setCreateDialogOpen(false)}
-          onDescriptionChange={setCreateDescription}
-          onNameChange={setCreateName}
-          onSubmit={(event) => void submitCreateExtension(event)}
+          draft={draftDialog.draft}
+          mode={draftDialog.mode}
+          onCancel={() => setDraftDialog(null)}
+          onDraftChange={(draft) =>
+            setDraftDialog((current) => (current ? { ...current, draft } : current))
+          }
+          onSubmit={(event) => void submitExtensionDraft(event)}
         />
       ) : null}
     </section>
@@ -656,35 +799,65 @@ function renderDraftExtensionActions(
   );
 }
 
-function ExtensionCreateDialog({
+function ExtensionManifestDialog({
   busy,
   copy,
-  description,
-  name,
+  draft,
+  mode,
   onCancel,
-  onDescriptionChange,
-  onNameChange,
+  onDraftChange,
   onSubmit
 }: {
   busy: boolean;
   copy: ReturnType<typeof getExtensionsCopy>;
-  description: string;
-  name: string;
+  draft: ExtensionManifestDraft;
+  mode: ExtensionDraftDialogState["mode"];
   onCancel: () => void;
-  onDescriptionChange: (value: string) => void;
-  onNameChange: (value: string) => void;
+  onDraftChange: (draft: ExtensionManifestDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }): ReactElement {
+  const permissionOptions = draft.permissions.map((permission) => ({
+    value: permission.id,
+    label: permission.label || permission.id
+  }));
+
+  function updateField(index: number, patch: Partial<ExtensionSecretFieldDraft>): void {
+    onDraftChange({
+      ...draft,
+      fields: draft.fields.map((field, fieldIndex) =>
+        fieldIndex === index ? { ...field, ...patch } : field
+      )
+    });
+  }
+
+  function updatePermission(index: number, patch: Partial<ExtensionPermissionDraft>): void {
+    onDraftChange({
+      ...draft,
+      permissions: draft.permissions.map((permission, permissionIndex) =>
+        permissionIndex === index ? { ...permission, ...patch } : permission
+      )
+    });
+  }
+
+  function updateAction(index: number, patch: Partial<ExtensionActionDraft>): void {
+    onDraftChange({
+      ...draft,
+      actions: draft.actions.map((action, actionIndex) =>
+        actionIndex === index ? { ...action, ...patch } : action
+      )
+    });
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 px-4">
       <form
         onSubmit={onSubmit}
-        className="grid w-full max-w-[520px] gap-4 rounded-[16px] border border-[#ececf1] bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.16)]"
+        className="grid max-h-[86vh] w-full max-w-[760px] gap-4 overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.16)]"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-[17px] font-semibold text-[#202123]">
-              {copy.createExtensionTitle}
+              {mode === "create" ? copy.createExtensionTitle : copy.editExtensionTitle}
             </h3>
             <p className="mt-1 text-[13px] leading-5 text-[#6e6e80]">
               {copy.createExtensionHint}
@@ -703,8 +876,8 @@ function ExtensionCreateDialog({
         <label className="grid gap-1.5">
           <span className="text-[12px] font-semibold text-[#202123]">{copy.extensionName}</span>
           <input
-            value={name}
-            onChange={(event) => onNameChange(event.currentTarget.value)}
+            value={draft.name}
+            onChange={(event) => onDraftChange({ ...draft, name: event.currentTarget.value })}
             placeholder={copy.extensionNamePlaceholder}
             className="h-10 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]"
           />
@@ -715,13 +888,126 @@ function ExtensionCreateDialog({
             {copy.extensionDescription}
           </span>
           <textarea
-            value={description}
-            onChange={(event) => onDescriptionChange(event.currentTarget.value)}
+            value={draft.description}
+            onChange={(event) =>
+              onDraftChange({ ...draft, description: event.currentTarget.value })
+            }
             placeholder={copy.extensionDescriptionPlaceholder}
             rows={4}
             className="min-h-[104px] rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-2 text-sm leading-6 text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]"
           />
         </label>
+
+        <DraftSection title={copy.credentialFields} onAdd={() =>
+          onDraftChange({
+            ...draft,
+            fields: [
+              ...draft.fields,
+              { id: "api_key", label: "API Key", description: "", placeholder: "" }
+            ]
+          })
+        }>
+          {draft.fields.length === 0 ? (
+            <p className="text-[12px] text-[#8e8ea0]">{copy.noCredentialsRequired}</p>
+          ) : (
+            draft.fields.map((field, index) => (
+              <div key={index} className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-[#fafafa] p-3 md:grid-cols-4">
+                <input value={field.id} onChange={(event) => updateField(index, { id: event.currentTarget.value })} placeholder="id" className={draftInputClassName} />
+                <input value={field.label} onChange={(event) => updateField(index, { label: event.currentTarget.value })} placeholder={copy.fieldLabel} className={draftInputClassName} />
+                <input value={field.description} onChange={(event) => updateField(index, { description: event.currentTarget.value })} placeholder={copy.fieldDescription} className={draftInputClassName} />
+                <div className="flex gap-2">
+                  <input value={field.placeholder} onChange={(event) => updateField(index, { placeholder: event.currentTarget.value })} placeholder={copy.placeholder} className={draftInputClassName} />
+                  <button type="button" onClick={() => onDraftChange({ ...draft, fields: draft.fields.filter((_, fieldIndex) => fieldIndex !== index) })} className={draftIconButtonClassName}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </DraftSection>
+
+        <DraftSection title={copy.permissions} onAdd={() =>
+          onDraftChange({
+            ...draft,
+            permissions: [
+              ...draft.permissions,
+              { id: "external.read", label: copy.readPermission, description: "", defaultMode: "ask" }
+            ]
+          })
+        }>
+          {draft.permissions.map((permission, index) => (
+            <div key={index} className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-[#fafafa] p-3 md:grid-cols-[1fr_1fr_1.3fr_120px_auto]">
+              <input value={permission.id} onChange={(event) => updatePermission(index, { id: event.currentTarget.value })} placeholder="permission.id" className={draftInputClassName} />
+              <input value={permission.label} onChange={(event) => updatePermission(index, { label: event.currentTarget.value })} placeholder={copy.fieldLabel} className={draftInputClassName} />
+              <input value={permission.description} onChange={(event) => updatePermission(index, { description: event.currentTarget.value })} placeholder={copy.fieldDescription} className={draftInputClassName} />
+              <InlineSelectMenu<ExtensionPermissionMode>
+                ariaLabel={copy.permissions}
+                value={permission.defaultMode}
+                options={permissionModes.map((value) => ({ value, label: copy.permissionMode(value) }))}
+                triggerClassName="w-full justify-between rounded-[10px]"
+                onChange={(defaultMode) => updatePermission(index, { defaultMode })}
+              />
+              <button type="button" onClick={() => onDraftChange({ ...draft, permissions: draft.permissions.filter((_, permissionIndex) => permissionIndex !== index) })} className={draftIconButtonClassName}>
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </DraftSection>
+
+        <DraftSection title={copy.actions} onAdd={() =>
+          onDraftChange({
+            ...draft,
+            actions: [
+              ...draft.actions,
+              {
+                id: "readData",
+                label: copy.readAction,
+                description: "",
+                permission: draft.permissions[0]?.id ?? "external.read",
+                risk: "read",
+                confirmation: "ask",
+                inputFields: "query"
+              }
+            ]
+          })
+        }>
+          {draft.actions.map((action, index) => (
+            <div key={index} className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-[#fafafa] p-3">
+              <div className="grid gap-2 md:grid-cols-3">
+                <input value={action.id} onChange={(event) => updateAction(index, { id: event.currentTarget.value })} placeholder="action.id" className={draftInputClassName} />
+                <input value={action.label} onChange={(event) => updateAction(index, { label: event.currentTarget.value })} placeholder={copy.fieldLabel} className={draftInputClassName} />
+                <input value={action.description} onChange={(event) => updateAction(index, { description: event.currentTarget.value })} placeholder={copy.fieldDescription} className={draftInputClassName} />
+              </div>
+              <div className="grid gap-2 md:grid-cols-[1fr_120px_150px_auto]">
+                <InlineSelectMenu<string>
+                  ariaLabel={copy.permission}
+                  value={permissionOptions.some((option) => option.value === action.permission) ? action.permission : permissionOptions[0]?.value ?? ""}
+                  options={permissionOptions}
+                  triggerClassName="w-full justify-between rounded-[10px]"
+                  onChange={(permission) => updateAction(index, { permission })}
+                />
+                <InlineSelectMenu<ExtensionActionRisk>
+                  ariaLabel={copy.actions}
+                  value={action.risk}
+                  options={(["read", "write", "send", "delete"] as ExtensionActionRisk[]).map((value) => ({ value, label: copy.riskLabel(value) }))}
+                  triggerClassName="w-full justify-between rounded-[10px]"
+                  onChange={(risk) => updateAction(index, { risk, confirmation: risk === "read" ? action.confirmation : "always" })}
+                />
+                <InlineSelectMenu<ExtensionConfirmationPolicy>
+                  ariaLabel={copy.confirmation}
+                  value={action.confirmation}
+                  options={(["ask", "always", "never"] as ExtensionConfirmationPolicy[]).map((value) => ({ value, label: copy.confirmationPolicy(value) }))}
+                  triggerClassName="w-full justify-between rounded-[10px]"
+                  onChange={(confirmation) => updateAction(index, { confirmation })}
+                />
+                <button type="button" onClick={() => onDraftChange({ ...draft, actions: draft.actions.filter((_, actionIndex) => actionIndex !== index) })} className={draftIconButtonClassName}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              <input value={action.inputFields} onChange={(event) => updateAction(index, { inputFields: event.currentTarget.value })} placeholder={copy.inputFieldsPlaceholder} className={draftInputClassName} />
+            </div>
+          ))}
+        </DraftSection>
 
         <div className="flex justify-end gap-2">
           <button
@@ -733,15 +1019,42 @@ function ExtensionCreateDialog({
           </button>
           <button
             type="submit"
-            disabled={busy || !name.trim()}
+            disabled={busy || !draft.name.trim()}
             className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-[#202123] px-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Plus className="h-3.5 w-3.5" />
-            {busy ? copy.creating : copy.createExtension}
+            {busy ? copy.creating : mode === "create" ? copy.createExtension : copy.save}
           </button>
         </div>
       </form>
     </div>
+  );
+}
+
+function DraftSection({
+  children,
+  onAdd,
+  title
+}: {
+  children: ReactElement | ReactElement[];
+  onAdd: () => void;
+  title: string;
+}): ReactElement {
+  return (
+    <section className="grid gap-2 rounded-[12px] border border-[#ececf1] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-[13px] font-semibold text-[#202123]">{title}</h4>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8]"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {title}
+        </button>
+      </div>
+      <div className="grid gap-2">{children}</div>
+    </section>
   );
 }
 
@@ -860,6 +1173,174 @@ function createComposeInput(state: ComposeState): Record<string, unknown> {
   };
 }
 
+function createDefaultExtensionDraft(language: Language): ExtensionManifestDraft {
+  const isChinese = language === "zh-CN";
+
+  return {
+    name: "",
+    description: "",
+    category: "other",
+    fields: [],
+    permissions: [
+      {
+        id: "external.read",
+        label: isChinese ? "读取外部数据" : "Read external data",
+        description: isChinese
+          ? "允许扩展读取外部系统中的数据"
+          : "Allow the extension to read data from an external system",
+        defaultMode: "ask"
+      },
+      {
+        id: "external.write",
+        label: isChinese ? "修改外部数据" : "Modify external data",
+        description: isChinese
+          ? "允许扩展创建或修改外部系统中的真实数据"
+          : "Allow the extension to create or modify real external data",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      {
+        id: "readData",
+        label: isChinese ? "读取数据" : "Read data",
+        description: isChinese ? "读取外部系统数据" : "Read external data",
+        permission: "external.read",
+        risk: "read",
+        confirmation: "ask",
+        inputFields: "query"
+      },
+      {
+        id: "writeData",
+        label: isChinese ? "写入数据" : "Write data",
+        description: isChinese ? "创建或修改外部系统数据" : "Create or modify external data",
+        permission: "external.write",
+        risk: "write",
+        confirmation: "always",
+        inputFields: "title, content"
+      }
+    ]
+  };
+}
+
+function createDraftFromManifest(manifest: ExtensionManifest): ExtensionManifestDraft {
+  return {
+    name: manifest.name,
+    description: manifest.description,
+    category: manifest.category,
+    fields: manifest.auth.fields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      description: field.description,
+      placeholder: field.placeholder ?? ""
+    })),
+    permissions: manifest.permissions.map((permission) => ({
+      id: permission.id,
+      label: permission.label,
+      description: permission.description,
+      defaultMode: permission.defaultMode
+    })),
+    actions: manifest.actions.map((action) => ({
+      id: action.id,
+      label: action.label,
+      description: action.description,
+      permission: action.permission,
+      risk: action.risk,
+      confirmation: action.confirmation,
+      inputFields: Object.keys(action.inputSchema.properties).join(", ")
+    }))
+  };
+}
+
+function createRequestFromDraft(draft: ExtensionManifestDraft): ExtensionCreateRequest {
+  const permissions = createPermissionsFromDraft(draft);
+
+  return {
+    name: draft.name,
+    description: draft.description,
+    category: draft.category,
+    auth: {
+      type: "secret",
+      fields: draft.fields
+        .filter((field) => field.id.trim() && field.label.trim())
+        .map((field) => ({
+          id: field.id.trim(),
+          label: field.label.trim(),
+          description: field.description.trim() || field.label.trim(),
+          placeholder: field.placeholder.trim() || undefined
+        }))
+    },
+    permissions,
+    actions: createActionsFromDraft(draft, permissions)
+  };
+}
+
+function createManifestFromDraft(
+  draft: ExtensionManifestDraft,
+  existingManifest: ExtensionManifest
+): ExtensionManifest {
+  return {
+    ...existingManifest,
+    ...createRequestFromDraft(draft),
+    id: existingManifest.id,
+    builtIn: false,
+    version: existingManifest.version
+  };
+}
+
+function createPermissionsFromDraft(
+  draft: ExtensionManifestDraft
+): ExtensionPermissionDefinition[] {
+  return draft.permissions
+    .filter((permission) => permission.id.trim() && permission.label.trim())
+    .map((permission) => ({
+      id: permission.id.trim(),
+      label: permission.label.trim(),
+      description: permission.description.trim() || permission.label.trim(),
+      defaultMode: permission.defaultMode
+    }));
+}
+
+function createActionsFromDraft(
+  draft: ExtensionManifestDraft,
+  permissions: ExtensionPermissionDefinition[]
+): ExtensionActionDefinition[] {
+  const fallbackPermission = permissions[0]?.id ?? "external.read";
+
+  return draft.actions
+    .filter((action) => action.id.trim() && action.label.trim())
+    .map((action) => {
+      const inputFields = action.inputFields
+        .split(/[,\n]/u)
+        .map((field) => field.trim())
+        .filter(Boolean);
+      const risk = action.risk;
+
+      return {
+        id: action.id.trim(),
+        label: action.label.trim(),
+        description: action.description.trim() || action.label.trim(),
+        permission:
+          permissions.some((permission) => permission.id === action.permission)
+            ? action.permission
+            : fallbackPermission,
+        risk,
+        confirmation: risk === "read" ? action.confirmation : "always",
+        inputSchema: {
+          type: "object",
+          properties: Object.fromEntries(
+            inputFields.map((field) => [field, { type: "string" }])
+          )
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            summary: { type: "string" }
+          }
+        }
+      };
+    });
+}
+
 function splitRecipients(value: string): string[] {
   return value
     .split(/[;,]/u)
@@ -873,6 +1354,7 @@ function getExtensionsCopy(language: Language) {
   return {
     actions: isChinese ? "动作" : "Actions",
     body: isChinese ? "正文" : "Body",
+    builtInExtensions: isChinese ? "内置扩展" : "Built-in extensions",
     cancel: isChinese ? "取消" : "Cancel",
     confirmation: isChinese ? "确认策略" : "Confirmation",
     createExtension: isChinese ? "创建扩展" : "Create extension",
@@ -887,7 +1369,13 @@ function getExtensionsCopy(language: Language) {
     confirmTitle: isChinese ? "敏感操作确认" : "Sensitive action confirmation",
     connected: isChinese ? "已连接" : "Connected",
     credentials: isChinese ? "凭据" : "Credentials",
+    credentialFields: isChinese ? "凭据字段" : "Credential fields",
     delete: isChinese ? "删除" : "Delete",
+    deleteExtensionConfirm: (name: string) =>
+      isChinese
+        ? `确定删除“${name}”吗？这个操作会删除该本地扩展草稿。`
+        : `Delete "${name}"? This removes the local extension draft.`,
+    deleteFailed: isChinese ? "删除失败" : "Delete failed",
     disabled: isChinese ? "未启用" : "Disabled",
     draftExtensionNotice: isChinese
       ? "这是本地扩展草稿, 当前仅展示 manifest 中定义的权限和动作 schema。动作运行器接入后才可执行。"
@@ -896,6 +1384,9 @@ function getExtensionsCopy(language: Language) {
     emptySecret: isChinese ? "请输入凭据" : "Enter a credential value",
     enable: isChinese ? "启用" : "Enable",
     enabled: isChinese ? "已启用" : "Enabled",
+    edit: isChinese ? "编辑" : "Edit",
+    editExtensionTitle: isChinese ? "编辑本地扩展" : "Edit Local Extension",
+    extensionDeleted: isChinese ? "扩展已删除" : "Extension deleted",
     extensionCreated: (path: string) =>
       isChinese ? `扩展草稿已创建: ${path}` : `Extension draft created: ${path}`,
     extensionDescription: isChinese ? "说明" : "Description",
@@ -904,17 +1395,29 @@ function getExtensionsCopy(language: Language) {
       : "Describe the external service this extension connects to and what it can do",
     extensionName: isChinese ? "扩展名称" : "Extension name",
     extensionNamePlaceholder: isChinese ? "例如 飞书任务扩展" : "Linear Tasks Extension",
+    extensionUpdated: (path: string) =>
+      isChinese ? `扩展草稿已更新: ${path}` : `Extension draft updated: ${path}`,
+    fieldDescription: isChinese ? "说明" : "Description",
+    fieldLabel: isChinese ? "显示名称" : "Label",
     from: isChinese ? "发件人" : "From",
+    inputFieldsPlaceholder: isChinese
+      ? "输入字段, 用逗号分隔, 例如 query, limit"
+      : "Input fields separated by commas, e.g. query, limit",
     logs: isChinese ? "调用日志" : "Invocation logs",
+    myExtensions: isChinese ? "我的扩展" : "My extensions",
     noLogs: isChinese ? "暂无调用日志" : "No invocation logs",
     noCredentialsRequired: isChinese ? "暂无凭据要求" : "No credentials required",
     notConnected: isChinese ? "未连接" : "Not connected",
     permission: isChinese ? "权限" : "Permission",
     permissions: isChinese ? "权限" : "Permissions",
+    placeholder: isChinese ? "占位提示" : "Placeholder",
     query: isChinese ? "关键词" : "Query",
+    readAction: isChinese ? "读取数据" : "Read data",
+    readPermission: isChinese ? "读取权限" : "Read permission",
     refresh: isChinese ? "刷新扩展" : "Refresh extensions",
     run: isChinese ? "执行" : "Run",
     save: isChinese ? "保存" : "Save",
+    saveFailed: isChinese ? "保存失败" : "Save failed",
     secretSaved: isChinese ? "凭据已保存" : "Credential saved",
     subject: isChinese ? "主题" : "Subject",
     title: isChinese ? "扩展" : "Extensions",

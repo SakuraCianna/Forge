@@ -59,7 +59,9 @@ export const webSearchChannels = {
 export const localSkillChannels = {
   scan: "forge:local-skills:scan",
   readFile: "forge:local-skills:read-file",
-  create: "forge:local-skills:create"
+  create: "forge:local-skills:create",
+  update: "forge:local-skills:update",
+  delete: "forge:local-skills:delete"
 } as const;
 
 export const extensionChannels = {
@@ -70,7 +72,9 @@ export const extensionChannels = {
   invoke: "forge:extensions:invoke",
   confirmInvocation: "forge:extensions:confirm-invocation",
   logs: "forge:extensions:logs",
-  create: "forge:extensions:create"
+  create: "forge:extensions:create",
+  update: "forge:extensions:update",
+  delete: "forge:extensions:delete"
 } as const;
 
 export const systemChannels = {

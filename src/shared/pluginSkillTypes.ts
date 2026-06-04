@@ -10,6 +10,10 @@ export type LocalSkillManifest = {
   source: LocalSkillSource;
   sourceLabel: string;
   pluginName?: string;
+  directoryPath: string;
+  editable: boolean;
+  deletable: boolean;
+  userOwned: boolean;
 };
 
 export type LocalSkillScanResult = {
@@ -42,5 +46,32 @@ export type LocalPluginSkillCreateResult = {
   directoryPath: string;
   primaryFilePath: string;
   createdFiles: string[];
+  scanResult: LocalSkillScanResult;
+};
+
+export type LocalPluginSkillUpdateRequest = {
+  kind: LocalPluginSkillCreateKind;
+  filePath: string;
+  name: string;
+  description?: string;
+};
+
+export type LocalPluginSkillUpdateResult = {
+  kind: LocalPluginSkillCreateKind;
+  id: string;
+  name: string;
+  directoryPath: string;
+  updatedFiles: string[];
+  scanResult: LocalSkillScanResult;
+};
+
+export type LocalPluginSkillDeleteRequest = {
+  kind: LocalPluginSkillCreateKind;
+  filePath: string;
+};
+
+export type LocalPluginSkillDeleteResult = {
+  kind: LocalPluginSkillCreateKind;
+  deletedPath: string;
   scanResult: LocalSkillScanResult;
 };

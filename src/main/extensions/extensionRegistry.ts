@@ -4,6 +4,7 @@ import type {
   ExtensionActionConfirmation,
   ExtensionActionDefinition,
   ExtensionConfirmInvocationRequest,
+  ExtensionDeleteResult,
   ExtensionCreateRequest,
   ExtensionCreateResult,
   ExtensionInvocationLogRecord,
@@ -14,7 +15,9 @@ import type {
   ExtensionSecretSaveRequest,
   ExtensionSecretStatus,
   ExtensionSettings,
-  ExtensionSettingsPatch
+  ExtensionSettingsPatch,
+  ExtensionUpdateRequest,
+  ExtensionUpdateResult
 } from "../../shared/extensionTypes.js";
 import {
   createExtensionLogRecordInput,
@@ -29,6 +32,8 @@ import {
 } from "./qqMailExtension.js";
 import {
   createCustomExtensionScaffold,
+  deleteCustomExtensionScaffold,
+  updateCustomExtensionScaffold,
   readCustomExtensionManifests
 } from "./customExtensionScaffold.js";
 
@@ -52,6 +57,8 @@ type PendingInvocation = {
 export type ExtensionRegistry = {
   getSnapshot: () => Promise<ExtensionRegistrySnapshot>;
   createCustomExtension: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
+  updateCustomExtension: (request: ExtensionUpdateRequest) => Promise<ExtensionUpdateResult>;
+  deleteCustomExtension: (extensionId: string) => Promise<ExtensionDeleteResult>;
   updateSettings: (patch: ExtensionSettingsPatch) => Promise<ExtensionRegistrySnapshot>;
   saveSecret: (request: ExtensionSecretSaveRequest) => Promise<ExtensionRegistrySnapshot>;
   deleteSecret: (extensionId: string, fieldId: string) => Promise<ExtensionRegistrySnapshot>;
@@ -113,6 +120,46 @@ export function createExtensionRegistry({
 
     return {
       ...scaffold,
+      registry: await getSnapshot()
+    };
+  }
+
+  async function updateCustomExtension(
+    request: ExtensionUpdateRequest
+  ): Promise<ExtensionUpdateResult> {
+    const existing = await getManifest(request.extensionId);
+
+    if (existing.builtIn) {
+      throw new Error("Built-in extensions cannot be edited");
+    }
+
+    const updated = await updateCustomExtensionScaffold({
+      directory: customExtensionDirectory,
+      extensionId: request.extensionId,
+      manifest: request.manifest
+    });
+
+    return {
+      ...updated,
+      registry: await getSnapshot()
+    };
+  }
+
+  async function deleteCustomExtension(extensionId: string): Promise<ExtensionDeleteResult> {
+    const existing = await getManifest(extensionId);
+
+    if (existing.builtIn) {
+      throw new Error("Built-in extensions cannot be deleted");
+    }
+
+    const deleted = await deleteCustomExtensionScaffold({
+      directory: customExtensionDirectory,
+      extensionId
+    });
+
+    return {
+      extensionId: deleted.deletedManifestId,
+      deletedPath: deleted.deletedPath,
       registry: await getSnapshot()
     };
   }
@@ -410,6 +457,8 @@ export function createExtensionRegistry({
 
   return {
     createCustomExtension,
+    updateCustomExtension,
+    deleteCustomExtension,
     getSnapshot,
     updateSettings,
     saveSecret,
