@@ -165,3 +165,18 @@ export type ExtensionSettingsPatch = {
 export type ExtensionConfirmInvocationRequest = {
   token: string;
 };
+
+export type ExtensionCreateRequest = {
+  name: string;
+  description?: string;
+  category?: ExtensionManifest["category"];
+};
+
+export type ExtensionCreateResult = {
+  manifest: ExtensionManifest;
+  directoryPath: string;
+  manifestPath: string;
+  readmePath: string;
+  createdFiles: string[];
+  registry: ExtensionRegistrySnapshot;
+};

@@ -6,12 +6,18 @@ import {
   KeyRound,
   Mail,
   Play,
+  Plus,
   RefreshCcw,
   ShieldAlert,
-  Trash2
+  Trash2,
+  X
 } from "lucide-react";
 import type {
   ExtensionActionConfirmation,
+  ExtensionActionRisk,
+  ExtensionConfirmationPolicy,
+  ExtensionCreateRequest,
+  ExtensionCreateResult,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
@@ -33,6 +39,7 @@ type ExtensionsPanelProps = {
   logs: ExtensionInvocationLogRecord[];
   registry: ExtensionRegistrySnapshot;
   onConfirmInvocation: (token: string) => Promise<ExtensionInvocationResult>;
+  onCreateExtension: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
   onInvoke: (request: ExtensionInvocationRequest) => Promise<ExtensionInvocationResult>;
   onRefresh: () => void;
   onSaveSecret: (extensionId: string, fieldId: string, value: string) => Promise<void>;
@@ -55,6 +62,7 @@ export function ExtensionsPanel({
   logs,
   registry,
   onConfirmInvocation,
+  onCreateExtension,
   onDeleteSecret,
   onInvoke,
   onRefresh,
@@ -65,6 +73,10 @@ export function ExtensionsPanel({
   const [selectedExtensionId, setSelectedExtensionId] = useState(registry.manifests[0]?.id ?? "");
   const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createDescription, setCreateDescription] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<ExtensionActionConfirmation | null>(null);
@@ -113,6 +125,37 @@ export function ExtensionsPanel({
       extensionId: selectedManifest.id,
       enabled
     });
+  }
+
+  async function submitCreateExtension(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    if (!createName.trim()) {
+      return;
+    }
+
+    setCreateBusy(true);
+    setNotice(null);
+
+    try {
+      const result = await onCreateExtension({
+        name: createName,
+        description: createDescription,
+        category: "other"
+      });
+
+      setSelectedExtensionId(result.manifest.id);
+      setCreateDialogOpen(false);
+      setCreateName("");
+      setCreateDescription("");
+      setNotice(copy.extensionCreated(result.manifestPath));
+    } catch (error) {
+      setNotice(
+        `${copy.createFailed}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      setCreateBusy(false);
+    }
   }
 
   async function updatePermissionMode(
@@ -221,18 +264,28 @@ export function ExtensionsPanel({
   return (
     <section className="grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)] overflow-hidden">
       <aside className="min-h-0 border-r border-[#ececf1] bg-[#fbfbfc] p-4">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-[#202123]">{copy.title}</h2>
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]"
-            aria-label={copy.refresh}
-          >
-            <RefreshCcw className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCreateDialogOpen(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {copy.createExtension}
+            </button>
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]"
+              aria-label={copy.refresh}
+            >
+              <RefreshCcw className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <div className="space-y-2">
+        <div className="min-h-0 space-y-2 overflow-auto pb-8">
           {registry.manifests.map((manifest) => {
             const settings = findExtensionSettings(registry, manifest.id);
             const secretStatus = findExtensionSecretStatus(registry, manifest.id);
@@ -257,7 +310,11 @@ export function ExtensionsPanel({
                   <span className="block truncate text-[12px] text-[#8e8ea0]">
                     {settings?.enabled ? copy.enabled : copy.disabled}
                     {" · "}
-                    {secretStatus?.configured ? copy.connected : copy.notConnected}
+                    {manifest.auth.fields.length === 0
+                      ? copy.noCredentialsRequired
+                      : secretStatus?.configured
+                        ? copy.connected
+                        : copy.notConnected}
                   </span>
                 </span>
               </button>
@@ -337,6 +394,11 @@ export function ExtensionsPanel({
 
             <section className="grid gap-3 rounded-[12px] border border-[#ececf1] p-4">
               <h3 className="text-sm font-semibold text-[#202123]">{copy.credentials}</h3>
+              {selectedManifest.auth.fields.length === 0 ? (
+                <p className="rounded-[10px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-sm text-[#565869]">
+                  {copy.noCredentialsRequired}
+                </p>
+              ) : (
               <div className="grid gap-3 md:grid-cols-2">
                 {selectedManifest.auth.fields.map((field) => {
                   const key = `${selectedManifest.id}:${field.id}`;
@@ -386,6 +448,7 @@ export function ExtensionsPanel({
                   );
                 })}
               </div>
+              )}
             </section>
 
             <section className="grid gap-3 rounded-[12px] border border-[#ececf1] p-4">
@@ -430,7 +493,9 @@ export function ExtensionsPanel({
 
             <section className="grid gap-3 rounded-[12px] border border-[#ececf1] p-4">
               <h3 className="text-sm font-semibold text-[#202123]">{copy.actions}</h3>
-              {renderQQMailActions()}
+              {selectedManifest.id === "qq-mail"
+                ? renderQQMailActions()
+                : renderDraftExtensionActions(selectedManifest, copy)}
             </section>
 
             <section className="grid gap-3 rounded-[12px] border border-[#ececf1] p-4">
@@ -463,6 +528,18 @@ export function ExtensionsPanel({
           </div>
         )}
       </div>
+      {createDialogOpen ? (
+        <ExtensionCreateDialog
+          busy={createBusy}
+          copy={copy}
+          description={createDescription}
+          name={createName}
+          onCancel={() => setCreateDialogOpen(false)}
+          onDescriptionChange={setCreateDescription}
+          onNameChange={setCreateName}
+          onSubmit={(event) => void submitCreateExtension(event)}
+        />
+      ) : null}
     </section>
   );
 
@@ -546,6 +623,126 @@ export function ExtensionsPanel({
       </div>
     );
   }
+}
+
+function renderDraftExtensionActions(
+  manifest: ExtensionManifest,
+  copy: ReturnType<typeof getExtensionsCopy>
+): ReactElement {
+  return (
+    <div className="grid gap-3">
+      <p className="rounded-[10px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-sm leading-6 text-[#565869]">
+        {copy.draftExtensionNotice}
+      </p>
+      {manifest.actions.map((action) => (
+        <article
+          key={action.id}
+          className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-[#fafafa] p-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[13px] font-semibold text-[#202123]">{action.label}</div>
+            <span className="rounded-full bg-white px-2 py-1 text-[11px] text-[#6e6e80] shadow-[inset_0_0_0_1px_#ececf1]">
+              {copy.riskLabel(action.risk)}
+            </span>
+          </div>
+          <p className="text-[12px] leading-5 text-[#565869]">{action.description}</p>
+          <div className="text-[12px] text-[#8e8ea0]">
+            {copy.permission}: {action.permission} · {copy.confirmation}:{" "}
+            {copy.confirmationPolicy(action.confirmation)}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function ExtensionCreateDialog({
+  busy,
+  copy,
+  description,
+  name,
+  onCancel,
+  onDescriptionChange,
+  onNameChange,
+  onSubmit
+}: {
+  busy: boolean;
+  copy: ReturnType<typeof getExtensionsCopy>;
+  description: string;
+  name: string;
+  onCancel: () => void;
+  onDescriptionChange: (value: string) => void;
+  onNameChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}): ReactElement {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 px-4">
+      <form
+        onSubmit={onSubmit}
+        className="grid w-full max-w-[520px] gap-4 rounded-[16px] border border-[#ececf1] bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.16)]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[17px] font-semibold text-[#202123]">
+              {copy.createExtensionTitle}
+            </h3>
+            <p className="mt-1 text-[13px] leading-5 text-[#6e6e80]">
+              {copy.createExtensionHint}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-[#565869] transition hover:bg-[#f7f7f8]"
+            aria-label={copy.cancel}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <label className="grid gap-1.5">
+          <span className="text-[12px] font-semibold text-[#202123]">{copy.extensionName}</span>
+          <input
+            value={name}
+            onChange={(event) => onNameChange(event.currentTarget.value)}
+            placeholder={copy.extensionNamePlaceholder}
+            className="h-10 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]"
+          />
+        </label>
+
+        <label className="grid gap-1.5">
+          <span className="text-[12px] font-semibold text-[#202123]">
+            {copy.extensionDescription}
+          </span>
+          <textarea
+            value={description}
+            onChange={(event) => onDescriptionChange(event.currentTarget.value)}
+            placeholder={copy.extensionDescriptionPlaceholder}
+            rows={4}
+            className="min-h-[104px] rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-2 text-sm leading-6 text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]"
+          />
+        </label>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-9 items-center rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm font-semibold text-[#565869] transition hover:bg-[#f7f7f8]"
+          >
+            {copy.cancel}
+          </button>
+          <button
+            type="submit"
+            disabled={busy || !name.trim()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-[#202123] px-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {busy ? copy.creating : copy.createExtension}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function ActionRow({
@@ -677,6 +874,14 @@ function getExtensionsCopy(language: Language) {
     actions: isChinese ? "动作" : "Actions",
     body: isChinese ? "正文" : "Body",
     cancel: isChinese ? "取消" : "Cancel",
+    confirmation: isChinese ? "确认策略" : "Confirmation",
+    createExtension: isChinese ? "创建扩展" : "Create extension",
+    createExtensionHint: isChinese
+      ? "Forge 会创建本地扩展 manifest 草稿, 需要接入运行器后才能执行动作。"
+      : "Forge creates a local extension manifest draft. Actions need a runner before they can execute.",
+    createExtensionTitle: isChinese ? "创建本地扩展" : "Create Local Extension",
+    createFailed: isChinese ? "创建失败" : "Create failed",
+    creating: isChinese ? "创建中" : "Creating",
     confirm: isChinese ? "确认执行" : "Confirm",
     confirmRequired: isChinese ? "需要确认后执行" : "Confirmation required",
     confirmTitle: isChinese ? "敏感操作确认" : "Sensitive action confirmation",
@@ -684,14 +889,27 @@ function getExtensionsCopy(language: Language) {
     credentials: isChinese ? "凭据" : "Credentials",
     delete: isChinese ? "删除" : "Delete",
     disabled: isChinese ? "未启用" : "Disabled",
+    draftExtensionNotice: isChinese
+      ? "这是本地扩展草稿, 当前仅展示 manifest 中定义的权限和动作 schema。动作运行器接入后才可执行。"
+      : "This is a local extension draft. Forge is showing permissions and action schemas from the manifest; actions require a runner before execution.",
     empty: isChinese ? "暂无扩展" : "No extensions",
     emptySecret: isChinese ? "请输入凭据" : "Enter a credential value",
     enable: isChinese ? "启用" : "Enable",
     enabled: isChinese ? "已启用" : "Enabled",
+    extensionCreated: (path: string) =>
+      isChinese ? `扩展草稿已创建: ${path}` : `Extension draft created: ${path}`,
+    extensionDescription: isChinese ? "说明" : "Description",
+    extensionDescriptionPlaceholder: isChinese
+      ? "描述这个扩展会连接哪个外部系统, 能做哪些动作"
+      : "Describe the external service this extension connects to and what it can do",
+    extensionName: isChinese ? "扩展名称" : "Extension name",
+    extensionNamePlaceholder: isChinese ? "例如 飞书任务扩展" : "Linear Tasks Extension",
     from: isChinese ? "发件人" : "From",
     logs: isChinese ? "调用日志" : "Invocation logs",
     noLogs: isChinese ? "暂无调用日志" : "No invocation logs",
+    noCredentialsRequired: isChinese ? "暂无凭据要求" : "No credentials required",
     notConnected: isChinese ? "未连接" : "Not connected",
+    permission: isChinese ? "权限" : "Permission",
     permissions: isChinese ? "权限" : "Permissions",
     query: isChinese ? "关键词" : "Query",
     refresh: isChinese ? "刷新扩展" : "Refresh extensions",
@@ -715,6 +933,29 @@ function getExtensionsCopy(language: Language) {
     savedSecret: (last4: string | null) =>
       isChinese
         ? `已保存${last4 ? `, 尾号 ${last4}` : ""}`
-        : `Saved${last4 ? `, ending ${last4}` : ""}`
+        : `Saved${last4 ? `, ending ${last4}` : ""}`,
+    confirmationPolicy: (policy: ExtensionConfirmationPolicy) => {
+      if (!isChinese) {
+        return policy;
+      }
+
+      return {
+        always: "始终确认",
+        ask: "按权限询问",
+        never: "无需确认"
+      }[policy];
+    },
+    riskLabel: (risk: ExtensionActionRisk) => {
+      if (!isChinese) {
+        return risk;
+      }
+
+      return {
+        delete: "删除",
+        read: "读取",
+        send: "发送",
+        write: "写入"
+      }[risk];
+    }
   };
 }

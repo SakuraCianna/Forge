@@ -1,6 +1,7 @@
 // 本文件说明: 注册 Extensions IPC, 渲染层只能通过受控入口调用外部服务
 import type {
   ExtensionConfirmInvocationRequest,
+  ExtensionCreateRequest,
   ExtensionInvocationRequest,
   ExtensionSecretSaveRequest,
   ExtensionSettingsPatch
@@ -17,6 +18,9 @@ export function registerExtensionHandlers(
   registerHandler: RegisterHandler
 ): void {
   registerHandler(extensionChannels.registry, async () => registry.getSnapshot());
+  registerHandler(extensionChannels.create, async (_event, request) =>
+    registry.createCustomExtension(assertCreateRequest(request))
+  );
   registerHandler(extensionChannels.updateSettings, async (_event, patch) =>
     registry.updateSettings(assertSettingsPatch(patch))
   );
@@ -35,6 +39,18 @@ export function registerExtensionHandlers(
   registerHandler(extensionChannels.logs, async (_event, limit) =>
     registry.listLogs(readOptionalNumber(limit))
   );
+}
+
+function assertCreateRequest(value: unknown): ExtensionCreateRequest {
+  if (!isRecord(value) || typeof value.name !== "string") {
+    throw new Error("Invalid extension create request");
+  }
+
+  return {
+    name: value.name,
+    description: readOptionalString(value.description),
+    category: isExtensionCategory(value.category) ? value.category : undefined
+  };
 }
 
 function assertSettingsPatch(value: unknown): ExtensionSettingsPatch {
@@ -127,6 +143,16 @@ function isPermissionSetting(value: unknown): value is {
     isRecord(value) &&
     typeof value.permissionId === "string" &&
     (value.mode === "allow" || value.mode === "ask" || value.mode === "deny")
+  );
+}
+
+function isExtensionCategory(value: unknown): value is ExtensionCreateRequest["category"] {
+  return (
+    value === "mail" ||
+    value === "calendar" ||
+    value === "design" ||
+    value === "developer" ||
+    value === "other"
   );
 }
 

@@ -26,6 +26,8 @@ import type {
 import type { ForgeProvider } from "../shared/modelTypes.js";
 import type {
   ExtensionConfirmInvocationRequest,
+  ExtensionCreateRequest,
+  ExtensionCreateResult,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
@@ -35,6 +37,8 @@ import type {
 } from "../shared/extensionTypes.js";
 import type {
   LocalSkillFileContent,
+  LocalPluginSkillCreateRequest,
+  LocalPluginSkillCreateResult,
   LocalSkillScanResult
 } from "../shared/pluginSkillTypes.js";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
@@ -93,11 +97,15 @@ contextBridge.exposeInMainWorld("forge", {
     scanLocal: (): Promise<LocalSkillScanResult> =>
       ipcRenderer.invoke(localSkillChannels.scan),
     readFile: (filePath: string): Promise<LocalSkillFileContent> =>
-      ipcRenderer.invoke(localSkillChannels.readFile, filePath)
+      ipcRenderer.invoke(localSkillChannels.readFile, filePath),
+    create: (request: LocalPluginSkillCreateRequest): Promise<LocalPluginSkillCreateResult> =>
+      ipcRenderer.invoke(localSkillChannels.create, request)
   },
   extensions: {
     getRegistry: (): Promise<ExtensionRegistrySnapshot> =>
       ipcRenderer.invoke(extensionChannels.registry),
+    create: (request: ExtensionCreateRequest): Promise<ExtensionCreateResult> =>
+      ipcRenderer.invoke(extensionChannels.create, request),
     updateSettings: (patch: ExtensionSettingsPatch): Promise<ExtensionRegistrySnapshot> =>
       ipcRenderer.invoke(extensionChannels.updateSettings, patch),
     saveSecret: (request: ExtensionSecretSaveRequest): Promise<ExtensionRegistrySnapshot> =>

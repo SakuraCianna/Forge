@@ -54,7 +54,8 @@ export const fileChannels = {
 
 export const localSkillChannels = {
   scan: "forge:local-skills:scan",
-  readFile: "forge:local-skills:read-file"
+  readFile: "forge:local-skills:read-file",
+  create: "forge:local-skills:create"
 } as const;
 
 export const extensionChannels = {
@@ -64,7 +65,8 @@ export const extensionChannels = {
   deleteSecret: "forge:extensions:delete-secret",
   invoke: "forge:extensions:invoke",
   confirmInvocation: "forge:extensions:confirm-invocation",
-  logs: "forge:extensions:logs"
+  logs: "forge:extensions:logs",
+  create: "forge:extensions:create"
 } as const;
 
 export const systemChannels = {

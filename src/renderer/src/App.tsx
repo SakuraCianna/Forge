@@ -1,8 +1,10 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
 import type {
+  ExtensionCreateRequest,
+  ExtensionCreateResult,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
@@ -16,7 +18,12 @@ import type {
 } from "@shared/agentTypes";
 import type { ProjectGitCommitResult, ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
-import type { LocalSkillScanResult } from "@shared/pluginSkillTypes";
+import type {
+  LocalPluginSkillCreateRequest,
+  LocalPluginSkillCreateResult,
+  LocalSkillFileContent,
+  LocalSkillScanResult
+} from "@shared/pluginSkillTypes";
 import type { ProjectFile, ProjectScanResult } from "@shared/projectTypes";
 import { createAgentActionsFromPlanSteps, type AgentAction } from "@shared/agentExecutionPlan";
 import { AppShell, type WorkbenchView } from "@/components/AppShell";
@@ -806,6 +813,15 @@ export function App(): ReactElement {
     return result;
   }
 
+  async function createCustomExtension(
+    request: ExtensionCreateRequest
+  ): Promise<ExtensionCreateResult> {
+    const result = await window.forge.extensions.create(request);
+
+    setExtensionRegistry(result.registry);
+    return result;
+  }
+
   function createAgentRequestRuntimeContext({
     threadId,
     model,
@@ -833,6 +849,26 @@ export function App(): ReactElement {
       extensions: extensionRegistry
     };
   }
+
+  const openExternalUrl = useCallback((url: string): void => {
+    void window.forge.system.openExternal(url);
+  }, []);
+
+  const readLocalSkillCoreFile = useCallback(
+    (filePath: string): Promise<LocalSkillFileContent> => window.forge.skills.readFile(filePath),
+    []
+  );
+
+  const createLocalPluginSkillItem = useCallback(
+    async (
+      request: LocalPluginSkillCreateRequest
+    ): Promise<LocalPluginSkillCreateResult> => {
+      const result = await window.forge.skills.create(request);
+      setLocalSkillScan(result.scanResult);
+      return result;
+    },
+    []
+  );
 
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
@@ -4775,8 +4811,9 @@ export function App(): ReactElement {
       <PluginLibraryPanel
         language={settings.language}
         plugins={pluginCatalog}
-        onOpenExternal={(url) => void window.forge.system.openExternal(url)}
-        onReadCoreFile={(filePath) => window.forge.skills.readFile(filePath)}
+        onCreateLocalItem={createLocalPluginSkillItem}
+        onOpenExternal={openExternalUrl}
+        onReadCoreFile={readLocalSkillCoreFile}
       />
     );
   }
@@ -4789,6 +4826,7 @@ export function App(): ReactElement {
         registry={extensionRegistry}
         logs={extensionLogs}
         onConfirmInvocation={confirmExtensionInvocation}
+        onCreateExtension={createCustomExtension}
         onDeleteSecret={deleteExtensionSecret}
         onInvoke={invokeExtensionAction}
         onRefresh={() => void loadExtensionsState()}

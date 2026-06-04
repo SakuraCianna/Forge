@@ -15,6 +15,8 @@ import type {
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type {
   ExtensionConfirmInvocationRequest,
+  ExtensionCreateRequest,
+  ExtensionCreateResult,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
@@ -24,6 +26,8 @@ import type {
 } from "@shared/extensionTypes";
 import type {
   LocalSkillFileContent,
+  LocalPluginSkillCreateRequest,
+  LocalPluginSkillCreateResult,
   LocalSkillScanResult
 } from "@shared/pluginSkillTypes";
 import type {
@@ -71,9 +75,13 @@ declare global {
       skills: {
         scanLocal: () => Promise<LocalSkillScanResult>;
         readFile: (filePath: string) => Promise<LocalSkillFileContent>;
+        create: (
+          request: LocalPluginSkillCreateRequest
+        ) => Promise<LocalPluginSkillCreateResult>;
       };
       extensions: {
         getRegistry: () => Promise<ExtensionRegistrySnapshot>;
+        create: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
         updateSettings: (patch: ExtensionSettingsPatch) => Promise<ExtensionRegistrySnapshot>;
         saveSecret: (request: ExtensionSecretSaveRequest) => Promise<ExtensionRegistrySnapshot>;
         deleteSecret: (

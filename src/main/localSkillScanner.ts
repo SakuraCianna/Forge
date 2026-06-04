@@ -1,10 +1,12 @@
 // 本文件说明: 扫描本机 Codex/Agent skill 元数据, 不执行任何 skill 脚本
-import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, sep } from "node:path";
 import type {
   LocalSkillFileContent,
   LocalSkillManifest,
+  LocalPluginSkillCreateRequest,
+  LocalPluginSkillCreateResult,
   LocalSkillScanResult,
   LocalSkillSource
 } from "../shared/pluginSkillTypes.js";
@@ -23,9 +25,13 @@ const maxSkillNameLength = 120;
 const maxSkillDescriptionLength = 500;
 const maxCoreFilesPerFolder = 8;
 const maxSkillFileContentBytes = 256 * 1024;
+const maxCreatedNameLength = 80;
+const maxCreatedDescriptionLength = 280;
 
-export async function scanLocalSkills(): Promise<LocalSkillScanResult> {
-  const roots = createSkillRoots();
+export async function scanLocalSkills(
+  options: { homeDirectory?: string } = {}
+): Promise<LocalSkillScanResult> {
+  const roots = createSkillRoots(options.homeDirectory ?? homedir());
   const errors: LocalSkillScanResult["errors"] = [];
   const scannedRoots: string[] = [];
   const skillFiles: Array<{ filePath: string; root: SkillRoot }> = [];
@@ -72,9 +78,10 @@ export async function scanLocalSkills(): Promise<LocalSkillScanResult> {
         coreFiles: await collectSkillCoreFiles(item.filePath),
         source: item.root.source,
         sourceLabel: item.root.sourceLabel,
-        pluginName: item.root.source === "plugin-cache"
-          ? inferPluginName(item.root.root, item.filePath)
-          : undefined
+        pluginName:
+          item.root.source === "plugin-cache" || item.root.source === "plugin-local"
+            ? inferPluginName(item.root.root, item.filePath)
+            : undefined
       });
     } catch (error) {
       errors.push({
@@ -140,9 +147,59 @@ export async function readLocalSkillFileContent(filePath: string): Promise<Local
   };
 }
 
-function createSkillRoots(): SkillRoot[] {
-  const home = homedir();
+export async function createLocalPluginSkill(
+  request: LocalPluginSkillCreateRequest,
+  options: { homeDirectory?: string } = {}
+): Promise<LocalPluginSkillCreateResult> {
+  const normalizedRequest = normalizeCreateRequest(request);
+  const home = options.homeDirectory ?? homedir();
+  const slug = slugify(normalizedRequest.name) || normalizedRequest.kind;
 
+  if (normalizedRequest.kind === "skill") {
+    const root = join(home, ".codex", "skills");
+    const directoryPath = await createUniqueDirectory(root, slug);
+    const primaryFilePath = join(directoryPath, "SKILL.md");
+
+    await mkdir(directoryPath, { recursive: true });
+    await writeFile(primaryFilePath, createSkillMarkdown(normalizedRequest), "utf8");
+
+    return {
+      kind: normalizedRequest.kind,
+      id: basename(directoryPath),
+      name: normalizedRequest.name,
+      directoryPath,
+      primaryFilePath,
+      createdFiles: [primaryFilePath],
+      scanResult: await scanLocalSkills({ homeDirectory: home })
+    };
+  }
+
+  const root = join(home, ".codex", "plugins", "local");
+  const directoryPath = await createUniqueDirectory(root, slug);
+  const pluginManifestPath = join(directoryPath, ".claude-plugin", "plugin.json");
+  const skillDirectoryPath = join(directoryPath, "skills", slug);
+  const skillFilePath = join(skillDirectoryPath, "SKILL.md");
+  const readmePath = join(directoryPath, "README.md");
+  const createdFiles = [pluginManifestPath, skillFilePath, readmePath];
+
+  await mkdir(dirname(pluginManifestPath), { recursive: true });
+  await mkdir(skillDirectoryPath, { recursive: true });
+  await writeFile(pluginManifestPath, createPluginManifestJson(normalizedRequest, slug), "utf8");
+  await writeFile(skillFilePath, createSkillMarkdown(normalizedRequest), "utf8");
+  await writeFile(readmePath, createPluginReadme(normalizedRequest), "utf8");
+
+  return {
+    kind: normalizedRequest.kind,
+    id: basename(directoryPath),
+    name: normalizedRequest.name,
+    directoryPath,
+    primaryFilePath: pluginManifestPath,
+    createdFiles,
+    scanResult: await scanLocalSkills({ homeDirectory: home })
+  };
+}
+
+function createSkillRoots(home: string): SkillRoot[] {
   return [
     {
       root: join(home, ".codex", "skills"),
@@ -160,6 +217,12 @@ function createSkillRoots(): SkillRoot[] {
       root: join(home, ".codex", "plugins", "cache"),
       source: "plugin-cache",
       sourceLabel: "Codex plugin cache",
+      recursive: true
+    },
+    {
+      root: join(home, ".codex", "plugins", "local"),
+      source: "plugin-local",
+      sourceLabel: "Codex local plugins",
       recursive: true
     }
   ];
@@ -366,6 +429,102 @@ function trimMetadataValue(value: string, maxLength: number): string {
   }
 
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function normalizeCreateRequest(
+  request: LocalPluginSkillCreateRequest
+): Required<LocalPluginSkillCreateRequest> {
+  const kind = request.kind === "plugin" ? "plugin" : "skill";
+  const fallbackName = kind === "plugin" ? "New Plugin" : "New Skill";
+  const name = trimMetadataValue(request.name || fallbackName, maxCreatedNameLength) || fallbackName;
+  const description =
+    trimMetadataValue(
+      request.description ||
+        (kind === "plugin"
+          ? "Local Forge plugin scaffold created by the user."
+          : "Local Forge skill scaffold created by the user."),
+      maxCreatedDescriptionLength
+    ) || "Local Forge scaffold created by the user.";
+
+  return { kind, name, description };
+}
+
+async function createUniqueDirectory(root: string, slug: string): Promise<string> {
+  await mkdir(root, { recursive: true });
+
+  for (let index = 0; index < 200; index += 1) {
+    const candidateName = index === 0 ? slug : `${slug}-${index + 1}`;
+    const candidatePath = join(root, candidateName);
+
+    if (!(await pathExists(candidatePath))) {
+      return candidatePath;
+    }
+  }
+
+  throw new Error(`Unable to allocate a unique local scaffold directory for ${slug}`);
+}
+
+function createSkillMarkdown({
+  description,
+  name
+}: Required<LocalPluginSkillCreateRequest>): string {
+  return [
+    "---",
+    `name: ${formatYamlString(name)}`,
+    `description: ${formatYamlString(description)}`,
+    "---",
+    "",
+    `# ${name}`,
+    "",
+    description,
+    "",
+    "## When To Use",
+    "",
+    "- Use this skill when the user's request clearly matches the workflow above.",
+    "",
+    "## Workflow",
+    "",
+    "1. Read the user's latest request and the relevant project files first.",
+    "2. Produce a short plan before editing when the task changes code.",
+    "3. Make focused changes and verify the result before reporting completion."
+  ].join("\n");
+}
+
+function createPluginManifestJson(
+  request: Required<LocalPluginSkillCreateRequest>,
+  slug: string
+): string {
+  const manifest = {
+    name: request.name,
+    description: request.description,
+    version: "0.1.0",
+    skills: [`skills/${slug}/SKILL.md`]
+  };
+
+  return `${JSON.stringify(manifest, null, 2)}\n`;
+}
+
+function createPluginReadme({ description, name }: Required<LocalPluginSkillCreateRequest>): string {
+  return [
+    `# ${name}`,
+    "",
+    description,
+    "",
+    "This local plugin scaffold was created by Forge. Add more skills under `skills/` and keep metadata in `.claude-plugin/plugin.json`."
+  ].join("\n");
+}
+
+function formatYamlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-|-$/gu, "")
+    .slice(0, 64);
 }
 
 async function isRegularFile(path: string): Promise<boolean> {

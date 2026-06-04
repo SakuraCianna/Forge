@@ -25,7 +25,11 @@ import {
 import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerLocalSkillHandlers } from "./localSkillIpc.js";
-import { readLocalSkillFileContent, scanLocalSkills } from "./localSkillScanner.js";
+import {
+  createLocalPluginSkill,
+  readLocalSkillFileContent,
+  scanLocalSkills
+} from "./localSkillScanner.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
 import { createProjectIndexCache } from "./projectIndexCache.js";
@@ -180,6 +184,7 @@ void app.whenReady().then(() => {
     directory: extensionDirectory
   });
   const extensionRegistry = createExtensionRegistry({
+    customExtensionDirectory: join(extensionDirectory, "custom"),
     logStore: extensionLogStore,
     store: extensionStore,
     vault: keyVault
@@ -202,9 +207,14 @@ void app.whenReady().then(() => {
 
   void openRouterCatalog.refresh();
 
-  registerLocalSkillHandlers(scanLocalSkills, readLocalSkillFileContent, (channel, handler) => {
-    ipcMain.handle(channel, handler);
-  });
+  registerLocalSkillHandlers(
+    scanLocalSkills,
+    readLocalSkillFileContent,
+    createLocalPluginSkill,
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
 
   registerExtensionHandlers(extensionRegistry, (channel, handler) => {
     ipcMain.handle(channel, handler);

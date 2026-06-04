@@ -7,17 +7,27 @@ import {
   ExternalLink,
   FileText,
   GitBranch,
-  Plug,
-  Search
+  Package,
+  Plus,
+  Search,
+  X
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
-import type { LocalSkillFileContent } from "@shared/pluginSkillTypes";
+import type {
+  LocalPluginSkillCreateKind,
+  LocalPluginSkillCreateRequest,
+  LocalPluginSkillCreateResult,
+  LocalSkillFileContent
+} from "@shared/pluginSkillTypes";
 import type { ForgePlugin, ForgeSkill } from "@/state/pluginSkills";
 import { getContextKindLabel } from "@/state/pluginSkills";
 
 type PluginLibraryPanelProps = {
   language: Language;
   plugins: ForgePlugin[];
+  onCreateLocalItem?: (
+    request: LocalPluginSkillCreateRequest
+  ) => Promise<LocalPluginSkillCreateResult>;
   onOpenExternal?: (url: string) => void;
   onReadCoreFile?: (filePath: string) => Promise<LocalSkillFileContent>;
 };
@@ -32,6 +42,19 @@ type SkillListItem = {
 type PluginLibraryCopy = {
   allSkills: string;
   catalogSource: string;
+  cancel: string;
+  create: string;
+  createDescription: string;
+  createDescriptionPlaceholder: string;
+  createFailed: string;
+  createHint: string;
+  createName: string;
+  createNamePlaceholder: (kind: LocalPluginSkillCreateKind) => string;
+  createPlugin: string;
+  createSkill: string;
+  createTitle: (kind: LocalPluginSkillCreateKind) => string;
+  createdLocalItem: (path: string) => string;
+  creating: string;
   coreFiles: string;
   downloadFromGithub: string;
   empty: string;
@@ -55,6 +78,7 @@ type PluginLibraryCopy = {
 
 export function PluginLibraryPanel({
   language,
+  onCreateLocalItem,
   onOpenExternal,
   onReadCoreFile,
   plugins
@@ -65,6 +89,12 @@ export function PluginLibraryPanel({
   const [selectedPluginId, setSelectedPluginId] = useState(plugins[0]?.id ?? "");
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const [githubUrl, setGithubUrl] = useState("");
+  const [creationDialogKind, setCreationDialogKind] =
+    useState<LocalPluginSkillCreateKind | null>(null);
+  const [creationDescription, setCreationDescription] = useState("");
+  const [creationName, setCreationName] = useState("");
+  const [creationNotice, setCreationNotice] = useState<string | null>(null);
+  const [creationBusy, setCreationBusy] = useState(false);
   const normalizedQuery = query.trim().toLowerCase();
   const skillItems = useMemo(
     () =>
@@ -127,6 +157,44 @@ export function PluginLibraryPanel({
     }
   }
 
+  function openCreationDialog(kind: LocalPluginSkillCreateKind): void {
+    setCreationDialogKind(kind);
+    setCreationName("");
+    setCreationDescription("");
+    setCreationNotice(null);
+  }
+
+  async function submitCreation(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+
+    if (!creationDialogKind || !onCreateLocalItem || !creationName.trim()) {
+      return;
+    }
+
+    setCreationBusy(true);
+    setCreationNotice(null);
+
+    try {
+      const result = await onCreateLocalItem({
+        kind: creationDialogKind,
+        name: creationName,
+        description: creationDescription
+      });
+
+      setMode(result.kind === "plugin" ? "plugins" : "skills");
+      setCreationDialogKind(null);
+      setCreationName("");
+      setCreationDescription("");
+      setCreationNotice(copy.createdLocalItem(result.primaryFilePath));
+    } catch (error) {
+      setCreationNotice(
+        `${copy.createFailed}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      setCreationBusy(false);
+    }
+  }
+
   function openGithubExtension(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     const normalizedGithubUrl = normalizeGithubUrl(githubUrl);
@@ -140,25 +208,37 @@ export function PluginLibraryPanel({
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(280px,340px)_minmax(0,1fr)] overflow-hidden">
-        <aside className="min-h-0 border-r border-[#ececf1] bg-[#fbfbfc] p-4">
-          <div className="mb-3 inline-flex rounded-[13px] bg-[#f1f1f4] p-1">
-            {(["plugins", "skills"] as const).map((item) => (
+        <aside className="flex min-h-0 flex-col border-r border-[#ececf1] bg-[#fbfbfc] p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="inline-flex rounded-[13px] bg-[#f1f1f4] p-1">
+              {(["plugins", "skills"] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => switchMode(item)}
+                  className={`h-8 rounded-[10px] px-3 text-[13px] transition ${
+                    mode === item
+                      ? "bg-white font-medium text-[#202123] shadow-[0_1px_5px_rgba(0,0,0,0.08)]"
+                      : "text-[#6e6e80] hover:text-[#202123]"
+                  }`}
+                >
+                  {item === "plugins" ? copy.plugins : copy.skills}
+                </button>
+              ))}
+            </div>
+            {onCreateLocalItem ? (
               <button
-                key={item}
                 type="button"
-                onClick={() => switchMode(item)}
-                className={`h-8 rounded-[10px] px-3 text-[13px] transition ${
-                  mode === item
-                    ? "bg-white font-medium text-[#202123] shadow-[0_1px_5px_rgba(0,0,0,0.08)]"
-                    : "text-[#6e6e80] hover:text-[#202123]"
-                }`}
+                onClick={() => openCreationDialog(mode === "plugins" ? "plugin" : "skill")}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8]"
               >
-                {item === "plugins" ? copy.plugins : copy.skills}
+                <Plus className="h-3.5 w-3.5" />
+                {mode === "plugins" ? copy.createPlugin : copy.createSkill}
               </button>
-            ))}
+            ) : null}
           </div>
 
-          <label className="mb-4 flex h-10 items-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[12px] text-[#8e8ea0]">
+          <label className="mb-4 flex h-10 shrink-0 items-center gap-2 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[12px] text-[#8e8ea0]">
             <Search className="h-4 w-4 shrink-0" />
             <input
               value={query}
@@ -168,10 +248,16 @@ export function PluginLibraryPanel({
             />
           </label>
 
-          <div className="mb-2 px-1 text-[10px] uppercase tracking-normal text-[#8e8ea0]">
+          {creationNotice ? (
+            <p className="mb-3 rounded-[10px] border border-[#d9d9e3] bg-white px-3 py-2 text-[12px] leading-5 text-[#565869]">
+              {creationNotice}
+            </p>
+          ) : null}
+
+          <div className="mb-2 shrink-0 px-1 text-[10px] uppercase tracking-normal text-[#8e8ea0]">
             {mode === "plugins" ? copy.plugins : copy.allSkills}
           </div>
-          <div className="max-h-[calc(100%-92px)] space-y-2.5 overflow-auto pr-1">
+          <div className="min-h-0 flex-1 scroll-pb-8 space-y-2.5 overflow-auto pb-8 pr-1">
             {mode === "plugins"
               ? filteredPlugins.map((plugin) => (
                   <button
@@ -188,7 +274,7 @@ export function PluginLibraryPanel({
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-white"
                       style={{ backgroundColor: plugin.accent }}
                     >
-                      <Plug className="h-4 w-4" />
+                      <Package className="h-4 w-4" />
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-[14px] font-medium leading-5 text-[#202123]">
@@ -256,7 +342,109 @@ export function PluginLibraryPanel({
           )}
         </div>
       </div>
+      {creationDialogKind ? (
+        <CreationDialog
+          busy={creationBusy}
+          copy={copy}
+          description={creationDescription}
+          kind={creationDialogKind}
+          name={creationName}
+          onCancel={() => setCreationDialogKind(null)}
+          onDescriptionChange={setCreationDescription}
+          onNameChange={setCreationName}
+          onSubmit={(event) => void submitCreation(event)}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function CreationDialog({
+  busy,
+  copy,
+  description,
+  kind,
+  name,
+  onCancel,
+  onDescriptionChange,
+  onNameChange,
+  onSubmit
+}: {
+  busy: boolean;
+  copy: PluginLibraryCopy;
+  description: string;
+  kind: LocalPluginSkillCreateKind;
+  name: string;
+  onCancel: () => void;
+  onDescriptionChange: (value: string) => void;
+  onNameChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}): ReactElement {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 px-4">
+      <form
+        onSubmit={onSubmit}
+        className="grid w-full max-w-[520px] gap-4 rounded-[16px] border border-[#ececf1] bg-white p-5 shadow-[0_18px_60px_rgba(0,0,0,0.16)]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[17px] font-semibold text-[#202123]">
+              {copy.createTitle(kind)}
+            </h3>
+            <p className="mt-1 text-[13px] leading-5 text-[#6e6e80]">{copy.createHint}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-[#565869] transition hover:bg-[#f7f7f8]"
+            aria-label={copy.cancel}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <label className="grid gap-1.5">
+          <span className="text-[12px] font-semibold text-[#202123]">{copy.createName}</span>
+          <input
+            value={name}
+            onChange={(event) => onNameChange(event.currentTarget.value)}
+            placeholder={copy.createNamePlaceholder(kind)}
+            className="h-10 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-[14px] text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]"
+          />
+        </label>
+
+        <label className="grid gap-1.5">
+          <span className="text-[12px] font-semibold text-[#202123]">
+            {copy.createDescription}
+          </span>
+          <textarea
+            value={description}
+            onChange={(event) => onDescriptionChange(event.currentTarget.value)}
+            placeholder={copy.createDescriptionPlaceholder}
+            rows={4}
+            className="min-h-[104px] rounded-[12px] border border-[#d9d9e3] bg-white px-3 py-2 text-[14px] leading-6 text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]"
+          />
+        </label>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-9 items-center rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-[13px] font-semibold text-[#565869] transition hover:bg-[#f7f7f8]"
+          >
+            {copy.cancel}
+          </button>
+          <button
+            type="submit"
+            disabled={busy || !name.trim()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-[#202123] px-3 text-[13px] font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {busy ? copy.creating : copy.create}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -289,7 +477,7 @@ function PluginDetail({
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] text-white"
           style={{ backgroundColor: plugin.accent }}
         >
-          <Plug className="h-5 w-5" />
+          <Package className="h-5 w-5" />
         </span>
         <span className="min-w-0">
           <span className="mb-1 inline-flex rounded-full bg-[#f1f1f4] px-2 py-0.5 text-[10px] text-[#6e6e80]">
@@ -563,6 +751,19 @@ function getPluginLibraryCopy(language: Language): PluginLibraryCopy {
     return {
       allSkills: "全部技能",
       catalogSource: "Forge 目录",
+      cancel: "取消",
+      create: "创建",
+      createDescription: "说明",
+      createDescriptionPlaceholder: "描述这个插件或技能解决什么问题, 什么时候使用",
+      createFailed: "创建失败",
+      createHint: "Forge 会创建本地模板文件, 不会执行任何外部代码。",
+      createName: "名称",
+      createNamePlaceholder: (kind) => (kind === "plugin" ? "例如 项目交付插件" : "例如 代码审查技能"),
+      createPlugin: "创建插件",
+      createSkill: "创建技能",
+      createTitle: (kind) => (kind === "plugin" ? "创建本地插件" : "创建本地技能"),
+      createdLocalItem: (path) => `已创建: ${path}`,
+      creating: "创建中",
       coreFiles: "核心文件",
       downloadFromGithub: "打开仓库",
       empty: "没有匹配的插件或技能",
@@ -588,6 +789,19 @@ function getPluginLibraryCopy(language: Language): PluginLibraryCopy {
   return {
     allSkills: "All skills",
     catalogSource: "Forge catalog",
+    cancel: "Cancel",
+    create: "Create",
+    createDescription: "Description",
+    createDescriptionPlaceholder: "Describe what this plugin or skill helps with and when to use it",
+    createFailed: "Create failed",
+    createHint: "Forge creates local template files and does not execute external code.",
+    createName: "Name",
+    createNamePlaceholder: (kind) => (kind === "plugin" ? "Project Delivery Plugin" : "Code Review Skill"),
+    createPlugin: "Create plugin",
+    createSkill: "Create skill",
+    createTitle: (kind) => (kind === "plugin" ? "Create Local Plugin" : "Create Local Skill"),
+    createdLocalItem: (path) => `Created: ${path}`,
+    creating: "Creating",
     coreFiles: "Core files",
     downloadFromGithub: "Open repo",
     empty: "No matching plugins or skills",

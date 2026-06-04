@@ -4,6 +4,8 @@ import type {
   ExtensionActionConfirmation,
   ExtensionActionDefinition,
   ExtensionConfirmInvocationRequest,
+  ExtensionCreateRequest,
+  ExtensionCreateResult,
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
@@ -25,6 +27,10 @@ import {
   qqMailManifest,
   type ExtensionActionHandler
 } from "./qqMailExtension.js";
+import {
+  createCustomExtensionScaffold,
+  readCustomExtensionManifests
+} from "./customExtensionScaffold.js";
 
 type ExtensionSecretVault = {
   saveExtensionSecret: (extensionId: string, fieldId: string, value: string) => Promise<void>;
@@ -45,6 +51,7 @@ type PendingInvocation = {
 
 export type ExtensionRegistry = {
   getSnapshot: () => Promise<ExtensionRegistrySnapshot>;
+  createCustomExtension: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
   updateSettings: (patch: ExtensionSettingsPatch) => Promise<ExtensionRegistrySnapshot>;
   saveSecret: (request: ExtensionSecretSaveRequest) => Promise<ExtensionRegistrySnapshot>;
   deleteSecret: (extensionId: string, fieldId: string) => Promise<ExtensionRegistrySnapshot>;
@@ -59,22 +66,31 @@ const confirmationTtlMs = 10 * 60 * 1000;
 
 export function createExtensionRegistry({
   logStore,
+  customExtensionDirectory,
   now = () => new Date().toISOString(),
   store,
   vault
 }: {
+  customExtensionDirectory: string;
   logStore: ExtensionInvocationLogStore;
   now?: () => string;
   store: ExtensionStore;
   vault: ExtensionSecretVault;
 }): ExtensionRegistry {
-  const manifests = [qqMailManifest];
+  const builtInManifests = [qqMailManifest];
   const handlers = new Map<string, Record<string, ExtensionActionHandler>>([
     [qqMailManifest.id, qqMailHandlers]
   ]);
   const pendingInvocations = new Map<string, PendingInvocation>();
 
+  async function readManifests(): Promise<ExtensionManifest[]> {
+    const customManifests = await readCustomExtensionManifests(customExtensionDirectory);
+
+    return [...builtInManifests, ...customManifests];
+  }
+
   async function getSnapshot(): Promise<ExtensionRegistrySnapshot> {
+    const manifests = await readManifests();
     const settings = await store.readSettings(manifests);
     const secretStatuses = await Promise.all(
       manifests.map((manifest) => getSecretStatus(manifest))
@@ -87,15 +103,30 @@ export function createExtensionRegistry({
     };
   }
 
+  async function createCustomExtension(
+    request: ExtensionCreateRequest
+  ): Promise<ExtensionCreateResult> {
+    const scaffold = await createCustomExtensionScaffold({
+      directory: customExtensionDirectory,
+      request
+    });
+
+    return {
+      ...scaffold,
+      registry: await getSnapshot()
+    };
+  }
+
   async function updateSettings(
     patch: ExtensionSettingsPatch
   ): Promise<ExtensionRegistrySnapshot> {
+    const manifests = await readManifests();
     await store.updateSettings(manifests, patch);
     return getSnapshot();
   }
 
   async function saveSecret(request: ExtensionSecretSaveRequest): Promise<ExtensionRegistrySnapshot> {
-    const manifest = getManifest(request.extensionId);
+    const manifest = await getManifest(request.extensionId);
 
     if (!manifest.auth.fields.some((field) => field.id === request.fieldId)) {
       throw new Error(`Unknown extension secret field: ${request.fieldId}`);
@@ -115,7 +146,7 @@ export function createExtensionRegistry({
     extensionId: string,
     fieldId: string
   ): Promise<ExtensionRegistrySnapshot> {
-    getManifest(extensionId);
+    await getManifest(extensionId);
     await vault.deleteExtensionSecret(extensionId, fieldId);
     return getSnapshot();
   }
@@ -230,7 +261,8 @@ export function createExtensionRegistry({
     manifest: ExtensionManifest;
     settings: ExtensionSettings;
   }> {
-    const manifest = getManifest(request.extensionId);
+    const manifests = await readManifests();
+    const manifest = getManifestFromList(manifests, request.extensionId);
     const action = getAction(manifest, request.actionId);
     const allSettings = await store.readSettings(manifests);
     const settings = allSettings.find((item) => item.extensionId === manifest.id);
@@ -372,17 +404,12 @@ export function createExtensionRegistry({
     };
   }
 
-  function getManifest(extensionId: string): ExtensionManifest {
-    const manifest = manifests.find((candidate) => candidate.id === extensionId);
-
-    if (!manifest) {
-      throw new Error(`Unknown extension: ${extensionId}`);
-    }
-
-    return manifest;
+  async function getManifest(extensionId: string): Promise<ExtensionManifest> {
+    return getManifestFromList(await readManifests(), extensionId);
   }
 
   return {
+    createCustomExtension,
     getSnapshot,
     updateSettings,
     saveSecret,
@@ -391,6 +418,19 @@ export function createExtensionRegistry({
     confirmInvocation,
     listLogs
   };
+}
+
+function getManifestFromList(
+  manifests: ExtensionManifest[],
+  extensionId: string
+): ExtensionManifest {
+  const manifest = manifests.find((candidate) => candidate.id === extensionId);
+
+  if (!manifest) {
+    throw new Error(`Unknown extension: ${extensionId}`);
+  }
+
+  return manifest;
 }
 
 function getAction(
