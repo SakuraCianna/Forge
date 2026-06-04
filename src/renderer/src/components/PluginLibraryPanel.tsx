@@ -245,7 +245,6 @@ export function PluginLibraryPanel({
               githubUrl={githubUrl}
               language={language}
               onGithubUrlChange={setGithubUrl}
-              onOpenExternal={onOpenExternal}
               onOpenGithubExtension={openGithubExtension}
               onSelectSkill={(skill) => selectSkill({ plugin: selectedPlugin, skill })}
               plugin={selectedPlugin}
@@ -266,7 +265,6 @@ function PluginDetail({
   githubUrl,
   language,
   onGithubUrlChange,
-  onOpenExternal,
   onOpenGithubExtension,
   onSelectSkill,
   plugin
@@ -275,7 +273,6 @@ function PluginDetail({
   githubUrl: string;
   language: Language;
   onGithubUrlChange: (url: string) => void;
-  onOpenExternal?: (url: string) => void;
   onOpenGithubExtension: (event: FormEvent<HTMLFormElement>) => void;
   onSelectSkill: (skill: ForgeSkill) => void;
   plugin: ForgePlugin;
@@ -337,16 +334,6 @@ function PluginDetail({
               {copy.downloadFromGithub}
             </button>
           </div>
-          {plugin.repositoryUrl ? (
-            <button
-              type="button"
-              onClick={() => onOpenExternal?.(plugin.repositoryUrl ?? "")}
-              className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-[#2563eb] transition hover:text-[#1d4ed8]"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              {copy.openRepository}
-            </button>
-          ) : null}
         </form>
       </div>
 
