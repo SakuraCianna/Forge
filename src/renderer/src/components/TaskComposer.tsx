@@ -453,7 +453,9 @@ export function TaskComposer({
 
   return (
     <section className={`${wallpaperActive ? "bg-transparent" : "bg-white"} px-5 py-2`}>
-      <div className="mx-auto max-w-[880px]">{inputPanel}</div>
+      <div className="mx-auto w-full max-w-[760px] xl:ml-[clamp(36px,4vw,76px)] xl:mr-auto">
+        {inputPanel}
+      </div>
     </section>
   );
 
