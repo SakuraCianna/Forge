@@ -1302,6 +1302,47 @@ export function App(): ReactElement {
     }
   }
 
+  async function refreshProjectFilesAfterMutation(
+    projectPath: string,
+    relativePaths: string[],
+    options: { expandParents?: boolean } = {}
+  ): Promise<void> {
+    const normalizedPaths = relativePaths
+      .map((relativePath) => relativePath.trim().replace(/\\/g, "/").replace(/^\.\//u, ""))
+      .filter(Boolean);
+
+    if (normalizedPaths.length === 0) {
+      return;
+    }
+
+    const parentPaths = [
+      ...new Set(normalizedPaths.flatMap((relativePath) => getProjectFileParentPaths(relativePath)))
+    ];
+    const directoriesToRefresh = [".", ...parentPaths];
+
+    if (options.expandParents && parentPaths.length > 0) {
+      setExpandedFileTreeFolders((current) => [...new Set([...current, ...parentPaths])]);
+    }
+
+    try {
+      const nextScan = await window.forge.projects.scan(projectPath);
+
+      if (currentProjectPathRef.current !== projectPath) {
+        return;
+      }
+
+      setProjectScanResult(nextScan);
+
+      for (const directoryPath of directoriesToRefresh) {
+        await loadProjectFileTreeDirectory(projectPath, directoryPath, { force: true });
+      }
+    } catch (error) {
+      if (currentProjectPathRef.current === projectPath) {
+        setFileTreeNotice(formatRuntimeError(settings.language, error));
+      }
+    }
+  }
+
   async function scanProject(projectPath: string): Promise<boolean> {
     try {
       const result = await window.forge.projects.scan(projectPath);
@@ -1544,6 +1585,9 @@ export function App(): ReactElement {
     setFilePreview(createTextFilePreview(file));
     setChangePreviews((current) => removeFileChangePreview(current, relativePath));
     void refreshProjectGitStatus();
+    void refreshProjectFilesAfterMutation(currentProject.path, [file.relativePath], {
+      expandParents: pendingPreview?.changeKind === "create"
+    });
 
     const eventThreadId = pendingPreview?.source?.threadId ?? selectedThreadId;
 
@@ -1636,15 +1680,14 @@ export function App(): ReactElement {
         projectRoot: currentProject.path,
         relativePath
       });
-      const nextScan = await window.forge.projects.scan(currentProject.path);
       const createdAt = new Date().toISOString();
 
-      setProjectScanResult(nextScan);
       setPreviewFile((current) => (current?.relativePath === result.relativePath ? null : current));
       setFilePreview((current) => (current?.relativePath === result.relativePath ? null : current));
       setFormattedPreview(null);
       setChangePreviews((current) => removeFileChangePreview(current, result.relativePath));
       void refreshProjectGitStatus();
+      void refreshProjectFilesAfterMutation(currentProject.path, [result.relativePath]);
 
       if (!selectedThreadId) {
         return;
@@ -1699,6 +1742,13 @@ export function App(): ReactElement {
 
     setChangePreviews([]);
     void refreshProjectGitStatus();
+    void refreshProjectFilesAfterMutation(
+      currentProject.path,
+      appliedPreviews.map((preview) => preview.relativePath),
+      {
+        expandParents: appliedPreviews.some((preview) => preview.changeKind === "create")
+      }
+    );
 
     for (const preview of appliedPreviews) {
       if (!preview.source?.threadId) {
@@ -1890,6 +1940,9 @@ export function App(): ReactElement {
         setFilePreview(createTextFilePreview(writtenFile));
         setChangePreviews((current) => removeFileChangePreview(current, sourcedPreview.relativePath));
         void refreshProjectGitStatus();
+        void refreshProjectFilesAfterMutation(currentProject.path, [writtenFile.relativePath], {
+          expandParents: sourcedPreview.changeKind === "create"
+        });
         setThreads((current) =>
           appendThreadEvents(current, selectedThread.id, [
             {
