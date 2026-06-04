@@ -12,14 +12,21 @@ export type AgentActionExecution =
   | { kind: "list-directory"; relativePath: string }
   | { kind: "glob-project"; pattern: string }
   | { kind: "search-project"; query: string }
+  | { kind: "web-search"; query: string }
   | { kind: "git-status" }
   | { kind: "generate-file-change"; relativePath: string }
   | { kind: "run-command"; command: string }
+  | {
+      kind: "invoke-extension";
+      actionId: string;
+      extensionId: string;
+      input: Record<string, unknown>;
+    }
   | { kind: "invalid-target"; reason: string }
   | { kind: "manual-gate"; reason: "review" | "commit" }
   | { kind: "complete" };
 
-export type AgentToolPermission = "read" | "edit" | "command" | "git";
+export type AgentToolPermission = "read" | "edit" | "command" | "git" | "extension" | "web";
 
 export type AgentActionPermissionResult =
   | { ok: true }
@@ -70,6 +77,10 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
     return { kind: "search-project", query: action.target };
   }
 
+  if (action.kind === "web-search" && action.target) {
+    return { kind: "web-search", query: action.target };
+  }
+
   if (action.kind === "git-status") {
     return { kind: "git-status" };
   }
@@ -84,6 +95,15 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
 
   if (action.kind === "run-command" && action.command) {
     return { kind: "run-command", command: action.command };
+  }
+
+  if (action.kind === "invoke-extension" && action.extensionId && action.extensionActionId) {
+    return {
+      kind: "invoke-extension",
+      actionId: action.extensionActionId,
+      extensionId: action.extensionId,
+      input: action.extensionInput ?? {}
+    };
   }
 
   return { kind: "complete" };
@@ -375,6 +395,7 @@ export function isRunnableAgentAction(
       action.kind === "list-directory" ||
       action.kind === "glob-project" ||
       action.kind === "search-project" ||
+      action.kind === "web-search" ||
       action.kind === "git-status" ||
       action.kind === "edit-file") &&
     (action.kind === "git-status" ||
@@ -396,11 +417,23 @@ export function isRunnableAgentAction(
     return risk.level === "allow" || (policy.fullAccess === true && risk.level === "ask");
   }
 
+  if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+    return false;
+  }
+
+  if (action.kind === "invoke-extension" && action.extensionId && action.extensionActionId) {
+    return true;
+  }
+
   return false;
 }
 
 // 将队列动作映射到智能体配置中的工具名
 function getRequiredToolForAction(action: AgentAction): AgentToolPermission | null {
+  if (action.kind === "web-search") {
+    return "web";
+  }
+
   if (
     action.kind === "inspect-file" ||
     action.kind === "list-directory" ||
@@ -420,6 +453,10 @@ function getRequiredToolForAction(action: AgentAction): AgentToolPermission | nu
 
   if (action.kind === "git-status" || action.kind === "commit") {
     return "git";
+  }
+
+  if (action.kind === "invoke-extension") {
+    return "extension";
   }
 
   return null;

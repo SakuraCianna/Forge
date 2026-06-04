@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
   agentChannels,
   commandChannels,
+  extensionChannels,
   fileChannels,
   gitChannels,
   keyVaultChannels,
@@ -10,6 +11,7 @@ import {
   projectChannels,
   providerModelChannels,
   systemChannels,
+  webSearchChannels,
   windowChannels
 } from "../shared/ipcChannels.js";
 import type {
@@ -24,7 +26,27 @@ import type {
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
 import type {
+  ExtensionConfirmInvocationRequest,
+  ExtensionCreateRequest,
+  ExtensionCreateResult,
+  ExtensionDeleteResult,
+  ExtensionInvocationLogRecord,
+  ExtensionInvocationRequest,
+  ExtensionInvocationResult,
+  ExtensionRegistrySnapshot,
+  ExtensionSecretSaveRequest,
+  ExtensionSettingsPatch,
+  ExtensionUpdateRequest,
+  ExtensionUpdateResult
+} from "../shared/extensionTypes.js";
+import type {
   LocalSkillFileContent,
+  LocalPluginSkillCreateRequest,
+  LocalPluginSkillCreateResult,
+  LocalPluginSkillDeleteRequest,
+  LocalPluginSkillDeleteResult,
+  LocalPluginSkillUpdateRequest,
+  LocalPluginSkillUpdateResult,
   LocalSkillScanResult
 } from "../shared/pluginSkillTypes.js";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
@@ -48,6 +70,7 @@ import type {
   ProjectGitWorktreeResult
 } from "../shared/gitTypes.js";
 import type { ProjectScanResult } from "../shared/projectTypes.js";
+import type { WebSearchRequest, WebSearchResult } from "../shared/webSearchTypes.js";
 
 contextBridge.exposeInMainWorld("forge", {
   appName: "Forge",
@@ -83,11 +106,45 @@ contextBridge.exposeInMainWorld("forge", {
     scanLocal: (): Promise<LocalSkillScanResult> =>
       ipcRenderer.invoke(localSkillChannels.scan),
     readFile: (filePath: string): Promise<LocalSkillFileContent> =>
-      ipcRenderer.invoke(localSkillChannels.readFile, filePath)
+      ipcRenderer.invoke(localSkillChannels.readFile, filePath),
+    create: (request: LocalPluginSkillCreateRequest): Promise<LocalPluginSkillCreateResult> =>
+      ipcRenderer.invoke(localSkillChannels.create, request),
+    update: (request: LocalPluginSkillUpdateRequest): Promise<LocalPluginSkillUpdateResult> =>
+      ipcRenderer.invoke(localSkillChannels.update, request),
+    delete: (request: LocalPluginSkillDeleteRequest): Promise<LocalPluginSkillDeleteResult> =>
+      ipcRenderer.invoke(localSkillChannels.delete, request)
+  },
+  extensions: {
+    getRegistry: (): Promise<ExtensionRegistrySnapshot> =>
+      ipcRenderer.invoke(extensionChannels.registry),
+    create: (request: ExtensionCreateRequest): Promise<ExtensionCreateResult> =>
+      ipcRenderer.invoke(extensionChannels.create, request),
+    update: (request: ExtensionUpdateRequest): Promise<ExtensionUpdateResult> =>
+      ipcRenderer.invoke(extensionChannels.update, request),
+    delete: (extensionId: string): Promise<ExtensionDeleteResult> =>
+      ipcRenderer.invoke(extensionChannels.delete, extensionId),
+    updateSettings: (patch: ExtensionSettingsPatch): Promise<ExtensionRegistrySnapshot> =>
+      ipcRenderer.invoke(extensionChannels.updateSettings, patch),
+    saveSecret: (request: ExtensionSecretSaveRequest): Promise<ExtensionRegistrySnapshot> =>
+      ipcRenderer.invoke(extensionChannels.saveSecret, request),
+    deleteSecret: (extensionId: string, fieldId: string): Promise<ExtensionRegistrySnapshot> =>
+      ipcRenderer.invoke(extensionChannels.deleteSecret, extensionId, fieldId),
+    invoke: (request: ExtensionInvocationRequest): Promise<ExtensionInvocationResult> =>
+      ipcRenderer.invoke(extensionChannels.invoke, request),
+    confirmInvocation: (
+      request: ExtensionConfirmInvocationRequest
+    ): Promise<ExtensionInvocationResult> =>
+      ipcRenderer.invoke(extensionChannels.confirmInvocation, request),
+    listLogs: (limit?: number): Promise<ExtensionInvocationLogRecord[]> =>
+      ipcRenderer.invoke(extensionChannels.logs, limit)
   },
   system: {
     openExternal: (url: string): Promise<boolean> =>
       ipcRenderer.invoke(systemChannels.openExternal, url)
+  },
+  web: {
+    search: (request: WebSearchRequest): Promise<WebSearchResult> =>
+      ipcRenderer.invoke(webSearchChannels.search, request)
   },
   agent: {
     generatePlan: (request: GenerateAgentPlanRequest): Promise<AgentPlanResult> =>

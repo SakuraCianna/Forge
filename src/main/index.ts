@@ -11,6 +11,10 @@ import {
 } from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
 import { cancelProjectCommand, runProjectCommand } from "./commandRunner.js";
+import { registerExtensionHandlers } from "./extensionIpc.js";
+import { createExtensionInvocationLogStore } from "./extensions/extensionInvocationLog.js";
+import { createExtensionRegistry } from "./extensions/extensionRegistry.js";
+import { createExtensionStore } from "./extensions/extensionStore.js";
 import { registerGitHandlers } from "./gitIpc.js";
 import {
   commitProjectChanges,
@@ -21,7 +25,13 @@ import {
 import { createKeyVault } from "./keyVault.js";
 import { registerKeyVaultHandlers } from "./keyVaultIpc.js";
 import { registerLocalSkillHandlers } from "./localSkillIpc.js";
-import { readLocalSkillFileContent, scanLocalSkills } from "./localSkillScanner.js";
+import {
+  createLocalPluginSkill,
+  deleteLocalPluginSkill,
+  readLocalSkillFileContent,
+  scanLocalSkills,
+  updateLocalPluginSkill
+} from "./localSkillScanner.js";
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
 import { createProjectIndexCache } from "./projectIndexCache.js";
@@ -41,6 +51,8 @@ import { configureProjectTextSearchIndex } from "./projectTextSearchIndex.js";
 import { createOpenRouterModelCatalog } from "./openRouterModelCatalog.js";
 import { fetchModelsForProvider } from "./providerModelService.js";
 import { registerProviderModelHandlers } from "./providerModelsIpc.js";
+import { registerWebSearchHandlers } from "./webSearchIpc.js";
+import { searchWeb } from "./webSearchService.js";
 import { systemChannels, windowChannels } from "../shared/ipcChannels.js";
 
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL);
@@ -168,6 +180,19 @@ void app.whenReady().then(() => {
   const projectIndexCache = createProjectIndexCache({
     directory: join(app.getPath("userData"), "project-indexes")
   });
+  const extensionDirectory = join(app.getPath("userData"), "extensions");
+  const extensionStore = createExtensionStore({
+    directory: extensionDirectory
+  });
+  const extensionLogStore = createExtensionInvocationLogStore({
+    directory: extensionDirectory
+  });
+  const extensionRegistry = createExtensionRegistry({
+    customExtensionDirectory: join(extensionDirectory, "custom"),
+    logStore: extensionLogStore,
+    store: extensionStore,
+    vault: keyVault
+  });
   configureProjectTextSearchIndex({
     directory: join(app.getPath("userData"), "project-text-indexes")
   });
@@ -186,7 +211,18 @@ void app.whenReady().then(() => {
 
   void openRouterCatalog.refresh();
 
-  registerLocalSkillHandlers(scanLocalSkills, readLocalSkillFileContent, (channel, handler) => {
+  registerLocalSkillHandlers(
+    scanLocalSkills,
+    readLocalSkillFileContent,
+    createLocalPluginSkill,
+    updateLocalPluginSkill,
+    deleteLocalPluginSkill,
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
+
+  registerExtensionHandlers(extensionRegistry, (channel, handler) => {
     ipcMain.handle(channel, handler);
   });
 
@@ -244,6 +280,13 @@ void app.whenReady().then(() => {
     (request) => listProjectDirectory(request),
     (request) => globProjectFiles(request),
     (request) => searchProjectTextFiles(request),
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
+
+  registerWebSearchHandlers(
+    (request) => searchWeb(request),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

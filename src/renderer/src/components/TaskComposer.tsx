@@ -83,6 +83,7 @@ type TaskComposerProps = {
   placeholder?: string;
   submitSignal?: number;
   variant?: "dock" | "hero";
+  wallpaperActive?: boolean;
 };
 
 // 控制输入框提交和底部工具条布局, 新会话和线程底栏共用
@@ -103,7 +104,8 @@ export function TaskComposer({
   focusSignal = 0,
   placeholder,
   submitSignal = 0,
-  variant = "dock"
+  variant = "dock",
+  wallpaperActive = false
 }: TaskComposerProps): ReactElement {
   const { t } = useI18n(settings.language);
   const isHero = variant === "hero";
@@ -346,10 +348,12 @@ export function TaskComposer({
       onDragLeave={handleComposerDragLeave}
       onDragOver={handleComposerDragOver}
       onDrop={handleComposerDrop}
-      className={`relative bg-white p-1.5 text-[#202123] transition focus-within:border-[#202123] ${
+      className={`relative p-1.5 text-[#202123] transition focus-within:border-[#202123] ${
         isHero
           ? "rounded-[18px] border-0 shadow-none"
           : "rounded-[18px] border border-[#d9d9e3] shadow-[0_10px_28px_rgba(0,0,0,0.08)]"
+      } ${
+        wallpaperActive ? "bg-white/84 backdrop-blur-md" : "bg-white"
       } ${
         isDraggingAttachments
           ? "ring-2 ring-[#2563eb]/30"
@@ -448,8 +452,10 @@ export function TaskComposer({
   }
 
   return (
-    <section className="bg-white px-5 py-2">
-      <div className="mx-auto max-w-[880px]">{inputPanel}</div>
+    <section className={`${wallpaperActive ? "bg-transparent" : "bg-white"} px-5 py-2`}>
+      <div className="mx-auto w-full max-w-[760px] xl:ml-[clamp(36px,4vw,76px)] xl:mr-auto">
+        {inputPanel}
+      </div>
     </section>
   );
 

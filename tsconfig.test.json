@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "types": ["node"],
+    "skipLibCheck": true,
+    "rootDir": ".",
+    "outDir": ".tmp-test"
+  },
+  "include": [
+    "tests/**/*.test.ts",
+    "src/renderer/src/state/agentMemory.ts",
+    "src/renderer/src/state/conversationRouting.ts"
+  ]
+}

@@ -274,24 +274,27 @@ export function SettingsPanel({
 
   return (
     <section className="h-full min-h-0 overflow-hidden">
-      <div className="mx-auto flex h-full max-w-[1180px] flex-col">
-        <header className="border-b border-[#ececf1] px-1 pb-4">
+      <div className="mx-auto flex h-full w-full max-w-[1180px] flex-col px-3 sm:px-4">
+        <header className="border-b border-[#ececf1] px-1 pb-3 sm:pb-4">
           <h1 className="text-xl font-semibold tracking-normal text-[#202123]">{activeItem.label}</h1>
           <p className="mt-1 text-sm leading-6 text-[#6e6e80]">
             {getSectionDescription(activeSection)}
           </p>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)] overflow-hidden">
-          <aside className="min-h-0 border-r border-[#ececf1] py-4 pr-4">
-            <nav aria-label={t("settings.title")} className="space-y-1">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[220px_minmax(0,1fr)] lg:grid-rows-1">
+          <aside className="min-w-0 border-b border-[#ececf1] py-2 lg:min-h-0 lg:border-b-0 lg:border-r lg:py-4 lg:pr-4">
+            <nav
+              aria-label={t("settings.title")}
+              className="flex min-w-0 gap-1 overflow-x-auto pb-1 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0"
+            >
               {sectionItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   aria-label={item.label}
                   onClick={() => setActiveSection(item.id)}
-                  className={`flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left transition active:scale-[0.99] ${
+                  className={`flex min-w-[148px] shrink-0 items-center gap-3 rounded-[12px] px-3 py-2.5 text-left transition active:scale-[0.99] lg:w-full lg:min-w-0 ${
                     activeSection === item.id
                       ? "bg-[#ececf1] text-[#202123]"
                       : "text-[#565869] hover:bg-[#f7f7f8] hover:text-[#202123]"
@@ -307,7 +310,7 @@ export function SettingsPanel({
             </nav>
           </aside>
 
-          <main className="min-h-0 overflow-auto px-6 py-5">
+          <main className="min-h-0 min-w-0 overflow-auto px-1 py-4 sm:px-3 lg:px-6 lg:py-5">
             {activeSection === "general" ? renderGeneralSection() : null}
             {activeSection === "privacy" ? renderPrivacySection() : null}
             {activeSection === "models" ? renderModelsSection() : null}
@@ -1259,7 +1262,7 @@ export function SettingsPanel({
                       </label>
                     ) : null}
 
-                    <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       {requiresApiKey ? (
                         <>
                           <button
@@ -1310,7 +1313,7 @@ export function SettingsPanel({
                       ) : null}
                       {fetchState.message ? (
                         <span
-                          className={`min-w-0 flex-1 truncate whitespace-nowrap text-xs ${
+                          className={`min-w-[180px] flex-1 break-words text-xs leading-5 ${
                             fetchState.status === "error" ? "text-[#b45309]" : "text-[#087443]"
                           }`}
                         >
@@ -1333,7 +1336,7 @@ export function SettingsPanel({
                       // 手动模型行保持单行, 避免状态信息挤压按钮
                       <div
                         data-testid={`manual-model-row-${provider.id}`}
-                        className="flex min-w-0 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap"
+                        className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
                       >
                         <label className="min-w-0 flex-1">
                           <span className="sr-only">{providerLabel} model ID</span>
@@ -1355,7 +1358,7 @@ export function SettingsPanel({
                         <button
                           type="button"
                           aria-label={`Save ${providerLabel} model ID`}
-                          className="h-9 shrink-0 rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
+                          className="h-9 rounded-[12px] bg-[#202123] px-3 text-xs font-semibold text-white transition hover:bg-black active:scale-[0.99]"
                           onClick={() => {
                             onAddManualModel(provider.id, draftManualModel, draftKey);
                             setDraftManualModels((current) => ({
@@ -1377,8 +1380,8 @@ export function SettingsPanel({
                           : "Local services do not need an API key. Start the service, then fetch models."}
                     </p>
                     <div className="rounded-[14px] border border-[#ececf1] bg-white p-3">
-                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(560px,672px)] md:items-center">
-                        <span>
+                      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(160px,1fr)_minmax(280px,672px)] xl:items-center">
+                        <span className="min-w-0">
                           <span className="block text-sm font-medium text-[#202123]">
                             {t("settings.providerModels")}
                           </span>
@@ -1675,8 +1678,8 @@ export function SettingsPanel({
                       /4
                     </span>
                   </div>
-                  <div data-testid="agent-tool-grid" className="grid gap-2 sm:grid-cols-4">
-                    {(["read", "edit", "command", "git"] as const).map((tool) => (
+                  <div data-testid="agent-tool-grid" className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                    {(["read", "edit", "command", "git", "extension", "web"] as const).map((tool) => (
                       <label
                         key={tool}
                         className={`flex h-10 items-center gap-2 rounded-[12px] border px-3 text-sm transition ${
@@ -2410,7 +2413,7 @@ function ProviderModelDropdown({
           aria-label={
             language === "zh-CN" ? `${providerLabel} 可用模型` : `${providerLabel} available models`
           }
-          className="inline-flex h-9 w-full min-w-0 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f7f8] disabled:text-[#8e8ea0] md:min-w-[560px]"
+          className="inline-flex h-9 w-full min-w-0 items-center justify-between gap-3 rounded-[12px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none transition hover:bg-[#f7f7f8] focus:border-[#202123] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f7f8] disabled:text-[#8e8ea0]"
         >
           <span className="truncate">{triggerLabel}</span>
           <ChevronDown className="h-4 w-4 shrink-0 text-[#6e6e80]" />
@@ -2420,7 +2423,7 @@ function ProviderModelDropdown({
         <DropdownMenu.Content
           align="end"
           sideOffset={6}
-          className="forge-dropdown-content forge-dropdown-fast z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[560px] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
+          className="forge-dropdown-content forge-dropdown-fast z-50 max-h-80 w-[var(--radix-dropdown-menu-trigger-width)] min-w-[min(280px,calc(100vw-32px))] max-w-[calc(100vw-32px)] overflow-auto rounded-[16px] border border-[#ececf1] bg-white p-1.5 text-sm text-[#202123] shadow-[0_18px_46px_rgba(0,0,0,0.16)]"
         >
           {models.map((model) => (
             <DropdownMenu.Item
@@ -2778,7 +2781,9 @@ function getAgentProfilesCopy(language: Language): {
           read: "读取文件",
           edit: "编辑文件",
           command: "运行命令",
-          git: "Git 操作"
+          git: "Git 操作",
+          extension: "外部扩展",
+          web: "网页搜索"
         })[tool],
       verificationPolicy: "验证策略",
       verificationPolicyDescription: "控制计划是否需要包含测试、构建或检查步骤",
@@ -2821,7 +2826,9 @@ function getAgentProfilesCopy(language: Language): {
         read: "Read files",
         edit: "Edit files",
         command: "Run commands",
-        git: "Git operations"
+        git: "Git operations",
+        extension: "External Extensions",
+        web: "Web search"
       })[tool],
     verificationPolicy: "Verification policy",
     verificationPolicyDescription: "Controls whether plans should include test, build, or check steps",

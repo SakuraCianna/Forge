@@ -5,7 +5,7 @@ import type {
   AgentProfileContext
 } from "@shared/agentTypes";
 import type { ModelSettings } from "@shared/modelTypes";
-import { isDirectAnswerPrompt } from "./conversationRouting";
+import { canAppendDirectAnswerToThread, isDirectAnswerPrompt } from "./conversationRouting";
 import {
   createThreadFromSettings,
   type TaskThread
@@ -58,7 +58,11 @@ export function createTaskSubmissionRoute({
       return { kind: "invalid", reason: result.reason };
     }
 
-    if (activeThread && activeThread.status !== "running") {
+    if (
+      activeThread &&
+      activeThread.status !== "running" &&
+      canAppendDirectAnswerToThread(activeThread.projectPath, currentProjectPath)
+    ) {
       return { kind: "ask-follow-up", draftThread: result.thread, thread: activeThread };
     }
 

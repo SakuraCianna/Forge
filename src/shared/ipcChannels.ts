@@ -52,9 +52,29 @@ export const fileChannels = {
   deleteFile: "forge:file:delete-file"
 } as const;
 
+export const webSearchChannels = {
+  search: "forge:web-search:search"
+} as const;
+
 export const localSkillChannels = {
   scan: "forge:local-skills:scan",
-  readFile: "forge:local-skills:read-file"
+  readFile: "forge:local-skills:read-file",
+  create: "forge:local-skills:create",
+  update: "forge:local-skills:update",
+  delete: "forge:local-skills:delete"
+} as const;
+
+export const extensionChannels = {
+  registry: "forge:extensions:registry",
+  updateSettings: "forge:extensions:update-settings",
+  saveSecret: "forge:extensions:save-secret",
+  deleteSecret: "forge:extensions:delete-secret",
+  invoke: "forge:extensions:invoke",
+  confirmInvocation: "forge:extensions:confirm-invocation",
+  logs: "forge:extensions:logs",
+  create: "forge:extensions:create",
+  update: "forge:extensions:update",
+  delete: "forge:extensions:delete"
 } as const;
 
 export const systemChannels = {

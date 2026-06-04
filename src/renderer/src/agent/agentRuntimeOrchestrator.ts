@@ -30,9 +30,15 @@ export type AgentRuntimeExecutionHandlers = {
   listDirectory: (relativePath: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   globProject: (pattern: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   searchProject: (query: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
+  webSearch: (query: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   inspectGitStatus: () => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   generateFileChange: (relativePath: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   runCommand: (command: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
+  invokeExtension: (
+    extensionId: string,
+    actionId: string,
+    input: Record<string, unknown>
+  ) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   blockCommandDenied: (reason: string) => AgentActionRunOutcome;
   blockCommandApprovalRequired: (command: string, reason: string) => AgentActionRunOutcome;
   blockInvalidTarget: (reason: string) => AgentActionRunOutcome;
@@ -204,6 +210,10 @@ export async function runAgentRuntimeExecution({
     return handlers.searchProject(execution.query);
   }
 
+  if (execution.kind === "web-search") {
+    return handlers.webSearch(execution.query);
+  }
+
   if (execution.kind === "git-status") {
     return handlers.inspectGitStatus();
   }
@@ -231,6 +241,10 @@ export async function runAgentRuntimeExecution({
     }
 
     return handlers.runCommand(execution.command);
+  }
+
+  if (execution.kind === "invoke-extension") {
+    return handlers.invokeExtension(execution.extensionId, execution.actionId, execution.input);
   }
 
   if (execution.kind === "invalid-target") {

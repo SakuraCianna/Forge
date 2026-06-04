@@ -504,6 +504,26 @@ export function updateThreadAgentActionStatus(
   );
 }
 
+export function updateThreadAgentAction(
+  threads: TaskThread[],
+  threadId: string,
+  actionId: string,
+  updater: (action: AgentAction) => AgentAction
+): TaskThread[] {
+  return threads.map((thread) => {
+    if (thread.id !== threadId || !thread.agentActions) {
+      return thread;
+    }
+
+    return {
+      ...thread,
+      agentActions: thread.agentActions.map((action) =>
+        action.id === actionId ? updater(action) : action
+      )
+    };
+  });
+}
+
 // 将指定类型的下一个待执行动作标为完成, 用于文件变更和命令结果回写
 export function completeNextPendingAgentAction(
   threads: TaskThread[],

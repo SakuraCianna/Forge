@@ -7,6 +7,7 @@ import type {
 } from "@shared/fileTypes";
 import type { ProjectGitStatus } from "@shared/gitTypes";
 import type { Language } from "@shared/modelTypes";
+import type { WebSearchResult } from "@shared/webSearchTypes";
 
 export function formatProjectFileReadResultMessage(
   language: Language,
@@ -46,6 +47,33 @@ export function formatProjectSearchResultMessage(
 
   if (remaining > 0) {
     lines.push(language === "zh-CN" ? `- 还有 ${remaining} 个结果未显示` : `- ${remaining} more not shown`);
+  }
+
+  return [header, ...lines].join("\n");
+}
+
+export function formatWebSearchResultMessage(
+  language: Language,
+  result: WebSearchResult
+): string {
+  const header =
+    language === "zh-CN"
+      ? `网页搜索完成: ${result.query} (${result.results.length} 个结果${result.truncated ? ", 已截断" : ""})`
+      : `Web search complete: ${result.query} (${result.results.length} ${result.results.length === 1 ? "result" : "results"}${result.truncated ? ", truncated" : ""})`;
+
+  if (result.results.length === 0) {
+    return `${header}\n${language === "zh-CN" ? "未找到公开网页结果。" : "No public web results found."}`;
+  }
+
+  const lines = result.results.slice(0, 8).map((item, index) => {
+    const snippet = item.snippet ? ` - ${item.snippet}` : "";
+
+    return `${index + 1}. ${item.title} (${item.source})\n   ${item.url}${snippet}`;
+  });
+  const remaining = result.results.length - lines.length;
+
+  if (remaining > 0) {
+    lines.push(language === "zh-CN" ? `还有 ${remaining} 个结果未显示` : `${remaining} more not shown`);
   }
 
   return [header, ...lines].join("\n");

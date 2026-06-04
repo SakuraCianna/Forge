@@ -16,14 +16,18 @@ export type AgentToolResultEventKind =
   | "git-status"
   | "glob"
   | "search"
-  | "read-file";
+  | "web-search"
+  | "read-file"
+  | "extension";
 
 const agentToolResultEventNameByKind: Record<AgentToolResultEventKind, string> = {
   "list-directory": "agent-list-directory",
   "git-status": "agent-git-status",
   glob: "agent-glob",
   search: "agent-search",
-  "read-file": "agent-read-file"
+  "web-search": "agent-web-search",
+  "read-file": "agent-read-file",
+  extension: "agent-extension"
 };
 
 export type AgentToolResults = {

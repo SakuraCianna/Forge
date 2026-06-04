@@ -54,6 +54,7 @@ export type GenerateAgentPlanRequest = {
   speed: SpeedMode;
   workMode?: AgentWorkMode;
   agentRuntime?: AgentRuntime;
+  extensionContext?: string;
   taskPrompt: string;
   projectScan: ProjectScanResult;
   attachments?: AgentImageAttachment[];
@@ -70,6 +71,7 @@ export type GenerateAgentFileChangeRequest = {
   speed: SpeedMode;
   workMode?: AgentWorkMode;
   agentRuntime?: AgentRuntime;
+  extensionContext?: string;
   taskPrompt: string;
   relativePath: string;
   currentContent: string;
@@ -88,6 +90,7 @@ export type GenerateAgentAskRequest = {
   speed: SpeedMode;
   workMode?: AgentWorkMode;
   agentRuntime?: AgentRuntime;
+  extensionContext?: string;
   prompt: string;
   attachments?: AgentImageAttachment[];
 };
@@ -101,6 +104,12 @@ export type AgentPlanStep = {
   kind: AgentPlanStepKind;
   status: "pending";
   target?: string;
+  tool?: string;
+  extensionId?: string;
+  extensionActionId?: string;
+  extensionInput?: Record<string, unknown>;
+  extensionRisk?: "read" | "write" | "send" | "delete";
+  requiresConfirmation?: boolean;
 };
 
 export type AgentPlanResult = {

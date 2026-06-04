@@ -1,6 +1,7 @@
 // 本文件说明: 推导 Agent 确认队列和队列控制状态, 供主视图复用和测试
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { AgentProfileContext } from "@shared/agentTypes";
+import type { ExtensionActionConfirmation } from "@shared/extensionTypes";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import {
   findNextPendingAgentAction,
@@ -18,6 +19,7 @@ export type AgentConfirmationItemKind =
   | "pending-changes"
   | "failed-action"
   | "manual-gate"
+  | "extension-confirmation"
   | "command-approval"
   | "command-blocked"
   | "commit-gate";
@@ -33,6 +35,7 @@ export type AgentConfirmationItem = {
   afterApprovalActionLabel?: string;
   command?: string;
   cwd?: string | null;
+  extensionConfirmation?: ExtensionActionConfirmation;
   pendingChangeCount?: number;
   previewPath?: string;
   riskReason?: string;
@@ -163,6 +166,7 @@ export function getAgentConfirmationItems({
       afterApprovalActionLabel: nextAction?.label,
       command: action.command,
       cwd: action.kind === "run-command" ? projectPath : null,
+      extensionConfirmation: action.extensionConfirmation,
       riskReason:
         commandRisk?.level === "ask" || commandRisk?.level === "deny"
           ? commandRisk.reason
@@ -231,6 +235,10 @@ export function getAgentConfirmationKind(
 
   if (action.kind === "commit") {
     return "commit-gate";
+  }
+
+  if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+    return "extension-confirmation";
   }
 
   if (action.kind === "run-command" && action.command) {

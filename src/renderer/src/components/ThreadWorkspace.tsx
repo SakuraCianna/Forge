@@ -97,6 +97,7 @@ type ThreadWorkspaceProps = {
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
   onAllowAgentCommand?: (threadId: string, action: AgentAction) => void;
+  onConfirmAgentExtension?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onGenerateContinuationPlan?: (threadId: string) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
@@ -202,6 +203,7 @@ export function ThreadWorkspace({
   onRunAgentActions,
   onApproveAgentCommand,
   onAllowAgentCommand,
+  onConfirmAgentExtension,
   onGenerateCommandFix,
   onGenerateContinuationPlan,
   onCompleteAgentAction,
@@ -405,45 +407,49 @@ export function ThreadWorkspace({
     const confirmationItems = selectedThread ? getCompactConfirmationItems(selectedThread) : [];
 
     return (
-      <section className="h-full min-h-0 overflow-auto px-5 py-7">
-        <div className="mx-auto flex min-h-full max-w-[920px] flex-col gap-7">
-          <article className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-sm leading-5 text-[#202123]">
-            <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
-          </article>
+      <section className="h-full min-h-0 overflow-auto px-4 py-7 md:px-5">
+        <div className="grid min-h-full w-full grid-cols-1 gap-5 xl:grid-cols-[minmax(0,760px)_minmax(280px,340px)] xl:items-start xl:justify-between xl:gap-7 xl:pl-[clamp(16px,3vw,56px)]">
+          <div className="order-2 flex min-h-full w-full max-w-[760px] flex-col gap-7 xl:order-1">
+            <article className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-sm leading-5 text-[#202123]">
+              <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
+            </article>
 
-          {renderCompactMemoryContext(selectedThread.contextMemories ?? [])}
+            {renderCompactMemoryContext(selectedThread.contextMemories ?? [])}
 
-          {compactProcessedSummary ? renderCompactProcessedSummary(compactProcessedSummary) : null}
+            {compactProcessedSummary ? renderCompactProcessedSummary(compactProcessedSummary) : null}
 
-          <CompactAgentAttentionStrip
-            items={confirmationItems}
-            language={language}
-            threadId={selectedThread.id}
-            onApproveAgentCommand={onApproveAgentCommand}
-            onCompleteAgentAction={onCompleteAgentAction}
-            onOpenFiles={onOpenFiles}
-            onOpenSourceControl={onOpenSourceControl}
-            onPreviewFile={onPreviewFile}
-            onSkipAgentAction={onSkipAgentAction}
-          />
+            <CompactAgentAttentionStrip
+              items={confirmationItems}
+              language={language}
+              threadId={selectedThread.id}
+              onApproveAgentCommand={onApproveAgentCommand}
+              onConfirmAgentExtension={onConfirmAgentExtension}
+              onCompleteAgentAction={onCompleteAgentAction}
+              onOpenFiles={onOpenFiles}
+              onOpenSourceControl={onOpenSourceControl}
+              onPreviewFile={onPreviewFile}
+              onSkipAgentAction={onSkipAgentAction}
+            />
 
-          {showActivityHeartbeat && threadActivitySummary
-            ? renderCompactActivityHeartbeat(threadActivitySummary)
-            : null}
+            {showActivityHeartbeat && threadActivitySummary
+              ? renderCompactActivityHeartbeat(threadActivitySummary)
+              : null}
 
-          <section
-            role="region"
-            aria-label="Conversation transcript"
-            className="grid gap-5"
-          >
-            {visibleCompactEvents.length > 0 ? (
-              visibleCompactEvents.map((event) => renderCompactEvent(event))
-            ) : !hasCompactSourceEvents ? (
-              <div className="text-sm text-[#8e8ea0]">
-                {language === "zh-CN" ? "等待 Forge 开始执行" : "Waiting for Forge to start"}
-              </div>
-            ) : null}
-          </section>
+            <section
+              role="region"
+              aria-label="Conversation transcript"
+              className="grid gap-5"
+            >
+              {visibleCompactEvents.length > 0 ? (
+                visibleCompactEvents.map((event) => renderCompactEvent(event))
+              ) : !hasCompactSourceEvents ? (
+                <div className="text-sm text-[#8e8ea0]">
+                  {language === "zh-CN" ? "等待 Forge 开始执行" : "Waiting for Forge to start"}
+                </div>
+              ) : null}
+            </section>
+          </div>
+          {renderCompactAgentPlanPanel(selectedThread)}
         </div>
       </section>
     );
@@ -974,6 +980,164 @@ export function ThreadWorkspace({
     );
   }
 
+  // 将 LLM planner 生成的动作队列提升到主屏右侧, 避免用户必须展开“已处理”才看得到计划。
+  function renderCompactAgentPlanPanel(thread: TaskThread): ReactElement {
+    const agentActions = thread.agentActions ?? [];
+    const queueStats = getQueueStats(agentActions);
+    const activeAction =
+      agentActions.find((action) => action.status === "running") ??
+      agentActions.find((action) => action.status === "failed") ??
+      agentActions.find((action) => action.status === "pending") ??
+      agentActions.at(-1) ??
+      null;
+    const copy =
+      language === "zh-CN"
+        ? {
+            title: "执行计划",
+            subtitle: "LLM planner 生成的可执行动作",
+            planning: "Forge 正在准备执行计划...",
+            empty: "还没有可执行动作",
+            progress: "进度",
+            current: "当前",
+            generated: (count: number) => `已生成 ${count} 个动作`,
+            completed: (completed: number, total: number) => `${completed} / ${total} 已完成`,
+            noCurrent: "等待模型返回计划",
+            status: {
+              pending: "待执行",
+              running: "执行中",
+              completed: "已完成",
+              failed: "失败",
+              skipped: "已跳过",
+              confirm: "待确认"
+            },
+            kind: {
+              "inspect-file": "读取文件",
+              "list-directory": "列目录",
+              "glob-project": "匹配文件",
+              "search-project": "项目搜索",
+              "web-search": "网页搜索",
+              "git-status": "Git 检查",
+              "edit-file": "生成修改",
+              "run-command": "运行命令",
+              "invoke-extension": "调用扩展",
+              commit: "提交",
+              manual: "人工步骤"
+            }
+          }
+        : {
+            title: "Execution Plan",
+            subtitle: "Executable actions from the LLM planner",
+            planning: "Forge is preparing an execution plan...",
+            empty: "No executable actions yet",
+            progress: "Progress",
+            current: "Current",
+            generated: (count: number) => `${count} actions generated`,
+            completed: (completed: number, total: number) => `${completed} / ${total} completed`,
+            noCurrent: "Waiting for the model plan",
+            status: {
+              pending: "Pending",
+              running: "Running",
+              completed: "Done",
+              failed: "Failed",
+              skipped: "Skipped",
+              confirm: "Confirm"
+            },
+            kind: {
+              "inspect-file": "Read file",
+              "list-directory": "List directory",
+              "glob-project": "Match files",
+              "search-project": "Search project",
+              "web-search": "Web search",
+              "git-status": "Git check",
+              "edit-file": "Generate edit",
+              "run-command": "Run command",
+              "invoke-extension": "Invoke extension",
+              commit: "Commit",
+              manual: "Manual step"
+            }
+          };
+    const progressPercent =
+      queueStats.total > 0 ? Math.round((queueStats.completed / queueStats.total) * 100) : 0;
+
+    return (
+      <aside
+        aria-label={copy.title}
+        className="order-1 rounded-[22px] border border-[#ececf1] bg-white/95 p-4 text-[#202123] shadow-[0_18px_54px_rgba(0,0,0,0.12)] backdrop-blur xl:sticky xl:top-0 xl:order-2 xl:max-h-[calc(100vh-180px)] xl:overflow-hidden"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 text-sm font-semibold leading-5">
+              <ListChecks className="h-4 w-4 text-[#565869]" />
+              {copy.title}
+            </h2>
+            <p className="mt-1 text-[11px] leading-4 text-[#8e8ea0]">{copy.subtitle}</p>
+          </div>
+          <span className="shrink-0 rounded-full border border-[#ececf1] bg-[#f7f7f8] px-2 py-0.5 text-[11px] font-medium text-[#565869]">
+            {agentActions.length > 0 ? copy.generated(agentActions.length) : copy.empty}
+          </span>
+        </div>
+
+        <div className="mt-4 rounded-[16px] border border-[#ececf1] bg-[#fafafa] p-3">
+          <div className="flex items-center justify-between gap-3 text-[11px] text-[#6e6e80]">
+            <span>{copy.progress}</span>
+            <span>{copy.completed(queueStats.completed, queueStats.total)}</span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#ececf1]">
+            <div
+              className="h-full rounded-full bg-[#202123] transition-all"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="mt-2 line-clamp-2 text-[12px] font-medium leading-5 text-[#202123]">
+            {copy.current}: {activeAction?.label ?? copy.noCurrent}
+          </p>
+        </div>
+
+        <div className="mt-4 max-h-[min(52vh,520px)] space-y-2 overflow-auto pr-1">
+          {agentActions.length > 0 ? (
+            agentActions.map((action, index) => (
+              <article
+                key={action.id}
+                className="grid grid-cols-[22px_minmax(0,1fr)] gap-2 rounded-[14px] border border-[#ececf1] bg-white px-3 py-2"
+              >
+                <span
+                  className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded-full ${getCompactPlanStatusIconClass(action)}`}
+                  aria-hidden="true"
+                >
+                  {action.status === "completed" ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : action.status === "running" ? (
+                    <Activity className="h-3.5 w-3.5 animate-pulse" />
+                  ) : (
+                    <span className="text-[10px] font-semibold">{index + 1}</span>
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 break-words text-[12px] font-semibold leading-5 text-[#202123]">
+                      {action.label}
+                    </p>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${getCompactPlanStatusBadgeClass(action)}`}>
+                      {getCompactPlanStatusLabel(action, copy.status)}
+                    </span>
+                  </div>
+                  <p className="mt-1 min-w-0 truncate text-[11px] leading-4 text-[#8e8ea0]">
+                    {copy.kind[action.kind]}
+                    {formatCompactPlanActionTarget(action) ? ` · ${formatCompactPlanActionTarget(action)}` : ""}
+                  </p>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div className="rounded-[14px] border border-dashed border-[#d9d9e3] bg-[#fafafa] px-3 py-3 text-[12px] leading-5 text-[#6e6e80]">
+              {thread.status === "running" ? copy.planning : copy.empty}
+            </div>
+          )}
+        </div>
+      </aside>
+    );
+  }
+
   function renderAssistantSourceLinks(message: string): ReactElement | null {
     const urls = extractSourceUrls(message);
 
@@ -1162,8 +1326,11 @@ export function ThreadWorkspace({
             manualGateBody: (label: string) => `请先处理 ${label}, Forge 不会自动越过这个门禁`,
             reviewGate: "审查门禁",
             approveCommand: "批准命令",
+            approveExtension: "确认扩展操作",
             commandNeedsApproval: "命令需要批准",
             commandBlocked: "命令已被安全策略阻止",
+            extensionNeedsConfirmation: "扩展操作需要确认",
+            extensionGateBody: (label: string) => `请确认 ${label}, Forge 不会静默执行外部服务写操作`,
             markReviewComplete: "完成审查",
             skipAction: "跳过动作",
             openSourceControl: "打开源代码管理",
@@ -1194,8 +1361,12 @@ export function ThreadWorkspace({
               `Handle ${label} before Forge continues. This gate will not be auto-run.`,
             reviewGate: "Review gate",
             approveCommand: "Approve command",
+            approveExtension: "Confirm extension",
             commandNeedsApproval: "Command needs approval",
             commandBlocked: "Command blocked by policy",
+            extensionNeedsConfirmation: "Extension action needs confirmation",
+            extensionGateBody: (label: string) =>
+              `Confirm ${label}. Forge will not silently run external write actions.`,
             markReviewComplete: "Mark review complete",
             skipAction: "Skip action",
             openSourceControl: "Open source control",
@@ -1506,6 +1677,7 @@ export function ThreadWorkspace({
         (action.kind === "list-directory" ||
           action.kind === "glob-project" ||
           action.kind === "search-project" ||
+          action.kind === "web-search" ||
           action.kind === "git-status") &&
         (action.kind === "git-status" || action.target) &&
         selectedThread &&
@@ -1560,7 +1732,25 @@ export function ThreadWorkspace({
             }}
             className="mt-2 h-7 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
           >
-            {actionQueueCopy.run}
+          {actionQueueCopy.run}
+          </button>
+        );
+      }
+
+      if (
+        action.kind === "invoke-extension" &&
+        action.extensionConfirmation &&
+        selectedThread &&
+        onConfirmAgentExtension
+      ) {
+        return (
+          <button
+            type="button"
+            aria-label={`Confirm extension action ${action.label}`}
+            onClick={() => onConfirmAgentExtension(selectedThread.id, action)}
+            className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {actionQueueCopy.approveExtension}
           </button>
         );
       }
@@ -1606,6 +1796,10 @@ export function ThreadWorkspace({
         )}`;
       }
 
+      if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+        return actionQueueCopy.extensionGateBody(action.label);
+      }
+
       if (isRunnableAgentAction(action, commandSafetyPolicy)) {
         return actionDetailsCopy.ready;
       }
@@ -1625,6 +1819,10 @@ export function ThreadWorkspace({
         return actionQueueCopy.commandBlocked;
       }
 
+      if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+        return actionQueueCopy.extensionNeedsConfirmation;
+      }
+
       return fullAccess ? actionQueueCopy.ready : actionQueueCopy.manualGate;
     }
 
@@ -1638,6 +1836,10 @@ export function ThreadWorkspace({
 
       if (commandRisk?.level === "deny") {
         return actionDetailsCopy.commandBlocked;
+      }
+
+      if (action.kind === "invoke-extension" && action.extensionConfirmation) {
+        return actionQueueCopy.extensionGateBody(action.label);
       }
 
       return fullAccess ? actionDetailsCopy.ready : actionQueueCopy.manualGateBody(action.label);
@@ -1680,6 +1882,24 @@ export function ThreadWorkspace({
             className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
           >
             {actionQueueCopy.openSourceControl}
+          </button>
+        );
+      }
+
+      if (
+        action.status === "pending" &&
+        action.kind === "invoke-extension" &&
+        action.extensionConfirmation &&
+        onConfirmAgentExtension
+      ) {
+        controls.push(
+          <button
+            key="confirm-extension"
+            type="button"
+            onClick={() => onConfirmAgentExtension(selectedThread.id, action)}
+            className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {actionQueueCopy.approveExtension}
           </button>
         );
       }
@@ -2053,6 +2273,7 @@ export function ThreadWorkspace({
             onAllowAgentCommand={onAllowAgentCommand}
             onApplyAllChanges={onApplyAllChanges}
             onApproveAgentCommand={onApproveAgentCommand}
+            onConfirmAgentExtension={onConfirmAgentExtension}
             onCompleteAgentAction={onCompleteAgentAction}
             onDiscardAllChanges={onDiscardAllChanges}
             onOpenChangesTab={() => setActiveTab("changes")}
@@ -2225,6 +2446,18 @@ export function ThreadWorkspace({
                     className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
                   >
                     {actionQueueCopy.openSourceControl}
+                  </button>
+                ) : null}
+                {activeGateAction.kind === "invoke-extension" &&
+                activeGateAction.extensionConfirmation &&
+                selectedThread &&
+                onConfirmAgentExtension ? (
+                  <button
+                    type="button"
+                    onClick={() => onConfirmAgentExtension(selectedThread.id, activeGateAction)}
+                    className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+                  >
+                    {actionQueueCopy.approveExtension}
                   </button>
                 ) : null}
                 {activeGateAction.kind === "manual" && selectedThread && onCompleteAgentAction ? (
@@ -3313,13 +3546,14 @@ function isControlledToolResultAction(action: AgentAction): boolean {
     action.kind === "list-directory" ||
     action.kind === "glob-project" ||
     action.kind === "search-project" ||
+    action.kind === "web-search" ||
     action.kind === "git-status"
   );
 }
 
 // 只接收 Agent 读类工具写入的结果事件, 避免把普通文件日志误显示成工具观察
 function isControlledToolResultMessage(message: string): boolean {
-  return /^(文件读取完成|File read complete|目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|Git 状态完成|Git status complete):/u.test(
+  return /^(文件读取完成|File read complete|目录列表完成|Directory list complete|文件匹配完成|File glob complete|项目搜索完成|Project search complete|网页搜索完成|Web search complete|Git 状态完成|Git status complete):/u.test(
     message.trim()
   );
 }
@@ -3398,6 +3632,79 @@ function getCommandHistoryEntries(events: TaskThreadEvent[]): CommandHistoryEntr
 // 生成命令事件的稳定 key, 没有 runId 时回退到命令和目录
 function getCommandRunKey(command: string, runId?: string): string {
   return runId ? `run:${runId}` : `command:${command}`;
+}
+
+type CompactPlanStatusCopy = Record<AgentAction["status"], string> & {
+  confirm: string;
+};
+
+function getCompactPlanStatusLabel(
+  action: AgentAction,
+  statusCopy: CompactPlanStatusCopy
+): string {
+  if (
+    action.status === "pending" &&
+    (action.requiresConfirmation || action.extensionConfirmation)
+  ) {
+    return statusCopy.confirm;
+  }
+
+  return statusCopy[action.status];
+}
+
+function getCompactPlanStatusIconClass(action: AgentAction): string {
+  if (action.status === "completed") {
+    return "bg-[#ecfdf5] text-[#10a37f]";
+  }
+
+  if (action.status === "running") {
+    return "bg-[#eff6ff] text-[#2563eb]";
+  }
+
+  if (action.status === "failed") {
+    return "bg-[#fff7ed] text-[#9a3412]";
+  }
+
+  if (action.status === "skipped") {
+    return "bg-[#f7f7f8] text-[#8e8ea0]";
+  }
+
+  return "bg-[#f7f7f8] text-[#565869]";
+}
+
+function getCompactPlanStatusBadgeClass(action: AgentAction): string {
+  if (action.status === "completed") {
+    return "border-[#bbf7d0] bg-[#ecfdf5] text-[#047857]";
+  }
+
+  if (action.status === "running") {
+    return "border-[#bfdbfe] bg-[#eff6ff] text-[#1d4ed8]";
+  }
+
+  if (action.status === "failed") {
+    return "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]";
+  }
+
+  if (action.status === "skipped") {
+    return "border-[#d9d9e3] bg-[#f7f7f8] text-[#8e8ea0]";
+  }
+
+  if (action.requiresConfirmation || action.extensionConfirmation) {
+    return "border-[#fed7aa] bg-[#fff7ed] text-[#9a3412]";
+  }
+
+  return "border-[#d9d9e3] bg-[#f7f7f8] text-[#565869]";
+}
+
+function formatCompactPlanActionTarget(action: AgentAction): string {
+  const target = action.command ?? action.target ?? action.extensionActionId ?? "";
+  const normalizedTarget = target.trim();
+
+  if (normalizedTarget.length <= 88) {
+    return normalizedTarget;
+  }
+
+  return `${normalizedTarget.slice(0, 85)}...`;
 }
 
 // 把 ISO 时间格式化到秒, 不在界面暴露 T 分隔符

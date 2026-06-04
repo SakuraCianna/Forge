@@ -14,7 +14,27 @@ import type {
 } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type {
+  ExtensionConfirmInvocationRequest,
+  ExtensionCreateRequest,
+  ExtensionCreateResult,
+  ExtensionDeleteResult,
+  ExtensionInvocationLogRecord,
+  ExtensionInvocationRequest,
+  ExtensionInvocationResult,
+  ExtensionRegistrySnapshot,
+  ExtensionSecretSaveRequest,
+  ExtensionSettingsPatch,
+  ExtensionUpdateRequest,
+  ExtensionUpdateResult
+} from "@shared/extensionTypes";
+import type {
   LocalSkillFileContent,
+  LocalPluginSkillCreateRequest,
+  LocalPluginSkillCreateResult,
+  LocalPluginSkillDeleteRequest,
+  LocalPluginSkillDeleteResult,
+  LocalPluginSkillUpdateRequest,
+  LocalPluginSkillUpdateResult,
   LocalSkillScanResult
 } from "@shared/pluginSkillTypes";
 import type {
@@ -37,6 +57,7 @@ import type {
   ProjectGitWorktreeResult
 } from "@shared/gitTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
+import type { WebSearchRequest, WebSearchResult } from "@shared/webSearchTypes";
 
 declare global {
   interface Window {
@@ -62,9 +83,38 @@ declare global {
       skills: {
         scanLocal: () => Promise<LocalSkillScanResult>;
         readFile: (filePath: string) => Promise<LocalSkillFileContent>;
+        create: (
+          request: LocalPluginSkillCreateRequest
+        ) => Promise<LocalPluginSkillCreateResult>;
+        update: (
+          request: LocalPluginSkillUpdateRequest
+        ) => Promise<LocalPluginSkillUpdateResult>;
+        delete: (
+          request: LocalPluginSkillDeleteRequest
+        ) => Promise<LocalPluginSkillDeleteResult>;
+      };
+      extensions: {
+        getRegistry: () => Promise<ExtensionRegistrySnapshot>;
+        create: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
+        update: (request: ExtensionUpdateRequest) => Promise<ExtensionUpdateResult>;
+        delete: (extensionId: string) => Promise<ExtensionDeleteResult>;
+        updateSettings: (patch: ExtensionSettingsPatch) => Promise<ExtensionRegistrySnapshot>;
+        saveSecret: (request: ExtensionSecretSaveRequest) => Promise<ExtensionRegistrySnapshot>;
+        deleteSecret: (
+          extensionId: string,
+          fieldId: string
+        ) => Promise<ExtensionRegistrySnapshot>;
+        invoke: (request: ExtensionInvocationRequest) => Promise<ExtensionInvocationResult>;
+        confirmInvocation: (
+          request: ExtensionConfirmInvocationRequest
+        ) => Promise<ExtensionInvocationResult>;
+        listLogs: (limit?: number) => Promise<ExtensionInvocationLogRecord[]>;
       };
       system: {
         openExternal: (url: string) => Promise<boolean>;
+      };
+      web: {
+        search: (request: WebSearchRequest) => Promise<WebSearchResult>;
       };
       agent: {
         generatePlan: (request: GenerateAgentPlanRequest) => Promise<AgentPlanResult>;

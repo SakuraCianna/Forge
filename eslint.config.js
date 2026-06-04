@@ -26,7 +26,8 @@ export default tseslint.config(
       "dist/**",
       "dist-electron/**",
       "node_modules/**",
-      "out/**"
+      "out/**",
+      ".tmp-test/**"
     ]
   },
   js.configs.recommended,

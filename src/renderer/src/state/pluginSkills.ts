@@ -14,8 +14,12 @@ export type ForgeSkill = {
   description: string;
   scope: ForgePluginScope;
   coreFiles: string[];
+  deletable?: boolean;
+  editable?: boolean;
   localPath?: string;
+  localDirectoryPath?: string;
   sourceLabel?: string;
+  userOwned?: boolean;
 };
 
 export type ForgePlugin = {
@@ -27,6 +31,11 @@ export type ForgePlugin = {
   installSource: ForgePluginInstallSource;
   repositoryUrl?: string;
   sourceLabel?: string;
+  localPath?: string;
+  localDirectoryPath?: string;
+  userOwned?: boolean;
+  editable?: boolean;
+  deletable?: boolean;
   skills: ForgeSkill[];
 };
 
@@ -426,27 +435,46 @@ function createLocalSkillPlugins(
     groups.set(groupName, [...(groups.get(groupName) ?? []), skill]);
   });
 
-  return Array.from(groups, ([groupName, skills]) => ({
-    id: `local-${slugify(groupName)}`,
-    name: isChinese ? `本机 ${groupName}` : `Local ${groupName}`,
-    description: isChinese
-      ? "从这台电脑上的 SKILL.md 自动发现"
-      : "Discovered automatically from SKILL.md files on this computer",
-    accent: "#0f766e",
-    installSource: "local" as const,
-    sourceLabel: groupName,
-    scope: "personal" as const,
-    skills: skills.map((skill) => ({
-      id: skill.id,
-      pluginId: `local-${slugify(groupName)}`,
-      name: skill.name,
-      description: skill.description,
-      coreFiles: skill.coreFiles?.length ? skill.coreFiles : [skill.filePath],
+  return Array.from(groups, ([groupName, skills]) => {
+    const pluginUserOwned = skills.some((skill) => skill.source === "plugin-local" && skill.userOwned);
+    const firstSkill = skills[0];
+
+    return {
+      id: `local-${slugify(groupName)}`,
+      name:
+        pluginUserOwned && firstSkill?.pluginName
+          ? firstSkill.pluginName
+          : isChinese
+            ? `本机 ${groupName}`
+            : `Local ${groupName}`,
+      description: isChinese
+        ? "从这台电脑上的 SKILL.md 自动发现"
+        : "Discovered automatically from SKILL.md files on this computer",
+      accent: "#0f766e",
+      installSource: "local" as const,
+      deletable: pluginUserOwned,
+      editable: pluginUserOwned,
+      localDirectoryPath: firstSkill?.directoryPath,
+      localPath: firstSkill?.filePath,
+      sourceLabel: groupName,
       scope: "personal" as const,
-      localPath: skill.filePath,
-      sourceLabel: skill.sourceLabel
-    }))
-  }));
+      userOwned: pluginUserOwned,
+      skills: skills.map((skill) => ({
+        id: skill.id,
+        pluginId: `local-${slugify(groupName)}`,
+        name: skill.name,
+        description: skill.description,
+        coreFiles: skill.coreFiles?.length ? skill.coreFiles : [skill.filePath],
+        deletable: skill.deletable,
+        editable: skill.editable,
+        localDirectoryPath: skill.directoryPath,
+        scope: "personal" as const,
+        localPath: skill.filePath,
+        sourceLabel: skill.sourceLabel,
+        userOwned: skill.userOwned
+      }))
+    };
+  });
 }
 
 function createSlashSuggestions(language: Language, pluginCatalog: ForgePlugin[]): ComposerSuggestion[] {

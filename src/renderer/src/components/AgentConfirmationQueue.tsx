@@ -23,6 +23,7 @@ type AgentConfirmationCallbacks = {
   onAllowAgentCommand?: (threadId: string, action: AgentAction) => void;
   onApplyAllChanges?: () => void;
   onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
+  onConfirmAgentExtension?: (threadId: string, action: AgentAction) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
   onDiscardAllChanges?: () => void;
   onOpenChangesTab?: () => void;
@@ -61,6 +62,7 @@ export function AgentConfirmationQueue({
   onAllowAgentCommand,
   onApplyAllChanges,
   onApproveAgentCommand,
+  onConfirmAgentExtension,
   onCompleteAgentAction,
   onDiscardAllChanges,
   onOpenChangesTab,
@@ -230,6 +232,21 @@ export function AgentConfirmationQueue({
       );
     }
 
+    if (item.kind === "extension-confirmation" && onConfirmAgentExtension) {
+      controls.push(
+        <button
+          key="confirm-extension"
+          type="button"
+          aria-label={`${copy.confirmExtensionAction} ${action.label}`}
+          onClick={() => onConfirmAgentExtension(activeThreadId, action)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {copy.confirmExtensionAction}
+        </button>
+      );
+    }
+
     if (item.kind === "manual-gate" && onCompleteAgentAction) {
       controls.push(
         <button
@@ -333,6 +350,7 @@ export function CompactAgentAttentionStrip({
   language,
   threadId,
   onApproveAgentCommand,
+  onConfirmAgentExtension,
   onCompleteAgentAction,
   onOpenFiles,
   onOpenSourceControl,
@@ -370,6 +388,17 @@ export function CompactAgentAttentionStrip({
         label: copy.approveCommand,
         icon: CheckCircle2,
         onClick: () => onApproveAgentCommand(threadId, action)
+      })
+    );
+  }
+
+  if (item.kind === "extension-confirmation" && action && onConfirmAgentExtension) {
+    actions.push(
+      renderCompactIconAction({
+        key: "confirm-extension",
+        label: copy.confirmExtensionAction,
+        icon: CheckCircle2,
+        onClick: () => onConfirmAgentExtension(threadId, action)
       })
     );
   }
@@ -468,6 +497,8 @@ function getAgentConfirmationKindLabel(
       return copy.failedActionTitle;
     case "manual-gate":
       return copy.manualGateTitle;
+    case "extension-confirmation":
+      return copy.extensionConfirmationTitle;
     case "command-approval":
       return copy.commandApprovalTitle;
     case "command-blocked":
@@ -484,6 +515,10 @@ function getAgentConfirmationTitle(
 ): string {
   if (item.kind === "pending-changes") {
     return copy.pendingChangesTitle;
+  }
+
+  if (item.kind === "extension-confirmation") {
+    return copy.extensionConfirmationHeading(item.label);
   }
 
   return item.label;
@@ -510,6 +545,10 @@ function getAgentConfirmationBody(
 
   if (item.kind === "failed-action") {
     return getFailedActionBody(item, copy);
+  }
+
+  if (item.kind === "extension-confirmation") {
+    return item.extensionConfirmation?.inputSummary ?? copy.extensionConfirmationBody(item.label);
   }
 
   const action = item.action;
@@ -573,6 +612,16 @@ function getFailureRecoveryPolicyLabel(
   return copy.failureRecoverySuggest;
 }
 
+function formatExtensionConfirmationDate(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
+
 // 为确认项生成结构化上下文行, 保持 UI 和复制摘要使用同一份信息
 function getAgentConfirmationMetadataRows(
   item: AgentConfirmationItem,
@@ -593,6 +642,25 @@ function getAgentConfirmationMetadataRows(
     rows.push({
       label: copy.riskLabel,
       value: formatAgentCommandRiskReason(language, item.riskReason)
+    });
+  }
+
+  if (item.extensionConfirmation) {
+    rows.push({
+      label: copy.extensionLabel,
+      value: item.extensionConfirmation.extensionId
+    });
+    rows.push({
+      label: copy.extensionActionLabel,
+      value: item.extensionConfirmation.actionId
+    });
+    rows.push({
+      label: copy.extensionRiskLabel,
+      value: item.extensionConfirmation.risk
+    });
+    rows.push({
+      label: copy.extensionExpiresAtLabel,
+      value: formatExtensionConfirmationDate(item.extensionConfirmation.expiresAt)
     });
   }
 
@@ -688,11 +756,19 @@ export function getCompactAgentControlCopy(language: Language) {
       manualGateTitle: "人工确认",
       commandApprovalTitle: "命令批准",
       commandBlockedTitle: "命令被阻止",
+      extensionConfirmationTitle: "扩展确认",
+      extensionConfirmationHeading: (label: string) => `确认扩展操作: ${label}`,
+      extensionConfirmationBody: (label: string) =>
+        `请确认是否允许 Forge 执行 ${label}, 该操作会访问或修改外部服务数据`,
       commitGateTitle: "提交门禁",
       queuedGateBody: "这是后续停止点, 当前队列推进到这里后才会开放确认按钮",
       commandLabel: "命令",
       cwdLabel: "目录",
       riskLabel: "风险",
+      extensionLabel: "扩展",
+      extensionActionLabel: "动作",
+      extensionRiskLabel: "风险",
+      extensionExpiresAtLabel: "过期",
       failureRecoveryPolicyLabel: "恢复策略",
       failureRecoveryAttemptLimitLabel: "自动上限",
       failureRecoveryAttemptProgressLabel: "已尝试",
@@ -708,6 +784,7 @@ export function getCompactAgentControlCopy(language: Language) {
       discardQueuedChanges: "丢弃队列修改",
       approveQueuedCommand: "批准队列命令",
       allowQueuedCommand: "始终允许队列命令",
+      confirmExtensionAction: "确认扩展操作",
       confirmQueuedAction: "确认队列动作",
       openQueuedSourceControl: "打开队列源码管理",
       retryQueuedAction: "重试队列动作",
@@ -791,11 +868,19 @@ export function getCompactAgentControlCopy(language: Language) {
     manualGateTitle: "Manual confirmation",
     commandApprovalTitle: "Command approval",
     commandBlockedTitle: "Blocked command",
+    extensionConfirmationTitle: "Extension confirmation",
+    extensionConfirmationHeading: (label: string) => `Confirm extension action: ${label}`,
+    extensionConfirmationBody: (label: string) =>
+      `Confirm whether Forge may run ${label}. This action can read or mutate external service data.`,
     commitGateTitle: "Commit gate",
     queuedGateBody: "This is an upcoming stop. Forge will expose its approval controls when the queue reaches it.",
     commandLabel: "Command",
     cwdLabel: "cwd",
     riskLabel: "Risk",
+    extensionLabel: "Extension",
+    extensionActionLabel: "Action",
+    extensionRiskLabel: "Risk",
+    extensionExpiresAtLabel: "Expires",
     failureRecoveryPolicyLabel: "Recovery",
     failureRecoveryAttemptLimitLabel: "Auto limit",
     failureRecoveryAttemptProgressLabel: "Attempted",
@@ -812,6 +897,7 @@ export function getCompactAgentControlCopy(language: Language) {
     discardQueuedChanges: "Discard queued changes",
     approveQueuedCommand: "Approve queued command",
     allowQueuedCommand: "Always allow queued command",
+    confirmExtensionAction: "Confirm extension",
     confirmQueuedAction: "Confirm queued action",
     openQueuedSourceControl: "Open queued source control",
     retryQueuedAction: "Retry queued action",
