@@ -4,20 +4,22 @@ import type { ProjectFileTreeNode } from "./projectFileTree";
 export function createProjectFileTreeNodesFromDirectoryEntries(
   entries: ProjectDirectoryEntry[]
 ): ProjectFileTreeNode[] {
-  return entries.map((entry) =>
-    entry.kind === "directory"
-      ? {
-          children: [],
-          kind: "directory",
-          name: entry.name,
-          relativePath: entry.relativePath
-        }
-      : {
-          kind: "file",
-          name: entry.name,
-          relativePath: entry.relativePath,
-          size: entry.size ?? 0
-        }
+  return sortProjectFileTreeNodesForDisplay(
+    entries.map((entry) =>
+      entry.kind === "directory"
+        ? {
+            children: [],
+            kind: "directory",
+            name: entry.name,
+            relativePath: entry.relativePath
+          }
+        : {
+            kind: "file",
+            name: entry.name,
+            relativePath: entry.relativePath,
+            size: entry.size ?? 0
+          }
+    )
   );
 }
 
@@ -88,10 +90,20 @@ function appendProjectFileTreeNodes(
     return nextNode;
   });
 
-  return [
+  return sortProjectFileTreeNodesForDisplay([
     ...mergedNodes,
     ...nextNodes.filter((node) => !existingPaths.has(node.relativePath))
-  ];
+  ]);
+}
+
+function sortProjectFileTreeNodesForDisplay(nodes: ProjectFileTreeNode[]): ProjectFileTreeNode[] {
+  return [...nodes].sort((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === "directory" ? -1 : 1;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
 }
 
 export function normalizeLazyDirectoryPath(relativePath: string): string {

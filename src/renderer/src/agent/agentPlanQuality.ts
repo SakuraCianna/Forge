@@ -20,6 +20,14 @@ type AgentPlanQualityResult = {
   notices: string[];
 };
 
+type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+
+type PackageVerificationCommand = {
+  installCommand: string;
+  packageRoot: string;
+  manager: PackageManager;
+};
+
 const CREATE_TASK_PATTERN =
   /(创建|新建|生成|搭建|实现|做一个|写一个|开发|create|generate|scaffold|build|make|implement)/iu;
 const PROJECT_SCOPE_PATTERN =
@@ -93,17 +101,23 @@ export function improveAgentPlanActions({
     isCreationTask,
     prompt
   });
+  const dependencySetupResult = insertMissingPackageInstallActions({
+    actions: scaffoldResult.actions,
+    isCreationTask,
+    projectScan
+  });
 
   const notices = formatPlanQualityNotices({
     language,
     inspectConversions,
     shellWriterConversions,
+    dependencyInstallSupplements: dependencySetupResult.addedActions,
     scaffoldSupplements: scaffoldResult.addedActions,
     missingScaffoldLayers: scaffoldResult.missingLayers
   });
 
   return {
-    actions: renumberActions(scaffoldResult.actions),
+    actions: renumberActions(dependencySetupResult.actions),
     notices
   };
 }
@@ -142,6 +156,214 @@ function createEditAction(
   };
 }
 
+function insertMissingPackageInstallActions({
+  actions,
+  isCreationTask,
+  projectScan
+}: {
+  actions: AgentAction[];
+  isCreationTask: boolean;
+  projectScan?: ProjectScanResult | null;
+}): { actions: AgentAction[]; addedActions: number } {
+  if (!isCreationTask) {
+    return { actions, addedActions: 0 };
+  }
+
+  const packageRoots = collectKnownPackageRoots(actions, projectScan);
+  const installedRoots = new Set<string>();
+  const nextActions: AgentAction[] = [];
+  let addedActions = 0;
+
+  for (const action of actions) {
+    const installRoot = action.command ? parsePackageInstallCommandRoot(action.command) : null;
+
+    if (installRoot) {
+      installedRoots.add(installRoot);
+      nextActions.push(action);
+      continue;
+    }
+
+    const verification = action.command ? parsePackageVerificationCommand(action.command) : null;
+
+    if (
+      verification &&
+      packageRoots.has(verification.packageRoot) &&
+      !installedRoots.has(verification.packageRoot)
+    ) {
+      nextActions.push(createPackageInstallAction(verification, addedActions));
+      installedRoots.add(verification.packageRoot);
+      addedActions += 1;
+    }
+
+    nextActions.push(action);
+  }
+
+  return {
+    actions: nextActions,
+    addedActions
+  };
+}
+
+function collectKnownPackageRoots(
+  actions: AgentAction[],
+  projectScan?: ProjectScanResult | null
+): Set<string> {
+  const roots = new Set<string>();
+
+  for (const filePath of [
+    ...actions.map((action) => action.target ?? ""),
+    ...(projectScan?.files ?? []).map((file) => file.relativePath)
+  ]) {
+    const packageRoot = getPackageRootFromManifestPath(filePath);
+
+    if (packageRoot) {
+      roots.add(packageRoot);
+    }
+  }
+
+  return roots;
+}
+
+function getPackageRootFromManifestPath(filePath: string): string | null {
+  const normalizedPath = normalizeProjectPath(filePath);
+
+  if (normalizedPath === "package.json") {
+    return ".";
+  }
+
+  if (!normalizedPath.endsWith("/package.json")) {
+    return null;
+  }
+
+  return normalizedPath.slice(0, -"/package.json".length) || ".";
+}
+
+function parsePackageVerificationCommand(command: string): PackageVerificationCommand | null {
+  const normalizedCommand = normalizeCommand(command);
+  const packageCommand = parsePackageCommand(normalizedCommand);
+
+  if (!packageCommand || !isPackageVerificationSubcommand(packageCommand.manager, packageCommand.subcommand)) {
+    return null;
+  }
+
+  return {
+    packageRoot: packageCommand.packageRoot,
+    manager: packageCommand.manager,
+    installCommand: createPackageInstallCommand(packageCommand.manager, packageCommand.packageRoot)
+  };
+}
+
+function parsePackageInstallCommandRoot(command: string): string | null {
+  const normalizedCommand = normalizeCommand(command);
+  const packageCommand = parsePackageCommand(normalizedCommand);
+
+  if (packageCommand && isPackageInstallSubcommand(packageCommand.subcommand)) {
+    return packageCommand.packageRoot;
+  }
+
+  return null;
+}
+
+function parsePackageCommand(command: string): {
+  manager: PackageManager;
+  packageRoot: string;
+  subcommand: string;
+} | null {
+  const managerMatch = command.match(/^(npm|pnpm|yarn|bun)\b/iu);
+  const manager = managerMatch?.[1]?.toLocaleLowerCase() as PackageManager | undefined;
+
+  if (!manager) {
+    return null;
+  }
+
+  const withoutManager = command.slice(managerMatch![0].length).trim();
+  const prefixPattern = createPackageRootOptionPattern(manager);
+  const prefixMatch = withoutManager.match(prefixPattern);
+  const packageRoot = prefixMatch ? normalizePackageRoot(readFirstMatchedGroup(prefixMatch)) : ".";
+  const commandTail = prefixMatch
+    ? withoutManager.slice(prefixMatch[0].length).trim()
+    : withoutManager;
+  const subcommand = commandTail.toLocaleLowerCase();
+
+  if (!subcommand) {
+    return null;
+  }
+
+  return {
+    manager,
+    packageRoot,
+    subcommand
+  };
+}
+
+function createPackageRootOptionPattern(manager: PackageManager): RegExp {
+  const optionNames = {
+    npm: ["--prefix", "-c"],
+    pnpm: ["--dir", "--cwd", "-c"],
+    yarn: ["--cwd", "-c"],
+    bun: ["--cwd", "-c"]
+  }[manager];
+  const optionPattern = optionNames.map(escapeRegExp).join("|");
+  const valuePattern = `"([^"]+)"|'([^']+)'|(\\S+)`;
+
+  return new RegExp(`^(?:${optionPattern})(?:=|\\s+)${valuePattern}\\s+`, "iu");
+}
+
+function isPackageVerificationSubcommand(
+  manager: PackageManager,
+  subcommand: string
+): boolean {
+  if (manager === "npm") {
+    return /^(?:test|t|(?:run|run-script)\s+(?:build|test|lint|typecheck))\b/iu.test(subcommand);
+  }
+
+  if (manager === "pnpm" || manager === "bun") {
+    return /^(?:test|run\s+(?:build|test|lint|typecheck))\b/iu.test(subcommand);
+  }
+
+  return /^(?:test|(?:run\s+)?(?:build|test|lint|typecheck))\b/iu.test(subcommand);
+}
+
+function isPackageInstallSubcommand(subcommand: string): boolean {
+  return /^(?:i|install|ci)\b/iu.test(subcommand);
+}
+
+function createPackageInstallCommand(manager: PackageManager, packageRoot: string): string {
+  if (packageRoot === ".") {
+    return `${manager} install`;
+  }
+
+  const packageRootArgument = formatPackageRootArgument(packageRoot);
+
+  if (manager === "npm") {
+    return `npm --prefix ${packageRootArgument} install`;
+  }
+
+  if (manager === "pnpm") {
+    return `pnpm --dir ${packageRootArgument} install`;
+  }
+
+  return `${manager} --cwd ${packageRootArgument} install`;
+}
+
+function formatPackageRootArgument(packageRoot: string): string {
+  return /\s/u.test(packageRoot) ? `"${packageRoot.replace(/"/gu, '\\"')}"` : packageRoot;
+}
+
+function createPackageInstallAction(
+  verification: PackageVerificationCommand,
+  index: number
+): AgentAction {
+  return {
+    id: `plan-quality-package-install-${index + 1}`,
+    stepId: "plan-quality-package-install",
+    kind: "run-command",
+    label: `运行命令 ${verification.installCommand}`,
+    status: "pending",
+    command: verification.installCommand
+  };
+}
+
 function renumberActions(actions: AgentAction[]): AgentAction[] {
   return actions.map((action, index) => ({
     ...action,
@@ -153,12 +375,14 @@ function formatPlanQualityNotices({
   language,
   inspectConversions,
   shellWriterConversions,
+  dependencyInstallSupplements,
   scaffoldSupplements,
   missingScaffoldLayers
 }: {
   language: Language;
   inspectConversions: number;
   shellWriterConversions: number;
+  dependencyInstallSupplements: number;
   scaffoldSupplements: number;
   missingScaffoldLayers: ScaffoldLayer[];
 }): string[] {
@@ -185,6 +409,14 @@ function formatPlanQualityNotices({
       language === "zh-CN"
         ? `计划预检已补充 ${scaffoldSupplements} 个空项目工程骨架步骤, 覆盖缺失的 ${formatScaffoldLayerLabels(missingScaffoldLayers, language)}。`
         : `Plan preflight added ${scaffoldSupplements} bare-project scaffold step(s), covering missing ${formatScaffoldLayerLabels(missingScaffoldLayers, language)}.`
+    );
+  }
+
+  if (dependencyInstallSupplements > 0) {
+    notices.push(
+      language === "zh-CN"
+        ? `计划预检已在前端构建前补充 ${dependencyInstallSupplements} 个依赖安装步骤。`
+        : `Plan preflight added ${dependencyInstallSupplements} dependency install step(s) before frontend build commands.`
     );
   }
 
@@ -379,6 +611,20 @@ function stripProjectRoot(value: string, projectRoot: string | null): string {
 
 function normalizeProjectPath(value: string): string {
   return value.trim().replace(/\\/gu, "/").replace(/^\.\/+/u, "").replace(/\/+/gu, "/");
+}
+
+function normalizeCommand(value: string): string {
+  return value.trim().replace(/\s+/gu, " ");
+}
+
+function normalizePackageRoot(value: string): string {
+  const normalized = normalizeProjectPath(value.replace(/^["']|["']$/gu, "")).replace(/\/+$/gu, "");
+
+  return normalized || ".";
+}
+
+function readFirstMatchedGroup(match: RegExpMatchArray): string {
+  return match.slice(1).find((value): value is string => Boolean(value)) ?? ".";
 }
 
 function isSafeRelativeProjectPath(value: string): boolean {
