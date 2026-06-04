@@ -223,6 +223,15 @@ export function classifyAutoFailureForRecovery(
   }
 
   const failureText = collectFailureText(thread.events, action, commandResult);
+
+  if (
+    commandResult &&
+    isPackageScriptCommand(commandResult.command) &&
+    isRecoverablePackageScriptDependencyFailure(failureText)
+  ) {
+    return { recoverable: true, reason: "recoverable" };
+  }
+
   const dependencyDetail = findDependencyMissingDetail(failureText);
 
   if (dependencyDetail) {
@@ -396,6 +405,30 @@ function findDependencyMissingDetail(value: string): string | null {
   }
 
   return null;
+}
+
+function isPackageScriptCommand(command: string): boolean {
+  const normalized = command.trim().replace(/\s+/gu, " ").toLowerCase();
+
+  return (
+    /^npm\s+(?:(?:--prefix|-c)\s+\S+\s+)*(?:test|t|run\s+\S+)/u.test(normalized) ||
+    /^pnpm\s+(?:(?:--dir|--cwd|-c)\s+\S+\s+)*(?:test|run\s+\S+)/u.test(normalized) ||
+    /^yarn\s+(?:(?:--cwd|-c)\s+\S+\s+)*(?:test|run\s+\S+|(?:test|lint|typecheck|build))/u.test(normalized) ||
+    /^bun\s+(?:(?:--cwd|-c)\s+\S+\s+)*(?:test|run\s+\S+)/u.test(normalized)
+  );
+}
+
+function isRecoverablePackageScriptDependencyFailure(value: string): boolean {
+  if (findMissingDependencySpecifier(value)) {
+    return true;
+  }
+
+  const missingToolMatch = value.match(
+    /['"]?([a-z][a-z0-9_.-]*)['"]?\s+(?:is not recognized as an internal or external command|is not recognized as the name of|command not found)/iu
+  );
+  const toolName = missingToolMatch?.[1]?.toLocaleLowerCase();
+
+  return Boolean(toolName && !["npm", "pnpm", "yarn", "bun", "node"].includes(toolName));
 }
 
 function findMissingDependencySpecifier(value: string): string | null {

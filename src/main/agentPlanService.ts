@@ -479,6 +479,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "For edit steps, the target must be exactly one project-relative file path only. Put comparison notes or reasoning in description, never in target.",
     "For inspect steps, target must be one file, folder, glob pattern, or search query. Do not combine several unrelated paths in one target string.",
     "For verify steps, target must be a runnable command such as npm run build, npm run typecheck, mvn test, or git status --short.",
+    "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For subprojects prefer commands like npm --prefix frontend install before npm --prefix frontend run build.",
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
     'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for text search queries, and "git_status" for git status or diff checks.',
     "Do not use shell commands for directory listing, file globbing, text search, or git status/diff when a controlled tool can express the same step.",
@@ -857,6 +858,7 @@ function formatProjectScaffoldPlanningContext(request: GenerateAgentPlanRequest)
       ? "The selected project appears empty or bare. Treat this as a scaffold task, not a single-file edit."
       : "The selected project already has files. Preserve its structure and fill the missing layers only.",
     "The plan must cover these layers when relevant: dependency/build files, backend entrypoint, domain/model, API/controller, runtime configuration, frontend package/config, frontend entrypoint, UI component/page, and verification command.",
+    "For frontend package scaffolds, include dependency installation before verification so local binaries such as tsc and vite exist before build commands run.",
     'Use grouped edit steps with a "files" array for related files, for example backend foundation files or frontend foundation files.',
     "Do not use shell heredocs or PowerShell file-writing scripts to create project files; use Forge edit steps instead."
   ];

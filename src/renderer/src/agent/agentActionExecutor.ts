@@ -543,7 +543,9 @@ function isDestructiveCommand(command: string): boolean {
 
 // 识别会改变依赖或项目状态的包管理命令
 function isDependencyChangingCommand(command: string): boolean {
-  return /^(npm|pnpm|yarn|bun)\s+(?:i|install|add|remove|uninstall|update|upgrade)\b/u.test(command);
+  return /^(npm|pnpm|yarn|bun)\s+(?:(?:--prefix|--dir|--cwd|-c)\s+\S+\s+)*(?:i|install|ci|add|remove|uninstall|update|upgrade)\b/u.test(
+    command
+  );
 }
 
 // 识别会把命令输出写入文件的 shell 重定向, 让 Agent 停下来等用户确认
@@ -560,10 +562,10 @@ function isGitMutatingCommand(command: string): boolean {
 function isAllowedCommand(command: string): boolean {
   return (
     /^git\s+(?:status|diff|log|show|branch)(?:\s|$)/u.test(command) ||
-    /^npm\s+(?:test|t|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
-    /^pnpm\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
-    /^yarn\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
-    /^bun\s+(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^npm\s+(?:(?:--prefix|-c)\s+\S+\s+)*(?:test|t|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^pnpm\s+(?:(?:--dir|--cwd|-c)\s+\S+\s+)*(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^yarn\s+(?:(?:--cwd|-c)\s+\S+\s+)*(?:test|run\s+(?:test|lint|typecheck|build)|(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^bun\s+(?:(?:--cwd|-c)\s+\S+\s+)*(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
     /^(npx\s+)?(?:vitest|tsc|eslint)(?:\s|$)/u.test(command) ||
     /^(rg|git\s+grep|get-childitem|dir|ls)(?:\s|$)/u.test(command) ||
     isAllowedPowerShellPipelineHelperCommand(command)

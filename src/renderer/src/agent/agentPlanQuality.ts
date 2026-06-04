@@ -20,6 +20,11 @@ type AgentPlanQualityResult = {
   notices: string[];
 };
 
+type PackageVerificationCommand = {
+  installCommand: string;
+  packageRoot: string;
+};
+
 const CREATE_TASK_PATTERN =
   /(创建|新建|生成|搭建|实现|做一个|写一个|开发|create|generate|scaffold|build|make|implement)/iu;
 const PROJECT_SCOPE_PATTERN =
@@ -93,17 +98,23 @@ export function improveAgentPlanActions({
     isCreationTask,
     prompt
   });
+  const dependencySetupResult = insertMissingPackageInstallActions({
+    actions: scaffoldResult.actions,
+    isCreationTask,
+    projectScan
+  });
 
   const notices = formatPlanQualityNotices({
     language,
     inspectConversions,
     shellWriterConversions,
+    dependencyInstallSupplements: dependencySetupResult.addedActions,
     scaffoldSupplements: scaffoldResult.addedActions,
     missingScaffoldLayers: scaffoldResult.missingLayers
   });
 
   return {
-    actions: renumberActions(scaffoldResult.actions),
+    actions: renumberActions(dependencySetupResult.actions),
     notices
   };
 }
@@ -142,6 +153,144 @@ function createEditAction(
   };
 }
 
+function insertMissingPackageInstallActions({
+  actions,
+  isCreationTask,
+  projectScan
+}: {
+  actions: AgentAction[];
+  isCreationTask: boolean;
+  projectScan?: ProjectScanResult | null;
+}): { actions: AgentAction[]; addedActions: number } {
+  if (!isCreationTask) {
+    return { actions, addedActions: 0 };
+  }
+
+  const packageRoots = collectKnownPackageRoots(actions, projectScan);
+  const installedRoots = new Set<string>();
+  const nextActions: AgentAction[] = [];
+  let addedActions = 0;
+
+  for (const action of actions) {
+    const installRoot = action.command ? parsePackageInstallCommandRoot(action.command) : null;
+
+    if (installRoot) {
+      installedRoots.add(installRoot);
+      nextActions.push(action);
+      continue;
+    }
+
+    const verification = action.command ? parsePackageVerificationCommand(action.command) : null;
+
+    if (
+      verification &&
+      packageRoots.has(verification.packageRoot) &&
+      !installedRoots.has(verification.packageRoot)
+    ) {
+      nextActions.push(createPackageInstallAction(verification, addedActions));
+      installedRoots.add(verification.packageRoot);
+      addedActions += 1;
+    }
+
+    nextActions.push(action);
+  }
+
+  return {
+    actions: nextActions,
+    addedActions
+  };
+}
+
+function collectKnownPackageRoots(
+  actions: AgentAction[],
+  projectScan?: ProjectScanResult | null
+): Set<string> {
+  const roots = new Set<string>();
+
+  for (const filePath of [
+    ...actions.map((action) => action.target ?? ""),
+    ...(projectScan?.files ?? []).map((file) => file.relativePath)
+  ]) {
+    const packageRoot = getPackageRootFromManifestPath(filePath);
+
+    if (packageRoot) {
+      roots.add(packageRoot);
+    }
+  }
+
+  return roots;
+}
+
+function getPackageRootFromManifestPath(filePath: string): string | null {
+  const normalizedPath = normalizeProjectPath(filePath);
+
+  if (normalizedPath === "package.json") {
+    return ".";
+  }
+
+  if (!normalizedPath.endsWith("/package.json")) {
+    return null;
+  }
+
+  return normalizedPath.slice(0, -"/package.json".length) || ".";
+}
+
+function parsePackageVerificationCommand(command: string): PackageVerificationCommand | null {
+  const normalizedCommand = normalizeCommand(command);
+  const npmPrefixMatch = normalizedCommand.match(
+    /^npm\s+--prefix(?:=|\s+)(\S+)\s+(?:(?:run|run-script)\s+)?(build|test|lint|typecheck|t)\b/iu
+  );
+
+  if (npmPrefixMatch?.[1]) {
+    const packageRoot = normalizePackageRoot(npmPrefixMatch[1]);
+
+    return {
+      packageRoot,
+      installCommand: packageRoot === "." ? "npm install" : `npm --prefix ${packageRoot} install`
+    };
+  }
+
+  if (/^npm\s+(?:(?:run|run-script)\s+)?(?:build|test|lint|typecheck|t)\b/iu.test(normalizedCommand)) {
+    return {
+      packageRoot: ".",
+      installCommand: "npm install"
+    };
+  }
+
+  return null;
+}
+
+function parsePackageInstallCommandRoot(command: string): string | null {
+  const normalizedCommand = normalizeCommand(command);
+  const npmPrefixMatch = normalizedCommand.match(
+    /^npm\s+--prefix(?:=|\s+)(\S+)\s+(?:i|install|ci)\b/iu
+  );
+
+  if (npmPrefixMatch?.[1]) {
+    return normalizePackageRoot(npmPrefixMatch[1]);
+  }
+
+  if (/^npm\s+(?:i|install|ci)\b/iu.test(normalizedCommand)) {
+    return ".";
+  }
+
+  return null;
+}
+
+function createPackageInstallAction(
+  verification: PackageVerificationCommand,
+  index: number
+): AgentAction {
+  return {
+    id: `plan-quality-package-install-${index + 1}`,
+    stepId: "plan-quality-package-install",
+    kind: "run-command",
+    label: `运行命令 ${verification.installCommand}`,
+    status: "pending",
+    command: verification.installCommand
+  };
+}
+
 function renumberActions(actions: AgentAction[]): AgentAction[] {
   return actions.map((action, index) => ({
     ...action,
@@ -153,12 +302,14 @@ function formatPlanQualityNotices({
   language,
   inspectConversions,
   shellWriterConversions,
+  dependencyInstallSupplements,
   scaffoldSupplements,
   missingScaffoldLayers
 }: {
   language: Language;
   inspectConversions: number;
   shellWriterConversions: number;
+  dependencyInstallSupplements: number;
   scaffoldSupplements: number;
   missingScaffoldLayers: ScaffoldLayer[];
 }): string[] {
@@ -185,6 +336,14 @@ function formatPlanQualityNotices({
       language === "zh-CN"
         ? `计划预检已补充 ${scaffoldSupplements} 个空项目工程骨架步骤, 覆盖缺失的 ${formatScaffoldLayerLabels(missingScaffoldLayers, language)}。`
         : `Plan preflight added ${scaffoldSupplements} bare-project scaffold step(s), covering missing ${formatScaffoldLayerLabels(missingScaffoldLayers, language)}.`
+    );
+  }
+
+  if (dependencyInstallSupplements > 0) {
+    notices.push(
+      language === "zh-CN"
+        ? `计划预检已在前端构建前补充 ${dependencyInstallSupplements} 个依赖安装步骤。`
+        : `Plan preflight added ${dependencyInstallSupplements} dependency install step(s) before frontend build commands.`
     );
   }
 
@@ -379,6 +538,16 @@ function stripProjectRoot(value: string, projectRoot: string | null): string {
 
 function normalizeProjectPath(value: string): string {
   return value.trim().replace(/\\/gu, "/").replace(/^\.\/+/u, "").replace(/\/+/gu, "/");
+}
+
+function normalizeCommand(value: string): string {
+  return value.trim().replace(/\s+/gu, " ");
+}
+
+function normalizePackageRoot(value: string): string {
+  const normalized = normalizeProjectPath(value.replace(/^["']|["']$/gu, "")).replace(/\/+$/gu, "");
+
+  return normalized || ".";
 }
 
 function isSafeRelativeProjectPath(value: string): boolean {
