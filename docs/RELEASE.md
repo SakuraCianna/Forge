@@ -24,7 +24,7 @@ npm run release:check
 npm run dist:win
 ```
 
-该命令会生成 x64 NSIS 安装包, 并通过 `--publish never` 禁止 electron-builder 自动发布。安装包输出到 `release` 目录, 文件名类似 `Forge-0.1.1-x64-setup.exe`。
+该命令会生成 x64 NSIS 安装包, 并通过 `--publish never` 禁止 electron-builder 自动发布。安装包输出到 `release` 目录, 文件名类似 `Forge-0.1.0-x64-setup.exe`。
 
 ## GitHub Release 发布
 
@@ -37,10 +37,10 @@ Get-ChildItem release -Filter "*setup.exe"
 2. 创建 tag 和 GitHub Release, 并上传安装包
 
 ```powershell
-gh release create v0.1.1 release/Forge-0.1.1-x64-setup.exe --title "Forge v0.1.1" --notes-file release/RELEASE_NOTES_v0.1.1.md
+gh release create v0.1.0 release/Forge-0.1.0-x64-setup.exe --title "Forge v0.1.0" --notes-file release/RELEASE_NOTES_v0.1.0.md
 ```
 
-如果 tag 已存在, 使用 `gh release upload v0.1.1 release/Forge-0.1.1-x64-setup.exe --clobber` 更新安装包。
+如果 tag 已存在, 使用 `gh release upload v0.1.0 release/Forge-0.1.0-x64-setup.exe --clobber` 更新安装包。
 
 ## 冒烟测试清单
 
