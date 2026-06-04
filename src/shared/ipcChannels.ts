@@ -53,7 +53,8 @@ export const fileChannels = {
 } as const;
 
 export const localSkillChannels = {
-  scan: "forge:local-skills:scan"
+  scan: "forge:local-skills:scan",
+  readFile: "forge:local-skills:read-file"
 } as const;
 
 export const systemChannels = {

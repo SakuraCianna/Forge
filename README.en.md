@@ -36,6 +36,7 @@ The goal is to move AI coding from suggestions inside a chat box to a local engi
 - The sidebar includes a plugin directory. A plugin organizes a group of reusable skills.
 - Forge scans common local skill locations on startup, including `~/.codex/skills`, `~/.agents/skills`, and `SKILL.md` files inside the Codex plugin cache.
 - The plugin page can switch between a plugin list and a skill list. Plugin details show bundled skills; skill details show source, local file path, and core files.
+- Core files from locally scanned skills can be previewed read-only in the skill details page, making `SKILL.md` and related resource content inspectable in the UI.
 - The plugin page includes a GitHub extension entry. Users can open repositories in `https://github.com/owner/repo` or `owner/repo` format and manually inspect or download extensions. Forge does not automatically clone, install, or execute third-party repository code in the current version.
 - The composer add menu can insert plugins or skills into the current task.
 - Typing `/` opens Forge commands and skill candidates. Commands run UI operations such as status, model settings, or feedback instead of being sent as normal chat text.

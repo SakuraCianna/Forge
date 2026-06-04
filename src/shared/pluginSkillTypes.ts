@@ -20,3 +20,9 @@ export type LocalSkillScanResult = {
     message: string;
   }>;
 };
+
+export type LocalSkillFileContent = {
+  filePath: string;
+  content: string;
+  size: number;
+};

@@ -23,7 +23,10 @@ import type {
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
-import type { LocalSkillScanResult } from "../shared/pluginSkillTypes.js";
+import type {
+  LocalSkillFileContent,
+  LocalSkillScanResult
+} from "../shared/pluginSkillTypes.js";
 import type { CommandOutputChunk } from "../shared/commandTypes.js";
 import type {
   ProjectDirectoryListResult,
@@ -78,7 +81,9 @@ contextBridge.exposeInMainWorld("forge", {
   },
   skills: {
     scanLocal: (): Promise<LocalSkillScanResult> =>
-      ipcRenderer.invoke(localSkillChannels.scan)
+      ipcRenderer.invoke(localSkillChannels.scan),
+    readFile: (filePath: string): Promise<LocalSkillFileContent> =>
+      ipcRenderer.invoke(localSkillChannels.readFile, filePath)
   },
   system: {
     openExternal: (url: string): Promise<boolean> =>

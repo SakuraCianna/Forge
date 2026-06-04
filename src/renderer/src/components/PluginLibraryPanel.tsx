@@ -1,9 +1,8 @@
 // 本文件说明: 渲染插件和技能目录视图
 import type { FormEvent, ReactElement } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  CheckCircle2,
   Download,
   ExternalLink,
   FileText,
@@ -12,6 +11,7 @@ import {
   Search
 } from "lucide-react";
 import type { Language } from "@shared/modelTypes";
+import type { LocalSkillFileContent } from "@shared/pluginSkillTypes";
 import type { ForgePlugin, ForgeSkill } from "@/state/pluginSkills";
 import { getContextKindLabel } from "@/state/pluginSkills";
 
@@ -19,6 +19,7 @@ type PluginLibraryPanelProps = {
   language: Language;
   plugins: ForgePlugin[];
   onOpenExternal?: (url: string) => void;
+  onReadCoreFile?: (filePath: string) => Promise<LocalSkillFileContent>;
 };
 
 type PluginLibraryMode = "plugins" | "skills";
@@ -35,11 +36,14 @@ type PluginLibraryCopy = {
   downloadFromGithub: string;
   empty: string;
   extensionSource: string;
+  fileContent: string;
   githubExtensions: string;
   githubPlaceholder: string;
-  installed: string;
+  loadingFile: string;
   localFile: string;
   noCoreFiles: string;
+  previewUnavailable: string;
+  readFileFailed: string;
   openRepository: string;
   plugins: string;
   repository: string;
@@ -47,13 +51,12 @@ type PluginLibraryCopy = {
   skillCount: (count: number) => string;
   skills: string;
   source: string;
-  subtitle: string;
-  title: string;
 };
 
 export function PluginLibraryPanel({
   language,
   onOpenExternal,
+  onReadCoreFile,
   plugins
 }: PluginLibraryPanelProps): ReactElement {
   const copy = getPluginLibraryCopy(language);
@@ -136,19 +139,6 @@ export function PluginLibraryPanel({
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <header className="border-b border-[#ececf1] px-5 py-4">
-        <div className="flex min-w-0 items-start justify-between gap-4">
-          <span className="min-w-0">
-            <h1 className="text-lg font-semibold text-[#202123]">{copy.title}</h1>
-            <p className="mt-1 text-[12px] text-[#6e6e80]">{copy.subtitle}</p>
-          </span>
-          <span className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[10px] border border-[#ececf1] bg-[#f7f7f8] px-2 text-[11px] font-medium text-[#565869]">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {copy.installed}
-          </span>
-        </div>
-      </header>
-
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(280px,340px)_minmax(0,1fr)] overflow-hidden">
         <aside className="min-h-0 border-r border-[#ececf1] bg-[#fbfbfc] p-4">
           <div className="mb-3 inline-flex rounded-[13px] bg-[#f1f1f4] p-1">
@@ -247,6 +237,7 @@ export function PluginLibraryPanel({
               item={activeSkillItem}
               language={language}
               onOpenExternal={onOpenExternal}
+              onReadCoreFile={onReadCoreFile}
             />
           ) : selectedPlugin ? (
             <PluginDetail
@@ -360,8 +351,8 @@ function PluginDetail({
       </div>
 
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold text-[#202123]">{copy.skills}</h3>
-        <span className="text-[11px] text-[#8e8ea0]">{copy.skillCount(plugin.skills.length)}</span>
+        <h3 className="text-[14px] font-semibold text-[#202123]">{copy.skills}</h3>
+        <span className="text-[12px] text-[#8e8ea0]">{copy.skillCount(plugin.skills.length)}</span>
       </div>
       <div className="grid gap-3 xl:grid-cols-2">
         {plugin.skills.map((skill) => (
@@ -376,15 +367,19 @@ function PluginDetail({
                 <Box className="h-4 w-4" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-[13px] font-medium text-[#202123]">
+                <span className="block truncate text-[14px] font-medium text-[#202123]">
                   {skill.name}
                 </span>
-                <span className="block text-[10px] text-[#8e8ea0]">
+                <span className="block text-[11px] text-[#8e8ea0]">
                   {getContextKindLabel("skill", language)}
                 </span>
               </span>
             </div>
-            <p className="text-[12px] leading-5 text-[#6e6e80]">{skill.description}</p>
+            {getDisplayDescription(skill.description) ? (
+              <p className="text-[13px] leading-6 text-[#6e6e80]">
+                {getDisplayDescription(skill.description)}
+              </p>
+            ) : null}
           </button>
         ))}
       </div>
@@ -396,15 +391,70 @@ function SkillDetail({
   copy,
   item,
   language,
-  onOpenExternal
+  onOpenExternal,
+  onReadCoreFile
 }: {
   copy: PluginLibraryCopy;
   item: SkillListItem;
   language: Language;
   onOpenExternal?: (url: string) => void;
+  onReadCoreFile?: (filePath: string) => Promise<LocalSkillFileContent>;
 }): ReactElement {
   const { plugin, skill } = item;
   const coreFiles = getSkillCoreFiles(skill);
+  const coreFileKey = coreFiles.join("\n");
+  const [selectedCoreFile, setSelectedCoreFile] = useState<string | null>(coreFiles[0] ?? null);
+  const [coreFilePreview, setCoreFilePreview] = useState<{
+    content?: string;
+    error?: string;
+    filePath?: string;
+    size?: number;
+    status: "idle" | "loading" | "ready" | "error";
+  }>({ status: "idle" });
+
+  useEffect(() => {
+    setSelectedCoreFile(coreFiles[0] ?? null);
+  }, [coreFileKey, skill.id]);
+
+  useEffect(() => {
+    if (!selectedCoreFile) {
+      setCoreFilePreview({ status: "idle" });
+      return;
+    }
+
+    if (!onReadCoreFile || !isLocalCoreFilePath(selectedCoreFile)) {
+      setCoreFilePreview({ filePath: selectedCoreFile, status: "idle" });
+      return;
+    }
+
+    let disposed = false;
+
+    setCoreFilePreview({ filePath: selectedCoreFile, status: "loading" });
+    void onReadCoreFile(selectedCoreFile)
+      .then((result) => {
+        if (!disposed) {
+          setCoreFilePreview({
+            content: result.content,
+            filePath: result.filePath,
+            size: result.size,
+            status: "ready"
+          });
+        }
+      })
+      .catch((error) => {
+        if (!disposed) {
+          setCoreFilePreview({
+            error: error instanceof Error ? error.message : String(error),
+            filePath: selectedCoreFile,
+            status: "error"
+          });
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [onReadCoreFile, selectedCoreFile]);
 
   return (
     <div className="mx-auto max-w-[900px]">
@@ -417,9 +467,11 @@ function SkillDetail({
             {getContextKindLabel("skill", language)}
           </span>
           <h2 className="truncate text-[19px] font-semibold text-[#202123]">{skill.name}</h2>
-          <p className="mt-1 max-w-[720px] text-[12px] leading-5 text-[#6e6e80]">
-            {skill.description}
-          </p>
+          {getDisplayDescription(skill.description) ? (
+            <p className="mt-1 max-w-[720px] text-[13px] leading-6 text-[#6e6e80]">
+              {getDisplayDescription(skill.description)}
+            </p>
+          ) : null}
         </span>
       </div>
 
@@ -441,7 +493,7 @@ function SkillDetail({
 
       <div className="rounded-[12px] border border-[#ececf1] bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="text-[13px] font-semibold text-[#202123]">{copy.coreFiles}</h3>
+          <h3 className="text-[14px] font-semibold text-[#202123]">{copy.coreFiles}</h3>
           {plugin.repositoryUrl ? (
             <button
               type="button"
@@ -456,20 +508,53 @@ function SkillDetail({
         {coreFiles.length > 0 ? (
           <div className="space-y-2">
             {coreFiles.map((filePath) => (
-              <div
+              <button
                 key={filePath}
-                className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-[10px] bg-[#f7f7f8] px-3 py-2"
+                type="button"
+                onClick={() => setSelectedCoreFile(filePath)}
+                className={`grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-[10px] px-3 py-2 text-left transition ${
+                  selectedCoreFile === filePath
+                    ? "bg-[#ececf1]"
+                    : "bg-[#f7f7f8] hover:bg-[#f1f1f4]"
+                }`}
               >
                 <FileText className="h-4 w-4 text-[#565869]" />
-                <span className="min-w-0 break-all text-[12px] leading-5 text-[#202123]">
+                <span className="min-w-0 break-all text-[13px] leading-5 text-[#202123]">
                   {filePath}
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         ) : (
           <p className="text-[12px] text-[#8e8ea0]">{copy.noCoreFiles}</p>
         )}
+        {selectedCoreFile ? (
+          <div className="mt-4 overflow-hidden rounded-[12px] border border-[#ececf1] bg-[#fafafa]">
+            <div className="flex items-center justify-between gap-3 border-b border-[#ececf1] px-3 py-2">
+              <span className="min-w-0 truncate text-[13px] font-semibold text-[#202123]">
+                {copy.fileContent}
+              </span>
+              {coreFilePreview.size !== undefined ? (
+                <span className="shrink-0 text-[11px] text-[#8e8ea0]">
+                  {formatFileSize(coreFilePreview.size)}
+                </span>
+              ) : null}
+            </div>
+            {coreFilePreview.status === "loading" ? (
+              <div className="p-3 text-[13px] text-[#8e8ea0]">{copy.loadingFile}</div>
+            ) : coreFilePreview.status === "ready" ? (
+              <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[13px] leading-6 text-[#202123]">
+                {coreFilePreview.content}
+              </pre>
+            ) : coreFilePreview.status === "error" ? (
+              <div className="p-3 text-[13px] leading-5 text-[#b45309]">
+                {copy.readFileFailed}: {coreFilePreview.error}
+              </div>
+            ) : (
+              <div className="p-3 text-[13px] text-[#8e8ea0]">{copy.previewUnavailable}</div>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -495,20 +580,21 @@ function getPluginLibraryCopy(language: Language): PluginLibraryCopy {
       downloadFromGithub: "打开仓库",
       empty: "没有匹配的插件或技能",
       extensionSource: "扩展来源",
+      fileContent: "文件内容",
       githubExtensions: "GitHub 扩展",
       githubPlaceholder: "https://github.com/owner/repo",
-      installed: "本地目录",
+      loadingFile: "正在读取文件内容",
       localFile: "本机技能文件",
       noCoreFiles: "没有可展示的核心文件",
+      previewUnavailable: "此核心文件不是本机扫描到的可预览文件，可从仓库查看。",
+      readFileFailed: "读取失败",
       openRepository: "打开仓库",
       plugins: "插件",
       repository: "仓库",
       search: "搜索插件或技能",
       skillCount: (count) => `${count} 个技能`,
       skills: "技能",
-      source: "来源",
-      subtitle: "本地技能目录与可下载工作流组件。",
-      title: "插件"
+      source: "来源"
     };
   }
 
@@ -519,20 +605,21 @@ function getPluginLibraryCopy(language: Language): PluginLibraryCopy {
     downloadFromGithub: "Open repo",
     empty: "No matching plugins or skills",
     extensionSource: "Extension source",
+    fileContent: "File content",
     githubExtensions: "GitHub extensions",
     githubPlaceholder: "https://github.com/owner/repo",
-    installed: "Local catalog",
+    loadingFile: "Reading file content",
     localFile: "Local skill file",
     noCoreFiles: "No core files to show",
+    previewUnavailable: "This core file is not a locally scanned previewable file. Open the repository to inspect it.",
+    readFileFailed: "Read failed",
     openRepository: "Open repository",
     plugins: "Plugins",
     repository: "Repository",
     search: "Search plugins or skills",
     skillCount: (count) => `${count} skill${count === 1 ? "" : "s"}`,
     skills: "Skills",
-    source: "Source",
-    subtitle: "Local skill catalog and downloadable workflow components.",
-    title: "Plugins"
+    source: "Source"
   };
 }
 
@@ -572,10 +659,32 @@ function normalizeSearchCorpus(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function getDisplayDescription(description: string): string {
+  const value = description.trim();
+
+  return value === "|" || value === ">" ? "" : value;
+}
+
 function getSkillCoreFiles(skill: ForgeSkill): string[] {
   if (skill.coreFiles?.length) {
     return skill.coreFiles;
   }
 
   return skill.localPath ? [skill.localPath] : ["SKILL.md"];
+}
+
+function isLocalCoreFilePath(filePath: string): boolean {
+  return /^[a-z]:[\\/]/iu.test(filePath) || /^\\\\/u.test(filePath);
+}
+
+function formatFileSize(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }

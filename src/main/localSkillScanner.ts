@@ -1,8 +1,9 @@
 // 本文件说明: 扫描本机 Codex/Agent skill 元数据, 不执行任何 skill 脚本
-import { lstat, readdir, readFile, stat } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, sep } from "node:path";
 import type {
+  LocalSkillFileContent,
   LocalSkillManifest,
   LocalSkillScanResult,
   LocalSkillSource
@@ -21,6 +22,7 @@ const maxSkillMarkdownBytes = 64 * 1024;
 const maxSkillNameLength = 120;
 const maxSkillDescriptionLength = 500;
 const maxCoreFilesPerFolder = 8;
+const maxSkillFileContentBytes = 256 * 1024;
 
 export async function scanLocalSkills(): Promise<LocalSkillScanResult> {
   const roots = createSkillRoots();
@@ -86,6 +88,55 @@ export async function scanLocalSkills(): Promise<LocalSkillScanResult> {
     skills: dedupeSkills(skills),
     scannedRoots,
     errors
+  };
+}
+
+export async function readLocalSkillFileContent(filePath: string): Promise<LocalSkillFileContent> {
+  const requestedPath = filePath.trim();
+
+  if (!requestedPath) {
+    throw new Error("Skill file path is required");
+  }
+
+  const scanResult = await scanLocalSkills();
+  const allowedFiles = new Map<string, string>();
+
+  for (const skill of scanResult.skills) {
+    for (const coreFile of skill.coreFiles) {
+      const resolvedCoreFile = await realpathSafe(coreFile);
+
+      if (resolvedCoreFile) {
+        allowedFiles.set(resolvedCoreFile.toLowerCase(), coreFile);
+      }
+    }
+  }
+
+  const resolvedRequestedPath = await realpathSafe(requestedPath);
+
+  if (!resolvedRequestedPath) {
+    throw new Error("Skill file does not exist");
+  }
+
+  const allowedOriginalPath = allowedFiles.get(resolvedRequestedPath.toLowerCase());
+
+  if (!allowedOriginalPath) {
+    throw new Error("Skill file is not part of the scanned local skill catalog");
+  }
+
+  const fileStat = await lstat(resolvedRequestedPath);
+
+  if (!fileStat.isFile()) {
+    throw new Error("Skill file path must point to a file");
+  }
+
+  if (fileStat.size > maxSkillFileContentBytes) {
+    throw new Error("Skill file is too large to preview");
+  }
+
+  return {
+    filePath: allowedOriginalPath,
+    content: await readFile(resolvedRequestedPath, "utf8"),
+    size: fileStat.size
   };
 }
 
@@ -179,10 +230,57 @@ function parseSkillMarkdown(markdown: string): { name: string; description: stri
 }
 
 function parseFrontmatterValue(frontmatter: string, key: string): string {
-  const pattern = new RegExp(`^${key}:\\s*(.+)$`, "imu");
-  const value = pattern.exec(frontmatter)?.[1]?.trim() ?? "";
+  const lines = frontmatter.split(/\r?\n/u);
+  const pattern = new RegExp(`^${key}:\\s*(.*)$`, "iu");
 
-  return value.replace(/^["']|["']$/gu, "");
+  for (let index = 0; index < lines.length; index += 1) {
+    const value = pattern.exec(lines[index])?.[1]?.trim();
+
+    if (value === undefined) {
+      continue;
+    }
+
+    if (/^[>|][+-]?$/u.test(value)) {
+      return parseFrontmatterBlockScalar(lines, index + 1, value.startsWith(">"));
+    }
+
+    return value.replace(/^["']|["']$/gu, "");
+  }
+
+  return "";
+}
+
+function parseFrontmatterBlockScalar(
+  lines: string[],
+  startIndex: number,
+  folded: boolean
+): string {
+  const blockLines: string[] = [];
+
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const line = lines[index];
+
+    if (/^[A-Za-z0-9_-]+:\s*/u.test(line)) {
+      break;
+    }
+
+    if (line.trim() && !/^\s/u.test(line)) {
+      break;
+    }
+
+    blockLines.push(line);
+  }
+
+  const indentedLines = blockLines.filter((line) => line.trim());
+  const minIndent =
+    indentedLines.length > 0
+      ? Math.min(...indentedLines.map((line) => /^\s*/u.exec(line)?.[0].length ?? 0))
+      : 0;
+  const normalizedLines = blockLines.map((line) => (line.trim() ? line.slice(minIndent) : ""));
+
+  return folded
+    ? normalizedLines.join(" ").replace(/\s+/gu, " ").trim()
+    : normalizedLines.join("\n").trim();
 }
 
 function parseHeading(markdown: string): string {
@@ -274,6 +372,14 @@ async function isRegularFile(path: string): Promise<boolean> {
   const fileStat = await lstat(path).catch(() => null);
 
   return fileStat?.isFile() ?? false;
+}
+
+async function realpathSafe(path: string): Promise<string | null> {
+  try {
+    return await realpath(path);
+  } catch {
+    return null;
+  }
 }
 
 async function pathExists(path: string): Promise<boolean> {

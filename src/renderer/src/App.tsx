@@ -3685,14 +3685,13 @@ export function App(): ReactElement {
       : [];
 
     return (
-      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-hidden rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
-        <ViewHeader title={t("files.title")} description={t("files.description")} />
+      <section className="h-full min-h-0 overflow-hidden bg-white">
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
         ) : currentProjectMissing ? (
           <div className="p-5">{renderProjectMissingNotice()}</div>
         ) : (
-          <div className="grid h-[calc(100%-86px)] min-h-0 grid-cols-[320px_minmax(0,1fr)]">
+          <div className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)]">
             <div className="min-h-0 overflow-auto border-r border-[#ececf1] p-3">
               {fileTreeNotice ? (
                 <div className="mb-2 rounded-[10px] border border-[#fdecc8] bg-[#fff7ed] px-3 py-2 text-[12px] text-[#b45309]">
@@ -3849,15 +3848,14 @@ export function App(): ReactElement {
     const remoteSelectOptions = remoteOptions.map((remote) => ({ value: remote, label: remote }));
 
     return (
-      <section className="m-5 h-[calc(100%-40px)] min-h-0 overflow-auto rounded-[20px] border border-[#ececf1] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
-        <ViewHeader title={t("source.title")} description={t("source.description")} />
+      <section className="h-full min-h-0 overflow-hidden bg-white">
         {!currentProject ? (
           <EmptyAction message={t("projects.required")} action={t("projects.pick")} onClick={() => void pickProject()} />
         ) : currentProjectMissing ? (
           <div className="p-5">{renderProjectMissingNotice()}</div>
         ) : (
-          <div className="grid h-[calc(100%-86px)] min-h-0 gap-3 p-4 xl:grid-cols-[minmax(260px,330px)_minmax(0,1fr)]">
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+          <div className="grid h-full min-h-0 grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+            <div className="flex min-h-0 flex-col overflow-hidden border-r border-[#ececf1] bg-white">
               <div className="border-b border-[#ececf1] px-3 py-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0">
@@ -4027,7 +4025,7 @@ export function App(): ReactElement {
               </div>
             </div>
 
-            <div className="min-h-[520px] overflow-hidden rounded-[16px] border border-[#ececf1] bg-white">
+            <div className="min-h-0 overflow-hidden bg-white">
               <div className="border-b border-[#ececf1] px-4 py-3">
                 <h2 className="text-sm font-semibold text-[#202123]">{t("source.diffPreview")}</h2>
                 <p className="mt-1 truncate text-[10px] text-[#6e6e80]">
@@ -4037,7 +4035,7 @@ export function App(): ReactElement {
               {selectedChange && selectedChange.diff.trim() ? (
                 <SourceDiffPreview diff={selectedChange.diff} />
               ) : (
-                <div className="flex h-[calc(100%-58px)] min-h-[520px] items-center justify-center px-4 text-center text-sm text-[#6e6e80]">
+                <div className="flex h-[calc(100%-58px)] items-center justify-center px-4 text-center text-sm text-[#6e6e80]">
                   {t("source.noDiffPreview")}
                 </div>
               )}
@@ -4142,6 +4140,7 @@ export function App(): ReactElement {
         language={settings.language}
         plugins={pluginCatalog}
         onOpenExternal={(url) => void window.forge.system.openExternal(url)}
+        onReadCoreFile={(filePath) => window.forge.skills.readFile(filePath)}
       />
     );
   }
@@ -4698,22 +4697,6 @@ function Notice({ message }: { message: string }): ReactElement {
   );
 }
 
-// 渲染页面标题和副标题, 保持文件页和设置页层级一致
-function ViewHeader({
-  title,
-  description
-}: {
-  title: string;
-  description: string;
-}): ReactElement {
-  return (
-    <header className="border-b border-[#ececf1] px-5 py-4">
-      <h1 className="text-lg font-semibold text-[#202123]">{title}</h1>
-      <p className="mt-1 text-[12px] text-[#6e6e80]">{description}</p>
-    </header>
-  );
-}
-
 // 渲染空状态行动入口, 图标和文案由调用方决定
 function EmptyAction({
   message,
@@ -4725,7 +4708,7 @@ function EmptyAction({
   onClick: () => void;
 }): ReactElement {
   return (
-    <div className="flex h-[calc(100%-86px)] items-center justify-center p-6">
+    <div className="flex h-full items-center justify-center p-6">
       <div className="text-center">
         <p className="mb-4 text-[12px] text-[#6e6e80]">{message}</p>
         <button
