@@ -50,6 +50,7 @@ import {
 import {
   appendAgentActionOutcomeRecord,
   appendAgentActionRunRecord,
+  appendAgentBlockedSummaryIfNeeded,
   appendAgentManualGateWaitEvent,
   appendAgentPermissionDeniedEvent,
   applyAgentRuntimePostActionStep,
@@ -697,8 +698,8 @@ export function App(): ReactElement {
         createdAt
       });
 
-      setThreads((current) =>
-        current.map((thread) => {
+      setThreads((current) => {
+        const withSkipNotice = current.map((thread) => {
           if (
             thread.id !== skipNotice.thread.id ||
             thread.events.some((threadEvent) => threadEvent.id === event.id)
@@ -710,8 +711,14 @@ export function App(): ReactElement {
             ...thread,
             events: [...thread.events, event]
           };
-        })
-      );
+        });
+
+        return appendAgentBlockedSummaryIfNeeded(withSkipNotice, {
+          threadId: skipNotice.thread.id,
+          language: settings.language,
+          createdAt
+        });
+      });
       return;
     }
 

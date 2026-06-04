@@ -648,12 +648,16 @@ const textMediaTypeByExtension: Record<string, string> = {
   yml: "application/yaml; charset=utf-8"
 };
 
-// 读取目录并按名称排序, 让搜索和 glob 结果稳定可测
+// 读取目录时目录排在文件前面, 再按名称排序, 保持文件树和受控工具输出一致
 
 async function readSortedDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
-  return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) =>
-    left.name.localeCompare(right.name)
-  );
+  return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) => {
+    if (left.isDirectory() !== right.isDirectory()) {
+      return left.isDirectory() ? -1 : 1;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
 }
 
 // 只有调用方显式传入 limit 时才截断文件列表类结果, 默认展示所有未忽略路径

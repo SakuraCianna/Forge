@@ -5,8 +5,10 @@ import type { Language } from "@shared/modelTypes";
 import type { AgentActionRunOutcome, AgentToolPermission } from "@/agent/agentActionExecutor";
 import type { AgentRuntimePostActionStep } from "@/agent/agentRuntimeOrchestrator";
 import {
+  collectAgentFileChangeStats,
   createAgentCompletionSummaryMessage,
-  getAgentCompletionWorkStartedAt
+  getAgentCompletionWorkStartedAt,
+  type AgentFileChangeStats
 } from "@/agent/agentCompletionSummary";
 import { formatAgentActionRunMessage } from "@/agent/agentRunMessages";
 import {
@@ -23,6 +25,7 @@ import {
   appendThreadEvents,
   updateThreadAgentActionStatus,
   type AgentActionRunRecord,
+  type AutoFailureRecoverySkipRecord,
   type TaskThread,
   type TaskThreadEvent
 } from "@/state/taskThreads";
@@ -352,6 +355,60 @@ export function appendAgentCompletionSummaryIfDone(
   });
 }
 
+export function appendAgentBlockedSummaryIfNeeded(
+  threads: TaskThread[],
+  {
+    threadId,
+    language,
+    createdAt = new Date().toISOString()
+  }: {
+    threadId: string;
+    language: Language;
+    createdAt?: string;
+  }
+): TaskThread[] {
+  return threads.map((thread) => {
+    if (thread.id !== threadId) {
+      return thread;
+    }
+
+    const paused = findLatestAutoFailureRecoveryPause(thread);
+
+    if (!paused) {
+      return thread;
+    }
+
+    const summaryPrefix = `${threadId}-agent-blocked-summary-${paused.actionId}-${paused.reason}-`;
+
+    if (thread.events.some((event) => event.id.startsWith(summaryPrefix))) {
+      return thread;
+    }
+
+    const baseMessage = createAgentBlockedSummaryMessage(thread, paused, language);
+    const message = appendSourceUrlsToAgentSummary(
+      baseMessage,
+      extractSourceUrlsFromThreadEvents(thread.events),
+      language
+    );
+    const workStartedAt = getAgentCompletionWorkStartedAt(thread);
+
+    return {
+      ...thread,
+      status: "blocked",
+      events: [
+        ...thread.events,
+        {
+          id: `${summaryPrefix}${createdAt}`,
+          kind: "result" as const,
+          message,
+          createdAt: workStartedAt,
+          completedAt: createdAt
+        }
+      ]
+    };
+  });
+}
+
 export function applyAgentRuntimePostActionStep(
   threads: TaskThread[],
   {
@@ -372,6 +429,152 @@ export function applyAgentRuntimePostActionStep(
     threadId,
     language
   });
+}
+
+function createAgentBlockedSummaryMessage(
+  thread: TaskThread,
+  paused: AutoFailureRecoverySkipRecord,
+  language: Language
+): string {
+  const actions = thread.agentActions ?? [];
+  const completed = actions.filter((action) => action.status === "completed").length;
+  const skipped = actions.filter((action) => action.status === "skipped").length;
+  const pending = actions.filter(
+    (action) =>
+      action.status !== "completed" &&
+      action.status !== "skipped" &&
+      action.id !== paused.actionId
+  ).length;
+  const stats = collectAgentFileChangeStats(thread, actions);
+  const fileProgress = formatBlockedFileProgress(stats, language);
+  const reason = formatBlockedRecoveryPauseReason(paused.reason, language);
+  const detail = compactBlockedSummaryDetail(paused.detail);
+  const nextStep = formatBlockedSummaryNextStep(paused.reason, language);
+
+  if (language === "zh-CN") {
+    const skippedText = skipped > 0 ? `，跳过 ${skipped} 个步骤` : "";
+    const pendingText = pending > 0 ? `，还有 ${pending} 个步骤未继续` : "";
+    const fileText = fileProgress ? `，${fileProgress}` : "";
+
+    return [
+      `这次执行已暂停在「${paused.label}」。已完成 ${completed} 个步骤${skippedText}${pendingText}${fileText}。`,
+      `暂停原因是${reason}: ${detail}`,
+      nextStep
+    ].join("\n");
+  }
+
+  const skippedText = skipped > 0 ? `, skipped ${skipped}` : "";
+  const pendingText = pending > 0 ? `, ${pending} step${pending === 1 ? "" : "s"} not continued` : "";
+  const fileText = fileProgress ? `, ${fileProgress}` : "";
+
+  return [
+    `This run paused at "${paused.label}". Completed ${completed} step${
+      completed === 1 ? "" : "s"
+    }${skippedText}${pendingText}${fileText}.`,
+    `Pause reason: ${reason}: ${detail}`,
+    nextStep
+  ].join("\n");
+}
+
+function findLatestAutoFailureRecoveryPause(
+  thread: TaskThread
+): AutoFailureRecoverySkipRecord | null {
+  for (let index = thread.events.length - 1; index >= 0; index -= 1) {
+    const paused = thread.events[index].autoFailureRecoverySkip;
+
+    if (paused) {
+      return paused;
+    }
+  }
+
+  return null;
+}
+
+function formatBlockedFileProgress(
+  stats: AgentFileChangeStats,
+  language: Language
+): string | null {
+  const parts =
+    language === "zh-CN"
+      ? [
+          stats.createdFiles.length > 0 ? `创建 ${stats.createdFiles.length} 个文件` : null,
+          stats.editedFiles.length > 0 ? `编辑 ${stats.editedFiles.length} 个文件` : null,
+          stats.deletedFiles.length > 0 ? `删除 ${stats.deletedFiles.length} 个文件` : null,
+          stats.readFiles.length > 0 ? `读取 ${stats.readFiles.length} 个文件` : null
+        ]
+      : [
+          stats.createdFiles.length > 0
+            ? `created ${stats.createdFiles.length} file${stats.createdFiles.length === 1 ? "" : "s"}`
+            : null,
+          stats.editedFiles.length > 0
+            ? `edited ${stats.editedFiles.length} file${stats.editedFiles.length === 1 ? "" : "s"}`
+            : null,
+          stats.deletedFiles.length > 0
+            ? `deleted ${stats.deletedFiles.length} file${stats.deletedFiles.length === 1 ? "" : "s"}`
+            : null,
+          stats.readFiles.length > 0
+            ? `read ${stats.readFiles.length} file${stats.readFiles.length === 1 ? "" : "s"}`
+            : null
+        ];
+  const visibleParts = parts.filter((part): part is string => Boolean(part));
+
+  return visibleParts.length > 0 ? visibleParts.join(language === "zh-CN" ? "，" : ", ") : null;
+}
+
+function formatBlockedRecoveryPauseReason(
+  reason: AutoFailureRecoverySkipRecord["reason"],
+  language: Language
+): string {
+  if (language === "zh-CN") {
+    return {
+      "requires-permission": "需要权限确认",
+      "requires-dependency": "需要依赖配置",
+      "user-cancelled": "用户取消命令"
+    }[reason];
+  }
+
+  return {
+    "requires-permission": "permission required",
+    "requires-dependency": "dependency setup required",
+    "user-cancelled": "cancelled by user"
+  }[reason];
+}
+
+function formatBlockedSummaryNextStep(
+  reason: AutoFailureRecoverySkipRecord["reason"],
+  language: Language
+): string {
+  if (language === "zh-CN") {
+    if (reason === "requires-dependency") {
+      return "请先安装或配置缺失依赖，然后继续该线程或重新运行失败步骤。";
+    }
+
+    if (reason === "requires-permission") {
+      return "请先确认权限或调整 Agent 权限配置，然后继续该线程。";
+    }
+
+    return "如果仍需要执行这个步骤，请继续该线程并重新批准相关动作。";
+  }
+
+  if (reason === "requires-dependency") {
+    return "Install or configure the missing dependency, then continue the thread or rerun the failed step.";
+  }
+
+  if (reason === "requires-permission") {
+    return "Confirm the permission or adjust the Agent permission profile, then continue the thread.";
+  }
+
+  return "Continue the thread and approve the related action again if this step is still needed.";
+}
+
+function compactBlockedSummaryDetail(detail: string): string {
+  const normalized = detail.replace(/\s+/gu, " ").trim();
+
+  if (normalized.length <= 220) {
+    return normalized || "No additional detail.";
+  }
+
+  return `${normalized.slice(0, 217)}...`;
 }
 
 function formatAgentActionDecisionMessage(
