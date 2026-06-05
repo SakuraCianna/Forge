@@ -62,7 +62,7 @@
 - `createdAt`: 必须记录该任务实际完成时的带时区 ISO 时间戳, 例如 `2026-06-05T12:00:00.000Z`。
 - `complexity`: 只能是 `simple`, `medium`, `complex`。
 - `validations[].kind`: 只能是 `typecheck`, `build`, `lint`。
-- 每条 run 必须各记录一次 `typecheck`, `build`, `lint` 验证结果, 否则不能证明该任务的修改后工程门禁状态。
+- 每条 run 必须恰好各记录一次 `typecheck`, `build`, `lint` 验证结果, 否则不能证明该任务的修改后工程门禁状态。
 - `validations[].command`: 必须记录实际运行的验证命令, 例如 `npm run lint`。
 - `validations[].exitCode`: 必须记录验证命令的退出码, `0` 表示命令成功。
 - `validations[].passed`: 只有实际运行过对应验证命令才能记录为 `true`。
@@ -70,8 +70,8 @@
 - `completedInFirstAttempt`: 只有该任务的所有验证命令均通过时才可以写 `true`; 如果任一验证失败, 必须写 `false` 并按实际情况记录恢复结果。
 - `failureRecovered`: 没有发生失败恢复流程时必须写 `null`; 发生失败恢复后按结果写 `true` 或 `false`; 一次完成且所有验证均通过的任务不能写 `true` 或 `false`。
 - 结果文件缺失或某项指标分母为 0 时, 对应指标仍然是未证明状态, 不能按可用级通过处理。
-- 格式错误的 run 会被统计为 invalid run, 不会计入有效样本。`invalidRuns[].reasons` 会列出需要修正的字段, 例如 `createdAt`, `complexityForTaskId`, `completedInFirstAttemptValidationMismatch`, `failureRecoveredWithoutFailure`, `validations.command`, `validations.exitCode`, `validations.missingTypecheck`, `validations.missingBuild`, `validations.missingLint`, `validations.passedExitCodeMismatch`。
-- `npm run quality:regression:gate` 会要求 `forgeVersion` 匹配当前 `package.json` 版本, S1-S5、M1-M5、C1-C3 每个固定任务恰好有一条有效结果, 每条 run 包含可审计的执行时间, 每条 run 各记录一次 typecheck、build、lint 验证结果, 每条验证结果包含命令和退出码, 且真实任务相关指标达到 usable 阈值; 如果结果文件缺失、版本不匹配、固定任务覆盖不完整、出现未定义任务 ID、重复 taskId、存在 invalid run、指标分母为 0 或指标低于 usable, 命令必须失败。
+- 格式错误的 run 会被统计为 invalid run, 不会计入有效样本。`invalidRuns[].reasons` 会列出需要修正的字段, 例如 `createdAt`, `complexityForTaskId`, `completedInFirstAttemptValidationMismatch`, `failureRecoveredWithoutFailure`, `validations.command`, `validations.exitCode`, `validations.missingTypecheck`, `validations.missingBuild`, `validations.missingLint`, `validations.duplicateTypecheck`, `validations.duplicateBuild`, `validations.duplicateLint`, `validations.passedExitCodeMismatch`。
+- `npm run quality:regression:gate` 会要求 `forgeVersion` 匹配当前 `package.json` 版本, S1-S5、M1-M5、C1-C3 每个固定任务恰好有一条有效结果, 每条 run 包含可审计的执行时间, 每条 run 恰好各记录一次 typecheck、build、lint 验证结果, 每条验证结果包含命令和退出码, 且真实任务相关指标达到 usable 阈值; 如果结果文件缺失、版本不匹配、固定任务覆盖不完整、出现未定义任务 ID、重复 taskId、存在 invalid run、指标分母为 0 或指标低于 usable, 命令必须失败。
 
 ## 简单任务
 

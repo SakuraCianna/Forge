@@ -373,7 +373,7 @@ function getRegressionRunInvalidReasons(value) {
     }
 
     if (!hasInvalidValidation) {
-      addUniqueReasons(reasons, getMissingValidationKindReasons(value.validations));
+      addUniqueReasons(reasons, getValidationKindCardinalityReasons(value.validations));
     }
 
     if (!hasInvalidValidation && value.completedInFirstAttempt === true && hasFailedValidationResult(value.validations)) {
@@ -401,12 +401,26 @@ function getRegressionRunInvalidReasons(value) {
   return reasons;
 }
 
-function getMissingValidationKindReasons(validations) {
-  const seenKinds = new Set(validations.map((validation) => validation.kind));
+function getValidationKindCardinalityReasons(validations) {
+  const kindCounts = new Map();
 
-  return REQUIRED_VALIDATION_KINDS.filter((kind) => !seenKinds.has(kind)).map(
-    (kind) => `validations.missing${toTitleCase(kind)}`
-  );
+  for (const validation of validations) {
+    kindCounts.set(validation.kind, (kindCounts.get(validation.kind) ?? 0) + 1);
+  }
+
+  return REQUIRED_VALIDATION_KINDS.flatMap((kind) => {
+    const count = kindCounts.get(kind) ?? 0;
+
+    if (count === 0) {
+      return [`validations.missing${toTitleCase(kind)}`];
+    }
+
+    if (count > 1) {
+      return [`validations.duplicate${toTitleCase(kind)}`];
+    }
+
+    return [];
+  });
 }
 
 function getValidationInvalidReasons(value) {
