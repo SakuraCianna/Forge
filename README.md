@@ -188,14 +188,14 @@ $env:FORGE_AGENT_METRICS_FILE = "C:\Users\you\AppData\Roaming\Forge\agent-qualit
 npm run quality:metrics
 ```
 
-`npm run quality:regression` 会读取 v0.2.x 真实任务回归结果 JSON, 并按 Agent 质量指标口径汇总一次完成率、错误文件修改率、无关代码改动率、修改后验证通过率和失败恢复率。没有找到结果文件时会显示 missing, 这表示真实任务回归指标仍未证明。默认结果文件可以放在 `docs\V0_2_REGRESSION_RESULTS.json`, 也可以通过环境变量指定:
+`npm run quality:regression` 会读取 v0.2.x 真实任务回归结果 JSON, 并按 Agent 质量指标口径汇总一次完成率、错误文件修改率、无关代码改动率、修改后验证通过率和失败恢复率。摘要会列出每个有效任务的 `changedFiles`, 方便复盘错误文件和无关改动证据。没有找到结果文件时会显示 missing, 这表示真实任务回归指标仍未证明。默认结果文件可以放在 `docs\V0_2_REGRESSION_RESULTS.json`, 也可以通过环境变量指定:
 
 ```powershell
 $env:FORGE_REGRESSION_RESULTS_FILE = "docs\V0_2_REGRESSION_RESULTS.json"
 npm run quality:regression
 ```
 
-当需要把真实任务回归作为 v0.2.x 可用级证据门时, 使用严格版本。它要求 `forgeVersion` 匹配当前 `package.json` 版本, 固定任务集 S1-S5、M1-M5、C1-C3 每个任务恰好有一条有效结果, 每条 run 必须恰好包含一次 `typecheck`、`build`、`lint` validation, 每条 validation 必须是修改后验证结果, 记录实际命令和退出码, 命令必须与 validation 类型匹配且与 `passed` 一致, 且真实任务相关指标达到 usable 阈值; 文件缺失、报告结构错误、版本不匹配、任务覆盖不完整、出现未定义任务 ID、重复 taskId、存在 invalid run、validation 种类缺失或重复、指标分母为 0 或低于 usable 时都会以非 0 状态退出:
+当需要把真实任务回归作为 v0.2.x 可用级证据门时, 使用严格版本。它要求 `forgeVersion` 匹配当前 `package.json` 版本, 固定任务集 S1-S5、M1-M5、C1-C3 每个任务恰好有一条有效结果, 每条 run 必须记录非空 `changedFiles`, 恰好包含一次 `typecheck`、`build`、`lint` validation, 每条 validation 必须是修改后验证结果, 记录实际命令和退出码, 命令必须与 validation 类型匹配且与 `passed` 一致, 且真实任务相关指标达到 usable 阈值; 文件缺失、报告结构错误、版本不匹配、任务覆盖不完整、出现未定义任务 ID、重复 taskId、存在 invalid run、缺少 changedFiles、validation 种类缺失或重复、指标分母为 0 或低于 usable 时都会以非 0 状态退出:
 
 ```powershell
 npm run quality:regression:gate

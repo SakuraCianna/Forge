@@ -8,6 +8,11 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "README.md",
+        "README.en.md",
+        "docs/RELEASE.md"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -37,6 +42,9 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/RELEASE.md"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -66,6 +74,10 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "README.md",
+        "README.en.md"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -95,6 +107,9 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -124,6 +139,9 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "README.md"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -153,6 +171,9 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "tests/agentQualityMetrics.test.ts"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -182,6 +203,9 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "tests/builtInToolIpc.test.ts"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -211,6 +235,10 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "scripts/run-v0-2-quality-gate.mjs",
+        "package.json"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -240,6 +268,9 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/RELEASE.md"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -269,6 +300,9 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/V0_2_REGRESSION_TASKS.md"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -298,6 +332,10 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "src/shared/agentQualityMetrics.ts",
+        "tests/agentQualityMetrics.test.ts"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -327,6 +365,10 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "src/renderer/src/components/ExtensionsPanel.tsx",
+        "tests/builtInToolsUi.test.ts"
+      ],
       "validations": [
         {
           "kind": "typecheck",
@@ -356,6 +398,11 @@
       "completedInFirstAttempt": false,
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "scripts/run-v0-2-quality-gate.mjs",
+        "README.md",
+        "README.en.md"
+      ],
       "validations": [
         {
           "kind": "typecheck",

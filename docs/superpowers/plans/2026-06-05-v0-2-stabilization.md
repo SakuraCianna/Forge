@@ -410,6 +410,8 @@ Latest status invalid-run detail hardening: `npm run quality:v0.2:status -- --js
 
 Latest failure recovery denominator hardening: strict v0.2 regression reports now reject non-first-pass runs that leave `failureRecovered` as `null`. Any failed path must explicitly record `true` or `false`, so failure recovery rate evidence cannot disappear from the denominator by omission.
 
+Latest changed-file evidence hardening: strict v0.2 regression reports now require every valid run to record non-empty workspace-relative `changedFiles`, and the summary exposes those changed files per task. This makes wrong-file and unrelated-change rates reviewable from evidence instead of accepting bare booleans.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.

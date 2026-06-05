@@ -1,7 +1,7 @@
 // 本文件说明: 汇总 v0.2.x 真实任务回归结果, 复用 Agent 质量指标口径, 不写入应用指标日志
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAgentQualityMetricSnapshot } from "../.tmp-test/src/shared/agentQualityMetrics.js";
 
@@ -42,6 +42,7 @@ if (!source) {
       duplicateTaskCount: 0,
       duplicateTaskIds: [],
       coverage: createCoverageSummary([]),
+      fileModificationEvidence: [],
       gate: createRegressionUsableGate([]),
       metrics: []
     },
@@ -86,6 +87,7 @@ try {
     metadata,
     generatedAt: snapshot.generatedAt,
     coverage,
+    fileModificationEvidence: createFileModificationEvidence(runs),
     gate,
     metrics
   };
@@ -119,6 +121,7 @@ try {
       duplicateTaskCount: 0,
       duplicateTaskIds: [],
       coverage: createCoverageSummary([]),
+      fileModificationEvidence: [],
       gate: createRegressionUsableGate([]),
       message: error instanceof Error ? error.message : String(error),
       metrics: []
@@ -283,6 +286,15 @@ function createCoverageSummary(runs) {
   };
 }
 
+function createFileModificationEvidence(runs) {
+  return runs.map((run) => ({
+    taskId: run.taskId,
+    changedFiles: run.changedFiles.map((filePath) => filePath.trim()),
+    wrongFileModified: run.wrongFileModified,
+    unrelatedCodeChanged: run.unrelatedCodeChanged
+  }));
+}
+
 function getDuplicateTaskIds(runs) {
   const seenTaskIds = new Set();
   const duplicateTaskIds = new Set();
@@ -366,6 +378,10 @@ function getRegressionRunInvalidReasons(value) {
 
   if (typeof value.unrelatedCodeChanged !== "boolean") {
     reasons.push("unrelatedCodeChanged");
+  }
+
+  if (!isChangedFileList(value.changedFiles)) {
+    reasons.push("changedFiles");
   }
 
   if (!Array.isArray(value.validations)) {
@@ -502,6 +518,28 @@ function isRecord(value) {
   return typeof value === "object" && value !== null;
 }
 
+function isChangedFileList(value) {
+  return Array.isArray(value) && value.length > 0 && value.every((filePath) => isWorkspaceRelativeFilePath(filePath));
+}
+
+function isWorkspaceRelativeFilePath(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed || trimmed.includes("\0")) {
+    return false;
+  }
+
+  if (isAbsolute(trimmed) || win32.isAbsolute(trimmed) || posix.isAbsolute(trimmed)) {
+    return false;
+  }
+
+  return !trimmed.split(/[\\/]+/u).includes("..");
+}
+
 function isTaskComplexity(value) {
   return value === "simple" || value === "medium" || value === "complex";
 }
@@ -629,6 +667,10 @@ function writeSummary(summary, asJson) {
     console.log(`Unexpected tasks: ${summary.coverage.unexpectedTaskIds.join(", ")}`);
   }
 
+  if (summary.fileModificationEvidence.length > 0) {
+    console.log(`Changed files: ${formatFileModificationEvidence(summary.fileModificationEvidence)}`);
+  }
+
   console.log(
     `Regression usable gate: ${summary.gate.regressionUsablePassed ? "passed" : "failed"}`
   );
@@ -647,4 +689,18 @@ function writeSummary(summary, asJson) {
 
     console.log(`${metric.id}: ${value} (${metric.numerator}/${metric.denominator}) ${status}`);
   }
+}
+
+function formatFileModificationEvidence(evidence) {
+  return evidence
+    .map((entry) => {
+      const flags = [
+        entry.wrongFileModified ? "wrong-file" : null,
+        entry.unrelatedCodeChanged ? "unrelated-change" : null
+      ].filter(Boolean);
+      const suffix = flags.length > 0 ? ` (${flags.join(", ")})` : "";
+
+      return `${entry.taskId} [${entry.changedFiles.join(", ")}]${suffix}`;
+    })
+    .join("; ");
 }

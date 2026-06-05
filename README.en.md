@@ -177,14 +177,14 @@ $env:FORGE_AGENT_METRICS_FILE = "C:\Users\you\AppData\Roaming\Forge\agent-qualit
 npm run quality:metrics
 ```
 
-`npm run quality:regression` reads a v0.2.x real-task regression results JSON file and summarizes first-pass completion, wrong-file modifications, unrelated code changes, post-modification validation pass rates, and failure recovery with the same Agent quality metric definitions. If the results file is missing, the command reports `missing`; that means real-task regression metrics remain unproven. The default file can be `docs\V0_2_REGRESSION_RESULTS.json`, or you can point the command at one with an environment variable:
+`npm run quality:regression` reads a v0.2.x real-task regression results JSON file and summarizes first-pass completion, wrong-file modifications, unrelated code changes, post-modification validation pass rates, and failure recovery with the same Agent quality metric definitions. The summary lists each valid task's `changedFiles` so wrong-file and unrelated-change evidence can be reviewed. If the results file is missing, the command reports `missing`; that means real-task regression metrics remain unproven. The default file can be `docs\V0_2_REGRESSION_RESULTS.json`, or you can point the command at one with an environment variable:
 
 ```powershell
 $env:FORGE_REGRESSION_RESULTS_FILE = "docs\V0_2_REGRESSION_RESULTS.json"
 npm run quality:regression
 ```
 
-When real-task regression results are used as a v0.2.x usability evidence gate, run the strict version. It requires `forgeVersion` to match the current `package.json` version, exactly one valid result for every fixed task in S1-S5, M1-M5, and C1-C3, each run to include exactly one `typecheck`, one `build`, and one `lint` validation, each validation to be a post-modification validation result and record the actual command and exit code, the command to match the validation kind and stay consistent with `passed`, and all real-task regression metrics must meet the usable threshold. Missing files, malformed report shape, version mismatch, incomplete task coverage, unexpected task IDs, duplicate task IDs, invalid runs, missing or duplicated validation kinds, zero-denominator metrics, or below-usable metrics exit non-zero:
+When real-task regression results are used as a v0.2.x usability evidence gate, run the strict version. It requires `forgeVersion` to match the current `package.json` version, exactly one valid result for every fixed task in S1-S5, M1-M5, and C1-C3, each run to record non-empty `changedFiles`, each run to include exactly one `typecheck`, one `build`, and one `lint` validation, each validation to be a post-modification validation result and record the actual command and exit code, the command to match the validation kind and stay consistent with `passed`, and all real-task regression metrics must meet the usable threshold. Missing files, malformed report shape, version mismatch, incomplete task coverage, unexpected task IDs, duplicate task IDs, invalid runs, missing changedFiles, missing or duplicated validation kinds, zero-denominator metrics, or below-usable metrics exit non-zero:
 
 ```powershell
 npm run quality:regression:gate

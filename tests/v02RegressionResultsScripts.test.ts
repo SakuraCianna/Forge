@@ -28,6 +28,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: true,
             wrongFileModified: false,
             unrelatedCodeChanged: false,
+            changedFiles: ["README.md", "README.en.md"],
             validations: createAllValidationResults(true),
             failureRecovered: null
           },
@@ -38,6 +39,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: false,
             wrongFileModified: true,
             unrelatedCodeChanged: false,
+            changedFiles: ["src/main/builtInTools/builtInToolExecutors.ts"],
             validations: createAllValidationResults(true),
             failureRecovered: true
           },
@@ -48,6 +50,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: false,
             wrongFileModified: false,
             unrelatedCodeChanged: true,
+            changedFiles: ["scripts/run-v0-2-quality-gate.mjs", "README.md"],
             validations: createAllValidationResults(false),
             failureRecovered: false
           }
@@ -74,6 +77,12 @@ test("v0.2 regression results script converts manual runs into quality metrics",
     source: string;
     totalRuns: number;
     totalObservations: number;
+    fileModificationEvidence: Array<{
+      taskId: string;
+      changedFiles: string[];
+      wrongFileModified: boolean;
+      unrelatedCodeChanged: boolean;
+    }>;
     metrics: Array<{
       id: string;
       denominator: number;
@@ -87,6 +96,26 @@ test("v0.2 regression results script converts manual runs into quality metrics",
   assert.equal(summary.source, resultsFile);
   assert.equal(summary.totalRuns, 3);
   assert.equal(summary.totalObservations, 17);
+  assert.deepEqual(summary.fileModificationEvidence, [
+    {
+      taskId: "S1",
+      changedFiles: ["README.md", "README.en.md"],
+      wrongFileModified: false,
+      unrelatedCodeChanged: false
+    },
+    {
+      taskId: "M1",
+      changedFiles: ["src/main/builtInTools/builtInToolExecutors.ts"],
+      wrongFileModified: true,
+      unrelatedCodeChanged: false
+    },
+    {
+      taskId: "C1",
+      changedFiles: ["scripts/run-v0-2-quality-gate.mjs", "README.md"],
+      wrongFileModified: false,
+      unrelatedCodeChanged: true
+    }
+  ]);
   assert.deepEqual(
     summary.metrics.find((metric) => metric.id === "simpleTaskFirstPassCompletionRate"),
     {
@@ -139,6 +168,7 @@ test("v0.2 regression results script reports incomplete fixed task coverage", as
             completedInFirstAttempt: true,
             wrongFileModified: false,
             unrelatedCodeChanged: false,
+            changedFiles: ["README.md"],
             validations: createAllValidationResults(true),
             failureRecovered: null
           }
@@ -306,6 +336,7 @@ test("v0.2 regression results strict gate fails when results contain invalid run
             completedInFirstAttempt: true,
             wrongFileModified: false,
             unrelatedCodeChanged: false,
+            changedFiles: ["README.md"],
             validations: [{ kind: "unit", passed: true }],
             failureRecovered: true
           }
@@ -339,6 +370,90 @@ test("v0.2 regression results strict gate fails when results contain invalid run
       reasons: ["validations.kind", "validations.command", "validations.exitCode"]
     }
   ]);
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/summarize-v0-2-regression-results.mjs",
+        "--file",
+        resultsFile,
+        "--require-complete-set",
+        "--require-usable-regression"
+      ],
+      { windowsHide: true }
+    ),
+    /Command failed/
+  );
+});
+
+test("v0.2 regression results strict gate fails when changed files evidence is missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-changed-files-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            taskId: "S1",
+            createdAt,
+            complexity: "simple",
+            completedInFirstAttempt: true,
+            wrongFileModified: false,
+            unrelatedCodeChanged: false,
+            validations: createAllValidationResults(true),
+            failureRecovered: null
+          },
+          ...["S2", "S3", "S4", "S5"].map((taskId) =>
+            createRegressionRun(taskId, "simple", true)
+          ),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) =>
+            createRegressionRun(taskId, "medium", true)
+          ),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex", true))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+    coverage: {
+      requiredTaskCount: number;
+      coveredTaskCount: number;
+      completeTaskSet: boolean;
+      missingTaskIds: string[];
+      unexpectedTaskIds: string[];
+    };
+  };
+
+  assert.equal(summary.totalRawRuns, 13);
+  assert.equal(summary.totalRuns, 12);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "S1", reasons: ["changedFiles"] }
+  ]);
+  assert.deepEqual(summary.coverage, {
+    requiredTaskCount: 13,
+    coveredTaskCount: 12,
+    completeTaskSet: false,
+    missingTaskIds: ["S1"],
+    unexpectedTaskIds: []
+  });
 
   await assert.rejects(
     execFileAsync(
@@ -1369,6 +1484,7 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     completedInFirstAttempt: completed,
     wrongFileModified: false,
     unrelatedCodeChanged: false,
+    changedFiles: [`docs/${taskId}.md`],
     validations: createAllValidationResults(true),
     failureRecovered: completed ? null : true
   };

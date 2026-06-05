@@ -336,6 +336,7 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     completedInFirstAttempt: !recoveredTask,
     wrongFileModified: false,
     unrelatedCodeChanged: false,
+    changedFiles: [`docs/${taskId}.md`],
     validations: [
       { kind: "typecheck", command: "npm run typecheck", exitCode: 0, passed: true },
       { kind: "build", command: "npm run build", exitCode: 0, passed: true },
