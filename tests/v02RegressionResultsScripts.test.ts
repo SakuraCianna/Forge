@@ -551,6 +551,48 @@ test("v0.2 regression results strict gate fails when run timestamp is in the fut
   ]);
 });
 
+test("v0.2 regression results strict gate fails when run timestamp is not a real calendar date", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-invalid-calendar-date-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            ...createRegressionRun("S1", "simple", true),
+            createdAt: "2026-02-31T12:00:00.000Z"
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+  };
+
+  assert.equal(summary.totalRawRuns, 1);
+  assert.equal(summary.totalRuns, 0);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "S1", reasons: ["createdAt"] }
+  ]);
+});
+
 test("v0.2 regression results strict gate fails when first-pass completion contradicts validation failure", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-first-pass-validation-"));
   const resultsFile = join(directory, "regression-results.json");

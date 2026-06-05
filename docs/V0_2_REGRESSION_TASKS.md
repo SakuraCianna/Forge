@@ -59,7 +59,7 @@
 - 顶层字段 `forgeVersion` 必须和当前 `package.json` 版本一致, 否则不能证明当前版本达到可用级。
 - 顶层字段 `runs` 必须是数组, 否则结果文件视为格式错误。
 - `taskId`: 必须来自固定回归任务集, 且 S1-S5 只能记录为 `simple`, M1-M5 只能记录为 `medium`, C1-C3 只能记录为 `complex`。
-- `createdAt`: 必须记录该任务实际完成时的带时区 ISO 时间戳, 例如 `2026-06-05T12:00:00.000Z`, 且不能晚于当前时间。
+- `createdAt`: 必须记录该任务实际完成时的带时区 ISO 时间戳, 例如 `2026-06-05T12:00:00.000Z`, 且必须是真实存在的日历日期, 不能晚于当前时间。
 - `complexity`: 只能是 `simple`, `medium`, `complex`。
 - `validations[].kind`: 只能是 `typecheck`, `build`, `lint`。
 - 每条 run 必须恰好各记录一次 `typecheck`, `build`, `lint` 验证结果, 否则不能证明该任务的修改后工程门禁状态。

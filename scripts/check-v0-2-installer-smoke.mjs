@@ -15,6 +15,8 @@ const REQUIRED_CHECKS = [
   "highRiskRequiresConfirmation"
 ];
 const REQUIRED_METADATA = ["forgeVersion", "installerPath", "installerSha256", "testedAt", "platform"];
+const ISO_TIMESTAMP_WITH_TIMEZONE_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u;
 
 const args = parseArgs(process.argv.slice(2));
 const reportPath = resolve(args.file ?? process.env.FORGE_INSTALLER_SMOKE_FILE ?? "docs/V0_2_INSTALLER_SMOKE.json");
@@ -213,15 +215,35 @@ function isSha256(value) {
 }
 
 function isIsoTimestampWithTimezone(value) {
+  const match = ISO_TIMESTAMP_WITH_TIMEZONE_PATTERN.exec(value);
+
+  if (!match || !isValidCalendarDate(match[1], match[2], match[3])) {
+    return false;
+  }
+
   if (Number.isNaN(Date.parse(value))) {
     return false;
   }
 
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
+  return true;
 }
 
 function isAuditableSmokeTimestamp(value) {
   return isIsoTimestampWithTimezone(value) && Date.parse(value) <= Date.now();
+}
+
+function isValidCalendarDate(yearValue, monthValue, dayValue) {
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  const day = Number(dayValue);
+
+  if (month < 1 || month > 12 || day < 1) {
+    return false;
+  }
+
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  return day <= daysInMonth;
 }
 
 function isWindowsPlatform(value) {

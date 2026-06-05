@@ -380,6 +380,8 @@ Latest installer metadata hardening: installer smoke reports now require `tested
 
 Latest installer timestamp hardening: installer smoke reports now also reject future `testedAt` values. Manual smoke evidence must describe an already completed test run, not a pre-filled or scheduled future timestamp.
 
+Latest timestamp calendar hardening: strict v0.2 regression and installer smoke reports now reject timezone-qualified timestamps whose date component is not a real calendar date, such as February 31. This prevents JavaScript date normalization from turning impossible dates into accepted evidence.
+
 Latest installer path hardening: installer smoke reports now require `installerPath` to be the current workspace relative `release/Forge-<version>-x64-setup.exe` artifact. A same-named installer outside the current release directory can no longer satisfy the smoke evidence gate.
 
 Latest regression timestamp hardening: each v0.2 regression run now requires a timezone-qualified ISO `createdAt`. The summary script no longer silently replaces missing run timestamps with the report generation time, so real-task evidence remains auditable per sample.
