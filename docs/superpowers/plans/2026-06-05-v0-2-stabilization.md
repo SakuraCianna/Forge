@@ -412,6 +412,8 @@ Latest failure recovery denominator hardening: strict v0.2 regression reports no
 
 Latest changed-file evidence hardening: strict v0.2 regression reports now require every valid run to record non-empty workspace-relative `changedFiles`, and the summary exposes those changed files per task. This makes wrong-file and unrelated-change rates reviewable from evidence instead of accepting bare booleans.
 
+Latest changed-file scope hardening: strict v0.2 regression reports now reject fixed-task runs that claim `wrongFileModified: false` while `changedFiles` includes files outside that task's documented allowed scope. This catches contradictory evidence before it can enter first-pass, wrong-file, or unrelated-change metrics.
+
 Latest status changed-file review hardening: `npm run quality:v0.2:status` now includes flagged `regression.details.fileModificationEvidence` entries and prints them in the text details. A below-usable status can now point directly to the task IDs and changed files behind wrong-file or unrelated-change evidence.
 
 Latest status mixed-blocker classification hardening: `npm run quality:v0.2:status` now reports `unproven` only when every blocker is missing evidence. If one report is missing but another existing report is invalid, failed, or below usable, the overall classification is `blocked` while preserving all blockers.

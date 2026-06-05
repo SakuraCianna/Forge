@@ -204,7 +204,7 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "changedFiles": [
-        "tests/builtInToolIpc.test.ts"
+        "tests/agentQualityMetrics.test.ts"
       ],
       "validations": [
         {
@@ -236,8 +236,7 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "changedFiles": [
-        "scripts/run-v0-2-quality-gate.mjs",
-        "package.json"
+        "README.md"
       ],
       "validations": [
         {
@@ -301,7 +300,7 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "changedFiles": [
-        "docs/V0_2_REGRESSION_TASKS.md"
+        "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"
       ],
       "validations": [
         {
@@ -333,8 +332,7 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "changedFiles": [
-        "src/shared/agentQualityMetrics.ts",
-        "tests/agentQualityMetrics.test.ts"
+        "scripts/run-v0-2-quality-gate.mjs"
       ],
       "validations": [
         {
@@ -366,8 +364,7 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "changedFiles": [
-        "src/renderer/src/components/ExtensionsPanel.tsx",
-        "tests/builtInToolsUi.test.ts"
+        "src/renderer/src/components/ExtensionsPanel.tsx"
       ],
       "validations": [
         {
@@ -399,9 +396,7 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "changedFiles": [
-        "scripts/run-v0-2-quality-gate.mjs",
-        "README.md",
-        "README.en.md"
+        "tests/agentQualityMetricsLog.test.ts"
       ],
       "validations": [
         {

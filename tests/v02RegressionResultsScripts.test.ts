@@ -336,7 +336,7 @@ test("v0.2 regression results strict gate fails when results contain invalid run
             completedInFirstAttempt: true,
             wrongFileModified: false,
             unrelatedCodeChanged: false,
-            changedFiles: ["README.md"],
+            changedFiles: ["docs/RELEASE.md"],
             validations: [{ kind: "unit", passed: true }],
             failureRecovered: true
           }
@@ -446,6 +446,85 @@ test("v0.2 regression results strict gate fails when changed files evidence is m
   assert.equal(summary.invalidRunCount, 1);
   assert.deepEqual(summary.invalidRuns, [
     { index: 0, taskId: "S1", reasons: ["changedFiles"] }
+  ]);
+  assert.deepEqual(summary.coverage, {
+    requiredTaskCount: 13,
+    coveredTaskCount: 12,
+    completeTaskSet: false,
+    missingTaskIds: ["S1"],
+    unexpectedTaskIds: []
+  });
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/summarize-v0-2-regression-results.mjs",
+        "--file",
+        resultsFile,
+        "--require-complete-set",
+        "--require-usable-regression"
+      ],
+      { windowsHide: true }
+    ),
+    /Command failed/
+  );
+});
+
+test("v0.2 regression results strict gate fails when changed files contradict the wrong-file flag", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-changed-files-scope-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            ...createRegressionRun("S1", "simple", true),
+            changedFiles: ["src/main/unexpected.ts"],
+            wrongFileModified: false
+          },
+          ...["S2", "S3", "S4", "S5"].map((taskId) =>
+            createRegressionRun(taskId, "simple", true)
+          ),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) =>
+            createRegressionRun(taskId, "medium", true)
+          ),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex", true))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+    coverage: {
+      requiredTaskCount: number;
+      coveredTaskCount: number;
+      completeTaskSet: boolean;
+      missingTaskIds: string[];
+      unexpectedTaskIds: string[];
+    };
+  };
+
+  assert.equal(summary.totalRawRuns, 13);
+  assert.equal(summary.totalRuns, 12);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "S1", reasons: ["changedFiles.outOfScope"] }
   ]);
   assert.deepEqual(summary.coverage, {
     requiredTaskCount: 13,
@@ -1484,10 +1563,30 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     completedInFirstAttempt: completed,
     wrongFileModified: false,
     unrelatedCodeChanged: false,
-    changedFiles: [`docs/${taskId}.md`],
+    changedFiles: createChangedFilesForTask(taskId),
     validations: createAllValidationResults(true),
     failureRecovered: completed ? null : true
   };
+}
+
+function createChangedFilesForTask(taskId: string) {
+  const changedFilesByTaskId: Record<string, string[]> = {
+    S1: ["README.md"],
+    S2: ["docs/RELEASE.md"],
+    S3: ["README.md"],
+    S4: ["docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"],
+    S5: ["README.md"],
+    M1: ["tests/agentQualityMetrics.test.ts"],
+    M2: ["tests/agentQualityMetrics.test.ts"],
+    M3: ["README.md"],
+    M4: ["docs/RELEASE.md"],
+    M5: ["docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"],
+    C1: ["scripts/run-v0-2-quality-gate.mjs"],
+    C2: ["src/renderer/src/components/ExtensionsPanel.tsx"],
+    C3: ["tests/agentQualityMetricsLog.test.ts"]
+  };
+
+  return changedFilesByTaskId[taskId] ?? [`docs/${taskId}.md`];
 }
 
 function createAllValidationResults(passed: boolean) {

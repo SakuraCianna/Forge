@@ -12,6 +12,54 @@ const REQUIRED_VALIDATION_COMMANDS = {
   build: "npm run build",
   lint: "npm run lint"
 };
+const TASK_ALLOWED_FILE_RULES = {
+  S1: [
+    { type: "exact", value: "README.md" },
+    { type: "exact", value: "README.en.md" },
+    { type: "exact", value: "docs/RELEASE.md" }
+  ],
+  S2: [{ type: "exact", value: "docs/RELEASE.md" }],
+  S3: [
+    { type: "exact", value: "README.md" },
+    { type: "exact", value: "README.en.md" }
+  ],
+  S4: [{ type: "exact", value: "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md" }],
+  S5: [
+    { type: "exact", value: "README.md" },
+    { type: "exact", value: "README.en.md" }
+  ],
+  M1: [{ type: "exact", value: "tests/agentQualityMetrics.test.ts" }],
+  M2: [{ type: "exact", value: "tests/agentQualityMetrics.test.ts" }],
+  M3: [
+    { type: "exact", value: "README.md" },
+    { type: "exact", value: "README.en.md" },
+    { type: "exact", value: "docs/RELEASE.md" },
+    { type: "exact", value: "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md" }
+  ],
+  M4: [
+    { type: "exact", value: "docs/RELEASE.md" },
+    { type: "exact", value: "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md" }
+  ],
+  M5: [{ type: "exact", value: "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md" }],
+  C1: [
+    { type: "exact", value: "scripts/run-v0-2-quality-gate.mjs" },
+    { type: "exact", value: "package.json" },
+    { type: "exact", value: "README.md" },
+    { type: "exact", value: "README.en.md" }
+  ],
+  C2: [
+    { type: "exact", value: "src/main/agentQualityMetricsLog.ts" },
+    { type: "exact", value: "src/main/builtInTools/builtInToolIpc.ts" },
+    { type: "exact", value: "src/preload/index.ts" },
+    { type: "exact", value: "src/renderer/src/components/ExtensionsPanel.tsx" },
+    { type: "exact", value: "tests/agentQualityMetricsLog.test.ts" }
+  ],
+  C3: [
+    { type: "prefix", value: "tests/" },
+    { type: "prefix", value: "src/renderer/src/agent/" },
+    { type: "exact", value: "src/renderer/src/App.tsx" }
+  ]
+};
 const ISO_TIMESTAMP_WITH_TIMEZONE_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u;
 const REGRESSION_USABLE_METRIC_IDS = [
@@ -384,6 +432,15 @@ function getRegressionRunInvalidReasons(value) {
     reasons.push("changedFiles");
   }
 
+  if (
+    typeof value.taskId === "string" &&
+    value.wrongFileModified === false &&
+    isChangedFileList(value.changedFiles) &&
+    hasOutOfScopeChangedFiles(value.taskId, value.changedFiles)
+  ) {
+    reasons.push("changedFiles.outOfScope");
+  }
+
   if (!Array.isArray(value.validations)) {
     reasons.push("validations");
   } else {
@@ -527,7 +584,7 @@ function isWorkspaceRelativeFilePath(value) {
     return false;
   }
 
-  const trimmed = value.trim();
+  const trimmed = normalizeChangedFilePath(value);
 
   if (!trimmed || trimmed.includes("\0")) {
     return false;
@@ -538,6 +595,32 @@ function isWorkspaceRelativeFilePath(value) {
   }
 
   return !trimmed.split(/[\\/]+/u).includes("..");
+}
+
+function hasOutOfScopeChangedFiles(taskId, changedFiles) {
+  const rules = TASK_ALLOWED_FILE_RULES[taskId];
+
+  if (!rules) {
+    return false;
+  }
+
+  return changedFiles.some((filePath) => !isAllowedChangedFile(filePath, rules));
+}
+
+function isAllowedChangedFile(filePath, rules) {
+  const normalizedPath = normalizeChangedFilePath(filePath);
+
+  return rules.some((rule) => {
+    if (rule.type === "exact") {
+      return normalizedPath === rule.value;
+    }
+
+    return normalizedPath.startsWith(rule.value);
+  });
+}
+
+function normalizeChangedFilePath(value) {
+  return value.trim().replace(/\\/gu, "/").replace(/\/+/gu, "/");
 }
 
 function isTaskComplexity(value) {

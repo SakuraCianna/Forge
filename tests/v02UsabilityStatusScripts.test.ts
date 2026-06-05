@@ -523,7 +523,7 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     completedInFirstAttempt: !recoveredTask,
     wrongFileModified: false,
     unrelatedCodeChanged: false,
-    changedFiles: [`docs/${taskId}.md`],
+    changedFiles: createChangedFilesForTask(taskId),
     validations: [
       { kind: "typecheck", command: "npm run typecheck", exitCode: 0, passed: true },
       { kind: "build", command: "npm run build", exitCode: 0, passed: true },
@@ -531,6 +531,26 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     ],
     failureRecovered: recoveredTask ? true : null
   };
+}
+
+function createChangedFilesForTask(taskId: string) {
+  const changedFilesByTaskId: Record<string, string[]> = {
+    S1: ["README.md"],
+    S2: ["docs/RELEASE.md"],
+    S3: ["README.md"],
+    S4: ["docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"],
+    S5: ["README.md"],
+    M1: ["tests/agentQualityMetrics.test.ts"],
+    M2: ["tests/agentQualityMetrics.test.ts"],
+    M3: ["README.md"],
+    M4: ["docs/RELEASE.md"],
+    M5: ["docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"],
+    C1: ["scripts/run-v0-2-quality-gate.mjs"],
+    C2: ["src/renderer/src/components/ExtensionsPanel.tsx"],
+    C3: ["tests/agentQualityMetricsLog.test.ts"]
+  };
+
+  return changedFilesByTaskId[taskId] ?? [`docs/${taskId}.md`];
 }
 
 async function writeInstallerSmokeReport(filePath: string, installerFixture: string) {
