@@ -361,6 +361,8 @@ Current evidence: `npm run quality:v0.2` passed on 2026-06-05. It ran `npm test`
 
 Additional current evidence: `npm test` passed 86/86 and `npm run release:check` passed on 2026-06-05 after adding the strict regression and installer smoke gate checks.
 
+Latest current evidence: `npm run quality:v0.2` passed again on 2026-06-05 after adding evidence templates. The generated Windows installer was `release\Forge-0.2.0-x64-setup.exe` with size 144,328,757 bytes. Packaging still reports `duplicate-dependencies` and `dep0190-shell-args` warnings, both already tracked as known packaging warnings.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.
