@@ -1,0 +1,174 @@
+{
+  "forgeVersion": "0.2.0",
+  "runs": [
+    {
+      "taskId": "S1",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "S2",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "S3",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "S4",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "S5",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M1",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M2",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M3",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M4",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M5",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "C1",
+      "complexity": "complex",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "C2",
+      "complexity": "complex",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "C3",
+      "complexity": "complex",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "validations": [
+        { "kind": "typecheck", "passed": false },
+        { "kind": "build", "passed": false },
+        { "kind": "lint", "passed": false }
+      ],
+      "failureRecovered": null
+    }
+  ]
+}

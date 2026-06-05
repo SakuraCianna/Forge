@@ -256,6 +256,10 @@ docs/
   RELEASE.md         Windows 安装包发布流程
   V0_2_REGRESSION_TASKS.md
                     v0.2.x 真实任务回归集
+  V0_2_REGRESSION_RESULTS.example.json
+                    v0.2.x 真实任务回归结果模板, 不是正式证据
+  V0_2_INSTALLER_SMOKE.example.json
+                    v0.2.x 安装包烟测报告模板, 不是正式证据
   superpowers/plans/2026-06-05-v0-2-stabilization.md
                     v0.2.x 稳定化指标和实施计划
 ```

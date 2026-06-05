@@ -1,0 +1,14 @@
+{
+  "installerPath": "release/Forge-0.2.0-x64-setup.exe",
+  "testedAt": "2026-06-05T12:00:00.000Z",
+  "platform": "Windows 11",
+  "checks": {
+    "appLaunches": false,
+    "projectOpens": false,
+    "filePreviewWorks": false,
+    "safeCommandRuns": false,
+    "generatedDiffAcceptRejectWorks": false,
+    "gitStatusViewOpens": false,
+    "highRiskRequiresConfirmation": false
+  }
+}

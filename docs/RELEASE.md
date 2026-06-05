@@ -58,6 +58,8 @@ gh release create v0.2.0 release/Forge-0.2.0-x64-setup.exe --title "Forge v0.2.0
 npm run quality:installer-smoke
 ```
 
+可以从 `docs\V0_2_INSTALLER_SMOKE.example.json` 复制结构开始填写。示例文件不是证据, 默认值不会满足安装烟测门禁; 只有实际安装并完成清单后, 才能生成正式的 `docs\V0_2_INSTALLER_SMOKE.json`。
+
 记录格式:
 
 ```json

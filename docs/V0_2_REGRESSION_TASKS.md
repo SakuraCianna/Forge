@@ -17,6 +17,8 @@
 
 人工或半自动执行后, 可以把结果记录到 `docs/V0_2_REGRESSION_RESULTS.json`, 再运行 `npm run quality:regression` 汇总为 Agent 质量指标。该命令只读取结果文件并输出摘要, 不会写入应用指标日志。
 
+可以从 `docs/V0_2_REGRESSION_RESULTS.example.json` 复制结构开始填写。示例文件不是证据, 默认值也不会满足可用级门禁; 只有实际完成每个固定任务并记录真实结果后, 才能生成正式的 `docs/V0_2_REGRESSION_RESULTS.json`。
+
 ```json
 {
   "forgeVersion": "0.2.0",

@@ -222,6 +222,10 @@ docs/
   RELEASE.md         Windows installer release workflow
   V0_2_REGRESSION_TASKS.md
                     v0.2.x real-task regression set
+  V0_2_REGRESSION_RESULTS.example.json
+                    v0.2.x real-task regression results template, not evidence
+  V0_2_INSTALLER_SMOKE.example.json
+                    v0.2.x installer smoke report template, not evidence
   superpowers/plans/2026-06-05-v0-2-stabilization.md
                     v0.2.x stabilization metrics and implementation plan
 ```
