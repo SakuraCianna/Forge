@@ -28,7 +28,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "S2",
@@ -57,7 +57,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "S3",
@@ -86,7 +86,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "S4",
@@ -115,7 +115,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "S5",
@@ -144,7 +144,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "M1",
@@ -173,7 +173,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "M2",
@@ -202,7 +202,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "M3",
@@ -231,7 +231,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "M4",
@@ -260,7 +260,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "M5",
@@ -289,7 +289,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "C1",
@@ -318,7 +318,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "C2",
@@ -347,7 +347,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     },
     {
       "taskId": "C3",
@@ -376,7 +376,7 @@
           "passed": false
         }
       ],
-      "failureRecovered": null
+      "failureRecovered": false
     }
   ]
 }

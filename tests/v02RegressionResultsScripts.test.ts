@@ -1017,6 +1017,63 @@ test("v0.2 regression results strict gate fails when fixed tasks are duplicated"
   );
 });
 
+test("v0.2 regression results strict gate fails when failed path omits recovery outcome", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-missing-recovery-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            ...createRegressionRun("M1", "medium", false),
+            failureRecovered: null
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+  };
+
+  assert.equal(summary.totalRawRuns, 1);
+  assert.equal(summary.totalRuns, 0);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "M1", reasons: ["failureRecoveredMissingAfterFailure"] }
+  ]);
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/summarize-v0-2-regression-results.mjs",
+        "--file",
+        resultsFile,
+        "--require-complete-set",
+        "--require-usable-regression"
+      ],
+      { windowsHide: true }
+    ),
+    /Command failed/
+  );
+});
+
 test("v0.2 regression results strict gate fails when report version does not match package version", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-version-"));
   const resultsFile = join(directory, "regression-results.json");

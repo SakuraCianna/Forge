@@ -388,6 +388,14 @@ function getRegressionRunInvalidReasons(value) {
     ) {
       reasons.push("failureRecoveredWithoutFailure");
     }
+
+    if (
+      !hasInvalidValidation &&
+      value.completedInFirstAttempt === false &&
+      typeof value.failureRecovered !== "boolean"
+    ) {
+      reasons.push("failureRecoveredMissingAfterFailure");
+    }
   }
 
   if (
