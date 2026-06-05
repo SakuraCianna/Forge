@@ -7,6 +7,11 @@ import { createAgentQualityMetricSnapshot } from "../.tmp-test/src/shared/agentQ
 
 const REQUIRED_TASK_IDS = ["S1", "S2", "S3", "S4", "S5", "M1", "M2", "M3", "M4", "M5", "C1", "C2", "C3"];
 const REQUIRED_VALIDATION_KINDS = ["typecheck", "build", "lint"];
+const REQUIRED_VALIDATION_COMMANDS = {
+  typecheck: "npm run typecheck",
+  build: "npm run build",
+  lint: "npm run lint"
+};
 const REGRESSION_USABLE_METRIC_IDS = [
   "simpleTaskFirstPassCompletionRate",
   "mediumTaskFirstPassCompletionRate",
@@ -446,6 +451,15 @@ function getValidationInvalidReasons(value) {
     reasons.push("validations.command");
   }
 
+  if (
+    isValidationKind(value.kind) &&
+    typeof value.command === "string" &&
+    value.command.trim().length > 0 &&
+    normalizeCommand(value.command) !== REQUIRED_VALIDATION_COMMANDS[value.kind]
+  ) {
+    reasons.push("validations.commandForKind");
+  }
+
   if (!Number.isInteger(value.exitCode) || value.exitCode < 0) {
     reasons.push("validations.exitCode");
   }
@@ -508,6 +522,10 @@ function getExpectedTaskComplexity(taskId) {
 
 function isValidationKind(value) {
   return value === "typecheck" || value === "build" || value === "lint";
+}
+
+function normalizeCommand(value) {
+  return value.trim().replace(/\s+/gu, " ");
 }
 
 function hasFailedValidationResult(validations) {
