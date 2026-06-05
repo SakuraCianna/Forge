@@ -414,6 +414,8 @@ Latest changed-file evidence hardening: strict v0.2 regression reports now requi
 
 Latest status changed-file review hardening: `npm run quality:v0.2:status` now includes flagged `regression.details.fileModificationEvidence` entries and prints them in the text details. A below-usable status can now point directly to the task IDs and changed files behind wrong-file or unrelated-change evidence.
 
+Latest status mixed-blocker classification hardening: `npm run quality:v0.2:status` now reports `unproven` only when every blocker is missing evidence. If one report is missing but another existing report is invalid, failed, or below usable, the overall classification is `blocked` while preserving all blockers.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.

@@ -225,6 +225,78 @@ test("v0.2 usability status reports invalid regression evidence separately from 
   assert.match(textOutput, /Blocking metrics: none/u);
 });
 
+test("v0.2 usability status stays blocked when invalid evidence is mixed with missing evidence", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-invalid-and-missing-"));
+  const docsDirectory = join(directory, "docs");
+  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+
+  await mkdir(docsDirectory, { recursive: true });
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(
+    regressionFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.1",
+        runs: [
+          ...["S1", "S2", "S3", "S4", "S5"].map((taskId) => createRegressionRun(taskId, "simple")),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) => createRegressionRun(taskId, "medium")),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex"))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(process.execPath, [scriptPath, "--json"], {
+    cwd: directory,
+    windowsHide: true
+  });
+  const summary = JSON.parse(stdout) as {
+    classification: string;
+    passed: boolean;
+    blockers: string[];
+    regression: {
+      status: string;
+      details?: {
+        invalidMetadata: string[];
+      };
+    };
+    installerSmoke: { status: string };
+  };
+
+  assert.deepEqual(summary, {
+    classification: "blocked",
+    passed: false,
+    blockers: ["regression-results-invalid", "installer-smoke-missing"],
+    regression: {
+      status: "invalid",
+      details: {
+        invalidMetadata: ["forgeVersion"],
+        invalidRunCount: 0,
+        invalidRuns: [],
+        duplicateTaskIds: [],
+        missingTaskIds: [],
+        unexpectedTaskIds: [],
+        blockingMetricIds: [],
+        unprovenMetricIds: [],
+        fileModificationEvidence: []
+      }
+    },
+    installerSmoke: { status: "missing" }
+  });
+
+  const { stdout: textOutput } = await execFileAsync(process.execPath, [scriptPath], {
+    cwd: directory,
+    windowsHide: true
+  });
+
+  assert.match(textOutput, /v0\.2 usability status: blocked/u);
+  assert.match(textOutput, /Blockers: regression-results-invalid, installer-smoke-missing/u);
+});
+
 test("v0.2 usability status surfaces changed-file evidence for below-threshold regression metrics", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-below-regression-"));
   const releaseDirectory = join(directory, "release");

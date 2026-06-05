@@ -19,7 +19,7 @@ const blockers = [
   ...getInstallerSmokeBlockers(installerSmokeStatus)
 ];
 const summary = {
-  classification: blockers.length === 0 ? "evidence-ready" : blockers.some((blocker) => blocker.endsWith("-missing")) ? "unproven" : "blocked",
+  classification: classifyBlockers(blockers),
   passed: blockers.length === 0,
   blockers,
   regression: createRegressionSummary(regressionStatus, regressionResult.summary),
@@ -141,6 +141,14 @@ function hasItems(value) {
 
 function isPositiveNumber(value) {
   return typeof value === "number" && value > 0;
+}
+
+function classifyBlockers(blockers) {
+  if (blockers.length === 0) {
+    return "evidence-ready";
+  }
+
+  return blockers.every((blocker) => blocker.endsWith("-missing")) ? "unproven" : "blocked";
 }
 
 function createRegressionSummary(status, regressionSummary) {
