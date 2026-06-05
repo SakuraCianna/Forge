@@ -184,7 +184,7 @@ $env:FORGE_REGRESSION_RESULTS_FILE = "docs\V0_2_REGRESSION_RESULTS.json"
 npm run quality:regression
 ```
 
-When real-task regression results are used as a v0.2.x usability evidence gate, run the strict version. It requires `forgeVersion` to match the current `package.json` version, exactly one valid result for every fixed task in S1-S5, M1-M5, and C1-C3, each validation to record the actual command and exit code consistently with `passed`, and all real-task regression metrics must meet the usable threshold. Missing files, malformed report shape, version mismatch, incomplete task coverage, unexpected task IDs, duplicate task IDs, invalid runs, zero-denominator metrics, or below-usable metrics exit non-zero:
+When real-task regression results are used as a v0.2.x usability evidence gate, run the strict version. It requires `forgeVersion` to match the current `package.json` version, exactly one valid result for every fixed task in S1-S5, M1-M5, and C1-C3, each run to include exactly one `typecheck`, one `build`, and one `lint` validation, each validation to record the actual command and exit code consistently with `passed`, and all real-task regression metrics must meet the usable threshold. Missing files, malformed report shape, version mismatch, incomplete task coverage, unexpected task IDs, duplicate task IDs, invalid runs, missing or duplicated validation kinds, zero-denominator metrics, or below-usable metrics exit non-zero:
 
 ```powershell
 npm run quality:regression:gate
