@@ -180,6 +180,12 @@ test("v0.2 usability status reports invalid regression evidence separately from 
         unexpectedTaskIds: string[];
         blockingMetricIds: string[];
         unprovenMetricIds: string[];
+        fileModificationEvidence: Array<{
+          taskId: string | null;
+          changedFiles: string[];
+          wrongFileModified: boolean;
+          unrelatedCodeChanged: boolean;
+        }>;
       };
     };
     installerSmoke: { status: string };
@@ -199,7 +205,8 @@ test("v0.2 usability status reports invalid regression evidence separately from 
         missingTaskIds: ["S1"],
         unexpectedTaskIds: [],
         blockingMetricIds: [],
-        unprovenMetricIds: []
+        unprovenMetricIds: [],
+        fileModificationEvidence: []
       }
     },
     installerSmoke: { status: "passed" }
@@ -216,6 +223,114 @@ test("v0.2 usability status reports invalid regression evidence separately from 
   assert.match(textOutput, /Invalid run details: 0:S1 \[validations\.commandForKind\]/u);
   assert.match(textOutput, /Duplicate task IDs: none/u);
   assert.match(textOutput, /Blocking metrics: none/u);
+});
+
+test("v0.2 usability status surfaces changed-file evidence for below-threshold regression metrics", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-below-regression-"));
+  const releaseDirectory = join(directory, "release");
+  const docsDirectory = join(directory, "docs");
+  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
+  const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const installerFixture = "fake installer fixture";
+
+  await mkdir(releaseDirectory, { recursive: true });
+  await mkdir(docsDirectory, { recursive: true });
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(installerPath, installerFixture, "utf8");
+  await writeFile(
+    regressionFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            ...createRegressionRun("S1", "simple"),
+            completedInFirstAttempt: false,
+            wrongFileModified: true,
+            unrelatedCodeChanged: true,
+            changedFiles: ["src/main/unexpected.ts"],
+            failureRecovered: true
+          },
+          ...["S2", "S3", "S4", "S5"].map((taskId) => createRegressionRun(taskId, "simple")),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) => createRegressionRun(taskId, "medium")),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex"))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  await writeInstallerSmokeReport(smokeFile, installerFixture);
+
+  const { stdout } = await execFileAsync(process.execPath, [scriptPath, "--json"], {
+    cwd: directory,
+    windowsHide: true
+  });
+  const summary = JSON.parse(stdout) as {
+    classification: string;
+    passed: boolean;
+    blockers: string[];
+    regression: {
+      status: string;
+      details?: {
+        invalidMetadata: string[];
+        invalidRunCount: number;
+        invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+        duplicateTaskIds: string[];
+        missingTaskIds: string[];
+        unexpectedTaskIds: string[];
+        blockingMetricIds: string[];
+        unprovenMetricIds: string[];
+        fileModificationEvidence: Array<{
+          taskId: string;
+          changedFiles: string[];
+          wrongFileModified: boolean;
+          unrelatedCodeChanged: boolean;
+        }>;
+      };
+    };
+    installerSmoke: { status: string };
+  };
+
+  assert.deepEqual(summary, {
+    classification: "blocked",
+    passed: false,
+    blockers: ["regression-results-below-usable"],
+    regression: {
+      status: "failed",
+      details: {
+        invalidMetadata: [],
+        invalidRunCount: 0,
+        invalidRuns: [],
+        duplicateTaskIds: [],
+        missingTaskIds: [],
+        unexpectedTaskIds: [],
+        blockingMetricIds: ["simpleTaskFirstPassCompletionRate"],
+        unprovenMetricIds: [],
+        fileModificationEvidence: [
+          {
+            taskId: "S1",
+            changedFiles: ["src/main/unexpected.ts"],
+            wrongFileModified: true,
+            unrelatedCodeChanged: true
+          }
+        ]
+      }
+    },
+    installerSmoke: { status: "passed" }
+  });
+
+  const { stdout: textOutput } = await execFileAsync(process.execPath, [scriptPath], {
+    cwd: directory,
+    windowsHide: true
+  });
+
+  assert.match(textOutput, /Regression details:/u);
+  assert.match(textOutput, /Blocking metrics: simpleTaskFirstPassCompletionRate/u);
+  assert.match(textOutput, /Changed files: S1 \[src\/main\/unexpected\.ts\] \(wrong-file, unrelated-change\)/u);
 });
 
 test("v0.2 usability status reports invalid installer smoke evidence separately from failed smoke checks", async () => {

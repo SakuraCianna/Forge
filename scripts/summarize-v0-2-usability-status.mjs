@@ -157,7 +157,8 @@ function createRegressionSummary(status, regressionSummary) {
       missingTaskIds: asArray(regressionSummary?.coverage?.missingTaskIds),
       unexpectedTaskIds: asArray(regressionSummary?.coverage?.unexpectedTaskIds),
       blockingMetricIds: asArray(regressionSummary?.gate?.blockingMetricIds),
-      unprovenMetricIds: asArray(regressionSummary?.gate?.unprovenMetricIds)
+      unprovenMetricIds: asArray(regressionSummary?.gate?.unprovenMetricIds),
+      fileModificationEvidence: asFileModificationEvidence(regressionSummary?.fileModificationEvidence)
     };
   }
 
@@ -203,6 +204,22 @@ function asInvalidRuns(value) {
       taskId: typeof run.taskId === "string" ? run.taskId : null,
       reasons: asArray(run.reasons)
     }));
+}
+
+function asFileModificationEvidence(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => isRecord(entry))
+    .map((entry) => ({
+      taskId: typeof entry.taskId === "string" ? entry.taskId : null,
+      changedFiles: asArray(entry.changedFiles).filter((filePath) => typeof filePath === "string"),
+      wrongFileModified: entry.wrongFileModified === true,
+      unrelatedCodeChanged: entry.unrelatedCodeChanged === true
+    }))
+    .filter((entry) => entry.changedFiles.length > 0 && (entry.wrongFileModified || entry.unrelatedCodeChanged));
 }
 
 function isRecord(value) {
@@ -273,6 +290,7 @@ function writeRegressionDetails(details) {
   console.log(`Unexpected task IDs: ${formatList(details.unexpectedTaskIds)}`);
   console.log(`Blocking metrics: ${formatList(details.blockingMetricIds)}`);
   console.log(`Unproven metrics: ${formatList(details.unprovenMetricIds)}`);
+  console.log(`Changed files: ${formatFileModificationEvidence(details.fileModificationEvidence)}`);
 }
 
 function writeInstallerSmokeDetails(details) {
@@ -301,5 +319,22 @@ function formatInvalidRuns(value) {
           return `${label} [${formatList(run.reasons)}]`;
         })
         .join(", ")
+    : "none";
+}
+
+function formatFileModificationEvidence(value) {
+  return value.length > 0
+    ? value
+        .map((entry) => {
+          const label = entry.taskId ?? "unknown";
+          const flags = [
+            entry.wrongFileModified ? "wrong-file" : null,
+            entry.unrelatedCodeChanged ? "unrelated-change" : null
+          ].filter(Boolean);
+          const suffix = flags.length > 0 ? ` (${flags.join(", ")})` : "";
+
+          return `${label} [${formatList(entry.changedFiles)}]${suffix}`;
+        })
+        .join("; ")
     : "none";
 }
