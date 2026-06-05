@@ -392,7 +392,7 @@ Latest installer version binding hardening: installer smoke reports now require 
 
 Latest status blocker classification hardening: `npm run quality:v0.2:status` now classifies invalid regression evidence separately from below-usable metrics, and invalid installer smoke evidence separately from failed manual smoke checks. This makes the fast status command more useful for deciding whether to fix report shape/metadata first or rerun real tasks/manual smoke flows.
 
-Latest status review detail hardening: `npm run quality:v0.2:status -- --json` now includes `regression.details` and `installerSmoke.details` when evidence files exist but do not pass. These details surface invalid metadata, invalid run counts, duplicate and missing task IDs, blocking metric IDs, failed smoke checks, and installer artifact/SHA status so the next regression pass can repair evidence without re-reading every lower-level command log.
+Latest status review detail hardening: `npm run quality:v0.2:status` now prints text detail sections, and `npm run quality:v0.2:status -- --json` includes `regression.details` and `installerSmoke.details`, when evidence files exist but do not pass. These details surface invalid metadata, invalid run counts, duplicate and missing task IDs, blocking metric IDs, failed smoke checks, and installer artifact/SHA status so the next regression pass can repair evidence without re-reading every lower-level command log.
 
 - [ ] **Step 3: Run manual installer smoke test**
 

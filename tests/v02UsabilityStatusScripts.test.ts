@@ -194,6 +194,17 @@ test("v0.2 usability status reports invalid regression evidence separately from 
     },
     installerSmoke: { status: "passed" }
   });
+
+  const { stdout: textOutput } = await execFileAsync(process.execPath, [scriptPath], {
+    cwd: directory,
+    windowsHide: true
+  });
+
+  assert.match(textOutput, /Regression details:/u);
+  assert.match(textOutput, /Invalid metadata: forgeVersion/u);
+  assert.match(textOutput, /Invalid runs: 0/u);
+  assert.match(textOutput, /Duplicate task IDs: none/u);
+  assert.match(textOutput, /Blocking metrics: none/u);
 });
 
 test("v0.2 usability status reports invalid installer smoke evidence separately from failed smoke checks", async () => {
@@ -290,6 +301,18 @@ test("v0.2 usability status reports invalid installer smoke evidence separately 
       }
     }
   });
+
+  const { stdout: textOutput } = await execFileAsync(process.execPath, [scriptPath], {
+    cwd: directory,
+    windowsHide: true
+  });
+
+  assert.match(textOutput, /Installer smoke details:/u);
+  assert.match(textOutput, /Missing checks: none/u);
+  assert.match(textOutput, /Failed checks: none/u);
+  assert.match(textOutput, /Invalid metadata: testedAt, platform/u);
+  assert.match(textOutput, /Installer artifact: found/u);
+  assert.match(textOutput, /Installer SHA-256: matched/u);
 });
 
 function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "complex") {

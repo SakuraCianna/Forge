@@ -235,4 +235,40 @@ function writeSummary(summary, asJson) {
   if (summary.blockers.length > 0) {
     console.log(`Blockers: ${summary.blockers.join(", ")}`);
   }
+
+  writeRegressionDetails(summary.regression.details);
+  writeInstallerSmokeDetails(summary.installerSmoke.details);
+}
+
+function writeRegressionDetails(details) {
+  if (!details) {
+    return;
+  }
+
+  console.log("Regression details:");
+  console.log(`Invalid metadata: ${formatList(details.invalidMetadata)}`);
+  console.log(`Invalid runs: ${details.invalidRunCount}`);
+  console.log(`Duplicate task IDs: ${formatList(details.duplicateTaskIds)}`);
+  console.log(`Missing task IDs: ${formatList(details.missingTaskIds)}`);
+  console.log(`Unexpected task IDs: ${formatList(details.unexpectedTaskIds)}`);
+  console.log(`Blocking metrics: ${formatList(details.blockingMetricIds)}`);
+  console.log(`Unproven metrics: ${formatList(details.unprovenMetricIds)}`);
+}
+
+function writeInstallerSmokeDetails(details) {
+  if (!details) {
+    return;
+  }
+
+  console.log("Installer smoke details:");
+  console.log(`Missing checks: ${formatList(details.missingChecks)}`);
+  console.log(`Failed checks: ${formatList(details.failedChecks)}`);
+  console.log(`Missing metadata: ${formatList(details.missingMetadata)}`);
+  console.log(`Invalid metadata: ${formatList(details.invalidMetadata)}`);
+  console.log(`Installer artifact: ${details.installerExists ? "found" : "missing"}`);
+  console.log(`Installer SHA-256: ${details.installerSha256Matches ? "matched" : "missing-or-mismatched"}`);
+}
+
+function formatList(value) {
+  return value.length > 0 ? value.join(", ") : "none";
 }
