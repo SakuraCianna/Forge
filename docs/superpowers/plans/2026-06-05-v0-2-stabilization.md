@@ -382,6 +382,8 @@ Latest regression timestamp hardening: each v0.2 regression run now requires a t
 
 Latest first-pass evidence hardening: strict v0.2 regression reports now reject runs where `completedInFirstAttempt` is `true` but any recorded validation failed. This prevents first-pass completion metrics from being inflated by samples that still failed typecheck, build, or lint.
 
+Latest recovery evidence hardening: strict v0.2 regression reports now reject `failureRecovered` booleans on once-completed runs whose validations all passed. Recovery-rate denominators must come from tasks with an actual non-first-pass or failed path, not from clean first-pass successes.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.

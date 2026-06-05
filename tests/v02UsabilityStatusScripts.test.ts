@@ -121,11 +121,13 @@ test("v0.2 usability status reports evidence-ready when strict evidence files pa
 });
 
 function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "complex") {
+  const recoveredTask = taskId === "M1";
+
   return {
     taskId,
     createdAt,
     complexity,
-    completedInFirstAttempt: true,
+    completedInFirstAttempt: !recoveredTask,
     wrongFileModified: false,
     unrelatedCodeChanged: false,
     validations: [
@@ -133,7 +135,7 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
       { kind: "build", command: "npm run build", exitCode: 0, passed: true },
       { kind: "lint", command: "npm run lint", exitCode: 0, passed: true }
     ],
-    failureRecovered: true
+    failureRecovered: recoveredTask ? true : null
   };
 }
 

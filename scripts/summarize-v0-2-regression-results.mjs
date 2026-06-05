@@ -363,12 +363,25 @@ function getRegressionRunInvalidReasons(value) {
   if (!Array.isArray(value.validations)) {
     reasons.push("validations");
   } else {
+    let hasInvalidValidation = false;
+
     for (const validation of value.validations) {
-      addUniqueReasons(reasons, getValidationInvalidReasons(validation));
+      const validationReasons = getValidationInvalidReasons(validation);
+      hasInvalidValidation = hasInvalidValidation || validationReasons.length > 0;
+      addUniqueReasons(reasons, validationReasons);
     }
 
-    if (value.completedInFirstAttempt === true && hasFailedValidationResult(value.validations)) {
+    if (!hasInvalidValidation && value.completedInFirstAttempt === true && hasFailedValidationResult(value.validations)) {
       reasons.push("completedInFirstAttemptValidationMismatch");
+    }
+
+    if (
+      !hasInvalidValidation &&
+      typeof value.failureRecovered === "boolean" &&
+      value.completedInFirstAttempt === true &&
+      !hasFailedValidationResult(value.validations)
+    ) {
+      reasons.push("failureRecoveredWithoutFailure");
     }
   }
 
