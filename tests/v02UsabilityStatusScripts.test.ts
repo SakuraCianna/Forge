@@ -141,7 +141,15 @@ test("v0.2 usability status reports invalid regression evidence separately from 
       {
         forgeVersion: "0.2.1",
         runs: [
-          ...["S1", "S2", "S3", "S4", "S5"].map((taskId) => createRegressionRun(taskId, "simple")),
+          {
+            ...createRegressionRun("S1", "simple"),
+            validations: [
+              { kind: "typecheck", command: "npm test", exitCode: 0, passed: true },
+              { kind: "build", command: "npm run build", exitCode: 0, passed: true },
+              { kind: "lint", command: "npm run lint", exitCode: 0, passed: true }
+            ]
+          },
+          ...["S2", "S3", "S4", "S5"].map((taskId) => createRegressionRun(taskId, "simple")),
           ...["M1", "M2", "M3", "M4", "M5"].map((taskId) => createRegressionRun(taskId, "medium")),
           ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex"))
         ]
@@ -166,6 +174,7 @@ test("v0.2 usability status reports invalid regression evidence separately from 
       details?: {
         invalidMetadata: string[];
         invalidRunCount: number;
+        invalidRuns: Array<{ index: number; taskId: string; reasons: string[] }>;
         duplicateTaskIds: string[];
         missingTaskIds: string[];
         unexpectedTaskIds: string[];
@@ -184,9 +193,10 @@ test("v0.2 usability status reports invalid regression evidence separately from 
       status: "invalid",
       details: {
         invalidMetadata: ["forgeVersion"],
-        invalidRunCount: 0,
+        invalidRunCount: 1,
+        invalidRuns: [{ index: 0, taskId: "S1", reasons: ["validations.commandForKind"] }],
         duplicateTaskIds: [],
-        missingTaskIds: [],
+        missingTaskIds: ["S1"],
         unexpectedTaskIds: [],
         blockingMetricIds: [],
         unprovenMetricIds: []
@@ -202,7 +212,8 @@ test("v0.2 usability status reports invalid regression evidence separately from 
 
   assert.match(textOutput, /Regression details:/u);
   assert.match(textOutput, /Invalid metadata: forgeVersion/u);
-  assert.match(textOutput, /Invalid runs: 0/u);
+  assert.match(textOutput, /Invalid runs: 1/u);
+  assert.match(textOutput, /Invalid run details: 0:S1 \[validations\.commandForKind\]/u);
   assert.match(textOutput, /Duplicate task IDs: none/u);
   assert.match(textOutput, /Blocking metrics: none/u);
 });

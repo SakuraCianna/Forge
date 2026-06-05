@@ -406,6 +406,8 @@ Latest status blocker classification hardening: `npm run quality:v0.2:status` no
 
 Latest status review detail hardening: `npm run quality:v0.2:status` now prints text detail sections, and `npm run quality:v0.2:status -- --json` includes `regression.details` and `installerSmoke.details`, when evidence files exist but do not pass. These details surface invalid metadata, invalid run counts, duplicate and missing task IDs, blocking metric IDs, failed smoke checks, and installer artifact/SHA status so the next regression pass can repair evidence without re-reading every lower-level command log.
 
+Latest status invalid-run detail hardening: `npm run quality:v0.2:status -- --json` now includes `regression.details.invalidRuns` with each invalid run index, task ID, and reasons, and text output prints the same detail. This lets real regression report cleanup target exact malformed samples without reopening the lower-level regression summary.
+
 Latest failure recovery denominator hardening: strict v0.2 regression reports now reject non-first-pass runs that leave `failureRecovered` as `null`. Any failed path must explicitly record `true` or `false`, so failure recovery rate evidence cannot disappear from the denominator by omission.
 
 - [ ] **Step 3: Run manual installer smoke test**

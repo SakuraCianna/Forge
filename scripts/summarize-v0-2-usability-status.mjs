@@ -152,6 +152,7 @@ function createRegressionSummary(status, regressionSummary) {
     summary.details = {
       invalidMetadata: asArray(regressionSummary?.metadata?.invalidMetadata),
       invalidRunCount: asNumber(regressionSummary?.invalidRunCount),
+      invalidRuns: asInvalidRuns(regressionSummary?.invalidRuns),
       duplicateTaskIds: asArray(regressionSummary?.duplicateTaskIds),
       missingTaskIds: asArray(regressionSummary?.coverage?.missingTaskIds),
       unexpectedTaskIds: asArray(regressionSummary?.coverage?.unexpectedTaskIds),
@@ -188,6 +189,24 @@ function asArray(value) {
 
 function asNumber(value) {
   return typeof value === "number" ? value : 0;
+}
+
+function asInvalidRuns(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((run) => isRecord(run))
+    .map((run) => ({
+      index: Number.isInteger(run.index) ? run.index : -1,
+      taskId: typeof run.taskId === "string" ? run.taskId : null,
+      reasons: asArray(run.reasons)
+    }));
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
 }
 
 function getRegressionBlockers(status) {
@@ -248,6 +267,7 @@ function writeRegressionDetails(details) {
   console.log("Regression details:");
   console.log(`Invalid metadata: ${formatList(details.invalidMetadata)}`);
   console.log(`Invalid runs: ${details.invalidRunCount}`);
+  console.log(`Invalid run details: ${formatInvalidRuns(details.invalidRuns)}`);
   console.log(`Duplicate task IDs: ${formatList(details.duplicateTaskIds)}`);
   console.log(`Missing task IDs: ${formatList(details.missingTaskIds)}`);
   console.log(`Unexpected task IDs: ${formatList(details.unexpectedTaskIds)}`);
@@ -271,4 +291,15 @@ function writeInstallerSmokeDetails(details) {
 
 function formatList(value) {
   return value.length > 0 ? value.join(", ") : "none";
+}
+
+function formatInvalidRuns(value) {
+  return value.length > 0
+    ? value
+        .map((run) => {
+          const label = run.taskId ? `${run.index}:${run.taskId}` : `${run.index}`;
+          return `${label} [${formatList(run.reasons)}]`;
+        })
+        .join(", ")
+    : "none";
 }
