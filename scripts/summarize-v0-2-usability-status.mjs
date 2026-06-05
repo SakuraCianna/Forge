@@ -94,6 +94,10 @@ function getRegressionStatus(result) {
     return "invalid";
   }
 
+  if (result.summary?.status === "ok" && hasInvalidRegressionEvidence(result.summary)) {
+    return "invalid";
+  }
+
   return "failed";
 }
 
@@ -110,7 +114,37 @@ function getInstallerSmokeStatus(result) {
     return "invalid";
   }
 
+  if (result.summary?.status === "ok" && hasInvalidInstallerSmokeEvidence(result.summary)) {
+    return "invalid";
+  }
+
   return "failed";
+}
+
+function hasInvalidRegressionEvidence(summary) {
+  return (
+    hasItems(summary?.metadata?.invalidMetadata) ||
+    isPositiveNumber(summary?.invalidRunCount) ||
+    isPositiveNumber(summary?.duplicateTaskCount) ||
+    summary?.coverage?.completeTaskSet === false
+  );
+}
+
+function hasInvalidInstallerSmokeEvidence(summary) {
+  return (
+    hasItems(summary?.missingMetadata) ||
+    hasItems(summary?.invalidMetadata) ||
+    hasItems(summary?.missingChecks) ||
+    summary?.installerExists === false
+  );
+}
+
+function hasItems(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function isPositiveNumber(value) {
+  return typeof value === "number" && value > 0;
 }
 
 function getRegressionBlockers(status) {

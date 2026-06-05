@@ -201,7 +201,7 @@ npm run quality:regression
 npm run quality:regression:gate
 ```
 
-`npm run quality:v0.2:status` 会快速汇总当前可用性证据状态, 不运行打包。缺少正式回归结果或安装烟测报告时会显示 `unproven`, 用于在运行完整门禁前快速确认还缺哪些证据。
+`npm run quality:v0.2:status` 会快速汇总当前可用性证据状态, 不运行打包。缺少正式回归结果或安装烟测报告时会显示 `unproven`, 证据文件存在但结构、元数据、任务覆盖或安装包绑定无效时会显示 `blocked` 并给出对应 blocker, 用于在运行完整门禁前快速确认还缺哪些证据或需要修复哪些报告。
 
 发布候选版本可以运行完整 v0.2.x 质量门禁。该命令会串联测试、发布检查、Built-in Tools QA、Browser QA 和 Windows 安装包生成, 因为包含打包所以耗时更长。没有显式设置 `FORGE_QA_PROJECT_ROOT` 时, 它会使用 `.tmp-test\quality-gate-sandbox` 作为受控 QA 沙箱:
 

@@ -121,6 +121,135 @@ test("v0.2 usability status reports evidence-ready when strict evidence files pa
   });
 });
 
+test("v0.2 usability status reports invalid regression evidence separately from below-threshold metrics", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-invalid-regression-"));
+  const releaseDirectory = join(directory, "release");
+  const docsDirectory = join(directory, "docs");
+  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
+  const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const installerFixture = "fake installer fixture";
+
+  await mkdir(releaseDirectory, { recursive: true });
+  await mkdir(docsDirectory, { recursive: true });
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(installerPath, installerFixture, "utf8");
+  await writeFile(
+    regressionFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.1",
+        runs: [
+          ...["S1", "S2", "S3", "S4", "S5"].map((taskId) => createRegressionRun(taskId, "simple")),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) => createRegressionRun(taskId, "medium")),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex"))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  await writeInstallerSmokeReport(smokeFile, installerFixture);
+
+  const { stdout } = await execFileAsync(process.execPath, [scriptPath, "--json"], {
+    cwd: directory,
+    windowsHide: true
+  });
+  const summary = JSON.parse(stdout) as {
+    classification: string;
+    passed: boolean;
+    blockers: string[];
+    regression: { status: string };
+    installerSmoke: { status: string };
+  };
+
+  assert.deepEqual(summary, {
+    classification: "blocked",
+    passed: false,
+    blockers: ["regression-results-invalid"],
+    regression: { status: "invalid" },
+    installerSmoke: { status: "passed" }
+  });
+});
+
+test("v0.2 usability status reports invalid installer smoke evidence separately from failed smoke checks", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-invalid-smoke-"));
+  const releaseDirectory = join(directory, "release");
+  const docsDirectory = join(directory, "docs");
+  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
+  const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const installerFixture = "fake installer fixture";
+
+  await mkdir(releaseDirectory, { recursive: true });
+  await mkdir(docsDirectory, { recursive: true });
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(installerPath, installerFixture, "utf8");
+  await writeFile(
+    regressionFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          ...["S1", "S2", "S3", "S4", "S5"].map((taskId) => createRegressionRun(taskId, "simple")),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) => createRegressionRun(taskId, "medium")),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex"))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  await writeFile(
+    smokeFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        installerSha256: createSha256(installerFixture),
+        testedAt: "2026-06-05",
+        platform: "not Windows",
+        checks: {
+          appLaunches: true,
+          projectOpens: true,
+          filePreviewWorks: true,
+          safeCommandRuns: true,
+          generatedDiffAcceptRejectWorks: true,
+          gitStatusViewOpens: true,
+          highRiskRequiresConfirmation: true
+        }
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(process.execPath, [scriptPath, "--json"], {
+    cwd: directory,
+    windowsHide: true
+  });
+  const summary = JSON.parse(stdout) as {
+    classification: string;
+    passed: boolean;
+    blockers: string[];
+    regression: { status: string };
+    installerSmoke: { status: string };
+  };
+
+  assert.deepEqual(summary, {
+    classification: "blocked",
+    passed: false,
+    blockers: ["installer-smoke-invalid"],
+    regression: { status: "passed" },
+    installerSmoke: { status: "invalid" }
+  });
+});
+
 function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "complex") {
   const recoveredTask = taskId === "M1";
 
@@ -138,6 +267,33 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     ],
     failureRecovered: recoveredTask ? true : null
   };
+}
+
+async function writeInstallerSmokeReport(filePath: string, installerFixture: string) {
+  await writeFile(
+    filePath,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        installerSha256: createSha256(installerFixture),
+        testedAt: "2026-06-05T12:00:00.000Z",
+        platform: "Windows 11",
+        checks: {
+          appLaunches: true,
+          projectOpens: true,
+          filePreviewWorks: true,
+          safeCommandRuns: true,
+          generatedDiffAcceptRejectWorks: true,
+          gitStatusViewOpens: true,
+          highRiskRequiresConfirmation: true
+        }
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
 }
 
 function createSha256(value: string): string {

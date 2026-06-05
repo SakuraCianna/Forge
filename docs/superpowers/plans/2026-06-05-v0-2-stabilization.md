@@ -390,6 +390,8 @@ Latest validation cardinality hardening: strict v0.2 regression reports now also
 
 Latest installer version binding hardening: installer smoke reports now require `forgeVersion` to match the current `package.json` version, in addition to the installer filename and SHA-256 checks. This makes manual smoke evidence explicitly tied to the released Forge version under review.
 
+Latest status blocker classification hardening: `npm run quality:v0.2:status` now classifies invalid regression evidence separately from below-usable metrics, and invalid installer smoke evidence separately from failed manual smoke checks. This makes the fast status command more useful for deciding whether to fix report shape/metadata first or rerun real tasks/manual smoke flows.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.
