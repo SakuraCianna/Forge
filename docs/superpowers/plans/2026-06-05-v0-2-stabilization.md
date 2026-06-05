@@ -22,7 +22,7 @@ This baseline was collected on 2026-06-05 on branch `codex/Forge`.
 - `npm run quality:metrics`: added as the local metric snapshot review entry point. When no `agent-quality-metrics.json` exists, it reports missing and keeps real task metrics unproven.
 - `npm run quality:regression`: added as the manual v0.2.x regression result review entry point. When no regression results file exists, it reports missing and keeps real task regression metrics unproven.
 - `npm run quality:regression:gate`: added as the strict real-task regression usability gate. Missing result files, malformed report shape, missing or mismatched `forgeVersion`, incomplete S1-S5/M1-M5/C1-C3 coverage, unexpected task IDs, duplicate task IDs, invalid runs, zero-denominator regression metrics, or below-usable regression metrics fail the gate.
-- `npm run quality:installer-smoke`: added as the Windows installer manual smoke report gate. Missing `docs\V0_2_INSTALLER_SMOKE.json`, malformed report shape, missing installer artifact, missing checks, failed checks, or an installer filename that does not match the current package version fail the gate.
+- `npm run quality:installer-smoke`: added as the Windows installer manual smoke report gate. Missing `docs\V0_2_INSTALLER_SMOKE.json`, malformed report shape, missing installer artifact, missing checks, failed checks, an installer filename that does not match the current package version, or an installer SHA-256 that does not match the current artifact fail the gate.
 - `npm run quality:v0.2:status`: added as the quick usability evidence status summary. It does not run packaging and currently reports `unproven` with blockers `regression-results-missing` and `installer-smoke-missing`.
 - `npm run quality:v0.2:usable`: added as the top-level usability gate. It fails fast through `quality:regression:gate` and `quality:installer-smoke` before running the longer `quality:v0.2` engineering and packaging gate.
 - Packaging warnings to track: electron-builder reported duplicate dependency references, and Node emitted `DEP0190` for child process shell arguments.
@@ -370,11 +370,13 @@ Latest reviewability progress: the Built-in Tools UI now renders all 13 agent qu
 
 Latest regression evidence hardening: strict v0.2 regression reports now require each validation result to record the actual command and exit code, and `passed` must match whether the exit code is 0. This prevents unchecked typecheck/build/lint claims from being accepted as formal usability evidence, but it does not create the missing real regression report.
 
+Latest installer evidence hardening: installer smoke reports now require `installerSha256`, and `npm run quality:installer-smoke` verifies it against the current installer artifact. This binds manual smoke evidence to the exact tested package, but it does not create the missing manual installer smoke report.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.
 
-After the manual check, record the result in `docs\V0_2_INSTALLER_SMOKE.json` and run:
+After the manual check, record the result and the installer SHA-256 in `docs\V0_2_INSTALLER_SMOKE.json` and run:
 
 ```powershell
 npm run quality:installer-smoke

@@ -198,7 +198,7 @@ For release candidates, run the complete v0.2.x quality gate. This command chain
 npm run quality:v0.2
 ```
 
-Usability candidates must run the stricter top-level gate. This command runs the real-task regression gate and installer manual smoke report gate first, then runs the complete engineering and packaging gate only after the evidence gates pass. If `docs\V0_2_REGRESSION_RESULTS.json` is missing, `docs\V0_2_INSTALLER_SMOKE.json` is missing, evidence report shape is malformed, versions do not match, smoke metadata is invalid, or any gate is below threshold, it exits non-zero:
+Usability candidates must run the stricter top-level gate. This command runs the real-task regression gate and installer manual smoke report gate first, then runs the complete engineering and packaging gate only after the evidence gates pass. If `docs\V0_2_REGRESSION_RESULTS.json` is missing, `docs\V0_2_INSTALLER_SMOKE.json` is missing, evidence report shape is malformed, versions do not match, smoke metadata is invalid, the installer SHA-256 does not match, or any gate is below threshold, it exits non-zero:
 
 ```powershell
 npm run quality:v0.2:usable

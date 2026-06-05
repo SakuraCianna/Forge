@@ -209,7 +209,7 @@ npm run quality:regression:gate
 npm run quality:v0.2
 ```
 
-可用级候选版本需要运行更严格的总门禁。该命令会先跑真实任务回归门禁和安装包人工烟测报告门禁, 证据齐全后再跑完整工程门禁和打包门禁; 如果缺少 `docs\V0_2_REGRESSION_RESULTS.json`, 缺少 `docs\V0_2_INSTALLER_SMOKE.json`, 证据报告结构错误、版本不匹配、烟测元数据无效, 或任一门禁未达标, 会以非 0 状态退出:
+可用级候选版本需要运行更严格的总门禁。该命令会先跑真实任务回归门禁和安装包人工烟测报告门禁, 证据齐全后再跑完整工程门禁和打包门禁; 如果缺少 `docs\V0_2_REGRESSION_RESULTS.json`, 缺少 `docs\V0_2_INSTALLER_SMOKE.json`, 证据报告结构错误、版本不匹配、烟测元数据无效、安装包 SHA-256 不匹配, 或任一门禁未达标, 会以非 0 状态退出:
 
 ```powershell
 npm run quality:v0.2:usable

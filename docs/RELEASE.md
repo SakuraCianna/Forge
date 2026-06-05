@@ -60,11 +60,18 @@ npm run quality:installer-smoke
 
 可以从 `docs\V0_2_INSTALLER_SMOKE.example.json` 复制结构开始填写。示例文件不是证据, 默认值不会满足安装烟测门禁; 只有实际安装并完成清单后, 才能生成正式的 `docs\V0_2_INSTALLER_SMOKE.json`。
 
+记录烟测报告前, 先绑定本次实际测试的安装包哈希:
+
+```powershell
+(Get-FileHash -Algorithm SHA256 -LiteralPath "release\Forge-0.2.0-x64-setup.exe").Hash.ToLowerInvariant()
+```
+
 记录格式:
 
 ```json
 {
   "installerPath": "release/Forge-0.2.0-x64-setup.exe",
+  "installerSha256": "填写上一步得到的 sha256",
   "testedAt": "2026-06-05T12:00:00.000Z",
   "platform": "Windows 11",
   "checks": {
@@ -79,7 +86,7 @@ npm run quality:installer-smoke
 }
 ```
 
-报告顶层必须是 JSON object, 且 `checks` 必须是 object。其中 `installerPath`, `testedAt`, `platform` 是必填元数据。`testedAt` 必须是可解析时间, `platform` 必须明确为 Windows 环境, `installerPath` 必须指向和当前 `package.json` 版本一致的 Windows 安装包。所有 `checks` 字段都必须存在且为 `true`, 否则 `npm run quality:installer-smoke` 会失败。
+报告顶层必须是 JSON object, 且 `checks` 必须是 object。其中 `installerPath`, `installerSha256`, `testedAt`, `platform` 是必填元数据。`testedAt` 必须是可解析时间, `platform` 必须明确为 Windows 环境, `installerPath` 必须指向和当前 `package.json` 版本一致的 Windows 安装包, `installerSha256` 必须和该安装包当前内容一致。所有 `checks` 字段都必须存在且为 `true`, 否则 `npm run quality:installer-smoke` 会失败。
 
 可用级候选版本需要同时通过真实任务回归门禁、安装包烟测门禁和工程门禁。总门禁会先检查真实证据, 证据通过后再执行耗时更长的完整工程和打包检查:
 

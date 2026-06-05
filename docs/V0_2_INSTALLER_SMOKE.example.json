@@ -1,5 +1,6 @@
 {
   "installerPath": "release/Forge-0.2.0-x64-setup.exe",
+  "installerSha256": "0000000000000000000000000000000000000000000000000000000000000000",
   "testedAt": "2026-06-05T12:00:00.000Z",
   "platform": "Windows 11",
   "checks": {

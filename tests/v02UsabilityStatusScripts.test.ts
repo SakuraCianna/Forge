@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -51,11 +52,12 @@ test("v0.2 usability status reports evidence-ready when strict evidence files pa
   const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
   const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
   const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
   await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
-  await writeFile(installerPath, "fake installer fixture", "utf8");
+  await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     regressionFile,
     JSON.stringify(
@@ -77,6 +79,7 @@ test("v0.2 usability status reports evidence-ready when strict evidence files pa
     JSON.stringify(
       {
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
         checks: {
@@ -130,4 +133,8 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     ],
     failureRecovered: true
   };
+}
+
+function createSha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }

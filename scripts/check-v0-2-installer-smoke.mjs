@@ -1,4 +1,5 @@
 // 本文件说明: 校验 v0.2.x Windows 安装包人工烟测报告, 不安装应用, 不写入系统状态
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -13,7 +14,7 @@ const REQUIRED_CHECKS = [
   "gitStatusViewOpens",
   "highRiskRequiresConfirmation"
 ];
-const REQUIRED_METADATA = ["installerPath", "testedAt", "platform"];
+const REQUIRED_METADATA = ["installerPath", "installerSha256", "testedAt", "platform"];
 
 const args = parseArgs(process.argv.slice(2));
 const reportPath = resolve(args.file ?? process.env.FORGE_INSTALLER_SMOKE_FILE ?? "docs/V0_2_INSTALLER_SMOKE.json");
@@ -32,6 +33,7 @@ try {
     missingMetadata: REQUIRED_METADATA,
     invalidMetadata: [],
     installerExists: false,
+    installerSha256Matches: false,
     message: error instanceof Error ? error.message : String(error)
   };
 
@@ -77,7 +79,8 @@ async function createSummary(filePath) {
       failedChecks: [],
       missingMetadata: REQUIRED_METADATA,
       invalidMetadata: [],
-      installerExists: false
+      installerExists: false,
+      installerSha256Matches: false
     };
   }
 
@@ -99,13 +102,15 @@ async function createSummary(filePath) {
   const installerPath = typeof report?.installerPath === "string" ? resolve(report.installerPath) : null;
   const installerExists = installerPath ? existsSync(installerPath) : false;
   const missingMetadata = REQUIRED_METADATA.filter((metadataId) => typeof report?.[metadataId] !== "string");
-  const invalidMetadata = getInvalidMetadata(report, packageVersion);
+  const installerSha256Matches = await verifyInstallerSha256(report, installerPath, installerExists);
+  const invalidMetadata = getInvalidMetadata(report, packageVersion, installerSha256Matches);
   const passed =
     missingChecks.length === 0 &&
     failedChecks.length === 0 &&
     missingMetadata.length === 0 &&
     invalidMetadata.length === 0 &&
-    installerExists;
+    installerExists &&
+    installerSha256Matches;
 
   return {
     status: "ok",
@@ -114,7 +119,8 @@ async function createSummary(filePath) {
     failedChecks,
     missingMetadata,
     invalidMetadata,
-    installerExists
+    installerExists,
+    installerSha256Matches
   };
 }
 
@@ -140,7 +146,24 @@ async function readPackageVersion() {
   throw new Error("Unable to read package version for installer smoke validation");
 }
 
-function getInvalidMetadata(report, packageVersion) {
+async function verifyInstallerSha256(report, installerPath, installerExists) {
+  if (
+    !installerPath ||
+    !installerExists ||
+    typeof report?.installerSha256 !== "string" ||
+    !isSha256(report.installerSha256)
+  ) {
+    return false;
+  }
+
+  const installerHash = createHash("sha256")
+    .update(await readFile(installerPath))
+    .digest("hex");
+
+  return installerHash === report.installerSha256.toLowerCase();
+}
+
+function getInvalidMetadata(report, packageVersion, installerSha256Matches) {
   const invalidMetadata = [];
 
   if (typeof report?.testedAt === "string" && Number.isNaN(Date.parse(report.testedAt))) {
@@ -160,11 +183,22 @@ function getInvalidMetadata(report, packageVersion) {
     invalidMetadata.push("installerPath");
   }
 
+  if (
+    typeof report?.installerSha256 === "string" &&
+    (!isSha256(report.installerSha256) || !installerSha256Matches)
+  ) {
+    invalidMetadata.push("installerSha256");
+  }
+
   return invalidMetadata;
 }
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+function isSha256(value) {
+  return /^[a-f0-9]{64}$/iu.test(value);
 }
 
 function isRecord(value) {
@@ -181,6 +215,7 @@ function writeSummary(summary, asJson) {
       missingMetadata,
       invalidMetadata,
       installerExists,
+      installerSha256Matches,
       message
     } = summary;
 
@@ -193,6 +228,7 @@ function writeSummary(summary, asJson) {
         missingMetadata,
         invalidMetadata,
         installerExists,
+        installerSha256Matches,
         message
       })
     );
@@ -202,6 +238,7 @@ function writeSummary(summary, asJson) {
   console.log(`v0.2 installer smoke: ${summary.passed ? "passed" : "failed"}`);
   console.log(`Status: ${summary.status}`);
   console.log(`Installer artifact: ${summary.installerExists ? "found" : "missing"}`);
+  console.log(`Installer SHA-256: ${summary.installerSha256Matches ? "matched" : "missing-or-mismatched"}`);
 
   if (summary.missingChecks.length > 0) {
     console.log(`Missing checks: ${summary.missingChecks.join(", ")}`);
