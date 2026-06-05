@@ -24,7 +24,7 @@ This baseline was collected on 2026-06-05 on branch `codex/Forge`.
 - `npm run quality:regression:gate`: added as the strict real-task regression usability gate. Missing result files, malformed report shape, missing or mismatched `forgeVersion`, incomplete S1-S5/M1-M5/C1-C3 coverage, unexpected task IDs, duplicate task IDs, invalid runs, missing or duplicated validation kinds, zero-denominator regression metrics, or below-usable regression metrics fail the gate.
 - `npm run quality:installer-smoke`: added as the Windows installer manual smoke report gate. Missing `docs\V0_2_INSTALLER_SMOKE.json`, malformed report shape, missing metadata, missing or mismatched `forgeVersion`, invalid `testedAt` or `platform` metadata, missing installer artifact, missing checks, failed checks, an installer filename that does not match the current package version, or an installer SHA-256 that does not match the current artifact fail the gate.
 - `npm run quality:v0.2:status`: added as the quick usability evidence status summary. It does not run packaging and currently reports `unproven` with blockers `regression-results-missing` and `installer-smoke-missing`.
-- `npm run quality:v0.2:usable`: added as the top-level usability gate. It fails fast through `quality:regression:gate` and `quality:installer-smoke` before running the longer `quality:v0.2` engineering and packaging gate.
+- `npm run quality:v0.2:usable`: added as the top-level usability gate. It first runs the quick usability evidence status preflight and prints all blockers together; only after evidence passes does it run `quality:regression:gate`, `quality:installer-smoke`, and the longer `quality:v0.2` engineering and packaging gate.
 - Packaging warnings to track: electron-builder reported duplicate dependency references, and Node emitted `DEP0190` for child process shell arguments.
 - Missing evidence: no local `agent-quality-metrics.json` snapshot, no complete `docs/V0_2_REGRESSION_RESULTS.json` fixed-task result set, and no `docs\V0_2_INSTALLER_SMOKE.json` manual installer smoke report were found, so real simple, medium, and complex task first-pass completion rates plus installer smoke confidence are not yet proven.
 
@@ -419,6 +419,8 @@ Latest status changed-file review hardening: `npm run quality:v0.2:status` now i
 Latest status mixed-blocker classification hardening: `npm run quality:v0.2:status` now reports `unproven` only when every blocker is missing evidence. If one report is missing but another existing report is invalid, failed, or below usable, the overall classification is `blocked` while preserving all blockers.
 
 Latest invalid changed-file review hardening: `npm run quality:v0.2:status` now carries invalid regression runs' changed-file evidence into `regression.details.invalidFileModificationEvidence` and prints an `Invalid changed files` line. Out-of-scope file evidence is now reviewable directly from the fast status command instead of requiring a manual JSON lookup.
+
+Latest usable-gate preflight hardening: `npm run quality:v0.2:usable` now runs the fast usability status preflight before expensive gates. Missing or invalid evidence blockers are printed together, so a release candidate does not hide installer smoke gaps behind the first regression-gate failure.
 
 - [ ] **Step 3: Run manual installer smoke test**
 

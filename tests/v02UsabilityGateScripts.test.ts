@@ -32,10 +32,30 @@ test("v0.2 usability gate is wired and exposes a safe dry run", async () => {
   const dryRun = JSON.parse(stdout) as { commands: string[] };
 
   assert.deepEqual(dryRun.commands, [
+    "node scripts/summarize-v0-2-usability-status.mjs --json",
     "npm run quality:regression:gate",
     "npm run quality:installer-smoke",
     "npm run quality:v0.2"
   ]);
+});
+
+test("v0.2 usability gate reports all missing evidence blockers before expensive gates", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-gate-preflight-"));
+  const scriptPath = join(process.cwd(), "scripts", "run-v0-2-usability-gate.mjs");
+
+  const { stdout } = await execFileAsync(process.execPath, [scriptPath], {
+    cwd: directory,
+    windowsHide: true
+  }).catch((error: unknown) => {
+    const maybeError = error as { stdout?: string };
+
+    return { stdout: maybeError.stdout ?? "" };
+  });
+
+  assert.match(stdout, /\[quality:v0\.2:usable\] Evidence preflight: unproven/u);
+  assert.match(stdout, /Blockers: regression-results-missing, installer-smoke-missing/u);
+  assert.match(stdout, /FAIL evidence preflight/u);
+  assert.doesNotMatch(stdout, /\[quality:v0\.2:usable\] Running npm run quality:regression:gate/u);
 });
 
 test("v0.2 installer smoke script validates the manual smoke report and installer artifact", async () => {
