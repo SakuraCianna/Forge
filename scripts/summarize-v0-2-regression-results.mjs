@@ -1,0 +1,425 @@
+// 本文件说明: 汇总 v0.2.x 真实任务回归结果, 复用 Agent 质量指标口径, 不写入应用指标日志
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createAgentQualityMetricSnapshot } from "../.tmp-test/src/shared/agentQualityMetrics.js";
+
+const REQUIRED_TASK_IDS = ["S1", "S2", "S3", "S4", "S5", "M1", "M2", "M3", "M4", "M5", "C1", "C2", "C3"];
+const REGRESSION_USABLE_METRIC_IDS = [
+  "simpleTaskFirstPassCompletionRate",
+  "mediumTaskFirstPassCompletionRate",
+  "complexTaskFirstPassCompletionRate",
+  "postModificationTypecheckPassRate",
+  "postModificationBuildPassRate",
+  "postModificationLintPassRate",
+  "wrongFileModificationRate",
+  "unrelatedCodeChangeRate",
+  "failureRecoveryRate"
+];
+
+const args = parseArgs(process.argv.slice(2));
+const source = args.file ? resolve(args.file) : findDefaultResultsFile();
+
+if (!source) {
+  writeSummary(
+    {
+      status: "missing",
+      source: null,
+      totalRawRuns: 0,
+      totalRuns: 0,
+      totalObservations: 0,
+      invalidRunCount: 0,
+      invalidRuns: [],
+      duplicateTaskCount: 0,
+      duplicateTaskIds: [],
+      coverage: createCoverageSummary([]),
+      gate: createRegressionUsableGate([]),
+      metrics: []
+    },
+    args.json
+  );
+  if (args.requireCompleteSet || args.requireUsableRegression) {
+    process.exitCode = 1;
+  }
+  process.exit();
+}
+
+try {
+  const packageVersion = await readPackageVersion();
+  const { runs, invalidRuns, totalRawRuns, forgeVersion } = await readRegressionRuns(source);
+  const metadata = {
+    forgeVersion,
+    packageVersion,
+    invalidMetadata: getInvalidMetadata(forgeVersion, packageVersion)
+  };
+  const observations = createObservationsFromRuns(runs);
+  const snapshot = createAgentQualityMetricSnapshot(observations);
+  const coverage = createCoverageSummary(runs);
+  const duplicateTaskIds = getDuplicateTaskIds(runs);
+  const metrics = snapshot.metrics.map((metric) => ({
+    id: metric.id,
+    denominator: metric.denominator,
+    numerator: metric.numerator,
+    value: metric.value,
+    usablePassed: metric.usablePassed
+  }));
+  const gate = createRegressionUsableGate(metrics);
+  const summary = {
+    status: "ok",
+    source,
+    totalRawRuns,
+    totalRuns: runs.length,
+    totalObservations: observations.length,
+    invalidRunCount: invalidRuns.length,
+    invalidRuns,
+    duplicateTaskCount: duplicateTaskIds.length,
+    duplicateTaskIds,
+    metadata,
+    generatedAt: snapshot.generatedAt,
+    coverage,
+    gate,
+    metrics
+  };
+
+  writeSummary(summary, args.json);
+  if (args.requireCompleteSet && !coverage.completeTaskSet) {
+    process.exitCode = 1;
+  }
+  if (args.requireUsableRegression && !gate.regressionUsablePassed) {
+    process.exitCode = 1;
+  }
+  if ((args.requireCompleteSet || args.requireUsableRegression) && invalidRuns.length > 0) {
+    process.exitCode = 1;
+  }
+  if ((args.requireCompleteSet || args.requireUsableRegression) && duplicateTaskIds.length > 0) {
+    process.exitCode = 1;
+  }
+  if ((args.requireCompleteSet || args.requireUsableRegression) && metadata.invalidMetadata.length > 0) {
+    process.exitCode = 1;
+  }
+} catch (error) {
+  writeSummary(
+    {
+      status: "error",
+      source,
+      totalRawRuns: 0,
+      totalRuns: 0,
+      totalObservations: 0,
+      invalidRunCount: 0,
+      invalidRuns: [],
+      duplicateTaskCount: 0,
+      duplicateTaskIds: [],
+      coverage: createCoverageSummary([]),
+      gate: createRegressionUsableGate([]),
+      message: error instanceof Error ? error.message : String(error),
+      metrics: []
+    },
+    args.json
+  );
+  process.exitCode = 1;
+}
+
+function parseArgs(rawArgs) {
+  const parsed = {
+    file: process.env.FORGE_REGRESSION_RESULTS_FILE,
+    json: false,
+    requireCompleteSet: false,
+    requireUsableRegression: false
+  };
+
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const arg = rawArgs[index];
+
+    if (arg === "--json") {
+      parsed.json = true;
+      continue;
+    }
+
+    if (arg === "--require-complete-set") {
+      parsed.requireCompleteSet = true;
+      continue;
+    }
+
+    if (arg === "--require-usable-regression") {
+      parsed.requireUsableRegression = true;
+      continue;
+    }
+
+    if (arg === "--file") {
+      const nextArg = rawArgs[index + 1];
+
+      if (!nextArg) {
+        throw new Error("--file requires a path");
+      }
+
+      parsed.file = nextArg;
+      index += 1;
+    }
+  }
+
+  return parsed;
+}
+
+async function readRegressionRuns(filePath) {
+  const rawValue = await readFile(filePath, "utf8");
+  const parsed = JSON.parse(rawValue);
+
+  if (!isRecord(parsed) || !Array.isArray(parsed.runs)) {
+    throw new Error("v0.2 regression results file must contain a runs array");
+  }
+
+  const rawRuns = parsed.runs;
+  const runs = [];
+  const invalidRuns = [];
+
+  rawRuns.forEach((run, index) => {
+    if (isRegressionRun(run)) {
+      runs.push(run);
+      return;
+    }
+
+    invalidRuns.push({
+      index,
+      taskId: isRecord(run) && typeof run.taskId === "string" ? run.taskId : null
+    });
+  });
+
+  return {
+    runs,
+    invalidRuns,
+    totalRawRuns: rawRuns.length,
+    forgeVersion: typeof parsed.forgeVersion === "string" ? parsed.forgeVersion : null
+  };
+}
+
+async function readPackageVersion() {
+  const candidates = [
+    resolve("package.json"),
+    resolve(dirname(fileURLToPath(import.meta.url)), "..", "package.json")
+  ];
+
+  for (const packageJsonPath of candidates) {
+    if (!existsSync(packageJsonPath)) {
+      continue;
+    }
+
+    const rawValue = await readFile(packageJsonPath, "utf8");
+    const packageJson = JSON.parse(rawValue);
+
+    if (typeof packageJson?.version === "string" && packageJson.version.trim()) {
+      return packageJson.version;
+    }
+  }
+
+  throw new Error("Unable to read package version for regression result validation");
+}
+
+function getInvalidMetadata(forgeVersion, packageVersion) {
+  return forgeVersion === packageVersion ? [] : ["forgeVersion"];
+}
+
+function createObservationsFromRuns(runs) {
+  return runs.flatMap((run) => {
+    const createdAt = typeof run.createdAt === "string" ? run.createdAt : new Date().toISOString();
+    const observations = [
+      {
+        kind: "task_outcome",
+        createdAt,
+        complexity: run.complexity,
+        completedInFirstAttempt: run.completedInFirstAttempt
+      },
+      {
+        kind: "file_modification",
+        createdAt,
+        wrongFile: run.wrongFileModified,
+        unrelatedChange: run.unrelatedCodeChanged
+      },
+      ...run.validations.map((validation) => ({
+        kind: "validation_run",
+        createdAt,
+        validation: validation.kind,
+        afterModification: validation.afterModification ?? true,
+        passed: validation.passed
+      }))
+    ];
+
+    if (typeof run.failureRecovered === "boolean") {
+      observations.push({
+        kind: "failure_recovery",
+        createdAt,
+        recovered: run.failureRecovered
+      });
+    }
+
+    return observations;
+  });
+}
+
+function createCoverageSummary(runs) {
+  const seenTaskIds = Array.from(new Set(runs.map((run) => run.taskId)));
+  const requiredTaskIds = new Set(REQUIRED_TASK_IDS);
+  const coveredRequiredTaskIds = REQUIRED_TASK_IDS.filter((taskId) => seenTaskIds.includes(taskId));
+  const missingTaskIds = REQUIRED_TASK_IDS.filter((taskId) => !seenTaskIds.includes(taskId));
+  const unexpectedTaskIds = seenTaskIds.filter((taskId) => !requiredTaskIds.has(taskId));
+  const duplicateTaskIds = getDuplicateTaskIds(runs);
+
+  return {
+    requiredTaskCount: REQUIRED_TASK_IDS.length,
+    coveredTaskCount: coveredRequiredTaskIds.length,
+    completeTaskSet: missingTaskIds.length === 0 && unexpectedTaskIds.length === 0 && duplicateTaskIds.length === 0,
+    missingTaskIds,
+    unexpectedTaskIds
+  };
+}
+
+function getDuplicateTaskIds(runs) {
+  const seenTaskIds = new Set();
+  const duplicateTaskIds = new Set();
+
+  for (const run of runs) {
+    if (seenTaskIds.has(run.taskId)) {
+      duplicateTaskIds.add(run.taskId);
+      continue;
+    }
+
+    seenTaskIds.add(run.taskId);
+  }
+
+  return Array.from(duplicateTaskIds);
+}
+
+function createRegressionUsableGate(metrics) {
+  const regressionMetrics = REGRESSION_USABLE_METRIC_IDS.map((metricId) =>
+    metrics.find((metric) => metric.id === metricId)
+  );
+  const unprovenMetricIds = REGRESSION_USABLE_METRIC_IDS.filter((_, index) => {
+    const metric = regressionMetrics[index];
+
+    return !metric || metric.usablePassed === null;
+  });
+  const blockingMetricIds = REGRESSION_USABLE_METRIC_IDS.filter((_, index) => {
+    const metric = regressionMetrics[index];
+
+    return metric?.usablePassed === false;
+  });
+
+  return {
+    regressionUsablePassed: unprovenMetricIds.length === 0 && blockingMetricIds.length === 0,
+    blockingMetricIds,
+    unprovenMetricIds
+  };
+}
+
+function findDefaultResultsFile() {
+  const candidates = [
+    "docs/V0_2_REGRESSION_RESULTS.json",
+    "docs/v0-2-regression-results.json"
+  ].map((candidate) => resolve(candidate));
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+function isRegressionRun(value) {
+  return (
+    isRecord(value) &&
+    typeof value.taskId === "string" &&
+    isTaskComplexity(value.complexity) &&
+    typeof value.completedInFirstAttempt === "boolean" &&
+    typeof value.wrongFileModified === "boolean" &&
+    typeof value.unrelatedCodeChanged === "boolean" &&
+    Array.isArray(value.validations) &&
+    value.validations.every(isValidationResult) &&
+    (value.failureRecovered === null ||
+      value.failureRecovered === undefined ||
+      typeof value.failureRecovered === "boolean")
+  );
+}
+
+function isValidationResult(value) {
+  return isRecord(value) && isValidationKind(value.kind) && typeof value.passed === "boolean";
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
+}
+
+function isTaskComplexity(value) {
+  return value === "simple" || value === "medium" || value === "complex";
+}
+
+function isValidationKind(value) {
+  return value === "typecheck" || value === "build" || value === "lint";
+}
+
+function writeSummary(summary, asJson) {
+  if (asJson) {
+    console.log(JSON.stringify(summary));
+    return;
+  }
+
+  if (summary.status === "missing") {
+    console.log("v0.2 regression results: missing");
+    console.log("No regression results file was found. Real task metrics remain unproven.");
+    return;
+  }
+
+  if (summary.status === "error") {
+    console.error(`v0.2 regression results: error reading ${summary.source}`);
+    console.error(summary.message);
+    return;
+  }
+
+  console.log(`v0.2 regression results: ${summary.totalRuns} runs`);
+  console.log(`Source: ${summary.source}`);
+  console.log(`Raw runs: ${summary.totalRawRuns}`);
+
+  if (summary.invalidRunCount > 0) {
+    console.log(
+      `Invalid runs: ${summary.invalidRuns
+        .map((run) => `${run.index}${run.taskId ? `:${run.taskId}` : ""}`)
+        .join(", ")}`
+    );
+  }
+
+  if (summary.duplicateTaskCount > 0) {
+    console.log(`Duplicate tasks: ${summary.duplicateTaskIds.join(", ")}`);
+  }
+
+  if (summary.metadata?.invalidMetadata.length > 0) {
+    console.log(`Invalid metadata: ${summary.metadata.invalidMetadata.join(", ")}`);
+  }
+
+  console.log(
+    `Coverage: ${summary.coverage.coveredTaskCount}/${summary.coverage.requiredTaskCount} fixed tasks ${
+      summary.coverage.completeTaskSet ? "complete" : "incomplete"
+    }`
+  );
+
+  if (summary.coverage.missingTaskIds.length > 0) {
+    console.log(`Missing tasks: ${summary.coverage.missingTaskIds.join(", ")}`);
+  }
+
+  if (summary.coverage.unexpectedTaskIds.length > 0) {
+    console.log(`Unexpected tasks: ${summary.coverage.unexpectedTaskIds.join(", ")}`);
+  }
+
+  console.log(
+    `Regression usable gate: ${summary.gate.regressionUsablePassed ? "passed" : "failed"}`
+  );
+
+  if (summary.gate.blockingMetricIds.length > 0) {
+    console.log(`Below usable metrics: ${summary.gate.blockingMetricIds.join(", ")}`);
+  }
+
+  if (summary.gate.unprovenMetricIds.length > 0) {
+    console.log(`Unproven metrics: ${summary.gate.unprovenMetricIds.join(", ")}`);
+  }
+
+  for (const metric of summary.metrics) {
+    const value = metric.value === null ? "unproven" : `${Math.round(metric.value * 100)}%`;
+    const status = metric.usablePassed === null ? "unproven" : metric.usablePassed ? "usable" : "below-usable";
+
+    console.log(`${metric.id}: ${value} (${metric.numerator}/${metric.denominator}) ${status}`);
+  }
+}

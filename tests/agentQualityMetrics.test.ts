@@ -76,6 +76,65 @@ test("safety metrics detect high risk and write-before-confirmation misfires", (
   assert.equal(getAgentQualityMetricValue(snapshot, "writeBeforeConfirmationRate").mvpPassed, false);
 });
 
+test("agent quality metrics keep empty denominators unproven", () => {
+  const snapshot = createAgentQualityMetricSnapshot([], createdAt);
+  const metricIds = [
+    "toolCallSuccessRate",
+    "simpleTaskFirstPassCompletionRate",
+    "mediumTaskFirstPassCompletionRate",
+    "complexTaskFirstPassCompletionRate",
+    "postModificationTypecheckPassRate",
+    "postModificationBuildPassRate",
+    "postModificationLintPassRate",
+    "wrongFileModificationRate",
+    "unrelatedCodeChangeRate",
+    "failureRecoveryRate"
+  ] as const;
+
+  for (const metricId of metricIds) {
+    const metricValue = getAgentQualityMetricValue(snapshot, metricId);
+
+    assert.equal(metricValue.denominator, 0);
+    assert.equal(metricValue.value, null);
+    assert.equal(metricValue.mvpPassed, null);
+    assert.equal(metricValue.usablePassed, null);
+    assert.equal(metricValue.excellentPassed, null);
+  }
+});
+
+test("agent quality metrics calculate task complexity buckets independently", () => {
+  const snapshot = createAgentQualityMetricSnapshot([
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "simple",
+      completedInFirstAttempt: true
+    },
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "simple",
+      completedInFirstAttempt: false
+    },
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "medium",
+      completedInFirstAttempt: true
+    },
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "complex",
+      completedInFirstAttempt: false
+    }
+  ]);
+
+  assert.equal(getAgentQualityMetricValue(snapshot, "simpleTaskFirstPassCompletionRate").value, 0.5);
+  assert.equal(getAgentQualityMetricValue(snapshot, "mediumTaskFirstPassCompletionRate").value, 1);
+  assert.equal(getAgentQualityMetricValue(snapshot, "complexTaskFirstPassCompletionRate").value, 0);
+});
+
 test("agent quality observation validator rejects malformed metric records", () => {
   assert.equal(
     isAgentQualityObservation({
