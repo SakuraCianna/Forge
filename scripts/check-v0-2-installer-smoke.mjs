@@ -99,11 +99,11 @@ async function createSummary(filePath) {
   const checks = report.checks;
   const missingChecks = REQUIRED_CHECKS.filter((checkId) => typeof checks[checkId] !== "boolean");
   const failedChecks = REQUIRED_CHECKS.filter((checkId) => checks[checkId] === false);
-  const installerPath = typeof report?.installerPath === "string" ? resolve(report.installerPath) : null;
-  const installerExists = installerPath ? existsSync(installerPath) : false;
   const missingMetadata = REQUIRED_METADATA.filter((metadataId) => typeof report?.[metadataId] !== "string");
+  const installerPath = getInstallerPath(report, packageVersion);
+  const installerExists = installerPath ? existsSync(installerPath) : false;
   const installerSha256Matches = await verifyInstallerSha256(report, installerPath, installerExists);
-  const invalidMetadata = getInvalidMetadata(report, packageVersion, installerSha256Matches);
+  const invalidMetadata = getInvalidMetadata(report, packageVersion, installerPath, installerSha256Matches);
   const passed =
     missingChecks.length === 0 &&
     failedChecks.length === 0 &&
@@ -163,7 +163,7 @@ async function verifyInstallerSha256(report, installerPath, installerExists) {
   return installerHash === report.installerSha256.toLowerCase();
 }
 
-function getInvalidMetadata(report, packageVersion, installerSha256Matches) {
+function getInvalidMetadata(report, packageVersion, installerPath, installerSha256Matches) {
   const invalidMetadata = [];
 
   if (typeof report?.forgeVersion === "string" && report.forgeVersion !== packageVersion) {
@@ -178,12 +178,7 @@ function getInvalidMetadata(report, packageVersion, installerSha256Matches) {
     invalidMetadata.push("platform");
   }
 
-  const expectedInstallerPattern = new RegExp(
-    `release[\\\\/]+Forge-${escapeRegExp(packageVersion)}-x64-setup\\.exe$`,
-    "u"
-  );
-
-  if (typeof report?.installerPath === "string" && !expectedInstallerPattern.test(report.installerPath)) {
+  if (typeof report?.installerPath === "string" && !installerPath) {
     invalidMetadata.push("installerPath");
   }
 
@@ -197,8 +192,20 @@ function getInvalidMetadata(report, packageVersion, installerSha256Matches) {
   return invalidMetadata;
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+function getInstallerPath(report, packageVersion) {
+  const expectedInstallerPath = `release/Forge-${packageVersion}-x64-setup.exe`;
+
+  if (typeof report?.installerPath !== "string") {
+    return null;
+  }
+
+  const normalizedPath = report.installerPath.replace(/\\/gu, "/");
+
+  if (normalizedPath !== expectedInstallerPath) {
+    return null;
+  }
+
+  return resolve(expectedInstallerPath);
 }
 
 function isSha256(value) {

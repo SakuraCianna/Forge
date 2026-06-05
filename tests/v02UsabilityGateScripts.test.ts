@@ -224,6 +224,68 @@ test("v0.2 installer smoke script fails when report version does not match packa
   assert.equal(summary.installerSha256Matches, true);
 });
 
+test("v0.2 installer smoke script rejects installer paths outside the current release directory", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-path-scope-"));
+  const externalDirectory = await mkdtemp(join(tmpdir(), "forge-v02-external-release-"));
+  const externalReleaseDirectory = join(externalDirectory, "release");
+  const docsDirectory = join(directory, "docs");
+  const externalInstallerPath = join(externalReleaseDirectory, "Forge-0.2.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerFixture = "fake installer fixture";
+
+  await mkdir(externalReleaseDirectory, { recursive: true });
+  await mkdir(docsDirectory, { recursive: true });
+  await writeFile(externalInstallerPath, installerFixture, "utf8");
+  await writeFile(
+    reportPath,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        installerPath: externalInstallerPath,
+        installerSha256: createSha256(installerFixture),
+        testedAt: "2026-06-05T12:00:00.000Z",
+        platform: "Windows 11",
+        checks: {
+          appLaunches: true,
+          projectOpens: true,
+          filePreviewWorks: true,
+          safeCommandRuns: true,
+          generatedDiffAcceptRejectWorks: true,
+          gitStatusViewOpens: true,
+          highRiskRequiresConfirmation: true
+        }
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    {
+      cwd: directory,
+      windowsHide: true
+    }
+  ).catch((error: unknown) => {
+    const maybeError = error as { stdout?: string };
+
+    return { stdout: maybeError.stdout ?? "" };
+  });
+  const summary = JSON.parse(stdout) as {
+    passed: boolean;
+    invalidMetadata: string[];
+    installerExists: boolean;
+    installerSha256Matches: boolean;
+  };
+
+  assert.equal(summary.passed, false);
+  assert.deepEqual(summary.invalidMetadata, ["installerPath", "installerSha256"]);
+  assert.equal(summary.installerExists, false);
+  assert.equal(summary.installerSha256Matches, false);
+});
+
 test("v0.2 installer smoke script fails when installer SHA-256 is missing or stale", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-sha-"));
   const releaseDirectory = join(directory, "release");
