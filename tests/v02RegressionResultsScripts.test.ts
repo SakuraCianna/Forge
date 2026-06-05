@@ -28,7 +28,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: true,
             wrongFileModified: false,
             unrelatedCodeChanged: false,
-            validations: [createValidationResult("lint", true)],
+            validations: createAllValidationResults(true),
             failureRecovered: null
           },
           {
@@ -38,7 +38,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: false,
             wrongFileModified: true,
             unrelatedCodeChanged: false,
-            validations: [createValidationResult("typecheck", false)],
+            validations: createAllValidationResults(true),
             failureRecovered: true
           },
           {
@@ -48,7 +48,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: false,
             wrongFileModified: false,
             unrelatedCodeChanged: true,
-            validations: [createValidationResult("build", true)],
+            validations: createAllValidationResults(false),
             failureRecovered: false
           }
         ]
@@ -86,7 +86,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
   assert.equal(summary.status, "ok");
   assert.equal(summary.source, resultsFile);
   assert.equal(summary.totalRuns, 3);
-  assert.equal(summary.totalObservations, 11);
+  assert.equal(summary.totalObservations, 17);
   assert.deepEqual(
     summary.metrics.find((metric) => metric.id === "simpleTaskFirstPassCompletionRate"),
     {
@@ -139,7 +139,7 @@ test("v0.2 regression results script reports incomplete fixed task coverage", as
             completedInFirstAttempt: true,
             wrongFileModified: false,
             unrelatedCodeChanged: false,
-            validations: [createValidationResult("lint", true)],
+            validations: createAllValidationResults(true),
             failureRecovered: null
           }
         ]
@@ -674,6 +674,84 @@ test("v0.2 regression results strict gate fails when recovery is recorded withou
   );
 });
 
+test("v0.2 regression results strict gate fails when required validation kinds are missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-missing-validation-kind-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            ...createRegressionRun("S1", "simple", true),
+            validations: [createValidationResult("lint", true)]
+          },
+          ...["S2", "S3", "S4", "S5"].map((taskId) =>
+            createRegressionRun(taskId, "simple", true)
+          ),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) =>
+            createRegressionRun(taskId, "medium", true)
+          ),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex", true))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+    coverage: {
+      requiredTaskCount: number;
+      coveredTaskCount: number;
+      completeTaskSet: boolean;
+      missingTaskIds: string[];
+      unexpectedTaskIds: string[];
+    };
+  };
+
+  assert.equal(summary.totalRawRuns, 13);
+  assert.equal(summary.totalRuns, 12);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "S1", reasons: ["validations.missingTypecheck", "validations.missingBuild"] }
+  ]);
+  assert.deepEqual(summary.coverage, {
+    requiredTaskCount: 13,
+    coveredTaskCount: 12,
+    completeTaskSet: false,
+    missingTaskIds: ["S1"],
+    unexpectedTaskIds: []
+  });
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/summarize-v0-2-regression-results.mjs",
+        "--file",
+        resultsFile,
+        "--require-complete-set",
+        "--require-usable-regression"
+      ],
+      { windowsHide: true }
+    ),
+    /Command failed/
+  );
+});
+
 test("v0.2 regression results strict gate fails when validation command evidence is missing", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-evidence-"));
   const resultsFile = join(directory, "regression-results.json");
@@ -967,13 +1045,17 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     completedInFirstAttempt: completed,
     wrongFileModified: false,
     unrelatedCodeChanged: false,
-    validations: [
-      createValidationResult("typecheck", true),
-      createValidationResult("build", true),
-      createValidationResult("lint", true)
-    ],
+    validations: createAllValidationResults(true),
     failureRecovered: completed ? null : true
   };
+}
+
+function createAllValidationResults(passed: boolean) {
+  return [
+    createValidationResult("typecheck", passed),
+    createValidationResult("build", passed),
+    createValidationResult("lint", passed)
+  ];
 }
 
 function createValidationResult(kind: "typecheck" | "build" | "lint", passed: boolean) {

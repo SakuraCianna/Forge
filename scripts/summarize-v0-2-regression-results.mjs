@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createAgentQualityMetricSnapshot } from "../.tmp-test/src/shared/agentQualityMetrics.js";
 
 const REQUIRED_TASK_IDS = ["S1", "S2", "S3", "S4", "S5", "M1", "M2", "M3", "M4", "M5", "C1", "C2", "C3"];
+const REQUIRED_VALIDATION_KINDS = ["typecheck", "build", "lint"];
 const REGRESSION_USABLE_METRIC_IDS = [
   "simpleTaskFirstPassCompletionRate",
   "mediumTaskFirstPassCompletionRate",
@@ -371,6 +372,10 @@ function getRegressionRunInvalidReasons(value) {
       addUniqueReasons(reasons, validationReasons);
     }
 
+    if (!hasInvalidValidation) {
+      addUniqueReasons(reasons, getMissingValidationKindReasons(value.validations));
+    }
+
     if (!hasInvalidValidation && value.completedInFirstAttempt === true && hasFailedValidationResult(value.validations)) {
       reasons.push("completedInFirstAttemptValidationMismatch");
     }
@@ -394,6 +399,14 @@ function getRegressionRunInvalidReasons(value) {
   }
 
   return reasons;
+}
+
+function getMissingValidationKindReasons(validations) {
+  const seenKinds = new Set(validations.map((validation) => validation.kind));
+
+  return REQUIRED_VALIDATION_KINDS.filter((kind) => !seenKinds.has(kind)).map(
+    (kind) => `validations.missing${toTitleCase(kind)}`
+  );
 }
 
 function getValidationInvalidReasons(value) {
@@ -437,6 +450,10 @@ function addUniqueReasons(target, reasons) {
       target.push(reason);
     }
   }
+}
+
+function toTitleCase(value) {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
 function isRecord(value) {
