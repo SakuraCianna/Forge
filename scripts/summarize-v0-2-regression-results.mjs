@@ -338,7 +338,7 @@ function getRegressionRunInvalidReasons(value) {
     reasons.push("complexity");
   }
 
-  if (typeof value.createdAt !== "string" || !isIsoTimestampWithTimezone(value.createdAt)) {
+  if (typeof value.createdAt !== "string" || !isAuditableRunTimestamp(value.createdAt)) {
     reasons.push("createdAt");
   }
 
@@ -520,6 +520,10 @@ function isIsoTimestampWithTimezone(value) {
   }
 
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
+}
+
+function isAuditableRunTimestamp(value) {
+  return isIsoTimestampWithTimezone(value) && Date.parse(value) <= Date.now();
 }
 
 function writeSummary(summary, asJson) {

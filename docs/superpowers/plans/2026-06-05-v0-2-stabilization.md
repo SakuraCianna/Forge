@@ -382,6 +382,8 @@ Latest installer timestamp hardening: installer smoke reports now also reject fu
 
 Latest regression timestamp hardening: each v0.2 regression run now requires a timezone-qualified ISO `createdAt`. The summary script no longer silently replaces missing run timestamps with the report generation time, so real-task evidence remains auditable per sample.
 
+Latest regression future timestamp hardening: strict v0.2 regression reports now also reject future `createdAt` values. Fixed-task evidence must describe an already completed run, not a pre-filled or scheduled future result.
+
 Latest first-pass evidence hardening: strict v0.2 regression reports now reject runs where `completedInFirstAttempt` is `true` but any recorded validation failed. This prevents first-pass completion metrics from being inflated by samples that still failed typecheck, build, or lint.
 
 Latest recovery evidence hardening: strict v0.2 regression reports now reject `failureRecovered` booleans on once-completed runs whose validations all passed. Recovery-rate denominators must come from tasks with an actual non-first-pass or failed path, not from clean first-pass successes.
