@@ -337,7 +337,16 @@ function isRegressionRun(value) {
 }
 
 function isValidationResult(value) {
-  return isRecord(value) && isValidationKind(value.kind) && typeof value.passed === "boolean";
+  return (
+    isRecord(value) &&
+    isValidationKind(value.kind) &&
+    typeof value.command === "string" &&
+    value.command.trim().length > 0 &&
+    Number.isInteger(value.exitCode) &&
+    value.exitCode >= 0 &&
+    typeof value.passed === "boolean" &&
+    value.passed === (value.exitCode === 0)
+  );
 }
 
 function isRecord(value) {

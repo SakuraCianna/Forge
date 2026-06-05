@@ -368,6 +368,8 @@ Latest status evidence: `npm run quality:v0.2:status -- --json` reports classifi
 
 Latest reviewability progress: the Built-in Tools UI now renders all 13 agent quality metrics for review, including numerator, denominator, value, and MVP/usable/excellent tier status for each metric. This improves local metric review, but it does not replace the missing formal regression and installer smoke evidence.
 
+Latest regression evidence hardening: strict v0.2 regression reports now require each validation result to record the actual command and exit code, and `passed` must match whether the exit code is 0. This prevents unchecked typecheck/build/lint claims from being accepted as formal usability evidence, but it does not create the missing real regression report.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.

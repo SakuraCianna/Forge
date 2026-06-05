@@ -26,7 +26,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: true,
             wrongFileModified: false,
             unrelatedCodeChanged: false,
-            validations: [{ kind: "lint", passed: true }],
+            validations: [createValidationResult("lint", true)],
             failureRecovered: null
           },
           {
@@ -35,7 +35,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: false,
             wrongFileModified: true,
             unrelatedCodeChanged: false,
-            validations: [{ kind: "typecheck", passed: false }],
+            validations: [createValidationResult("typecheck", false)],
             failureRecovered: true
           },
           {
@@ -44,7 +44,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: false,
             wrongFileModified: false,
             unrelatedCodeChanged: true,
-            validations: [{ kind: "build", passed: true }],
+            validations: [createValidationResult("build", true)],
             failureRecovered: false
           }
         ]
@@ -134,7 +134,7 @@ test("v0.2 regression results script reports incomplete fixed task coverage", as
             completedInFirstAttempt: true,
             wrongFileModified: false,
             unrelatedCodeChanged: false,
-            validations: [{ kind: "lint", passed: true }],
+            validations: [createValidationResult("lint", true)],
             failureRecovered: null
           }
         ]
@@ -344,6 +344,119 @@ test("v0.2 regression results strict gate fails when results contain invalid run
   );
 });
 
+test("v0.2 regression results strict gate fails when validation command evidence is missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-evidence-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          ...["S1", "S2", "S3", "S4", "S5"].map((taskId) => ({
+            ...createRegressionRun(taskId, "simple", true),
+            validations: [{ kind: "lint", passed: true }]
+          })),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) => ({
+            ...createRegressionRun(taskId, "medium", true),
+            validations: [{ kind: "typecheck", passed: true }]
+          })),
+          ...["C1", "C2", "C3"].map((taskId) => ({
+            ...createRegressionRun(taskId, "complex", true),
+            validations: [{ kind: "build", passed: true }]
+          }))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null }>;
+  };
+
+  assert.equal(summary.totalRawRuns, 13);
+  assert.equal(summary.totalRuns, 0);
+  assert.equal(summary.invalidRunCount, 13);
+  assert.deepEqual(
+    summary.invalidRuns.map((run) => run.taskId),
+    ["S1", "S2", "S3", "S4", "S5", "M1", "M2", "M3", "M4", "M5", "C1", "C2", "C3"]
+  );
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/summarize-v0-2-regression-results.mjs",
+        "--file",
+        resultsFile,
+        "--require-complete-set",
+        "--require-usable-regression"
+      ],
+      { windowsHide: true }
+    ),
+    /Command failed/
+  );
+});
+
+test("v0.2 regression results strict gate fails when validation pass state contradicts exit code", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-exit-code-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            ...createRegressionRun("S1", "simple", true),
+            validations: [
+              {
+                kind: "lint",
+                command: "npm run lint",
+                exitCode: 1,
+                passed: true
+              }
+            ]
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null }>;
+  };
+
+  assert.equal(summary.totalRawRuns, 1);
+  assert.equal(summary.totalRuns, 0);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [{ index: 0, taskId: "S1" }]);
+});
+
 test("v0.2 regression results strict gate fails when fixed tasks are duplicated", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-duplicate-"));
   const resultsFile = join(directory, "regression-results.json");
@@ -518,10 +631,23 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     wrongFileModified: false,
     unrelatedCodeChanged: false,
     validations: [
-      { kind: "typecheck", passed: true },
-      { kind: "build", passed: true },
-      { kind: "lint", passed: true }
+      createValidationResult("typecheck", true),
+      createValidationResult("build", true),
+      createValidationResult("lint", true)
     ],
     failureRecovered: true
+  };
+}
+
+function createValidationResult(kind: "typecheck" | "build" | "lint", passed: boolean) {
+  return {
+    kind,
+    command: {
+      typecheck: "npm run typecheck",
+      build: "npm run build",
+      lint: "npm run lint"
+    }[kind],
+    exitCode: passed ? 0 : 1,
+    passed
   };
 }

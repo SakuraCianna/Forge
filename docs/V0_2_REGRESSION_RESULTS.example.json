@@ -8,9 +8,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -21,9 +36,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -34,9 +64,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -47,9 +92,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -60,9 +120,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -73,9 +148,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -86,9 +176,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -99,9 +204,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -112,9 +232,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -125,9 +260,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -138,9 +288,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -151,9 +316,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     },
@@ -164,9 +344,24 @@
       "wrongFileModified": false,
       "unrelatedCodeChanged": false,
       "validations": [
-        { "kind": "typecheck", "passed": false },
-        { "kind": "build", "passed": false },
-        { "kind": "lint", "passed": false }
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
       ],
       "failureRecovered": null
     }

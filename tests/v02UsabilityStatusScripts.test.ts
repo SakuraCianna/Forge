@@ -124,9 +124,9 @@ function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "
     wrongFileModified: false,
     unrelatedCodeChanged: false,
     validations: [
-      { kind: "typecheck", passed: true },
-      { kind: "build", passed: true },
-      { kind: "lint", passed: true }
+      { kind: "typecheck", command: "npm run typecheck", exitCode: 0, passed: true },
+      { kind: "build", command: "npm run build", exitCode: 0, passed: true },
+      { kind: "lint", command: "npm run lint", exitCode: 0, passed: true }
     ],
     failureRecovered: true
   };
