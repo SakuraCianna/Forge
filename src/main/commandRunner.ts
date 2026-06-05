@@ -39,16 +39,29 @@ export type CommandResult = {
   cancelled?: boolean;
 };
 
+export type RunningProjectCommand = {
+  runId: string;
+  command: string;
+  cwd: string;
+  projectRoot: string;
+  startedAt: string;
+  startedAtMs: number;
+  timeoutMs: number;
+  runtime: AgentRuntime;
+  shell: CommandShell;
+};
+
 type ProjectCommandRunner = {
   runProjectCommand: (options: RunProjectCommandOptions) => Promise<CommandResult>;
   cancelProjectCommand: (options: CancelProjectCommandOptions) => CancelProjectCommandResult;
+  listRunningProjectCommands: () => RunningProjectCommand[];
 };
 
 type ProjectCommandRunnerDeps = {
   killProcessTree?: (pid: number) => boolean;
 };
 
-type RunningCommand = {
+type RunningCommand = RunningProjectCommand & {
   cancel: () => boolean;
 };
 
@@ -64,7 +77,8 @@ export function createProjectCommandRunner({
     cancelProjectCommand: ({ runId }) => ({
       ok: runningCommands.get(runId)?.cancel() ?? false,
       runId
-    })
+    }),
+    listRunningProjectCommands: () => Array.from(runningCommands.values(), snapshotRunningCommand)
   };
 }
 
@@ -80,6 +94,11 @@ export function cancelProjectCommand(
   options: CancelProjectCommandOptions
 ): CancelProjectCommandResult {
   return defaultRunner.cancelProjectCommand(options);
+}
+
+// 读取默认全局运行器中的活动命令, 供 Agent 恢复和停止后台任务
+export function listRunningProjectCommands(): RunningProjectCommand[] {
+  return defaultRunner.listRunningProjectCommands();
 }
 
 // 在确认 cwd 属于项目后启动子进程, 输出通过回调实时上报
@@ -133,7 +152,17 @@ async function runProjectCommandWithRegistry(
     }, timeoutMs);
 
     if (runId) {
+      const startedAtMs = Date.now();
       runningCommands.set(runId, {
+        runId,
+        command,
+        cwd: resolvedCwd,
+        projectRoot: resolvedProjectRoot,
+        startedAt: new Date(startedAtMs).toISOString(),
+        startedAtMs,
+        timeoutMs,
+        runtime,
+        shell,
         cancel: () => {
           if (settled) {
             return false;
@@ -193,6 +222,30 @@ async function runProjectCommandWithRegistry(
       reject(createShellStartError(shellInvocation, error));
     });
   });
+}
+
+function snapshotRunningCommand({
+  runId,
+  command,
+  cwd,
+  projectRoot,
+  startedAt,
+  startedAtMs,
+  timeoutMs,
+  runtime,
+  shell
+}: RunningCommand): RunningProjectCommand {
+  return {
+    runId,
+    command,
+    cwd,
+    projectRoot,
+    startedAt,
+    startedAtMs,
+    timeoutMs,
+    runtime,
+    shell
+  };
 }
 
 // 根据用户选择构造真实 shell 调用参数, 让设置页的 Shell 选择不只是显示项

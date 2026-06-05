@@ -32,6 +32,23 @@ import type {
   ExtensionUpdateRequest,
   ExtensionUpdateResult
 } from "@shared/extensionTypes";
+import {
+  builtInToolCategories,
+  builtInToolDefinitions
+} from "@shared/builtInToolCatalog";
+import type {
+  BuiltInToolAvailability,
+  BuiltInToolCallLogRecord,
+  BuiltInToolCategory,
+  BuiltInToolDefinition,
+  BuiltInToolRiskLevel
+} from "@shared/builtInToolTypes";
+import type {
+  AgentQualityMetricId,
+  AgentQualityMetricSnapshot,
+  AgentQualityMetricValue
+} from "@shared/agentQualityMetrics";
+import type { BuiltInToolQaRunResult } from "@shared/builtInToolQaTypes";
 import type { Language } from "@shared/modelTypes";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
 import {
@@ -41,6 +58,10 @@ import {
 } from "@/state/extensions";
 
 type ExtensionsPanelProps = {
+  agentQualityMetrics: AgentQualityMetricSnapshot | null;
+  builtInToolLogs: BuiltInToolCallLogRecord[];
+  developmentQaResult: BuiltInToolQaRunResult | null;
+  developmentQaRunning: boolean;
   language: Language;
   logs: ExtensionInvocationLogRecord[];
   registry: ExtensionRegistrySnapshot;
@@ -49,6 +70,7 @@ type ExtensionsPanelProps = {
   onDeleteExtension: (extensionId: string) => Promise<ExtensionDeleteResult>;
   onInvoke: (request: ExtensionInvocationRequest) => Promise<ExtensionInvocationResult>;
   onRefresh: () => void;
+  onRunDevelopmentQa: () => void;
   onSaveSecret: (extensionId: string, fieldId: string, value: string) => Promise<void>;
   onDeleteSecret: (extensionId: string, fieldId: string) => Promise<void>;
   onUpdateExtension: (request: ExtensionUpdateRequest) => Promise<ExtensionUpdateResult>;
@@ -102,6 +124,13 @@ type ExtensionDraftDialogState = {
   draft: ExtensionManifestDraft;
 };
 
+type BuiltInToolCategoryGroup = {
+  category: (typeof builtInToolCategories)[number];
+  tools: BuiltInToolDefinition[];
+};
+
+type ExtensionsCopy = ReturnType<typeof getExtensionsCopy>;
+
 const permissionModes: ExtensionPermissionMode[] = ["ask", "allow", "deny"];
 const draftInputClassName =
   "h-9 min-w-0 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]";
@@ -109,6 +138,10 @@ const draftIconButtonClassName =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]";
 
 export function ExtensionsPanel({
+  agentQualityMetrics,
+  builtInToolLogs,
+  developmentQaResult,
+  developmentQaRunning,
   language,
   logs,
   registry,
@@ -118,6 +151,7 @@ export function ExtensionsPanel({
   onDeleteSecret,
   onInvoke,
   onRefresh,
+  onRunDevelopmentQa,
   onSaveSecret,
   onUpdateExtension,
   onUpdateSettings
@@ -155,6 +189,7 @@ export function ExtensionsPanel({
         : [],
     [logs, selectedManifest]
   );
+  const builtInToolGroups = useMemo(() => groupBuiltInToolsByCategory(), []);
   const permissionModeOptions = permissionModes.map((mode) => ({
     value: mode,
     label: copy.permissionMode(mode)
@@ -446,6 +481,16 @@ export function ExtensionsPanel({
       <div className="min-h-0 overflow-auto px-6 py-6">
         {selectedManifest && selectedSettings ? (
           <div className="mx-auto grid max-w-5xl gap-5">
+            {renderBuiltInToolsSection(
+              builtInToolGroups,
+              builtInToolLogs,
+              agentQualityMetrics,
+              developmentQaResult,
+              developmentQaRunning,
+              onRunDevelopmentQa,
+              copy
+            )}
+
             <header className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h1 className="text-xl font-semibold text-[#202123]">{selectedManifest.name}</h1>
@@ -768,9 +813,404 @@ export function ExtensionsPanel({
   }
 }
 
+function groupBuiltInToolsByCategory(): BuiltInToolCategoryGroup[] {
+  const toolsByCategory = new Map<BuiltInToolCategory, BuiltInToolDefinition[]>();
+
+  for (const tool of builtInToolDefinitions) {
+    toolsByCategory.set(tool.category, [...(toolsByCategory.get(tool.category) ?? []), tool]);
+  }
+
+  return builtInToolCategories.map((category) => ({
+    category,
+    tools: toolsByCategory.get(category.id) ?? []
+  }));
+}
+
+function renderBuiltInToolsSection(
+  groups: BuiltInToolCategoryGroup[],
+  logs: BuiltInToolCallLogRecord[],
+  metrics: AgentQualityMetricSnapshot | null,
+  developmentQaResult: BuiltInToolQaRunResult | null,
+  developmentQaRunning: boolean,
+  onRunDevelopmentQa: () => void,
+  copy: ExtensionsCopy
+): ReactElement {
+  const latestLogByToolName = createLatestBuiltInToolLogMap(logs);
+  const featuredMetrics = getFeaturedAgentQualityMetrics(metrics);
+
+  return (
+    <section className="grid gap-4 rounded-[16px] border border-[#ececf1] bg-white p-5 shadow-[0_12px_36px_rgba(0,0,0,0.04)]">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-[#202123]">{copy.builtInTools}</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#565869]">
+            {copy.builtInToolsDescription}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="rounded-full border border-[#d9d9e3] bg-[#fafafa] px-3 py-1 text-[12px] font-semibold text-[#202123]">
+            {copy.builtInToolCount(builtInToolDefinitions.length)}
+          </span>
+          <button
+            type="button"
+            disabled={developmentQaRunning}
+            onClick={onRunDevelopmentQa}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {developmentQaRunning ? (
+              <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+            {developmentQaRunning ? copy.qaRunning : copy.runDevelopmentQa}
+          </button>
+        </div>
+      </header>
+
+      <div className="grid gap-2 md:grid-cols-4">
+        {featuredMetrics.map((metric) => (
+          <div
+            key={metric.id}
+            className="rounded-[12px] border border-[#ececf1] bg-[#fbfbfc] px-3 py-2"
+          >
+            <div className="truncate text-[11px] font-medium text-[#8e8ea0]">
+              {copy.qualityMetricLabel(metric.id)}
+            </div>
+            <div className="mt-1 text-[16px] font-semibold text-[#202123]">
+              {formatMetricPercent(metric)}
+            </div>
+            <div className={`mt-1 text-[11px] ${getMetricStatusClassName(metric)}`}>
+              {copy.metricStatus(metric)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {developmentQaResult ? (
+        <div className="grid gap-3 rounded-[12px] border border-[#ececf1] bg-[#fbfbfc] p-3 text-[12px] text-[#565869] md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`rounded-full px-2 py-1 font-semibold ${getQaStatusClassName(
+                  developmentQaResult.status
+                )}`}
+              >
+                {copy.qaStatus}: {copy.qaRunStatus(developmentQaResult.status)}
+              </span>
+              <span className="rounded-full bg-white px-2 py-1">
+                {copy.qaSuccessRate}: {formatQaSuccessRate(developmentQaResult)}
+              </span>
+              <span className="rounded-full bg-white px-2 py-1">
+                {copy.qaModel}: {developmentQaResult.modelId}
+              </span>
+            </div>
+            <div className="mt-2 truncate font-mono text-[11px] text-[#8e8ea0]">
+              {copy.qaProject}: {developmentQaResult.projectRoot}
+            </div>
+            {developmentQaResult.skippedReason ? (
+              <div className="mt-1 text-[11px] text-[#9a3412]">
+                {copy.qaSkippedReason}: {developmentQaResult.skippedReason}
+              </div>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-right md:grid-cols-6">
+            <QaSummaryPill label={copy.qaTotal} value={developmentQaResult.summary.total} />
+            <QaSummaryPill label={copy.qaSucceeded} value={developmentQaResult.summary.succeeded} />
+            <QaSummaryPill label={copy.qaFailed} value={developmentQaResult.summary.failed} />
+            <QaSummaryPill label={copy.qaBlocked} value={developmentQaResult.summary.blocked} />
+            <QaSummaryPill
+              label={copy.qaNotImplemented}
+              value={developmentQaResult.summary.notImplemented}
+            />
+            <QaSummaryPill label={copy.qaSkipped} value={developmentQaResult.summary.skipped} />
+          </div>
+          {developmentQaResult.summary.safety.total > 0 ? (
+            <div className="grid grid-cols-2 gap-2 text-right md:col-span-2 md:grid-cols-4">
+              <QaSummaryPill
+                label={copy.qaSafetyTotal}
+                value={developmentQaResult.summary.safety.total}
+              />
+              <QaSummaryPill
+                label={copy.qaSafetyPassed}
+                value={developmentQaResult.summary.safety.passed}
+              />
+              <QaSummaryPill
+                label={copy.qaWriteBeforeConfirmationFailures}
+                value={developmentQaResult.summary.safety.writeBeforeConfirmationFailures}
+              />
+              <QaSummaryPill
+                label={copy.qaCriticalConfirmationFailures}
+                value={developmentQaResult.summary.safety.criticalConfirmationFailures}
+              />
+            </div>
+          ) : null}
+          <div className="grid grid-cols-2 gap-2 text-right md:col-span-2 md:grid-cols-5">
+            <QaSummaryPill
+              label={copy.qaMvpGate}
+              value={copy.qaMetricGateStatus(developmentQaResult.summary.quality.mvpPassed)}
+            />
+            <QaSummaryPill
+              label={copy.qaToolCallSuccessRate}
+              value={formatQaMetricGateValue(developmentQaResult.summary.quality.toolCallSuccessRate)}
+            />
+            <QaSummaryPill
+              label={copy.qaP0ToolErrorRate}
+              value={formatQaMetricGateValue(developmentQaResult.summary.quality.p0ToolErrorRate)}
+            />
+            <QaSummaryPill
+              label={copy.qaWriteBeforeConfirmationFailureRate}
+              value={formatQaMetricGateValue(
+                developmentQaResult.summary.quality.writeBeforeConfirmationFailureRate
+              )}
+            />
+            <QaSummaryPill
+              label={copy.qaCriticalConfirmationFailureRate}
+              value={formatQaMetricGateValue(
+                developmentQaResult.summary.quality.criticalConfirmationFailureRate
+              )}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-right md:col-span-2 md:grid-cols-6">
+            <QaSummaryPill
+              label={copy.qaRegisteredTools}
+              value={developmentQaResult.summary.coverage.registeredTools}
+            />
+            <QaSummaryPill
+              label={copy.qaAvailableTools}
+              value={developmentQaResult.summary.coverage.availableTools}
+            />
+            <QaSummaryPill
+              label={copy.qaScenarioTools}
+              value={developmentQaResult.summary.coverage.scenarioTools}
+            />
+            <QaSummaryPill
+              label={copy.qaAttemptedScenarioTools}
+              value={developmentQaResult.summary.coverage.attemptedScenarioTools}
+            />
+            <QaSummaryPill
+              label={copy.qaSucceededScenarioTools}
+              value={developmentQaResult.summary.coverage.succeededScenarioTools}
+            />
+            <QaSummaryPill
+              label={copy.qaP0P1ScenarioTools}
+              value={
+                developmentQaResult.summary.coverage.p0SucceededScenarioTools +
+                developmentQaResult.summary.coverage.p1SucceededScenarioTools
+              }
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid gap-3">
+        {groups.map((group) => (
+          <details
+            key={group.category.id}
+            open={group.category.id === "project" || group.category.id === "file"}
+            className="rounded-[12px] border border-[#ececf1] bg-[#fbfbfc]"
+          >
+            <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[#202123]">
+              <span>{group.category.label}</span>
+              <span className="text-[12px] font-medium text-[#8e8ea0]">
+                {copy.builtInToolCount(group.tools.length)}
+              </span>
+            </summary>
+            <div className="grid gap-2 border-t border-[#ececf1] p-3">
+              {group.tools.map((tool) => {
+                const latestLog = latestLogByToolName.get(tool.name);
+
+                return (
+                  <div
+                    key={tool.name}
+                    className="grid gap-3 rounded-[10px] bg-white p-3 shadow-[inset_0_0_0_1px_#ececf1] lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.2fr)_minmax(220px,0.9fr)]"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-[#202123]">
+                        {tool.displayName ?? tool.name}
+                      </div>
+                      <div className="mt-1 truncate font-mono text-[11px] text-[#8e8ea0]">
+                        {tool.name}
+                      </div>
+                    </div>
+                    <p className="text-[12px] leading-5 text-[#565869]">{tool.description}</p>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="rounded-full bg-[#f7f7f8] px-2 py-1 text-[#565869]">
+                        {copy.category}: {group.category.id}
+                      </span>
+                      <span className={`rounded-full px-2 py-1 ${getToolRiskClassName(tool.riskLevel)}`}>
+                        {copy.risk}: {copy.toolRisk(tool.riskLevel)}
+                      </span>
+                      <span className="rounded-full bg-[#f7f7f8] px-2 py-1 text-[#565869]">
+                        {tool.requiresConfirmation
+                          ? copy.confirmationRequired
+                          : copy.autoAllowed}
+                      </span>
+                      <span className="rounded-full bg-[#f7f7f8] px-2 py-1 text-[#565869]">
+                        {copy.availability}: {copy.toolAvailability(tool.availability)}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-1 ${
+                          latestLog
+                            ? getToolCallStatusClassName(latestLog.status)
+                            : "bg-[#f7f7f8] text-[#565869]"
+                        }`}
+                      >
+                        {copy.recentStatus}:{" "}
+                        {latestLog
+                          ? copy.toolCallStatus(latestLog.status)
+                          : copy.noRecentToolCall}
+                      </span>
+                      {latestLog ? (
+                        <span className="rounded-full bg-[#f7f7f8] px-2 py-1 text-[#565869]">
+                          {latestLog.durationMs}ms
+                        </span>
+                      ) : null}
+                      {latestLog?.errorMessage ? (
+                        <span className="max-w-full truncate rounded-full bg-[#fff1f1] px-2 py-1 text-[#b42318]">
+                          {latestLog.errorMessage}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function QaSummaryPill({
+  label,
+  value
+}: {
+  label: string;
+  value: number | string;
+}): ReactElement {
+  return (
+    <div className="rounded-[10px] bg-white px-2 py-1">
+      <div className="text-[10px] font-medium text-[#8e8ea0]">{label}</div>
+      <div className="mt-0.5 font-semibold text-[#202123]">{value}</div>
+    </div>
+  );
+}
+
+function formatQaSuccessRate(result: BuiltInToolQaRunResult): string {
+  return result.summary.total === 0 ? "-" : `${Math.round(result.summary.successRate * 100)}%`;
+}
+
+function formatQaMetricGateValue(
+  metric: BuiltInToolQaRunResult["summary"]["quality"]["toolCallSuccessRate"]
+): string {
+  return metric.value === null ? "-" : `${Math.round(metric.value * 100)}%`;
+}
+
+function getQaStatusClassName(status: BuiltInToolQaRunResult["status"]): string {
+  if (status === "passed") {
+    return "bg-[#effaf6] text-[#087443]";
+  }
+
+  if (status === "skipped") {
+    return "bg-[#fffbeb] text-[#92400e]";
+  }
+
+  return "bg-[#fff1f1] text-[#b42318]";
+}
+
+function getToolRiskClassName(riskLevel: BuiltInToolDefinition["riskLevel"]): string {
+  if (riskLevel === "critical") {
+    return "bg-[#fff1f1] text-[#b42318]";
+  }
+
+  if (riskLevel === "high") {
+    return "bg-[#fff5eb] text-[#9a3412]";
+  }
+
+  if (riskLevel === "medium") {
+    return "bg-[#fffbeb] text-[#92400e]";
+  }
+
+  return "bg-[#effaf6] text-[#087443]";
+}
+
+function createLatestBuiltInToolLogMap(
+  logs: BuiltInToolCallLogRecord[]
+): Map<string, BuiltInToolCallLogRecord> {
+  const latestLogByToolName = new Map<string, BuiltInToolCallLogRecord>();
+
+  for (const log of logs) {
+    if (!latestLogByToolName.has(log.toolName)) {
+      latestLogByToolName.set(log.toolName, log);
+    }
+  }
+
+  return latestLogByToolName;
+}
+
+function getFeaturedAgentQualityMetrics(
+  snapshot: AgentQualityMetricSnapshot | null
+): AgentQualityMetricValue[] {
+  const featuredMetricIds: AgentQualityMetricId[] = [
+    "toolCallSuccessRate",
+    "p0ToolErrorRate",
+    "highRiskMisfireRate",
+    "writeBeforeConfirmationRate"
+  ];
+
+  return featuredMetricIds.map((id) => {
+    const metric = snapshot?.metrics.find((candidate) => candidate.id === id);
+
+    return (
+      metric ?? {
+        id,
+        numerator: 0,
+        denominator: 0,
+        value: null,
+        mvpPassed: null,
+        usablePassed: null,
+        excellentPassed: null
+      }
+    );
+  });
+}
+
+function formatMetricPercent(metric: AgentQualityMetricValue): string {
+  return metric.value === null ? "-" : `${Math.round(metric.value * 100)}%`;
+}
+
+function getMetricStatusClassName(metric: AgentQualityMetricValue): string {
+  if (metric.mvpPassed === true) {
+    return "text-[#087443]";
+  }
+
+  if (metric.mvpPassed === false) {
+    return "text-[#b42318]";
+  }
+
+  return "text-[#8e8ea0]";
+}
+
+function getToolCallStatusClassName(status: BuiltInToolCallLogRecord["status"]): string {
+  if (status === "succeeded") {
+    return "bg-[#effaf6] text-[#087443]";
+  }
+
+  if (status === "blocked" || status === "not_implemented") {
+    return "bg-[#fff5eb] text-[#9a3412]";
+  }
+
+  if (status === "failed") {
+    return "bg-[#fff1f1] text-[#b42318]";
+  }
+
+  return "bg-[#f7f7f8] text-[#565869]";
+}
+
 function renderDraftExtensionActions(
   manifest: ExtensionManifest,
-  copy: ReturnType<typeof getExtensionsCopy>
+  copy: ExtensionsCopy
 ): ReactElement {
   return (
     <div className="grid gap-3">
@@ -1353,10 +1793,19 @@ function getExtensionsCopy(language: Language) {
 
   return {
     actions: isChinese ? "动作" : "Actions",
+    autoAllowed: isChinese ? "可自动执行" : "Auto allowed",
+    availability: isChinese ? "可用性" : "Availability",
     body: isChinese ? "正文" : "Body",
     builtInExtensions: isChinese ? "内置扩展" : "Built-in extensions",
+    builtInToolCount: (count: number) => (isChinese ? `${count} 个工具` : `${count} tools`),
+    builtInTools: isChinese ? "Built-in Tools 内置工具" : "Built-in Tools",
+    builtInToolsDescription: isChinese
+      ? "Forge 内置工具按 8 大类统一展示。高风险和 critical 工具即使在 Full Access 下也必须确认, 未来不可用工具仍会明确标记为 not_implemented。"
+      : "Forge built-in tools are grouped into 8 categories. High and critical tools still require confirmation in Full Access, and future unavailable tools remain marked not_implemented.",
     cancel: isChinese ? "取消" : "Cancel",
+    category: isChinese ? "分类" : "Category",
     confirmation: isChinese ? "确认策略" : "Confirmation",
+    confirmationRequired: isChinese ? "需要确认" : "Confirmation required",
     createExtension: isChinese ? "创建扩展" : "Create extension",
     createExtensionHint: isChinese
       ? "Forge 会创建本地扩展 manifest 草稿, 需要接入运行器后才能执行动作。"
@@ -1405,6 +1854,7 @@ function getExtensionsCopy(language: Language) {
       : "Input fields separated by commas, e.g. query, limit",
     logs: isChinese ? "调用日志" : "Invocation logs",
     myExtensions: isChinese ? "我的扩展" : "My extensions",
+    noRecentToolCall: isChinese ? "暂无记录" : "No recent call",
     noLogs: isChinese ? "暂无调用日志" : "No invocation logs",
     noCredentialsRequired: isChinese ? "暂无凭据要求" : "No credentials required",
     notConnected: isChinese ? "未连接" : "Not connected",
@@ -1412,10 +1862,47 @@ function getExtensionsCopy(language: Language) {
     permissions: isChinese ? "权限" : "Permissions",
     placeholder: isChinese ? "占位提示" : "Placeholder",
     query: isChinese ? "关键词" : "Query",
+    qaBlocked: isChinese ? "阻止" : "Blocked",
+    qaAvailableTools: isChinese ? "可用工具" : "Available tools",
+    qaAttemptedScenarioTools: isChinese ? "尝试工具" : "Attempted tools",
+    qaFailed: isChinese ? "失败" : "Failed",
+    qaModel: isChinese ? "模型" : "Model",
+    qaNotImplemented: isChinese ? "未实现" : "Not impl.",
+    qaProject: isChinese ? "沙箱" : "Sandbox",
+    qaP0P1ScenarioTools: isChinese ? "P0/P1 触达" : "P0/P1 covered",
+    qaP0ToolErrorRate: isChinese ? "P0 错误率" : "P0 error",
+    qaRegisteredTools: isChinese ? "注册工具" : "Registered tools",
+    qaRunning: isChinese ? "运行中" : "Running",
+    qaCriticalConfirmationFailureRate: isChinese ? "critical 失败率" : "Critical fail",
+    qaCriticalConfirmationFailures: isChinese ? "critical 确认失败" : "Critical confirm failures",
+    qaMetricGateStatus: (passed: boolean) => {
+      if (passed) {
+        return isChinese ? "通过" : "Pass";
+      }
+
+      return isChinese ? "未通过" : "Fail";
+    },
+    qaMvpGate: isChinese ? "MVP Gate" : "MVP gate",
+    qaSafetyPassed: isChinese ? "安全通过" : "Safety passed",
+    qaSafetyTotal: isChinese ? "安全断言" : "Safety assertions",
+    qaSkipped: isChinese ? "跳过" : "Skipped",
+    qaSkippedReason: isChinese ? "跳过原因" : "Skipped reason",
+    qaStatus: isChinese ? "开发 QA" : "Dev QA",
+    qaScenarioTools: isChinese ? "QA 触达工具" : "QA-covered tools",
+    qaSucceeded: isChinese ? "成功" : "Passed",
+    qaSucceededScenarioTools: isChinese ? "成功工具" : "Succeeded tools",
+    qaSuccessRate: isChinese ? "成功率" : "Success",
+    qaToolCallSuccessRate: isChinese ? "工具成功率" : "Tool success",
+    qaTotal: isChinese ? "总数" : "Total",
+    qaWriteBeforeConfirmationFailureRate: isChinese ? "写盘失败率" : "Write fail",
+    qaWriteBeforeConfirmationFailures: isChinese ? "确认前写盘失败" : "Write-before-confirm failures",
     readAction: isChinese ? "读取数据" : "Read data",
     readPermission: isChinese ? "读取权限" : "Read permission",
     refresh: isChinese ? "刷新扩展" : "Refresh extensions",
+    recentStatus: isChinese ? "最近调用" : "Recent status",
+    risk: isChinese ? "风险" : "Risk",
     run: isChinese ? "执行" : "Run",
+    runDevelopmentQa: isChinese ? "运行开发 QA" : "Run dev QA",
     save: isChinese ? "保存" : "Save",
     saveFailed: isChinese ? "保存失败" : "Save failed",
     secretSaved: isChinese ? "凭据已保存" : "Credential saved",
@@ -1437,6 +1924,63 @@ function getExtensionsCopy(language: Language) {
       isChinese
         ? `已保存${last4 ? `, 尾号 ${last4}` : ""}`
         : `Saved${last4 ? `, ending ${last4}` : ""}`,
+    metricStatus: (metric: AgentQualityMetricValue) => {
+      if (metric.value === null) {
+        return isChinese ? "等待数据" : "Waiting for data";
+      }
+
+      if (metric.mvpPassed) {
+        return isChinese ? "达到 MVP" : "MVP met";
+      }
+
+      return isChinese ? "低于 MVP" : "Below MVP";
+    },
+    qaRunStatus: (status: BuiltInToolQaRunResult["status"]) => {
+      if (!isChinese) {
+        return status;
+      }
+
+      return {
+        failed: "失败",
+        passed: "通过",
+        skipped: "已跳过"
+      }[status];
+    },
+    qualityMetricLabel: (metricId: AgentQualityMetricId) => {
+      const labels: Record<AgentQualityMetricId, string> = isChinese
+        ? {
+            complexTaskFirstPassCompletionRate: "复杂任务一次完成率",
+            failureRecoveryRate: "失败后可恢复率",
+            highRiskMisfireRate: "高风险误触发率",
+            mediumTaskFirstPassCompletionRate: "中等任务一次完成率",
+            p0ToolErrorRate: "P0 工具错误率",
+            postModificationBuildPassRate: "build 通过率",
+            postModificationLintPassRate: "lint 通过率",
+            postModificationTypecheckPassRate: "typecheck 通过率",
+            simpleTaskFirstPassCompletionRate: "简单任务一次完成率",
+            toolCallSuccessRate: "工具调用成功率",
+            unrelatedCodeChangeRate: "无关代码改动率",
+            wrongFileModificationRate: "错误文件修改率",
+            writeBeforeConfirmationRate: "确认前写盘率"
+          }
+        : {
+            complexTaskFirstPassCompletionRate: "Complex first-pass",
+            failureRecoveryRate: "Failure recovery",
+            highRiskMisfireRate: "High-risk misfire",
+            mediumTaskFirstPassCompletionRate: "Medium first-pass",
+            p0ToolErrorRate: "P0 error rate",
+            postModificationBuildPassRate: "Build pass rate",
+            postModificationLintPassRate: "Lint pass rate",
+            postModificationTypecheckPassRate: "Typecheck pass rate",
+            simpleTaskFirstPassCompletionRate: "Simple first-pass",
+            toolCallSuccessRate: "Tool success rate",
+            unrelatedCodeChangeRate: "Unrelated change rate",
+            wrongFileModificationRate: "Wrong file rate",
+            writeBeforeConfirmationRate: "Write before confirmation"
+          };
+
+      return labels[metricId];
+    },
     confirmationPolicy: (policy: ExtensionConfirmationPolicy) => {
       if (!isChinese) {
         return policy;
@@ -1447,6 +1991,41 @@ function getExtensionsCopy(language: Language) {
         ask: "按权限询问",
         never: "无需确认"
       }[policy];
+    },
+    toolAvailability: (availability: BuiltInToolAvailability) => {
+      if (!isChinese) {
+        return availability;
+      }
+
+      return {
+        available: "可用",
+        not_implemented: "未实现"
+      }[availability];
+    },
+    toolRisk: (risk: BuiltInToolRiskLevel) => {
+      if (!isChinese) {
+        return risk;
+      }
+
+      return {
+        critical: "critical",
+        high: "高",
+        low: "低",
+        medium: "中"
+      }[risk];
+    },
+    toolCallStatus: (status: BuiltInToolCallLogRecord["status"]) => {
+      if (!isChinese) {
+        return status;
+      }
+
+      return {
+        blocked: "已阻止",
+        cancelled: "已取消",
+        failed: "失败",
+        not_implemented: "未实现",
+        succeeded: "成功"
+      }[status];
     },
     riskLabel: (risk: ExtensionActionRisk) => {
       if (!isChinese) {

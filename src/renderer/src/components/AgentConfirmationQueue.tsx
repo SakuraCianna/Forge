@@ -23,6 +23,7 @@ type AgentConfirmationCallbacks = {
   onAllowAgentCommand?: (threadId: string, action: AgentAction) => void;
   onApplyAllChanges?: () => void;
   onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
+  onConfirmAgentBuiltInTool?: (threadId: string, action: AgentAction) => void;
   onConfirmAgentExtension?: (threadId: string, action: AgentAction) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
   onDiscardAllChanges?: () => void;
@@ -62,6 +63,7 @@ export function AgentConfirmationQueue({
   onAllowAgentCommand,
   onApplyAllChanges,
   onApproveAgentCommand,
+  onConfirmAgentBuiltInTool,
   onConfirmAgentExtension,
   onCompleteAgentAction,
   onDiscardAllChanges,
@@ -232,6 +234,21 @@ export function AgentConfirmationQueue({
       );
     }
 
+    if (item.kind === "built-in-tool-confirmation" && onConfirmAgentBuiltInTool) {
+      controls.push(
+        <button
+          key="confirm-built-in-tool"
+          type="button"
+          aria-label={`${copy.confirmBuiltInToolAction} ${action.label}`}
+          onClick={() => onConfirmAgentBuiltInTool(activeThreadId, action)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#9a3412] px-2.5 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {copy.confirmBuiltInToolAction}
+        </button>
+      );
+    }
+
     if (item.kind === "extension-confirmation" && onConfirmAgentExtension) {
       controls.push(
         <button
@@ -350,6 +367,7 @@ export function CompactAgentAttentionStrip({
   language,
   threadId,
   onApproveAgentCommand,
+  onConfirmAgentBuiltInTool,
   onConfirmAgentExtension,
   onCompleteAgentAction,
   onOpenFiles,
@@ -399,6 +417,17 @@ export function CompactAgentAttentionStrip({
         label: copy.confirmExtensionAction,
         icon: CheckCircle2,
         onClick: () => onConfirmAgentExtension(threadId, action)
+      })
+    );
+  }
+
+  if (item.kind === "built-in-tool-confirmation" && action && onConfirmAgentBuiltInTool) {
+    actions.push(
+      renderCompactIconAction({
+        key: "confirm-built-in-tool",
+        label: copy.confirmBuiltInToolAction,
+        icon: CheckCircle2,
+        onClick: () => onConfirmAgentBuiltInTool(threadId, action)
       })
     );
   }
@@ -497,6 +526,8 @@ function getAgentConfirmationKindLabel(
       return copy.failedActionTitle;
     case "manual-gate":
       return copy.manualGateTitle;
+    case "built-in-tool-confirmation":
+      return copy.builtInToolConfirmationTitle;
     case "extension-confirmation":
       return copy.extensionConfirmationTitle;
     case "command-approval":
@@ -519,6 +550,10 @@ function getAgentConfirmationTitle(
 
   if (item.kind === "extension-confirmation") {
     return copy.extensionConfirmationHeading(item.label);
+  }
+
+  if (item.kind === "built-in-tool-confirmation") {
+    return copy.builtInToolConfirmationHeading(item.label);
   }
 
   return item.label;
@@ -549,6 +584,10 @@ function getAgentConfirmationBody(
 
   if (item.kind === "extension-confirmation") {
     return item.extensionConfirmation?.inputSummary ?? copy.extensionConfirmationBody(item.label);
+  }
+
+  if (item.kind === "built-in-tool-confirmation") {
+    return copy.builtInToolConfirmationBody(item.label);
   }
 
   const action = item.action;
@@ -664,6 +703,49 @@ function getAgentConfirmationMetadataRows(
     });
   }
 
+  if (item.action?.kind === "built-in-tool" && item.action.builtInToolName) {
+    rows.push({
+      label: copy.builtInToolLabel,
+      value: item.action.builtInToolName
+    });
+
+    if (item.action.builtInToolRiskLevel) {
+      rows.push({
+        label: copy.riskLabel,
+        value: item.action.builtInToolRiskLevel
+      });
+    }
+
+    if (item.builtInToolConfirmation) {
+      rows.push({
+        label: copy.builtInToolTargetLabel(item.builtInToolConfirmation.targetLabel),
+        value: item.builtInToolConfirmation.targetSummary
+      });
+      rows.push({
+        label: copy.consequenceLabel,
+        value: item.builtInToolConfirmation.consequence
+      });
+      rows.push({
+        label: copy.reversibleLabel,
+        value: item.builtInToolConfirmation.reversible ? copy.yesLabel : copy.noLabel
+      });
+
+      if (item.builtInToolConfirmation.requiresTypedConfirmation) {
+        rows.push({
+          label: copy.typedConfirmationLabel,
+          value: item.builtInToolConfirmation.confirmationKeyword
+            ? copy.typeConfirmationKeyword(item.builtInToolConfirmation.confirmationKeyword)
+            : copy.requiredLabel
+        });
+      } else if (item.builtInToolConfirmation.confirmationKind === "double") {
+        rows.push({
+          label: copy.typedConfirmationLabel,
+          value: copy.doubleConfirmationRequired
+        });
+      }
+    }
+  }
+
   if (item.kind === "failed-action") {
     rows.push({
       label: copy.failureRecoveryPolicyLabel,
@@ -754,6 +836,10 @@ export function getCompactAgentControlCopy(language: Language) {
           ? "Forge 会按上限自动尝试恢复, 权限或依赖类步骤会等待人工审批"
           : `Forge 已自动尝试 ${used} / ${count} 次恢复, 后续只在权限、依赖或跳过时需要介入`,
       manualGateTitle: "人工确认",
+      builtInToolConfirmationTitle: "内置工具确认",
+      builtInToolConfirmationHeading: (label: string) => `确认内置工具: ${label}`,
+      builtInToolConfirmationBody: (label: string) =>
+        `请确认是否允许 Forge 执行 ${label}, 高风险内置工具不会在确认前写盘或改变项目状态`,
       commandApprovalTitle: "命令批准",
       commandBlockedTitle: "命令被阻止",
       extensionConfirmationTitle: "扩展确认",
@@ -765,6 +851,16 @@ export function getCompactAgentControlCopy(language: Language) {
       commandLabel: "命令",
       cwdLabel: "目录",
       riskLabel: "风险",
+      builtInToolLabel: "内置工具",
+      builtInToolTargetLabel: (targetLabel: string) => `影响${targetLabel}`,
+      consequenceLabel: "后果",
+      reversibleLabel: "可撤销",
+      typedConfirmationLabel: "二次确认",
+      typeConfirmationKeyword: (keyword: string) => `需要输入 ${keyword}`,
+      doubleConfirmationRequired: "需要二次确认",
+      requiredLabel: "必需",
+      yesLabel: "是",
+      noLabel: "否",
       extensionLabel: "扩展",
       extensionActionLabel: "动作",
       extensionRiskLabel: "风险",
@@ -784,6 +880,7 @@ export function getCompactAgentControlCopy(language: Language) {
       discardQueuedChanges: "丢弃队列修改",
       approveQueuedCommand: "批准队列命令",
       allowQueuedCommand: "始终允许队列命令",
+      confirmBuiltInToolAction: "确认内置工具",
       confirmExtensionAction: "确认扩展操作",
       confirmQueuedAction: "确认队列动作",
       openQueuedSourceControl: "打开队列源码管理",
@@ -866,6 +963,10 @@ export function getCompactAgentControlCopy(language: Language) {
         ? "Forge will auto-recover within its attempt limit and stop for permission or dependency approval."
         : `Forge has auto-recovered ${used} / ${count} ${count === 1 ? "time" : "times"}. It will only stop for permissions, dependencies, or skip decisions.`,
     manualGateTitle: "Manual confirmation",
+    builtInToolConfirmationTitle: "Built-in tool confirmation",
+    builtInToolConfirmationHeading: (label: string) => `Confirm built-in tool: ${label}`,
+    builtInToolConfirmationBody: (label: string) =>
+      `Confirm whether Forge may run ${label}. High-risk built-in tools will not write or mutate project state before confirmation.`,
     commandApprovalTitle: "Command approval",
     commandBlockedTitle: "Blocked command",
     extensionConfirmationTitle: "Extension confirmation",
@@ -877,6 +978,16 @@ export function getCompactAgentControlCopy(language: Language) {
     commandLabel: "Command",
     cwdLabel: "cwd",
     riskLabel: "Risk",
+    builtInToolLabel: "Built-in tool",
+    builtInToolTargetLabel: (targetLabel: string) => `Target ${targetLabel}`,
+    consequenceLabel: "Consequence",
+    reversibleLabel: "Reversible",
+    typedConfirmationLabel: "Second confirmation",
+    typeConfirmationKeyword: (keyword: string) => `Type ${keyword}`,
+    doubleConfirmationRequired: "Double confirmation required",
+    requiredLabel: "Required",
+    yesLabel: "Yes",
+    noLabel: "No",
     extensionLabel: "Extension",
     extensionActionLabel: "Action",
     extensionRiskLabel: "Risk",
@@ -897,6 +1008,7 @@ export function getCompactAgentControlCopy(language: Language) {
     discardQueuedChanges: "Discard queued changes",
     approveQueuedCommand: "Approve queued command",
     allowQueuedCommand: "Always allow queued command",
+    confirmBuiltInToolAction: "Confirm built-in tool",
     confirmExtensionAction: "Confirm extension",
     confirmQueuedAction: "Confirm queued action",
     openQueuedSourceControl: "Open queued source control",

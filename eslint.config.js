@@ -4,6 +4,7 @@ import tseslint from "typescript-eslint";
 
 const nodeGlobals = {
   Buffer: "readonly",
+  clearTimeout: "readonly",
   console: "readonly",
   process: "readonly",
   setTimeout: "readonly"
@@ -15,6 +16,7 @@ const browserGlobals = {
   HTMLElement: "readonly",
   HTMLInputElement: "readonly",
   HTMLTextAreaElement: "readonly",
+  navigator: "readonly",
   setTimeout: "readonly",
   window: "readonly"
 };
@@ -53,6 +55,7 @@ export default tseslint.config(
   {
     files: [
       "*.config.ts",
+      "scripts/**/*.mjs",
       "src/main/**/*.ts",
       "src/preload/**/*.ts",
       "src/shared/**/*.ts"

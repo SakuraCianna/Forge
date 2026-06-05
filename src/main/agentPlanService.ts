@@ -13,6 +13,12 @@ import type {
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
 import type { TokenUsage } from "../shared/usageTypes.js";
+import {
+  builtInToolDefinitions,
+  getBuiltInToolDefinition
+} from "../shared/builtInToolCatalog.js";
+import { deriveAgentToolSideEffect } from "../shared/agentQualityMetrics.js";
+import type { BuiltInToolRiskLevel } from "../shared/builtInToolTypes.js";
 import { hydrateProviderFromCatalog } from "../shared/providerCatalog.js";
 import {
   buildTextGenerationRequest,
@@ -78,6 +84,10 @@ type ParsedPlanStepDraft = {
   extensionId?: string;
   extensionInput?: Record<string, unknown>;
   extensionRisk?: "read" | "write" | "send" | "delete";
+  builtInToolName?: string;
+  builtInToolInput?: Record<string, unknown>;
+  builtInToolRiskLevel?: BuiltInToolRiskLevel;
+  builtInToolRequiresConfirmation?: boolean;
   requiresConfirmation?: boolean;
   kind: AgentPlanStepKind;
   target?: string;
@@ -98,6 +108,7 @@ type StructuredToolHint =
   | "git-status"
   | "bash"
   | "edit"
+  | "built-in-tool"
   | "invoke-extension";
 
 const maxFilesBySpeed = {
@@ -117,6 +128,9 @@ const projectEngineeringPresetInstructions = [
   "Project scaffolding requests are not tiny edits: if the project is empty or bare, plan a coherent skeleton with build config, source entrypoints, runtime config, and verification.",
   'For scaffold edit steps, prefer a "files" string array so Forge can expand one architectural step into several controlled file edits without wasting the plan budget.'
 ] as const;
+const builtInToolNameByNormalizedName = new Map(
+  builtInToolDefinitions.map((tool) => [normalizeBuiltInToolNameKey(tool.name), tool.name])
+);
 
 // 生成可执行计划并解析成步骤, 这里只请求模型不直接改文件
 export async function generateAgentPlan({
@@ -482,7 +496,8 @@ function createAgentPlanInstructions(personalization?: string): string {
     "Keep the plan small and respect the Agent profile plan step limit from the request context.",
     "Follow the Agent profile verification policy from the request context.",
     'Prefer JSON only: return a JSON object with a "steps" array and no prose before or after it. Each step must include "kind", "description", and optional "target".',
-    'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "web_search", "git_status", "bash", "edit", or "invoke_extension".',
+    'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "web_search", "git_status", "bash", "edit", "built_in_tool", or "invoke_extension".',
+    'For Built-in Tools, use kind "other", tool "built_in_tool", exact "toolName", and an "input" object. Prefer exact built-in tools over shell commands when the catalog contains a matching capability.',
     'For external Extensions, use kind "other", tool "invoke_extension", plus "extensionId", "actionId", and an "input" object that matches the enabled action schema.',
     'External Extensions read or modify real external-service data. Never represent Extension calls as shell commands.',
     'High-risk Extension actions such as sendEmail must remain confirmable by the user; do not claim the email has been sent in the plan response.',
@@ -493,6 +508,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For subprojects prefer package-manager subdirectory commands such as npm --prefix frontend install before npm --prefix frontend run build; use the same package manager if pnpm, yarn, or bun is already chosen.",
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
     'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for project text search queries, "web_search" for current external web information, and "git_status" for git status or diff checks.',
+    'Use "built_in_tool" for named Forge Built-in Tools such as readFile, searchText, previewDiff, getGitStatus, getDiagnostics, or runTypecheck.',
     'Do not use "web_search" for local project files. Use it only when the user asks for current public web information, docs, package/API facts, or external references.',
     "Do not use shell commands for directory listing, file globbing, text search, or git status/diff when a controlled tool can express the same step.",
     "If you cannot produce JSON, use a numbered list of concrete steps and mention target files or commands in backticks when known.",
@@ -847,6 +863,7 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     profileContext,
     memoryContext,
     instructionContext,
+    formatBuiltInToolContext(request.builtInToolContext),
     formatExtensionContext(request.extensionContext),
     scaffoldPlanningContext,
     `Project root:\n${request.projectScan.rootPath}`,
@@ -862,6 +879,14 @@ function formatExtensionContext(extensionContext: string | undefined): string {
   }
 
   return `Enabled external Extensions:\n${extensionContext.trim()}`;
+}
+
+function formatBuiltInToolContext(builtInToolContext: string | undefined): string {
+  if (!builtInToolContext?.trim()) {
+    return "";
+  }
+
+  return `Available Forge Built-in Tools:\n${builtInToolContext.trim()}`;
 }
 
 function formatContextBoundary(projectRoot: string | null | undefined): string {
@@ -965,6 +990,7 @@ function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): st
     profileContext,
     memoryContext,
     instructionContext,
+    formatBuiltInToolContext(request.builtInToolContext),
     formatExtensionContext(request.extensionContext),
     `File path:\n${request.relativePath}`,
     `Current file content:\n${request.currentContent}`
@@ -997,6 +1023,10 @@ function createAskInput(request: GenerateAgentAskRequest): string {
 
   if (instructionContext) {
     parts.push(instructionContext);
+  }
+
+  if (request.builtInToolContext) {
+    parts.push(formatBuiltInToolContext(request.builtInToolContext));
   }
 
   if (request.extensionContext) {
@@ -1151,7 +1181,7 @@ function stripMarkdownCodeFence(value: string): string {
 }
 
 // 从模型文本里解析步骤列表, 失败时回退到单个说明步骤
-function parseAgentPlanSteps(
+export function parseAgentPlanSteps(
   text: string,
   stepLimit = 12,
   verificationPolicy: AgentVerificationPolicy = "suggest"
@@ -1196,6 +1226,14 @@ function parseAgentPlanSteps(
         ...(step.extensionActionId ? { extensionActionId: step.extensionActionId } : {}),
         ...(step.extensionInput ? { extensionInput: step.extensionInput } : {}),
         ...(step.extensionRisk ? { extensionRisk: step.extensionRisk } : {}),
+        ...(step.builtInToolName ? { builtInToolName: step.builtInToolName } : {}),
+        ...(step.builtInToolInput ? { builtInToolInput: step.builtInToolInput } : {}),
+        ...(step.builtInToolRiskLevel
+          ? { builtInToolRiskLevel: step.builtInToolRiskLevel }
+          : {}),
+        ...(step.builtInToolRequiresConfirmation !== undefined
+          ? { builtInToolRequiresConfirmation: step.builtInToolRequiresConfirmation }
+          : {}),
         ...(step.requiresConfirmation !== undefined
           ? { requiresConfirmation: step.requiresConfirmation }
           : {})
@@ -1232,7 +1270,7 @@ function applyVerificationPolicy(
 ): AgentPlanStep[] {
   if (
     verificationPolicy !== "require" ||
-    !steps.some((step) => step.kind === "edit") ||
+    !steps.some(isProjectMutationPlanStep) ||
     steps.some((step) => step.kind === "verify")
   ) {
     return steps;
@@ -1259,12 +1297,26 @@ function applyVerificationPolicy(
 
 function findVerificationInsertionRemovalIndex(steps: AgentPlanStep[]): number {
   for (let index = steps.length - 1; index >= 0; index -= 1) {
-    if (steps[index].kind !== "edit") {
+    if (!isProjectMutationPlanStep(steps[index])) {
       return index;
     }
   }
 
   return Math.max(0, steps.length - 1);
+}
+
+function isProjectMutationPlanStep(step: AgentPlanStep): boolean {
+  if (step.kind === "edit") {
+    return true;
+  }
+
+  if (!step.builtInToolName) {
+    return false;
+  }
+
+  return ["delete", "git", "move", "write"].includes(
+    deriveAgentToolSideEffect(step.builtInToolName)
+  );
 }
 
 function renumberPlanSteps(steps: AgentPlanStep[]): AgentPlanStep[] {
@@ -1445,6 +1497,247 @@ function readStructuredStepsArray(value: unknown): unknown[] {
   return [];
 }
 
+function readBuiltInToolName(
+  value: Record<string, unknown>,
+  rawToolField: string | undefined,
+  toolHint: StructuredToolHint | null
+): string | null {
+  const explicitName = readStringField(value, [
+    "builtInToolName",
+    "built_in_tool_name",
+    "builtInTool",
+    "built_in_tool",
+    "forgeTool",
+    "forge_tool"
+  ]);
+  const toolNameField = readStringField(value, ["toolName", "tool_name"]);
+  const candidates = [
+    explicitName,
+    toolHint === "built-in-tool" ? toolNameField : undefined,
+    toolHint === "built-in-tool" ? readStringField(value, ["name"]) : undefined,
+    toolHint ? undefined : rawToolField
+  ];
+
+  for (const candidate of candidates) {
+    const toolName = normalizeBuiltInToolName(candidate);
+
+    if (toolName) {
+      return toolName;
+    }
+  }
+
+  return null;
+}
+
+function normalizeBuiltInToolName(value: string | undefined): string | null {
+  const normalized = value ? normalizeBuiltInToolNameKey(value) : "";
+
+  return normalized ? builtInToolNameByNormalizedName.get(normalized) ?? null : null;
+}
+
+function normalizeBuiltInToolNameKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s_-]+/gu, "");
+}
+
+function normalizeBuiltInToolPlanInput(
+  toolName: string,
+  input: Record<string, unknown>,
+  value: Record<string, unknown>,
+  rawTarget: string | undefined
+): Record<string, unknown> {
+  const nextInput = { ...input };
+  const target = rawTarget ?? readStringField(value, ["target"]);
+
+  applyRelativePathInput(toolName, nextInput, value, target);
+  applyRelativePathsInput(toolName, nextInput, value, target);
+  applyQueryInput(toolName, nextInput, value, target);
+  applyPatternInput(toolName, nextInput, value, target);
+  applyCommandInput(toolName, nextInput, value, target);
+  applyMoveCopyInput(toolName, nextInput, value);
+
+  return nextInput;
+}
+
+function applyRelativePathInput(
+  toolName: string,
+  input: Record<string, unknown>,
+  value: Record<string, unknown>,
+  target: string | undefined
+): void {
+  if (
+    ![
+      "readFile",
+      "readFileChunk",
+      "statFile",
+      "detectFileType",
+      "getFileSymbols",
+      "getRelatedFiles",
+      "createFile",
+      "deleteFile",
+      "formatFile",
+      "revertFile",
+      "previewDiff",
+      "proposeEdit",
+      "applyEdit",
+      "replaceText",
+      "insertText",
+      "createProjectInstructions",
+      "updateProjectInstructions",
+      "getGitBlame"
+    ].includes(toolName) ||
+    typeof input.relativePath === "string"
+  ) {
+    return;
+  }
+
+  const relativePath =
+    readStringField(value, ["relativePath", "relative_path", "file", "path"]) ??
+    readStringInputAlias(input, ["relativePath", "relative_path", "file", "path"]) ??
+    target;
+
+  if (relativePath) {
+    input.relativePath = relativePath;
+  }
+}
+
+function applyRelativePathsInput(
+  toolName: string,
+  input: Record<string, unknown>,
+  value: Record<string, unknown>,
+  target: string | undefined
+): void {
+  if (!["readManyFiles", "revertChanges"].includes(toolName) || Array.isArray(input.relativePaths)) {
+    return;
+  }
+
+  const relativePaths = readStringArrayField(value, [
+    "relativePaths",
+    "relative_paths",
+    "files",
+    "paths",
+    "targets"
+  ]);
+
+  if (relativePaths.length > 0) {
+    input.relativePaths = relativePaths;
+    return;
+  }
+
+  if (target) {
+    input.relativePaths = [target];
+  }
+}
+
+function applyQueryInput(
+  toolName: string,
+  input: Record<string, unknown>,
+  value: Record<string, unknown>,
+  target: string | undefined
+): void {
+  if (
+    ![
+      "searchText",
+      "findReferences",
+      "searchMemory",
+      "webSearch",
+      "searchSemantic",
+      "searchDiagnostics"
+    ].includes(toolName) ||
+    typeof input.query === "string"
+  ) {
+    return;
+  }
+
+  const query =
+    readStringField(value, ["query", "text", "keyword", "symbol"]) ??
+    readStringInputAlias(input, ["query", "text", "keyword", "symbol"]) ??
+    target;
+
+  if (query) {
+    input.query = query;
+  }
+}
+
+function applyPatternInput(
+  toolName: string,
+  input: Record<string, unknown>,
+  value: Record<string, unknown>,
+  target: string | undefined
+): void {
+  if (!["globFiles", "searchRegex"].includes(toolName) || typeof input.pattern === "string") {
+    return;
+  }
+
+  const pattern =
+    readStringField(value, ["pattern", "glob", "regex"]) ??
+    readStringInputAlias(input, ["pattern", "glob", "regex"]) ??
+    target;
+
+  if (pattern) {
+    input.pattern = pattern;
+  }
+}
+
+function applyCommandInput(
+  toolName: string,
+  input: Record<string, unknown>,
+  value: Record<string, unknown>,
+  target: string | undefined
+): void {
+  if (!["runCommand", "runTargetedTest"].includes(toolName) || typeof input.command === "string") {
+    return;
+  }
+
+  const command =
+    readStringField(value, ["command", "cmd"]) ??
+    readStringInputAlias(input, ["command", "cmd"]) ??
+    target;
+
+  if (command) {
+    input.command = command;
+  }
+}
+
+function applyMoveCopyInput(
+  toolName: string,
+  input: Record<string, unknown>,
+  value: Record<string, unknown>
+): void {
+  if (!["moveFile", "copyFile"].includes(toolName)) {
+    return;
+  }
+
+  const from =
+    readStringField(value, ["from", "source", "sourcePath", "source_path"]) ??
+    readStringInputAlias(input, ["from", "source", "sourcePath", "source_path"]);
+  const to =
+    readStringField(value, ["to", "destination", "dest", "targetPath", "target_path"]) ??
+    readStringInputAlias(input, ["to", "destination", "dest", "targetPath", "target_path"]);
+
+  if (from && typeof input.from !== "string") {
+    input.from = from;
+  }
+
+  if (to && typeof input.to !== "string") {
+    input.to = to;
+  }
+}
+
+function readStringInputAlias(
+  input: Record<string, unknown>,
+  keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = input[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return normalizePlanTargetText(value);
+    }
+  }
+
+  return undefined;
+}
+
 // 把结构化 step 的别名字段归一化成 Forge 内部计划步骤草稿
 function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft[] {
   if (!isRecord(value)) {
@@ -1454,7 +1747,8 @@ function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft[] {
   const title = readStringField(value, ["title", "label", "name"]);
   const description =
     readStringField(value, ["description", "task", "action", "summary"]) ?? title ?? "";
-  const toolHint = normalizeStructuredToolHint(readStringField(value, ["tool", "toolName", "tool_name"]));
+  const rawToolField = readStringField(value, ["tool", "toolName", "tool_name"]);
+  const toolHint = normalizeStructuredToolHint(rawToolField);
   const extensionId = readStringField(value, ["extensionId", "extension_id", "extension"]);
   const extensionActionId = readStringField(value, [
     "actionId",
@@ -1462,7 +1756,7 @@ function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft[] {
     "extensionActionId",
     "extension_action_id"
   ]);
-  const extensionInput = readRecordField(value, ["input", "args", "arguments", "parameters"]);
+  const structuredInput = readRecordField(value, ["input", "args", "arguments", "parameters"]);
   const extensionRisk = normalizeExtensionRisk(readStringField(value, ["risk"]));
   const rawTarget = readStringField(value, [
     "target",
@@ -1475,6 +1769,31 @@ function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft[] {
   ]);
   const rawKind = readStringField(value, ["kind", "type"]);
   const kind = normalizePlanStepKind(rawKind, `${description} ${rawTarget ?? ""}`, toolHint);
+  const builtInToolName = readBuiltInToolName(value, rawToolField, toolHint);
+
+  if (builtInToolName) {
+    const definition = getBuiltInToolDefinition(builtInToolName);
+    const builtInToolInput = normalizeBuiltInToolPlanInput(
+      builtInToolName,
+      structuredInput ?? {},
+      value,
+      rawTarget
+    );
+
+    return [
+      {
+        description: description.trim() || `Run built-in tool ${builtInToolName}`,
+        builtInToolInput,
+        builtInToolName,
+        builtInToolRequiresConfirmation: definition.requiresConfirmation,
+        builtInToolRiskLevel: definition.riskLevel,
+        kind: "other",
+        requiresConfirmation: definition.requiresConfirmation,
+        tool: "built-in-tool",
+        ...(title ? { title } : {})
+      }
+    ];
+  }
 
   if ((toolHint === "invoke-extension" || extensionId || extensionActionId) && extensionId && extensionActionId) {
     return [
@@ -1482,7 +1801,7 @@ function normalizeStructuredPlanStep(value: unknown): ParsedPlanStepDraft[] {
         description: description.trim() || `Invoke extension ${extensionId}.${extensionActionId}`,
         extensionActionId,
         extensionId,
-        extensionInput: extensionInput ?? {},
+        extensionInput: structuredInput ?? {},
         extensionRisk,
         kind: "other",
         requiresConfirmation: value.requiresConfirmation === true || value.confirmation === "always",
@@ -1639,6 +1958,19 @@ function normalizeStructuredToolHint(tool: string | undefined): StructuredToolHi
     return "edit";
   }
 
+  if (
+    [
+      "built-in-tool",
+      "built-in",
+      "builtin",
+      "builtin-tool",
+      "forge-tool",
+      "forge-built-in-tool"
+    ].includes(normalized)
+  ) {
+    return "built-in-tool";
+  }
+
   if (["invoke-extension", "extension", "external-action", "external-tool"].includes(normalized)) {
     return "invoke-extension";
   }
@@ -1709,6 +2041,10 @@ function normalizePlanStepKind(
 
   if (toolHint === "edit") {
     return "edit";
+  }
+
+  if (toolHint === "built-in-tool") {
+    return "other";
   }
 
   if (toolHint === "invoke-extension") {

@@ -2,6 +2,7 @@
 import type { ForgeModel, ForgeProvider, IntelligenceLevel, SpeedMode } from "./modelTypes.js";
 import type { ProjectScanResult } from "./projectTypes.js";
 import type { TokenUsage } from "./usageTypes.js";
+import type { BuiltInToolRiskLevel } from "./builtInToolTypes.js";
 
 export type AgentMemoryContext = {
   id: string;
@@ -24,6 +25,8 @@ export type AgentProfileContext = {
   failureRecoveryPolicy: "manual" | "suggest" | "auto";
   maxFailureRecoveryAttempts: number;
 };
+
+export type AgentToolPermission = "read" | "edit" | "command" | "git" | "extension" | "web";
 
 export type AgentWorkMode = "code" | "daily";
 export type AgentRuntime = "windows-native" | "wsl";
@@ -54,6 +57,7 @@ export type GenerateAgentPlanRequest = {
   speed: SpeedMode;
   workMode?: AgentWorkMode;
   agentRuntime?: AgentRuntime;
+  builtInToolContext?: string;
   extensionContext?: string;
   taskPrompt: string;
   projectScan: ProjectScanResult;
@@ -71,6 +75,7 @@ export type GenerateAgentFileChangeRequest = {
   speed: SpeedMode;
   workMode?: AgentWorkMode;
   agentRuntime?: AgentRuntime;
+  builtInToolContext?: string;
   extensionContext?: string;
   taskPrompt: string;
   relativePath: string;
@@ -90,6 +95,7 @@ export type GenerateAgentAskRequest = {
   speed: SpeedMode;
   workMode?: AgentWorkMode;
   agentRuntime?: AgentRuntime;
+  builtInToolContext?: string;
   extensionContext?: string;
   prompt: string;
   attachments?: AgentImageAttachment[];
@@ -109,6 +115,10 @@ export type AgentPlanStep = {
   extensionActionId?: string;
   extensionInput?: Record<string, unknown>;
   extensionRisk?: "read" | "write" | "send" | "delete";
+  builtInToolName?: string;
+  builtInToolInput?: Record<string, unknown>;
+  builtInToolRiskLevel?: BuiltInToolRiskLevel;
+  builtInToolRequiresConfirmation?: boolean;
   requiresConfirmation?: boolean;
 };
 

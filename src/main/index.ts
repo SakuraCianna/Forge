@@ -11,6 +11,12 @@ import {
 } from "./agentPlanService.js";
 import { registerCommandHandlers } from "./commandIpc.js";
 import { cancelProjectCommand, runProjectCommand } from "./commandRunner.js";
+import { createAgentQualityMetricsLogStore } from "./agentQualityMetricsLog.js";
+import { createElectronBrowserPreviewTools } from "./browserPreviewTools.js";
+import { createBuiltInToolAuditLogStore } from "./builtInTools/builtInToolAuditLog.js";
+import { createDefaultBuiltInToolExecutors } from "./builtInTools/builtInToolExecutors.js";
+import { registerBuiltInToolHandlers } from "./builtInTools/builtInToolIpc.js";
+import { createBuiltInToolRegistry } from "./builtInTools/builtInToolRegistry.js";
 import { registerExtensionHandlers } from "./extensionIpc.js";
 import { createExtensionInvocationLogStore } from "./extensions/extensionInvocationLog.js";
 import { createExtensionRegistry } from "./extensions/extensionRegistry.js";
@@ -187,6 +193,25 @@ void app.whenReady().then(() => {
   const extensionLogStore = createExtensionInvocationLogStore({
     directory: extensionDirectory
   });
+  const builtInToolDirectory = join(app.getPath("userData"), "built-in-tools");
+  const builtInToolAuditLogStore = createBuiltInToolAuditLogStore({
+    directory: builtInToolDirectory
+  });
+  const agentQualityMetricsLogStore = createAgentQualityMetricsLogStore({
+    directory: join(app.getPath("userData"), "agent-quality-metrics")
+  });
+  const builtInToolRegistry = createBuiltInToolRegistry({
+    auditLogStore: builtInToolAuditLogStore,
+    executors: createDefaultBuiltInToolExecutors({
+      browserTools: createElectronBrowserPreviewTools({
+        screenshotDirectory: join(builtInToolDirectory, "screenshots")
+      }),
+      cancelCommand: cancelProjectCommand,
+      openExternal: (url) => shell.openExternal(url),
+      runCommand: runProjectCommand
+    }),
+    metricsLogStore: agentQualityMetricsLogStore
+  });
   const extensionRegistry = createExtensionRegistry({
     customExtensionDirectory: join(extensionDirectory, "custom"),
     logStore: extensionLogStore,
@@ -225,6 +250,17 @@ void app.whenReady().then(() => {
   registerExtensionHandlers(extensionRegistry, (channel, handler) => {
     ipcMain.handle(channel, handler);
   });
+
+  registerBuiltInToolHandlers(
+    {
+      auditLogStore: builtInToolAuditLogStore,
+      metricsLogStore: agentQualityMetricsLogStore,
+      registry: builtInToolRegistry
+    },
+    (channel, handler) => {
+      ipcMain.handle(channel, handler);
+    }
+  );
 
   // Agent 调用统一经过主进程, 避免把 provider key 暴露给前端页面
   registerAgentHandlers(

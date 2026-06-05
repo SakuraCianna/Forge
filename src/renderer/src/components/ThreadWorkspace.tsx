@@ -97,6 +97,7 @@ type ThreadWorkspaceProps = {
   onRunAgentActions?: (threadId: string, actions: AgentAction[]) => void;
   onApproveAgentCommand?: (threadId: string, action: AgentAction) => void;
   onAllowAgentCommand?: (threadId: string, action: AgentAction) => void;
+  onConfirmAgentBuiltInTool?: (threadId: string, action: AgentAction) => void;
   onConfirmAgentExtension?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onGenerateContinuationPlan?: (threadId: string) => void;
@@ -203,6 +204,7 @@ export function ThreadWorkspace({
   onRunAgentActions,
   onApproveAgentCommand,
   onAllowAgentCommand,
+  onConfirmAgentBuiltInTool,
   onConfirmAgentExtension,
   onGenerateCommandFix,
   onGenerateContinuationPlan,
@@ -423,6 +425,7 @@ export function ThreadWorkspace({
               language={language}
               threadId={selectedThread.id}
               onApproveAgentCommand={onApproveAgentCommand}
+              onConfirmAgentBuiltInTool={onConfirmAgentBuiltInTool}
               onConfirmAgentExtension={onConfirmAgentExtension}
               onCompleteAgentAction={onCompleteAgentAction}
               onOpenFiles={onOpenFiles}
@@ -1019,6 +1022,7 @@ export function ThreadWorkspace({
               "git-status": "Git 检查",
               "edit-file": "生成修改",
               "run-command": "运行命令",
+              "built-in-tool": "内置工具",
               "invoke-extension": "调用扩展",
               commit: "提交",
               manual: "人工步骤"
@@ -1051,6 +1055,7 @@ export function ThreadWorkspace({
               "git-status": "Git check",
               "edit-file": "Generate edit",
               "run-command": "Run command",
+              "built-in-tool": "Built-in tool",
               "invoke-extension": "Invoke extension",
               commit: "Commit",
               manual: "Manual step"
@@ -1326,9 +1331,13 @@ export function ThreadWorkspace({
             manualGateBody: (label: string) => `请先处理 ${label}, Forge 不会自动越过这个门禁`,
             reviewGate: "审查门禁",
             approveCommand: "批准命令",
+            approveBuiltInTool: "确认内置工具",
             approveExtension: "确认扩展操作",
             commandNeedsApproval: "命令需要批准",
             commandBlocked: "命令已被安全策略阻止",
+            builtInToolNeedsConfirmation: "内置工具需要确认",
+            builtInToolGateBody: (label: string) =>
+              `请确认 ${label}, Forge 不会在用户确认前执行高风险内置工具`,
             extensionNeedsConfirmation: "扩展操作需要确认",
             extensionGateBody: (label: string) => `请确认 ${label}, Forge 不会静默执行外部服务写操作`,
             markReviewComplete: "完成审查",
@@ -1361,9 +1370,13 @@ export function ThreadWorkspace({
               `Handle ${label} before Forge continues. This gate will not be auto-run.`,
             reviewGate: "Review gate",
             approveCommand: "Approve command",
+            approveBuiltInTool: "Confirm built-in tool",
             approveExtension: "Confirm extension",
             commandNeedsApproval: "Command needs approval",
             commandBlocked: "Command blocked by policy",
+            builtInToolNeedsConfirmation: "Built-in tool needs confirmation",
+            builtInToolGateBody: (label: string) =>
+              `Confirm ${label}. Forge will not run high-risk built-in tools before user confirmation.`,
             extensionNeedsConfirmation: "Extension action needs confirmation",
             extensionGateBody: (label: string) =>
               `Confirm ${label}. Forge will not silently run external write actions.`,
@@ -1605,7 +1618,7 @@ export function ThreadWorkspace({
     function getActionStatusLabel(action: AgentAction): string {
       const commandRisk = getCommandRiskForAction(action);
 
-      if (action.status === "pending" && commandRisk?.level === "ask" && !fullAccess) {
+      if (action.status === "pending" && commandRisk?.level === "ask") {
         return actionQueueCopy.commandNeedsApproval;
       }
 
@@ -1615,8 +1628,7 @@ export function ThreadWorkspace({
 
       if (
         action.status === "pending" &&
-        (action.kind === "manual" || action.kind === "commit") &&
-        !fullAccess
+        (action.kind === "manual" || action.kind === "commit")
       ) {
         return actionQueueCopy.reviewGate;
       }
@@ -1701,7 +1713,7 @@ export function ThreadWorkspace({
         const commandToRun = action.command;
         const commandRisk = resolveAgentCommandRisk(commandToRun, commandSafetyPolicy);
 
-        if (commandRisk.level === "ask" && !fullAccess && onApproveAgentCommand) {
+        if (commandRisk.level === "ask" && onApproveAgentCommand) {
           return (
             <button
               type="button"
@@ -1733,6 +1745,25 @@ export function ThreadWorkspace({
             className="mt-2 h-7 rounded-[10px] bg-[#202123] px-2 text-[11px] font-semibold text-white transition hover:bg-black active:scale-[0.99]"
           >
           {actionQueueCopy.run}
+          </button>
+        );
+      }
+
+      if (
+        action.kind === "built-in-tool" &&
+        action.builtInToolName &&
+        selectedThread &&
+        onRunAgentAction &&
+        isRunnableAgentAction(action, commandSafetyPolicy)
+      ) {
+        return (
+          <button
+            type="button"
+            aria-label={`Run built-in tool ${action.builtInToolName}`}
+            onClick={() => onRunAgentAction(selectedThread.id, action)}
+            className="mt-2 h-7 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#202123] transition hover:bg-[#f7f7f8]"
+          >
+            {actionQueueCopy.run}
           </button>
         );
       }
@@ -1776,13 +1807,13 @@ export function ThreadWorkspace({
         return actionDetailsCopy.skipped;
       }
 
-      if ((action.kind === "manual" || action.kind === "commit") && !fullAccess) {
+      if (action.kind === "manual" || action.kind === "commit") {
         return actionDetailsCopy.manualGate;
       }
 
       const commandRisk = getCommandRiskForAction(action);
 
-      if (commandRisk?.level === "ask" && !fullAccess) {
+      if (commandRisk?.level === "ask") {
         return `${actionDetailsCopy.commandNeedsApproval}: ${formatAgentCommandRiskReason(
           language,
           commandRisk.reason
@@ -1800,6 +1831,10 @@ export function ThreadWorkspace({
         return actionQueueCopy.extensionGateBody(action.label);
       }
 
+      if (action.kind === "built-in-tool" && action.requiresConfirmation) {
+        return actionQueueCopy.builtInToolGateBody(action.label);
+      }
+
       if (isRunnableAgentAction(action, commandSafetyPolicy)) {
         return actionDetailsCopy.ready;
       }
@@ -1811,7 +1846,7 @@ export function ThreadWorkspace({
     function getGateTitle(action: AgentAction): string {
       const commandRisk = getCommandRiskForAction(action);
 
-      if (commandRisk?.level === "ask" && !fullAccess) {
+      if (commandRisk?.level === "ask") {
         return actionQueueCopy.commandNeedsApproval;
       }
 
@@ -1823,14 +1858,18 @@ export function ThreadWorkspace({
         return actionQueueCopy.extensionNeedsConfirmation;
       }
 
-      return fullAccess ? actionQueueCopy.ready : actionQueueCopy.manualGate;
+      if (action.kind === "built-in-tool" && action.requiresConfirmation) {
+        return actionQueueCopy.builtInToolNeedsConfirmation;
+      }
+
+      return actionQueueCopy.manualGate;
     }
 
     // 生成人工门禁或命令审批门禁说明
     function getGateBody(action: AgentAction): string {
       const commandRisk = getCommandRiskForAction(action);
 
-      if (commandRisk?.level === "ask" && !fullAccess) {
+      if (commandRisk?.level === "ask") {
         return actionDetailsCopy.commandNeedsApproval;
       }
 
@@ -1842,7 +1881,11 @@ export function ThreadWorkspace({
         return actionQueueCopy.extensionGateBody(action.label);
       }
 
-      return fullAccess ? actionDetailsCopy.ready : actionQueueCopy.manualGateBody(action.label);
+      if (action.kind === "built-in-tool" && action.requiresConfirmation) {
+        return actionQueueCopy.builtInToolGateBody(action.label);
+      }
+
+      return actionQueueCopy.manualGateBody(action.label);
     }
 
     // 动作详情也提供门禁和恢复操作, 避免用户看完详情后还要回到队列顶部找确认入口
@@ -1882,6 +1925,24 @@ export function ThreadWorkspace({
             className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
           >
             {actionQueueCopy.openSourceControl}
+          </button>
+        );
+      }
+
+      if (
+        action.status === "pending" &&
+        action.kind === "built-in-tool" &&
+        action.requiresConfirmation &&
+        onConfirmAgentBuiltInTool
+      ) {
+        controls.push(
+          <button
+            key="confirm-built-in-tool"
+            type="button"
+            onClick={() => onConfirmAgentBuiltInTool(selectedThread.id, action)}
+            className="h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+          >
+            {actionQueueCopy.approveBuiltInTool}
           </button>
         );
       }
@@ -2273,6 +2334,7 @@ export function ThreadWorkspace({
             onAllowAgentCommand={onAllowAgentCommand}
             onApplyAllChanges={onApplyAllChanges}
             onApproveAgentCommand={onApproveAgentCommand}
+            onConfirmAgentBuiltInTool={onConfirmAgentBuiltInTool}
             onConfirmAgentExtension={onConfirmAgentExtension}
             onCompleteAgentAction={onCompleteAgentAction}
             onDiscardAllChanges={onDiscardAllChanges}
@@ -2448,6 +2510,18 @@ export function ThreadWorkspace({
                     {actionQueueCopy.openSourceControl}
                   </button>
                 ) : null}
+                {activeGateAction.kind === "built-in-tool" &&
+                activeGateAction.requiresConfirmation &&
+                selectedThread &&
+                onConfirmAgentBuiltInTool ? (
+                  <button
+                    type="button"
+                    onClick={() => onConfirmAgentBuiltInTool(selectedThread.id, activeGateAction)}
+                    className="mt-2 h-7 rounded-[10px] bg-[#9a3412] px-2 text-[11px] font-semibold text-white transition hover:bg-[#7c2d12] active:scale-[0.99]"
+                  >
+                    {actionQueueCopy.approveBuiltInTool}
+                  </button>
+                ) : null}
                 {activeGateAction.kind === "invoke-extension" &&
                 activeGateAction.extensionConfirmation &&
                 selectedThread &&
@@ -2489,7 +2563,9 @@ export function ThreadWorkspace({
                     className={`rounded-[14px] border px-3 py-2 transition ${
                       selectedAgentAction?.id === action.id
                         ? "border-[#202123] bg-white shadow-sm"
-                        : action.kind === "manual" || action.kind === "commit"
+                        : action.kind === "manual" ||
+                            action.kind === "commit" ||
+                            (action.kind === "built-in-tool" && action.requiresConfirmation)
                           ? "border-[#f4c7ab] bg-[#fffaf5]"
                           : "border-[#ececf1] bg-[#fafafa]"
                     }`}

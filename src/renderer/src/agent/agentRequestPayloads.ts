@@ -29,6 +29,7 @@ import {
 import type { ExtensionRegistrySnapshot } from "@shared/extensionTypes";
 import { formatExtensionActionSchemaForPrompt } from "@/state/extensions";
 import { resolveVisionAttachments } from "@/state/threadSelectors";
+import { formatBuiltInToolCatalogForPrompt } from "@shared/builtInToolPromptContext";
 
 export type AgentRequestRuntimeContext = {
   provider: ForgeProvider;
@@ -172,6 +173,7 @@ function createCommonAgentRequestFields(
   | "speed"
   | "workMode"
   | "agentRuntime"
+  | "builtInToolContext"
   | "extensionContext"
   | "attachments"
 > {
@@ -184,6 +186,7 @@ function createCommonAgentRequestFields(
     speed: runtime.speed,
     workMode: runtime.workMode,
     agentRuntime: runtime.agentRuntime,
+    builtInToolContext: formatBuiltInToolCatalogForPrompt(),
     extensionContext: formatExtensionActionSchemaForPrompt(runtime.extensions),
     // 视觉附件由统一出口过滤, 避免非视觉模型收到 data URL 造成无效请求或额外 token 开销。
     attachments: resolveVisionAttachments(runtime.model, attachments)

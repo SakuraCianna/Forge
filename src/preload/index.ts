@@ -2,6 +2,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import {
   agentChannels,
+  builtInToolChannels,
   commandChannels,
   extensionChannels,
   fileChannels,
@@ -25,6 +26,19 @@ import type {
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
 import type { ForgeProvider } from "../shared/modelTypes.js";
+import type {
+  AgentQualityMetricSnapshot,
+  AgentQualityObservation
+} from "../shared/agentQualityMetrics.js";
+import type {
+  BuiltInToolCallLogRecord,
+  BuiltInToolCatalogSnapshot,
+  BuiltInToolExecutionRequest
+} from "../shared/builtInToolTypes.js";
+import type {
+  BuiltInToolQaRunRequest,
+  BuiltInToolQaRunResult
+} from "../shared/builtInToolQaTypes.js";
 import type {
   ExtensionConfirmInvocationRequest,
   ExtensionCreateRequest,
@@ -137,6 +151,20 @@ contextBridge.exposeInMainWorld("forge", {
       ipcRenderer.invoke(extensionChannels.confirmInvocation, request),
     listLogs: (limit?: number): Promise<ExtensionInvocationLogRecord[]> =>
       ipcRenderer.invoke(extensionChannels.logs, limit)
+  },
+  builtInTools: {
+    getCatalog: (): Promise<BuiltInToolCatalogSnapshot> =>
+      ipcRenderer.invoke(builtInToolChannels.catalog),
+    execute: (request: BuiltInToolExecutionRequest): Promise<unknown> =>
+      ipcRenderer.invoke(builtInToolChannels.execute, request),
+    listLogs: (limit?: number): Promise<BuiltInToolCallLogRecord[]> =>
+      ipcRenderer.invoke(builtInToolChannels.logs, limit),
+    getMetrics: (): Promise<AgentQualityMetricSnapshot> =>
+      ipcRenderer.invoke(builtInToolChannels.metrics),
+    recordMetric: (observation: AgentQualityObservation) =>
+      ipcRenderer.invoke(builtInToolChannels.recordMetric, observation),
+    runDevelopmentQa: (request?: BuiltInToolQaRunRequest): Promise<BuiltInToolQaRunResult> =>
+      ipcRenderer.invoke(builtInToolChannels.developmentQa, request)
   },
   system: {
     openExternal: (url: string): Promise<boolean> =>

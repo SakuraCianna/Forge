@@ -77,6 +77,15 @@ export const extensionChannels = {
   delete: "forge:extensions:delete"
 } as const;
 
+export const builtInToolChannels = {
+  catalog: "forge:built-in-tools:catalog",
+  execute: "forge:built-in-tools:execute",
+  logs: "forge:built-in-tools:logs",
+  metrics: "forge:built-in-tools:metrics",
+  recordMetric: "forge:built-in-tools:record-metric",
+  developmentQa: "forge:built-in-tools:development-qa"
+} as const;
+
 export const systemChannels = {
   openExternal: "forge:system:open-external"
 } as const;
