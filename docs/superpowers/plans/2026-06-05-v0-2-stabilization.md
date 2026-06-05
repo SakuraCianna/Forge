@@ -418,6 +418,8 @@ Latest status changed-file review hardening: `npm run quality:v0.2:status` now i
 
 Latest status mixed-blocker classification hardening: `npm run quality:v0.2:status` now reports `unproven` only when every blocker is missing evidence. If one report is missing but another existing report is invalid, failed, or below usable, the overall classification is `blocked` while preserving all blockers.
 
+Latest invalid changed-file review hardening: `npm run quality:v0.2:status` now carries invalid regression runs' changed-file evidence into `regression.details.invalidFileModificationEvidence` and prints an `Invalid changed files` line. Out-of-scope file evidence is now reviewable directly from the fast status command instead of requiring a manual JSON lookup.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.

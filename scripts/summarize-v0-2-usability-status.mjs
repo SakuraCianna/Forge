@@ -166,7 +166,10 @@ function createRegressionSummary(status, regressionSummary) {
       unexpectedTaskIds: asArray(regressionSummary?.coverage?.unexpectedTaskIds),
       blockingMetricIds: asArray(regressionSummary?.gate?.blockingMetricIds),
       unprovenMetricIds: asArray(regressionSummary?.gate?.unprovenMetricIds),
-      fileModificationEvidence: asFileModificationEvidence(regressionSummary?.fileModificationEvidence)
+      fileModificationEvidence: asFileModificationEvidence(regressionSummary?.fileModificationEvidence),
+      invalidFileModificationEvidence: asInvalidFileModificationEvidence(
+        regressionSummary?.invalidFileModificationEvidence
+      )
     };
   }
 
@@ -228,6 +231,24 @@ function asFileModificationEvidence(value) {
       unrelatedCodeChanged: entry.unrelatedCodeChanged === true
     }))
     .filter((entry) => entry.changedFiles.length > 0 && (entry.wrongFileModified || entry.unrelatedCodeChanged));
+}
+
+function asInvalidFileModificationEvidence(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => isRecord(entry))
+    .map((entry) => ({
+      index: Number.isInteger(entry.index) ? entry.index : -1,
+      taskId: typeof entry.taskId === "string" ? entry.taskId : null,
+      changedFiles: asArray(entry.changedFiles).filter((filePath) => typeof filePath === "string"),
+      wrongFileModified: entry.wrongFileModified === true,
+      unrelatedCodeChanged: entry.unrelatedCodeChanged === true,
+      reasons: asArray(entry.reasons).filter((reason) => typeof reason === "string")
+    }))
+    .filter((entry) => entry.changedFiles.length > 0);
 }
 
 function isRecord(value) {
@@ -299,6 +320,7 @@ function writeRegressionDetails(details) {
   console.log(`Blocking metrics: ${formatList(details.blockingMetricIds)}`);
   console.log(`Unproven metrics: ${formatList(details.unprovenMetricIds)}`);
   console.log(`Changed files: ${formatFileModificationEvidence(details.fileModificationEvidence)}`);
+  console.log(`Invalid changed files: ${formatInvalidFileModificationEvidence(details.invalidFileModificationEvidence)}`);
 }
 
 function writeInstallerSmokeDetails(details) {
@@ -342,6 +364,23 @@ function formatFileModificationEvidence(value) {
           const suffix = flags.length > 0 ? ` (${flags.join(", ")})` : "";
 
           return `${label} [${formatList(entry.changedFiles)}]${suffix}`;
+        })
+        .join("; ")
+    : "none";
+}
+
+function formatInvalidFileModificationEvidence(value) {
+  return value.length > 0
+    ? value
+        .map((entry) => {
+          const label = entry.taskId ? `${entry.index}:${entry.taskId}` : `${entry.index}`;
+          const flags = [
+            entry.wrongFileModified ? "wrong-file" : null,
+            entry.unrelatedCodeChanged ? "unrelated-change" : null
+          ].filter(Boolean);
+          const flagsSuffix = flags.length > 0 ? ` (${flags.join(", ")})` : "";
+
+          return `${label} [${formatList(entry.changedFiles)}] [${formatList(entry.reasons)}]${flagsSuffix}`;
         })
         .join("; ")
     : "none";

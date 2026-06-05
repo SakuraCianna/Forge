@@ -87,6 +87,7 @@ if (!source) {
       totalObservations: 0,
       invalidRunCount: 0,
       invalidRuns: [],
+      invalidFileModificationEvidence: [],
       duplicateTaskCount: 0,
       duplicateTaskIds: [],
       coverage: createCoverageSummary([]),
@@ -104,7 +105,8 @@ if (!source) {
 
 try {
   const packageVersion = await readPackageVersion();
-  const { runs, invalidRuns, totalRawRuns, forgeVersion } = await readRegressionRuns(source);
+  const { runs, invalidRuns, invalidFileModificationEvidence, totalRawRuns, forgeVersion } =
+    await readRegressionRuns(source);
   const metadata = {
     forgeVersion,
     packageVersion,
@@ -130,6 +132,7 @@ try {
     totalObservations: observations.length,
     invalidRunCount: invalidRuns.length,
     invalidRuns,
+    invalidFileModificationEvidence,
     duplicateTaskCount: duplicateTaskIds.length,
     duplicateTaskIds,
     metadata,
@@ -166,6 +169,7 @@ try {
       totalObservations: 0,
       invalidRunCount: 0,
       invalidRuns: [],
+      invalidFileModificationEvidence: [],
       duplicateTaskCount: 0,
       duplicateTaskIds: [],
       coverage: createCoverageSummary([]),
@@ -231,6 +235,7 @@ async function readRegressionRuns(filePath) {
   const rawRuns = parsed.runs;
   const runs = [];
   const invalidRuns = [];
+  const invalidFileModificationEvidence = [];
 
   rawRuns.forEach((run, index) => {
     const reasons = getRegressionRunInvalidReasons(run);
@@ -245,11 +250,17 @@ async function readRegressionRuns(filePath) {
       taskId: isRecord(run) && typeof run.taskId === "string" ? run.taskId : null,
       reasons
     });
+    const fileModificationEvidence = createInvalidFileModificationEvidence(index, run, reasons);
+
+    if (fileModificationEvidence) {
+      invalidFileModificationEvidence.push(fileModificationEvidence);
+    }
   });
 
   return {
     runs,
     invalidRuns,
+    invalidFileModificationEvidence,
     totalRawRuns: rawRuns.length,
     forgeVersion: typeof parsed.forgeVersion === "string" ? parsed.forgeVersion : null
   };
@@ -341,6 +352,30 @@ function createFileModificationEvidence(runs) {
     wrongFileModified: run.wrongFileModified,
     unrelatedCodeChanged: run.unrelatedCodeChanged
   }));
+}
+
+function createInvalidFileModificationEvidence(index, run, reasons) {
+  if (!isRecord(run) || !isChangedFileList(run.changedFiles)) {
+    return null;
+  }
+
+  const hasFlaggedFileEvidence =
+    reasons.includes("changedFiles.outOfScope") ||
+    run.wrongFileModified === true ||
+    run.unrelatedCodeChanged === true;
+
+  if (!hasFlaggedFileEvidence) {
+    return null;
+  }
+
+  return {
+    index,
+    taskId: typeof run.taskId === "string" ? run.taskId : null,
+    changedFiles: run.changedFiles.map((filePath) => normalizeChangedFilePath(filePath)),
+    wrongFileModified: run.wrongFileModified === true,
+    unrelatedCodeChanged: run.unrelatedCodeChanged === true,
+    reasons
+  };
 }
 
 function getDuplicateTaskIds(runs) {
