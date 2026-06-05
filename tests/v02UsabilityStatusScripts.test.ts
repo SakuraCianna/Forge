@@ -79,6 +79,7 @@ test("v0.2 usability status reports evidence-ready when strict evidence files pa
     smokeFile,
     JSON.stringify(
       {
+        forgeVersion: "0.2.0",
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",

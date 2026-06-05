@@ -53,6 +53,7 @@ test("v0.2 installer smoke script validates the manual smoke report and installe
     reportPath,
     JSON.stringify(
       {
+        forgeVersion: "0.2.0",
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
@@ -120,6 +121,7 @@ test("v0.2 installer smoke script derives installer name from package version", 
     reportPath,
     JSON.stringify(
       {
+        forgeVersion: "0.2.1",
         installerPath: "release/Forge-0.2.1-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
@@ -161,6 +163,67 @@ test("v0.2 installer smoke script derives installer name from package version", 
   assert.equal(summary.installerSha256Matches, true);
 });
 
+test("v0.2 installer smoke script fails when report version does not match package version", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-version-mismatch-"));
+  const releaseDirectory = join(directory, "release");
+  const docsDirectory = join(directory, "docs");
+  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerFixture = "fake installer fixture";
+
+  await mkdir(releaseDirectory, { recursive: true });
+  await mkdir(docsDirectory, { recursive: true });
+  await writeFile(installerPath, installerFixture, "utf8");
+  await writeFile(
+    reportPath,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.1",
+        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        installerSha256: createSha256(installerFixture),
+        testedAt: "2026-06-05T12:00:00.000Z",
+        platform: "Windows 11",
+        checks: {
+          appLaunches: true,
+          projectOpens: true,
+          filePreviewWorks: true,
+          safeCommandRuns: true,
+          generatedDiffAcceptRejectWorks: true,
+          gitStatusViewOpens: true,
+          highRiskRequiresConfirmation: true
+        }
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    {
+      cwd: directory,
+      windowsHide: true
+    }
+  ).catch((error: unknown) => {
+    const maybeError = error as { stdout?: string };
+
+    return { stdout: maybeError.stdout ?? "" };
+  });
+  const summary = JSON.parse(stdout) as {
+    passed: boolean;
+    invalidMetadata: string[];
+    installerExists: boolean;
+    installerSha256Matches: boolean;
+  };
+
+  assert.equal(summary.passed, false);
+  assert.deepEqual(summary.invalidMetadata, ["forgeVersion"]);
+  assert.equal(summary.installerExists, true);
+  assert.equal(summary.installerSha256Matches, true);
+});
+
 test("v0.2 installer smoke script fails when installer SHA-256 is missing or stale", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-sha-"));
   const releaseDirectory = join(directory, "release");
@@ -175,6 +238,7 @@ test("v0.2 installer smoke script fails when installer SHA-256 is missing or sta
     reportPath,
     JSON.stringify(
       {
+        forgeVersion: "0.2.0",
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
         installerSha256: createSha256("old installer fixture"),
         testedAt: "2026-06-05T12:00:00.000Z",
@@ -221,6 +285,7 @@ test("v0.2 installer smoke script fails when installer SHA-256 is missing or sta
     reportPath,
     JSON.stringify(
       {
+        forgeVersion: "0.2.0",
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
@@ -273,6 +338,7 @@ test("v0.2 installer smoke script fails when required manual checks are missing"
     reportPath,
     JSON.stringify(
       {
+        forgeVersion: "0.2.0",
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
@@ -309,6 +375,7 @@ test("v0.2 installer smoke script fails when report metadata is missing or not W
     reportPath,
     JSON.stringify(
       {
+        forgeVersion: "0.2.0",
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
         installerSha256: createSha256("fake installer fixture"),
         platform: "Linux",
@@ -377,6 +444,7 @@ test("v0.2 installer smoke script rejects ambiguous smoke metadata", async () =>
     reportPath,
     JSON.stringify(
       {
+        forgeVersion: "0.2.0",
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05",
@@ -430,6 +498,7 @@ test("v0.2 installer smoke script rejects malformed report shape", async () => {
     reportPath,
     JSON.stringify(
       {
+        forgeVersion: "0.2.0",
         installerPath: "release/Forge-0.2.0-x64-setup.exe",
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",

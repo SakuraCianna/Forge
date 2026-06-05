@@ -388,6 +388,8 @@ Latest validation coverage hardening: strict v0.2 regression reports now reject 
 
 Latest validation cardinality hardening: strict v0.2 regression reports now also reject duplicated validation kinds inside a run, such as two `lint` records. Each fixed task must contribute exactly one typecheck, one build, and one lint sample, keeping validation denominators aligned with the task set.
 
+Latest installer version binding hardening: installer smoke reports now require `forgeVersion` to match the current `package.json` version, in addition to the installer filename and SHA-256 checks. This makes manual smoke evidence explicitly tied to the released Forge version under review.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.

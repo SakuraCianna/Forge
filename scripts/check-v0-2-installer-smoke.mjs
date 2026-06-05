@@ -14,7 +14,7 @@ const REQUIRED_CHECKS = [
   "gitStatusViewOpens",
   "highRiskRequiresConfirmation"
 ];
-const REQUIRED_METADATA = ["installerPath", "installerSha256", "testedAt", "platform"];
+const REQUIRED_METADATA = ["forgeVersion", "installerPath", "installerSha256", "testedAt", "platform"];
 
 const args = parseArgs(process.argv.slice(2));
 const reportPath = resolve(args.file ?? process.env.FORGE_INSTALLER_SMOKE_FILE ?? "docs/V0_2_INSTALLER_SMOKE.json");
@@ -165,6 +165,10 @@ async function verifyInstallerSha256(report, installerPath, installerExists) {
 
 function getInvalidMetadata(report, packageVersion, installerSha256Matches) {
   const invalidMetadata = [];
+
+  if (typeof report?.forgeVersion === "string" && report.forgeVersion !== packageVersion) {
+    invalidMetadata.push("forgeVersion");
+  }
 
   if (typeof report?.testedAt === "string" && !isIsoTimestampWithTimezone(report.testedAt)) {
     invalidMetadata.push("testedAt");
