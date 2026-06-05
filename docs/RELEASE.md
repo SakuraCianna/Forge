@@ -86,7 +86,7 @@ npm run quality:installer-smoke
 }
 ```
 
-报告顶层必须是 JSON object, 且 `checks` 必须是 object。其中 `installerPath`, `installerSha256`, `testedAt`, `platform` 是必填元数据。`testedAt` 必须是可解析时间, `platform` 必须明确为 Windows 环境, `installerPath` 必须指向和当前 `package.json` 版本一致的 Windows 安装包, `installerSha256` 必须和该安装包当前内容一致。所有 `checks` 字段都必须存在且为 `true`, 否则 `npm run quality:installer-smoke` 会失败。
+报告顶层必须是 JSON object, 且 `checks` 必须是 object。其中 `installerPath`, `installerSha256`, `testedAt`, `platform` 是必填元数据。`testedAt` 必须是带时区的 ISO 时间戳, 例如 `2026-06-05T12:00:00.000Z`; `platform` 必须明确以 Windows 开头, 例如 `Windows 11`; `installerPath` 必须指向和当前 `package.json` 版本一致的 Windows 安装包; `installerSha256` 必须和该安装包当前内容一致。所有 `checks` 字段都必须存在且为 `true`, 否则 `npm run quality:installer-smoke` 会失败。
 
 可用级候选版本需要同时通过真实任务回归门禁、安装包烟测门禁和工程门禁。总门禁会先检查真实证据, 证据通过后再执行耗时更长的完整工程和打包检查:
 

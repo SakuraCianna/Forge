@@ -362,6 +362,64 @@ test("v0.2 installer smoke script fails when report metadata is missing or not W
   });
 });
 
+test("v0.2 installer smoke script rejects ambiguous smoke metadata", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-ambiguous-metadata-"));
+  const releaseDirectory = join(directory, "release");
+  const docsDirectory = join(directory, "docs");
+  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerFixture = "fake installer fixture";
+
+  await mkdir(releaseDirectory, { recursive: true });
+  await mkdir(docsDirectory, { recursive: true });
+  await writeFile(installerPath, installerFixture, "utf8");
+  await writeFile(
+    reportPath,
+    JSON.stringify(
+      {
+        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        installerSha256: createSha256(installerFixture),
+        testedAt: "2026-06-05",
+        platform: "not Windows",
+        checks: {
+          appLaunches: true,
+          projectOpens: true,
+          filePreviewWorks: true,
+          safeCommandRuns: true,
+          generatedDiffAcceptRejectWorks: true,
+          gitStatusViewOpens: true,
+          highRiskRequiresConfirmation: true
+        }
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    {
+      cwd: directory,
+      windowsHide: true
+    }
+  ).catch((error: unknown) => {
+    const maybeError = error as { stdout?: string };
+
+    return { stdout: maybeError.stdout ?? "" };
+  });
+  const summary = JSON.parse(stdout) as {
+    passed: boolean;
+    invalidMetadata: string[];
+    installerSha256Matches: boolean;
+  };
+
+  assert.equal(summary.passed, false);
+  assert.deepEqual(summary.invalidMetadata, ["testedAt", "platform"]);
+  assert.equal(summary.installerSha256Matches, true);
+});
+
 test("v0.2 installer smoke script rejects malformed report shape", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-malformed-"));
   const docsDirectory = join(directory, "docs");

@@ -166,11 +166,11 @@ async function verifyInstallerSha256(report, installerPath, installerExists) {
 function getInvalidMetadata(report, packageVersion, installerSha256Matches) {
   const invalidMetadata = [];
 
-  if (typeof report?.testedAt === "string" && Number.isNaN(Date.parse(report.testedAt))) {
+  if (typeof report?.testedAt === "string" && !isIsoTimestampWithTimezone(report.testedAt)) {
     invalidMetadata.push("testedAt");
   }
 
-  if (typeof report?.platform === "string" && !/windows/i.test(report.platform)) {
+  if (typeof report?.platform === "string" && !isWindowsPlatform(report.platform)) {
     invalidMetadata.push("platform");
   }
 
@@ -199,6 +199,18 @@ function escapeRegExp(value) {
 
 function isSha256(value) {
   return /^[a-f0-9]{64}$/iu.test(value);
+}
+
+function isIsoTimestampWithTimezone(value) {
+  if (Number.isNaN(Date.parse(value))) {
+    return false;
+  }
+
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
+}
+
+function isWindowsPlatform(value) {
+  return /^Windows(?:[\s_-]|$)/iu.test(value.trim());
 }
 
 function isRecord(value) {
