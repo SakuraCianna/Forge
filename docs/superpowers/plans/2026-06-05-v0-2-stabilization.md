@@ -396,6 +396,8 @@ Latest validation cardinality hardening: strict v0.2 regression reports now also
 
 Latest validation command binding hardening: strict v0.2 regression reports now reject validation entries whose command does not match the validation kind. `typecheck`, `build`, and `lint` evidence must come from `npm run typecheck`, `npm run build`, and `npm run lint` respectively, not from an unrelated passing command.
 
+Latest post-modification validation hardening: strict v0.2 regression reports now reject validation entries that explicitly set `afterModification` to anything other than `true`. The usable validation metrics must be based on post-modification typecheck, build, and lint evidence, not pre-change or unrelated command runs.
+
 Latest installer version binding hardening: installer smoke reports now require `forgeVersion` to match the current `package.json` version, in addition to the installer filename and SHA-256 checks. This makes manual smoke evidence explicitly tied to the released Forge version under review.
 
 Latest status blocker classification hardening: `npm run quality:v0.2:status` now classifies invalid regression evidence separately from below-usable metrics, and invalid installer smoke evidence separately from failed manual smoke checks. This makes the fast status command more useful for deciding whether to fix report shape/metadata first or rerun real tasks/manual smoke flows.

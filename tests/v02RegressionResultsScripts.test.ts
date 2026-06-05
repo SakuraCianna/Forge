@@ -1047,6 +1047,55 @@ test("v0.2 regression results strict gate fails when validation command does not
   ]);
 });
 
+test("v0.2 regression results strict gate fails when validation is not after modification", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-after-modification-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            ...createRegressionRun("S1", "simple", true),
+            validations: [
+              {
+                ...createValidationResult("typecheck", true),
+                afterModification: false
+              },
+              createValidationResult("build", true),
+              createValidationResult("lint", true)
+            ]
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+  };
+
+  assert.equal(summary.totalRawRuns, 1);
+  assert.equal(summary.totalRuns, 0);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "S1", reasons: ["validations.afterModification"] }
+  ]);
+});
+
 test("v0.2 regression results strict gate fails when fixed tasks are duplicated", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-duplicate-"));
   const resultsFile = join(directory, "regression-results.json");

@@ -195,7 +195,7 @@ $env:FORGE_REGRESSION_RESULTS_FILE = "docs\V0_2_REGRESSION_RESULTS.json"
 npm run quality:regression
 ```
 
-当需要把真实任务回归作为 v0.2.x 可用级证据门时, 使用严格版本。它要求 `forgeVersion` 匹配当前 `package.json` 版本, 固定任务集 S1-S5、M1-M5、C1-C3 每个任务恰好有一条有效结果, 每条 run 必须恰好包含一次 `typecheck`、`build`、`lint` validation, 每条 validation 记录实际命令和退出码, 命令必须与 validation 类型匹配且与 `passed` 一致, 且真实任务相关指标达到 usable 阈值; 文件缺失、报告结构错误、版本不匹配、任务覆盖不完整、出现未定义任务 ID、重复 taskId、存在 invalid run、validation 种类缺失或重复、指标分母为 0 或低于 usable 时都会以非 0 状态退出:
+当需要把真实任务回归作为 v0.2.x 可用级证据门时, 使用严格版本。它要求 `forgeVersion` 匹配当前 `package.json` 版本, 固定任务集 S1-S5、M1-M5、C1-C3 每个任务恰好有一条有效结果, 每条 run 必须恰好包含一次 `typecheck`、`build`、`lint` validation, 每条 validation 必须是修改后验证结果, 记录实际命令和退出码, 命令必须与 validation 类型匹配且与 `passed` 一致, 且真实任务相关指标达到 usable 阈值; 文件缺失、报告结构错误、版本不匹配、任务覆盖不完整、出现未定义任务 ID、重复 taskId、存在 invalid run、validation 种类缺失或重复、指标分母为 0 或低于 usable 时都会以非 0 状态退出:
 
 ```powershell
 npm run quality:regression:gate

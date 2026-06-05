@@ -468,6 +468,10 @@ function getValidationInvalidReasons(value) {
     reasons.push("validations.passed");
   }
 
+  if (value.afterModification !== undefined && value.afterModification !== true) {
+    reasons.push("validations.afterModification");
+  }
+
   if (
     Number.isInteger(value.exitCode) &&
     value.exitCode >= 0 &&
