@@ -366,6 +366,10 @@ function getRegressionRunInvalidReasons(value) {
     for (const validation of value.validations) {
       addUniqueReasons(reasons, getValidationInvalidReasons(validation));
     }
+
+    if (value.completedInFirstAttempt === true && hasFailedValidationResult(value.validations)) {
+      reasons.push("completedInFirstAttemptValidationMismatch");
+    }
   }
 
   if (
@@ -452,6 +456,10 @@ function getExpectedTaskComplexity(taskId) {
 
 function isValidationKind(value) {
   return value === "typecheck" || value === "build" || value === "lint";
+}
+
+function hasFailedValidationResult(validations) {
+  return validations.some((validation) => isRecord(validation) && validation.passed === false);
 }
 
 function isIsoTimestampWithTimezone(value) {
