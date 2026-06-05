@@ -161,7 +161,18 @@ test("v0.2 usability status reports invalid regression evidence separately from 
     classification: string;
     passed: boolean;
     blockers: string[];
-    regression: { status: string };
+    regression: {
+      status: string;
+      details?: {
+        invalidMetadata: string[];
+        invalidRunCount: number;
+        duplicateTaskIds: string[];
+        missingTaskIds: string[];
+        unexpectedTaskIds: string[];
+        blockingMetricIds: string[];
+        unprovenMetricIds: string[];
+      };
+    };
     installerSmoke: { status: string };
   };
 
@@ -169,7 +180,18 @@ test("v0.2 usability status reports invalid regression evidence separately from 
     classification: "blocked",
     passed: false,
     blockers: ["regression-results-invalid"],
-    regression: { status: "invalid" },
+    regression: {
+      status: "invalid",
+      details: {
+        invalidMetadata: ["forgeVersion"],
+        invalidRunCount: 0,
+        duplicateTaskIds: [],
+        missingTaskIds: [],
+        unexpectedTaskIds: [],
+        blockingMetricIds: [],
+        unprovenMetricIds: []
+      }
+    },
     installerSmoke: { status: "passed" }
   });
 });
@@ -238,7 +260,17 @@ test("v0.2 usability status reports invalid installer smoke evidence separately 
     passed: boolean;
     blockers: string[];
     regression: { status: string };
-    installerSmoke: { status: string };
+    installerSmoke: {
+      status: string;
+      details?: {
+        missingChecks: string[];
+        failedChecks: string[];
+        missingMetadata: string[];
+        invalidMetadata: string[];
+        installerExists: boolean;
+        installerSha256Matches: boolean;
+      };
+    };
   };
 
   assert.deepEqual(summary, {
@@ -246,7 +278,17 @@ test("v0.2 usability status reports invalid installer smoke evidence separately 
     passed: false,
     blockers: ["installer-smoke-invalid"],
     regression: { status: "passed" },
-    installerSmoke: { status: "invalid" }
+    installerSmoke: {
+      status: "invalid",
+      details: {
+        missingChecks: [],
+        failedChecks: [],
+        missingMetadata: [],
+        invalidMetadata: ["testedAt", "platform"],
+        installerExists: true,
+        installerSha256Matches: true
+      }
+    }
   });
 });
 

@@ -22,12 +22,8 @@ const summary = {
   classification: blockers.length === 0 ? "evidence-ready" : blockers.some((blocker) => blocker.endsWith("-missing")) ? "unproven" : "blocked",
   passed: blockers.length === 0,
   blockers,
-  regression: {
-    status: regressionStatus
-  },
-  installerSmoke: {
-    status: installerSmokeStatus
-  }
+  regression: createRegressionSummary(regressionStatus, regressionResult.summary),
+  installerSmoke: createInstallerSmokeSummary(installerSmokeStatus, installerSmokeResult.summary)
 };
 
 writeSummary(summary, args.json);
@@ -145,6 +141,53 @@ function hasItems(value) {
 
 function isPositiveNumber(value) {
   return typeof value === "number" && value > 0;
+}
+
+function createRegressionSummary(status, regressionSummary) {
+  const summary = {
+    status
+  };
+
+  if (status !== "passed" && status !== "missing") {
+    summary.details = {
+      invalidMetadata: asArray(regressionSummary?.metadata?.invalidMetadata),
+      invalidRunCount: asNumber(regressionSummary?.invalidRunCount),
+      duplicateTaskIds: asArray(regressionSummary?.duplicateTaskIds),
+      missingTaskIds: asArray(regressionSummary?.coverage?.missingTaskIds),
+      unexpectedTaskIds: asArray(regressionSummary?.coverage?.unexpectedTaskIds),
+      blockingMetricIds: asArray(regressionSummary?.gate?.blockingMetricIds),
+      unprovenMetricIds: asArray(regressionSummary?.gate?.unprovenMetricIds)
+    };
+  }
+
+  return summary;
+}
+
+function createInstallerSmokeSummary(status, installerSmokeSummary) {
+  const summary = {
+    status
+  };
+
+  if (status !== "passed" && status !== "missing") {
+    summary.details = {
+      missingChecks: asArray(installerSmokeSummary?.missingChecks),
+      failedChecks: asArray(installerSmokeSummary?.failedChecks),
+      missingMetadata: asArray(installerSmokeSummary?.missingMetadata),
+      invalidMetadata: asArray(installerSmokeSummary?.invalidMetadata),
+      installerExists: installerSmokeSummary?.installerExists === true,
+      installerSha256Matches: installerSmokeSummary?.installerSha256Matches === true
+    };
+  }
+
+  return summary;
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function asNumber(value) {
+  return typeof value === "number" ? value : 0;
 }
 
 function getRegressionBlockers(status) {

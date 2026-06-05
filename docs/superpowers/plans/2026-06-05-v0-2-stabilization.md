@@ -392,6 +392,8 @@ Latest installer version binding hardening: installer smoke reports now require 
 
 Latest status blocker classification hardening: `npm run quality:v0.2:status` now classifies invalid regression evidence separately from below-usable metrics, and invalid installer smoke evidence separately from failed manual smoke checks. This makes the fast status command more useful for deciding whether to fix report shape/metadata first or rerun real tasks/manual smoke flows.
 
+Latest status review detail hardening: `npm run quality:v0.2:status -- --json` now includes `regression.details` and `installerSmoke.details` when evidence files exist but do not pass. These details surface invalid metadata, invalid run counts, duplicate and missing task IDs, blocking metric IDs, failed smoke checks, and installer artifact/SHA status so the next regression pass can repair evidence without re-reading every lower-level command log.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.
