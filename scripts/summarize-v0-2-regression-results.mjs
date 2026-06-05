@@ -224,23 +224,22 @@ function getInvalidMetadata(forgeVersion, packageVersion) {
 
 function createObservationsFromRuns(runs) {
   return runs.flatMap((run) => {
-    const createdAt = typeof run.createdAt === "string" ? run.createdAt : new Date().toISOString();
     const observations = [
       {
         kind: "task_outcome",
-        createdAt,
+        createdAt: run.createdAt,
         complexity: run.complexity,
         completedInFirstAttempt: run.completedInFirstAttempt
       },
       {
         kind: "file_modification",
-        createdAt,
+        createdAt: run.createdAt,
         wrongFile: run.wrongFileModified,
         unrelatedChange: run.unrelatedCodeChanged
       },
       ...run.validations.map((validation) => ({
         kind: "validation_run",
-        createdAt,
+        createdAt: run.createdAt,
         validation: validation.kind,
         afterModification: validation.afterModification ?? true,
         passed: validation.passed
@@ -250,7 +249,7 @@ function createObservationsFromRuns(runs) {
     if (typeof run.failureRecovered === "boolean") {
       observations.push({
         kind: "failure_recovery",
-        createdAt,
+        createdAt: run.createdAt,
         recovered: run.failureRecovered
       });
     }
@@ -336,6 +335,10 @@ function getRegressionRunInvalidReasons(value) {
 
   if (!isTaskComplexity(value.complexity)) {
     reasons.push("complexity");
+  }
+
+  if (typeof value.createdAt !== "string" || !isIsoTimestampWithTimezone(value.createdAt)) {
+    reasons.push("createdAt");
   }
 
   const expectedComplexity = typeof value.taskId === "string"
@@ -449,6 +452,14 @@ function getExpectedTaskComplexity(taskId) {
 
 function isValidationKind(value) {
   return value === "typecheck" || value === "build" || value === "lint";
+}
+
+function isIsoTimestampWithTimezone(value) {
+  if (Number.isNaN(Date.parse(value))) {
+    return false;
+  }
+
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
 }
 
 function writeSummary(summary, asJson) {

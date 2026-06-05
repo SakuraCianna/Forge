@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const createdAt = "2026-06-05T12:00:00.000Z";
 
 test("v0.2 usability status is wired and reports missing evidence as unproven", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
@@ -122,6 +123,7 @@ test("v0.2 usability status reports evidence-ready when strict evidence files pa
 function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "complex") {
   return {
     taskId,
+    createdAt,
     complexity,
     completedInFirstAttempt: true,
     wrongFileModified: false,

@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const createdAt = "2026-06-05T12:00:00.000Z";
 
 test("v0.2 regression results script converts manual runs into quality metrics", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
@@ -22,6 +23,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
         runs: [
           {
             taskId: "S1",
+            createdAt,
             complexity: "simple",
             completedInFirstAttempt: true,
             wrongFileModified: false,
@@ -31,6 +33,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
           },
           {
             taskId: "M1",
+            createdAt,
             complexity: "medium",
             completedInFirstAttempt: false,
             wrongFileModified: true,
@@ -40,6 +43,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
           },
           {
             taskId: "C1",
+            createdAt,
             complexity: "complex",
             completedInFirstAttempt: false,
             wrongFileModified: false,
@@ -130,6 +134,7 @@ test("v0.2 regression results script reports incomplete fixed task coverage", as
         runs: [
           {
             taskId: "S1",
+            createdAt,
             complexity: "simple",
             completedInFirstAttempt: true,
             wrongFileModified: false,
@@ -296,6 +301,7 @@ test("v0.2 regression results strict gate fails when results contain invalid run
           ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex", true)),
           {
             taskId: "S2",
+            createdAt,
             complexity: "simple",
             completedInFirstAttempt: true,
             wrongFileModified: false,
@@ -400,6 +406,84 @@ test("v0.2 regression results strict gate fails when fixed task complexity misma
   assert.equal(summary.invalidRunCount, 1);
   assert.deepEqual(summary.invalidRuns, [
     { index: 0, taskId: "S1", reasons: ["complexityForTaskId"] }
+  ]);
+  assert.deepEqual(summary.coverage, {
+    requiredTaskCount: 13,
+    coveredTaskCount: 12,
+    completeTaskSet: false,
+    missingTaskIds: ["S1"],
+    unexpectedTaskIds: []
+  });
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/summarize-v0-2-regression-results.mjs",
+        "--file",
+        resultsFile,
+        "--require-complete-set",
+        "--require-usable-regression"
+      ],
+      { windowsHide: true }
+    ),
+    /Command failed/
+  );
+});
+
+test("v0.2 regression results strict gate fails when run timestamp is not auditable", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-created-at-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          {
+            ...createRegressionRun("S1", "simple", true),
+            createdAt: "2026-06-05"
+          },
+          ...["S2", "S3", "S4", "S5"].map((taskId) =>
+            createRegressionRun(taskId, "simple", true)
+          ),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) =>
+            createRegressionRun(taskId, "medium", true)
+          ),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex", true))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+    coverage: {
+      requiredTaskCount: number;
+      coveredTaskCount: number;
+      completeTaskSet: boolean;
+      missingTaskIds: string[];
+      unexpectedTaskIds: string[];
+    };
+  };
+
+  assert.equal(summary.totalRawRuns, 13);
+  assert.equal(summary.totalRuns, 12);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "S1", reasons: ["createdAt"] }
   ]);
   assert.deepEqual(summary.coverage, {
     requiredTaskCount: 13,
@@ -713,6 +797,7 @@ test("v0.2 regression results script rejects malformed report shape", async () =
 function createRegressionRun(taskId: string, complexity: "simple" | "medium" | "complex", completed: boolean) {
   return {
     taskId,
+    createdAt,
     complexity,
     completedInFirstAttempt: completed,
     wrongFileModified: false,
