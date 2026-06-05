@@ -350,6 +350,81 @@ test("v0.2 regression results strict gate fails when results contain invalid run
   );
 });
 
+test("v0.2 regression results strict gate fails when fixed task complexity mismatches task id", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-complexity-mismatch-"));
+  const resultsFile = join(directory, "regression-results.json");
+
+  await writeFile(
+    resultsFile,
+    JSON.stringify(
+      {
+        forgeVersion: "0.2.0",
+        runs: [
+          createRegressionRun("S1", "complex", true),
+          ...["S2", "S3", "S4", "S5"].map((taskId) =>
+            createRegressionRun(taskId, "simple", true)
+          ),
+          ...["M1", "M2", "M3", "M4", "M5"].map((taskId) =>
+            createRegressionRun(taskId, "medium", true)
+          ),
+          ...["C1", "C2", "C3"].map((taskId) => createRegressionRun(taskId, "complex", true))
+        ]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    { windowsHide: true }
+  );
+  const summary = JSON.parse(stdout) as {
+    totalRawRuns: number;
+    totalRuns: number;
+    invalidRunCount: number;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
+    coverage: {
+      requiredTaskCount: number;
+      coveredTaskCount: number;
+      completeTaskSet: boolean;
+      missingTaskIds: string[];
+      unexpectedTaskIds: string[];
+    };
+  };
+
+  assert.equal(summary.totalRawRuns, 13);
+  assert.equal(summary.totalRuns, 12);
+  assert.equal(summary.invalidRunCount, 1);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "S1", reasons: ["complexityForTaskId"] }
+  ]);
+  assert.deepEqual(summary.coverage, {
+    requiredTaskCount: 13,
+    coveredTaskCount: 12,
+    completeTaskSet: false,
+    missingTaskIds: ["S1"],
+    unexpectedTaskIds: []
+  });
+
+  await assert.rejects(
+    execFileAsync(
+      process.execPath,
+      [
+        "scripts/summarize-v0-2-regression-results.mjs",
+        "--file",
+        resultsFile,
+        "--require-complete-set",
+        "--require-usable-regression"
+      ],
+      { windowsHide: true }
+    ),
+    /Command failed/
+  );
+});
+
 test("v0.2 regression results strict gate fails when validation command evidence is missing", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-evidence-"));
   const resultsFile = join(directory, "regression-results.json");

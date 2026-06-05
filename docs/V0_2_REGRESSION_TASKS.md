@@ -45,6 +45,7 @@
 
 - 顶层字段 `forgeVersion` 必须和当前 `package.json` 版本一致, 否则不能证明当前版本达到可用级。
 - 顶层字段 `runs` 必须是数组, 否则结果文件视为格式错误。
+- `taskId`: 必须来自固定回归任务集, 且 S1-S5 只能记录为 `simple`, M1-M5 只能记录为 `medium`, C1-C3 只能记录为 `complex`。
 - `complexity`: 只能是 `simple`, `medium`, `complex`。
 - `validations[].kind`: 只能是 `typecheck`, `build`, `lint`。
 - `validations[].command`: 必须记录实际运行的验证命令, 例如 `npm run lint`。
@@ -53,7 +54,7 @@
 - `validations[].passed` 必须和 `validations[].exitCode` 一致, 也就是 exitCode 为 `0` 时才可以是 `true`。
 - `failureRecovered`: 没有发生失败恢复流程时写 `null`; 发生失败恢复后按结果写 `true` 或 `false`。
 - 结果文件缺失或某项指标分母为 0 时, 对应指标仍然是未证明状态, 不能按可用级通过处理。
-- 格式错误的 run 会被统计为 invalid run, 不会计入有效样本。`invalidRuns[].reasons` 会列出需要修正的字段, 例如 `validations.command`, `validations.exitCode`, `validations.passedExitCodeMismatch`。
+- 格式错误的 run 会被统计为 invalid run, 不会计入有效样本。`invalidRuns[].reasons` 会列出需要修正的字段, 例如 `complexityForTaskId`, `validations.command`, `validations.exitCode`, `validations.passedExitCodeMismatch`。
 - `npm run quality:regression:gate` 会要求 `forgeVersion` 匹配当前 `package.json` 版本, S1-S5、M1-M5、C1-C3 每个固定任务恰好有一条有效结果, 每条验证结果包含命令和退出码, 且真实任务相关指标达到 usable 阈值; 如果结果文件缺失、版本不匹配、固定任务覆盖不完整、出现未定义任务 ID、重复 taskId、存在 invalid run、指标分母为 0 或指标低于 usable, 命令必须失败。
 
 ## 简单任务

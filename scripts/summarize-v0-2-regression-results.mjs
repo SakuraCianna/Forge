@@ -338,6 +338,13 @@ function getRegressionRunInvalidReasons(value) {
     reasons.push("complexity");
   }
 
+  const expectedComplexity = typeof value.taskId === "string"
+    ? getExpectedTaskComplexity(value.taskId)
+    : null;
+  if (expectedComplexity && isTaskComplexity(value.complexity) && value.complexity !== expectedComplexity) {
+    reasons.push("complexityForTaskId");
+  }
+
   if (typeof value.completedInFirstAttempt !== "boolean") {
     reasons.push("completedInFirstAttempt");
   }
@@ -418,6 +425,26 @@ function isRecord(value) {
 
 function isTaskComplexity(value) {
   return value === "simple" || value === "medium" || value === "complex";
+}
+
+function getExpectedTaskComplexity(taskId) {
+  if (!REQUIRED_TASK_IDS.includes(taskId)) {
+    return null;
+  }
+
+  if (taskId.startsWith("S")) {
+    return "simple";
+  }
+
+  if (taskId.startsWith("M")) {
+    return "medium";
+  }
+
+  if (taskId.startsWith("C")) {
+    return "complex";
+  }
+
+  return null;
 }
 
 function isValidationKind(value) {

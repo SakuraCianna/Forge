@@ -374,6 +374,8 @@ Latest installer evidence hardening: installer smoke reports now require `instal
 
 Latest regression recovery improvement: invalid v0.2 regression runs now include `invalidRuns[].reasons`, so malformed evidence points to exact fields such as `validations.command`, `validations.exitCode`, or `validations.passedExitCodeMismatch`. This makes manual evidence cleanup repeatable, but it does not create the missing real regression report.
 
+Latest fixed-task evidence hardening: strict v0.2 regression reports now require fixed task IDs to match their complexity buckets, so S1-S5 must be `simple`, M1-M5 must be `medium`, and C1-C3 must be `complex`. Mismatches are rejected as `complexityForTaskId`, preventing incorrectly categorized samples from inflating or deflating the usable-level task metrics.
+
 - [ ] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.
