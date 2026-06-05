@@ -320,13 +320,19 @@ test("v0.2 regression results strict gate fails when results contain invalid run
     totalRawRuns: number;
     totalRuns: number;
     invalidRunCount: number;
-    invalidRuns: Array<{ index: number; taskId: string | null }>;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
   };
 
   assert.equal(summary.totalRawRuns, 14);
   assert.equal(summary.totalRuns, 13);
   assert.equal(summary.invalidRunCount, 1);
-  assert.deepEqual(summary.invalidRuns, [{ index: 13, taskId: "S2" }]);
+  assert.deepEqual(summary.invalidRuns, [
+    {
+      index: 13,
+      taskId: "S2",
+      reasons: ["validations.kind", "validations.command", "validations.exitCode"]
+    }
+  ]);
 
   await assert.rejects(
     execFileAsync(
@@ -383,7 +389,7 @@ test("v0.2 regression results strict gate fails when validation command evidence
     totalRawRuns: number;
     totalRuns: number;
     invalidRunCount: number;
-    invalidRuns: Array<{ index: number; taskId: string | null }>;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
   };
 
   assert.equal(summary.totalRawRuns, 13);
@@ -392,6 +398,10 @@ test("v0.2 regression results strict gate fails when validation command evidence
   assert.deepEqual(
     summary.invalidRuns.map((run) => run.taskId),
     ["S1", "S2", "S3", "S4", "S5", "M1", "M2", "M3", "M4", "M5", "C1", "C2", "C3"]
+  );
+  assert.deepEqual(
+    summary.invalidRuns.map((run) => run.reasons),
+    Array.from({ length: 13 }, () => ["validations.command", "validations.exitCode"])
   );
 
   await assert.rejects(
@@ -448,13 +458,15 @@ test("v0.2 regression results strict gate fails when validation pass state contr
     totalRawRuns: number;
     totalRuns: number;
     invalidRunCount: number;
-    invalidRuns: Array<{ index: number; taskId: string | null }>;
+    invalidRuns: Array<{ index: number; taskId: string | null; reasons: string[] }>;
   };
 
   assert.equal(summary.totalRawRuns, 1);
   assert.equal(summary.totalRuns, 0);
   assert.equal(summary.invalidRunCount, 1);
-  assert.deepEqual(summary.invalidRuns, [{ index: 0, taskId: "S1" }]);
+  assert.deepEqual(summary.invalidRuns, [
+    { index: 0, taskId: "S1", reasons: ["validations.passedExitCodeMismatch"] }
+  ]);
 });
 
 test("v0.2 regression results strict gate fails when fixed tasks are duplicated", async () => {

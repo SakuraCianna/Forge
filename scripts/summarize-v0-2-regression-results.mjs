@@ -174,14 +174,17 @@ async function readRegressionRuns(filePath) {
   const invalidRuns = [];
 
   rawRuns.forEach((run, index) => {
-    if (isRegressionRun(run)) {
+    const reasons = getRegressionRunInvalidReasons(run);
+
+    if (reasons.length === 0) {
       runs.push(run);
       return;
     }
 
     invalidRuns.push({
       index,
-      taskId: isRecord(run) && typeof run.taskId === "string" ? run.taskId : null
+      taskId: isRecord(run) && typeof run.taskId === "string" ? run.taskId : null,
+      reasons
     });
   });
 
@@ -320,33 +323,93 @@ function findDefaultResultsFile() {
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
-function isRegressionRun(value) {
-  return (
-    isRecord(value) &&
-    typeof value.taskId === "string" &&
-    isTaskComplexity(value.complexity) &&
-    typeof value.completedInFirstAttempt === "boolean" &&
-    typeof value.wrongFileModified === "boolean" &&
-    typeof value.unrelatedCodeChanged === "boolean" &&
-    Array.isArray(value.validations) &&
-    value.validations.every(isValidationResult) &&
-    (value.failureRecovered === null ||
-      value.failureRecovered === undefined ||
-      typeof value.failureRecovered === "boolean")
-  );
+function getRegressionRunInvalidReasons(value) {
+  if (!isRecord(value)) {
+    return ["run"];
+  }
+
+  const reasons = [];
+
+  if (typeof value.taskId !== "string") {
+    reasons.push("taskId");
+  }
+
+  if (!isTaskComplexity(value.complexity)) {
+    reasons.push("complexity");
+  }
+
+  if (typeof value.completedInFirstAttempt !== "boolean") {
+    reasons.push("completedInFirstAttempt");
+  }
+
+  if (typeof value.wrongFileModified !== "boolean") {
+    reasons.push("wrongFileModified");
+  }
+
+  if (typeof value.unrelatedCodeChanged !== "boolean") {
+    reasons.push("unrelatedCodeChanged");
+  }
+
+  if (!Array.isArray(value.validations)) {
+    reasons.push("validations");
+  } else {
+    for (const validation of value.validations) {
+      addUniqueReasons(reasons, getValidationInvalidReasons(validation));
+    }
+  }
+
+  if (
+    value.failureRecovered !== null &&
+    value.failureRecovered !== undefined &&
+    typeof value.failureRecovered !== "boolean"
+  ) {
+    reasons.push("failureRecovered");
+  }
+
+  return reasons;
 }
 
-function isValidationResult(value) {
-  return (
-    isRecord(value) &&
-    isValidationKind(value.kind) &&
-    typeof value.command === "string" &&
-    value.command.trim().length > 0 &&
+function getValidationInvalidReasons(value) {
+  if (!isRecord(value)) {
+    return ["validations"];
+  }
+
+  const reasons = [];
+
+  if (!isValidationKind(value.kind)) {
+    reasons.push("validations.kind");
+  }
+
+  if (typeof value.command !== "string" || value.command.trim().length === 0) {
+    reasons.push("validations.command");
+  }
+
+  if (!Number.isInteger(value.exitCode) || value.exitCode < 0) {
+    reasons.push("validations.exitCode");
+  }
+
+  if (typeof value.passed !== "boolean") {
+    reasons.push("validations.passed");
+  }
+
+  if (
     Number.isInteger(value.exitCode) &&
     value.exitCode >= 0 &&
     typeof value.passed === "boolean" &&
-    value.passed === (value.exitCode === 0)
-  );
+    value.passed !== (value.exitCode === 0)
+  ) {
+    reasons.push("validations.passedExitCodeMismatch");
+  }
+
+  return reasons;
+}
+
+function addUniqueReasons(target, reasons) {
+  for (const reason of reasons) {
+    if (!target.includes(reason)) {
+      target.push(reason);
+    }
+  }
 }
 
 function isRecord(value) {
@@ -386,7 +449,14 @@ function writeSummary(summary, asJson) {
   if (summary.invalidRunCount > 0) {
     console.log(
       `Invalid runs: ${summary.invalidRuns
-        .map((run) => `${run.index}${run.taskId ? `:${run.taskId}` : ""}`)
+        .map((run) => {
+          const label = `${run.index}${run.taskId ? `:${run.taskId}` : ""}`;
+          const reasons = Array.isArray(run.reasons) && run.reasons.length > 0
+            ? ` [${run.reasons.join(", ")}]`
+            : "";
+
+          return `${label}${reasons}`;
+        })
         .join(", ")}`
     );
   }
