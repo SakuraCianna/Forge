@@ -27,6 +27,7 @@ import type {
 } from "@shared/pluginSkillTypes";
 import type { ForgePlugin, ForgeSkill } from "@/state/pluginSkills";
 import { getContextKindLabel } from "@/state/pluginSkills";
+import { MarkdownPreview } from "./MarkdownPreview";
 
 type PluginLibraryPanelProps = {
   language: Language;
@@ -1068,9 +1069,9 @@ function SkillDetail({
             {coreFilePreview.status === "loading" ? (
               <div className="p-3 text-[13px] text-[#8e8ea0]">{copy.loadingFile}</div>
             ) : coreFilePreview.status === "ready" ? (
-              <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[13px] leading-6 text-[#202123]">
-                {coreFilePreview.content}
-              </pre>
+              <div className="p-4">
+                <MarkdownPreview compact content={coreFilePreview.content ?? ""} />
+              </div>
             ) : coreFilePreview.status === "error" ? (
               <div className="p-3 text-[13px] leading-5 text-[#b45309]">
                 {copy.readFileFailed}: {coreFilePreview.error}

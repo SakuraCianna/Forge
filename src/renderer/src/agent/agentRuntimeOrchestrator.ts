@@ -34,6 +34,10 @@ export type AgentRuntimeExecutionHandlers = {
   inspectGitStatus: () => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   generateFileChange: (relativePath: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   runCommand: (command: string) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
+  executeBuiltInTool: (
+    toolName: string,
+    input: Record<string, unknown>
+  ) => AgentActionRunOutcome | Promise<AgentActionRunOutcome>;
   invokeExtension: (
     extensionId: string,
     actionId: string,
@@ -113,27 +117,17 @@ export type AgentRuntimePostActionStep =
       kind: "idle";
     };
 
-// 完全访问权限下, 人工门禁由 Runtime 明确接管; 受控模式下仍停在用户审查点。
+// Full Access 不能绕过写盘, commit 或人工审查门禁; Runtime 始终停在用户审查点。
 export function resolveAgentRuntimeManualGateStep({
-  execution,
-  fullAccess
+  execution: _execution,
+  fullAccess: _fullAccess
 }: {
   execution: ManualGateExecution;
   fullAccess: boolean;
 }): AgentRuntimeManualGateStep {
-  if (!fullAccess) {
-    return {
-      kind: "wait-for-review"
-    };
-  }
-
-  return execution.reason === "commit"
-    ? {
-        kind: "auto-commit"
-      }
-    : {
-        kind: "auto-complete"
-      };
+  return {
+    kind: "wait-for-review"
+  };
 }
 
 // 动作结束后的收尾也先过 Runtime 决策, 避免 UI 主文件直接判断何时追加完成总结。
@@ -247,6 +241,10 @@ export async function runAgentRuntimeExecution({
     return handlers.invokeExtension(execution.extensionId, execution.actionId, execution.input);
   }
 
+  if (execution.kind === "built-in-tool") {
+    return handlers.executeBuiltInTool(execution.toolName, execution.input);
+  }
+
   if (execution.kind === "invalid-target") {
     return handlers.blockInvalidTarget(execution.reason);
   }
@@ -334,7 +332,7 @@ export function resolveAgentRuntimeCommandDecision({
     };
   }
 
-  if (risk.level === "ask" && !policy.fullAccess && !approvedCommand) {
+  if (risk.level === "ask" && !approvedCommand) {
     return {
       kind: "approval-required",
       risk: {

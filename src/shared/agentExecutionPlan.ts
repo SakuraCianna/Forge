@@ -1,5 +1,7 @@
 // 本文件说明: 将模型计划步骤转成前端可执行动作队列
 import type { AgentPlanStep } from "./agentTypes.js";
+import { getBuiltInToolDefinition } from "./builtInToolCatalog.js";
+import type { BuiltInToolRiskLevel } from "./builtInToolTypes.js";
 import type { ExtensionActionConfirmation, ExtensionActionRisk } from "./extensionTypes.js";
 
 type AgentActionKind =
@@ -11,6 +13,7 @@ type AgentActionKind =
   | "git-status"
   | "edit-file"
   | "run-command"
+  | "built-in-tool"
   | "invoke-extension"
   | "commit"
   | "manual";
@@ -25,6 +28,10 @@ export type AgentAction = {
   status: AgentActionStatus;
   target?: string;
   command?: string;
+  builtInToolName?: string;
+  builtInToolInput?: Record<string, unknown>;
+  builtInToolRiskLevel?: BuiltInToolRiskLevel;
+  builtInToolRequiresConfirmation?: boolean;
   extensionId?: string;
   extensionActionId?: string;
   extensionInput?: Record<string, unknown>;
@@ -69,6 +76,36 @@ function createAgentActionDrafts(step: AgentPlanStep): AgentActionDraft[] {
 function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
   const normalizedTarget = normalizeActionTarget(step.target);
   const normalizedTool = normalizeAgentPlanTool(step.tool);
+
+  if (step.builtInToolName) {
+    const definition = tryGetBuiltInToolDefinition(step.builtInToolName);
+
+    if (!definition) {
+      return {
+        stepId: step.id,
+        kind: "manual",
+        label: `未知内置工具 ${step.builtInToolName}`,
+        status: "pending",
+        target: step.builtInToolName
+      };
+    }
+
+    return {
+      stepId: step.id,
+      kind: "built-in-tool",
+      label:
+        step.title.trim() ||
+        step.description.trim() ||
+        `调用内置工具 ${definition.name}`,
+      status: "pending",
+      target: normalizedTarget,
+      builtInToolInput: step.builtInToolInput ?? {},
+      builtInToolName: definition.name,
+      builtInToolRiskLevel: definition.riskLevel,
+      builtInToolRequiresConfirmation: definition.requiresConfirmation,
+      requiresConfirmation: definition.requiresConfirmation
+    };
+  }
 
   if (step.extensionId && step.extensionActionId) {
     return {
@@ -212,9 +249,18 @@ function normalizeActionTarget(target: string | undefined): string | undefined {
 
 function shouldSplitStepTarget(step: AgentPlanStep): boolean {
   return (
+    !step.builtInToolName &&
     normalizeAgentPlanTool(step.tool) !== "web-search" &&
     (step.kind === "inspect" || step.kind === "edit" || step.kind === "verify")
   );
+}
+
+function tryGetBuiltInToolDefinition(toolName: string) {
+  try {
+    return getBuiltInToolDefinition(toolName);
+  } catch {
+    return null;
+  }
 }
 
 function splitMultiFileTarget(target: string | undefined): string[] {

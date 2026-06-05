@@ -29,6 +29,17 @@ Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查,
 - 失败恢复会基于真实工具结果和命令输出生成后续计划, 但依赖安装、外部权限、高风险删除和生产发布等场景仍需要人工介入。
 - 普通问答、解释、记忆和聊天类请求不会强行进入项目改动流程。
 
+### Built-in Tools 内置工具体系
+
+- 内置工具统一注册到 8 个一级分类: Project、File、Search、Edit、Terminal、Git、Diagnostics 和 Auxiliary。
+- 工具元数据包含名称、说明、分类、风险等级、确认要求、输入输出 Schema、可用状态和执行入口。
+- 低风险读取工具可以自动执行, 但写文件、删文件、移动文件、应用补丁、安装依赖、提交、切换分支、撤销修改和 push 必须经过确认。
+- Full Access 只扩大可用工具范围, 不会绕过高风险或 critical 操作确认。
+- critical 工具预留 typed confirmation 能力, 确认视图会展示工具名、风险等级、影响目标、操作后果和是否可撤销。
+- 工具调用会记录结构化审计日志和本地质量指标, 用于追踪成功率、失败、确认阻断和写盘前确认。
+- `searchSemantic` 当前使用本地轻量语义 fallback, 不调用 embedding 模型, 不读取敏感文件, 返回结果会标注 `local_semantic_fallback`。
+- 浏览器截图和页面控制台检查使用受限本地预览 URL, 截图默认写入应用数据目录并返回文件路径、尺寸和大小, 避免把大图直接塞入上下文。
+
 ### 输入框、附件和上下文引用
 
 - 输入框支持通过加号菜单、拖拽和粘贴添加附件。
@@ -154,6 +165,7 @@ npm test
 npm run typecheck
 npm run lint
 npm run build
+npm run qa:built-in-tools
 ```
 
 发布前可以运行:
@@ -163,6 +175,29 @@ npm run release:check
 ```
 
 `npm test` 会先编译轻量回归测试, 再运行 Node.js 测试, 用于覆盖 Agent 上下文隔离等关键逻辑。
+
+`npm run qa:built-in-tools` 会先编译测试产物, 再对开发 QA 沙箱运行 Built-in Tools 验证。默认沙箱配置位于 `src/shared/developmentSandboxConfig.ts`, 仅用于本地开发验证, 不会作为普通用户默认项目路径。需要临时指定沙箱时, 可以在 PowerShell 中设置:
+
+```powershell
+$env:FORGE_QA_PROJECT_ROOT = "E:\CodeHome\已完结的项目\测试项目"
+$env:FORGE_QA_MODEL_ID = "mimo-v2.5-pro"
+npm run qa:built-in-tools
+```
+
+如果需要把 browser 工具纳入 QA, 先启动本地预览服务, 再传入本地 URL:
+
+```powershell
+$env:FORGE_QA_BROWSER_PREVIEW_URL = "http://localhost:5173/"
+npm run qa:built-in-tools
+```
+
+没有配置 `FORGE_QA_BROWSER_PREVIEW_URL` 时, browser 截图和控制台场景会以 skipped 记录, 不会被伪装成成功。
+
+也可以运行 Electron 真实浏览器 QA, 这个命令会临时启动本地 fixture 页面并用隐藏 Electron 窗口执行截图和控制台检查:
+
+```powershell
+npm run qa:built-in-tools:browser
+```
 
 ## 环境变量说明
 

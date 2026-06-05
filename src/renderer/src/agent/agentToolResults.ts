@@ -18,6 +18,7 @@ export type AgentToolResultEventKind =
   | "search"
   | "web-search"
   | "read-file"
+  | "built-in-tool"
   | "extension";
 
 const agentToolResultEventNameByKind: Record<AgentToolResultEventKind, string> = {
@@ -27,6 +28,7 @@ const agentToolResultEventNameByKind: Record<AgentToolResultEventKind, string> =
   search: "agent-search",
   "web-search": "agent-web-search",
   "read-file": "agent-read-file",
+  "built-in-tool": "agent-built-in-tool",
   extension: "agent-extension"
 };
 

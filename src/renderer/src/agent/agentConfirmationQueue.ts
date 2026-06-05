@@ -1,6 +1,11 @@
 // 本文件说明: 推导 Agent 确认队列和队列控制状态, 供主视图复用和测试
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { AgentProfileContext } from "@shared/agentTypes";
+import { getBuiltInToolDefinition } from "@shared/builtInToolCatalog";
+import {
+  createBuiltInToolConfirmationView,
+  type BuiltInToolConfirmationView
+} from "@shared/builtInToolConfirmation";
 import type { ExtensionActionConfirmation } from "@shared/extensionTypes";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
 import {
@@ -19,6 +24,7 @@ export type AgentConfirmationItemKind =
   | "pending-changes"
   | "failed-action"
   | "manual-gate"
+  | "built-in-tool-confirmation"
   | "extension-confirmation"
   | "command-approval"
   | "command-blocked"
@@ -35,6 +41,7 @@ export type AgentConfirmationItem = {
   afterApprovalActionLabel?: string;
   command?: string;
   cwd?: string | null;
+  builtInToolConfirmation?: BuiltInToolConfirmationView;
   extensionConfirmation?: ExtensionActionConfirmation;
   pendingChangeCount?: number;
   previewPath?: string;
@@ -69,7 +76,7 @@ export function getAgentQueueControlState({
   hasPendingFileChanges: boolean;
 }): AgentQueueControlState {
   const queueBlockerAction = getQueueBlockerAction(actions, commandSafetyPolicy);
-  const hasBlockingFileChanges = hasPendingFileChanges && !commandSafetyPolicy.fullAccess;
+  const hasBlockingFileChanges = hasPendingFileChanges;
   const queueBlocked =
     agentPaused ||
     hasBlockingFileChanges ||
@@ -157,6 +164,10 @@ export function getAgentConfirmationItems({
       failureRecoveryPolicy === "auto" &&
       typeof maxFailureRecoveryAttempts === "number" &&
       (autoFailureRecoveryAttemptsUsed ?? 0) >= maxFailureRecoveryAttempts;
+    const builtInToolConfirmation =
+      kind === "built-in-tool-confirmation"
+        ? createBuiltInToolConfirmationForAction(action)
+        : undefined;
 
     items.push({
       id: `action-${action.id}`,
@@ -166,6 +177,7 @@ export function getAgentConfirmationItems({
       afterApprovalActionLabel: nextAction?.label,
       command: action.command,
       cwd: action.kind === "run-command" ? projectPath : null,
+      builtInToolConfirmation,
       extensionConfirmation: action.extensionConfirmation,
       riskReason:
         commandRisk?.level === "ask" || commandRisk?.level === "deny"
@@ -186,36 +198,78 @@ export function getAgentConfirmationItems({
   return items;
 }
 
-// full access 下不把文件预览当成人工确认项; App 可额外传入线程级判断, 避免其他线程的审查项卡住全自动队列。
+function createBuiltInToolConfirmationForAction(
+  action: AgentAction
+): BuiltInToolConfirmationView | undefined {
+  if (action.kind !== "built-in-tool" || !action.builtInToolName) {
+    return undefined;
+  }
+
+  try {
+    const definition = getBuiltInToolDefinition(action.builtInToolName);
+
+    return createBuiltInToolConfirmationView(
+      definition,
+      formatBuiltInToolActionTargetSummary(action)
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function formatBuiltInToolActionTargetSummary(action: AgentAction): string {
+  const input = action.builtInToolInput ?? {};
+  const parts: string[] = [];
+
+  for (const key of [
+    "relativePath",
+    "relativePaths",
+    "from",
+    "to",
+    "branch",
+    "remote",
+    "command",
+    "packageName",
+    "packageNames",
+    "script"
+  ]) {
+    const formatted = formatBuiltInToolInputValue(input[key]);
+
+    if (formatted) {
+      parts.push(`${key}: ${formatted}`);
+    }
+  }
+
+  return parts.join(" | ") || action.target || action.builtInToolName || action.label;
+}
+
+function formatBuiltInToolInputValue(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+
+  if (Array.isArray(value) && value.length > 0) {
+    return value.map(String).join(", ");
+  }
+
+  return null;
+}
+
+// 文件预览代表待写盘内容, Full Access 也必须停在用户确认前。
 export function getBlockingFileChangePreviews(
   changePreviews: AgentChangePreviewForQueue[],
-  {
-    fullAccess = false,
-    isFullAccessThread
-  }: {
+  _options: {
     fullAccess?: boolean;
     isFullAccessThread?: (threadId: string) => boolean;
   } = {}
 ): AgentChangePreviewForQueue[] {
-  if (fullAccess) {
-    return [];
-  }
-
-  if (!isFullAccessThread) {
-    return changePreviews;
-  }
-
-  return changePreviews.filter((preview) => {
-    const sourceThreadId = preview.source?.threadId;
-
-    return !sourceThreadId || !isFullAccessThread(sourceThreadId);
-  });
+  return changePreviews;
 }
 
 export function getAgentConfirmationKind(
   action: AgentAction,
   commandSafetyPolicy: AgentCommandSafetyPolicy,
-  fullAccess: boolean
+  _fullAccess: boolean
 ): AgentConfirmationItemKind | null {
   if (action.status === "failed") {
     return "failed-action";
@@ -225,16 +279,16 @@ export function getAgentConfirmationKind(
     return null;
   }
 
-  if (fullAccess && (action.kind === "manual" || action.kind === "commit")) {
-    return null;
-  }
-
   if (action.kind === "manual") {
     return "manual-gate";
   }
 
   if (action.kind === "commit") {
     return "commit-gate";
+  }
+
+  if (action.kind === "built-in-tool" && action.requiresConfirmation) {
+    return "built-in-tool-confirmation";
   }
 
   if (action.kind === "invoke-extension" && action.extensionConfirmation) {
@@ -248,7 +302,7 @@ export function getAgentConfirmationKind(
       return "command-blocked";
     }
 
-    if (commandRisk.level === "ask" && !fullAccess) {
+    if (commandRisk.level === "ask") {
       return "command-approval";
     }
   }

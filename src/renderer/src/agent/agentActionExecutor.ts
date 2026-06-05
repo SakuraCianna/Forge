@@ -4,7 +4,12 @@ import {
   isLikelyAgentProjectFilePath,
   type AgentAction
 } from "@shared/agentExecutionPlan";
-import type { AgentProfileContext } from "@shared/agentTypes";
+import {
+  canAutoExecuteBuiltInTool,
+  getBuiltInToolDefinition
+} from "@shared/builtInToolCatalog";
+import { getRequiredAgentPermissionForBuiltInTool } from "@shared/builtInToolAgentPermissions";
+import type { AgentProfileContext, AgentToolPermission } from "@shared/agentTypes";
 import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "@/state/generalPreferences";
 
 export type AgentActionExecution =
@@ -17,6 +22,11 @@ export type AgentActionExecution =
   | { kind: "generate-file-change"; relativePath: string }
   | { kind: "run-command"; command: string }
   | {
+      kind: "built-in-tool";
+      toolName: string;
+      input: Record<string, unknown>;
+    }
+  | {
       kind: "invoke-extension";
       actionId: string;
       extensionId: string;
@@ -26,7 +36,7 @@ export type AgentActionExecution =
   | { kind: "manual-gate"; reason: "review" | "commit" }
   | { kind: "complete" };
 
-export type AgentToolPermission = "read" | "edit" | "command" | "git" | "extension" | "web";
+export type { AgentToolPermission } from "@shared/agentTypes";
 
 export type AgentActionPermissionResult =
   | { ok: true }
@@ -95,6 +105,20 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
 
   if (action.kind === "run-command" && action.command) {
     return { kind: "run-command", command: action.command };
+  }
+
+  if (action.kind === "built-in-tool" && action.builtInToolName) {
+    const definition = getBuiltInToolDefinition(action.builtInToolName);
+
+    if (definition.requiresConfirmation) {
+      return { kind: "manual-gate", reason: "review" };
+    }
+
+    return {
+      kind: "built-in-tool",
+      toolName: definition.name,
+      input: action.builtInToolInput ?? {}
+    };
   }
 
   if (action.kind === "invoke-extension" && action.extensionId && action.extensionActionId) {
@@ -386,8 +410,8 @@ export function isRunnableAgentAction(
   action: AgentAction,
   policy: AgentCommandSafetyPolicy = {}
 ): boolean {
-  if (policy.fullAccess === true && (action.kind === "manual" || action.kind === "commit")) {
-    return true;
+  if (action.kind === "manual" || action.kind === "commit") {
+    return false;
   }
 
   if (
@@ -414,7 +438,15 @@ export function isRunnableAgentAction(
   if (action.kind === "run-command" && action.command) {
     const risk = resolveAgentCommandRisk(action.command, policy);
 
-    return risk.level === "allow" || (policy.fullAccess === true && risk.level === "ask");
+    return risk.level === "allow";
+  }
+
+  if (action.kind === "built-in-tool" && action.builtInToolName) {
+    const definition = getBuiltInToolDefinition(action.builtInToolName);
+
+    return canAutoExecuteBuiltInTool(definition, {
+      fullAccess: policy.fullAccess
+    });
   }
 
   if (action.kind === "invoke-extension" && action.extensionConfirmation) {
@@ -457,6 +489,10 @@ function getRequiredToolForAction(action: AgentAction): AgentToolPermission | nu
 
   if (action.kind === "invoke-extension") {
     return "extension";
+  }
+
+  if (action.kind === "built-in-tool" && action.builtInToolName) {
+    return getRequiredAgentPermissionForBuiltInTool(action.builtInToolName);
   }
 
   return null;

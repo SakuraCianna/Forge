@@ -14,6 +14,19 @@ import type {
 } from "@shared/agentTypes";
 import type { ForgeModel, ForgeProvider } from "@shared/modelTypes";
 import type {
+  AgentQualityMetricSnapshot,
+  AgentQualityObservation
+} from "@shared/agentQualityMetrics";
+import type {
+  BuiltInToolCallLogRecord,
+  BuiltInToolCatalogSnapshot,
+  BuiltInToolExecutionRequest
+} from "@shared/builtInToolTypes";
+import type {
+  BuiltInToolQaRunRequest,
+  BuiltInToolQaRunResult
+} from "@shared/builtInToolQaTypes";
+import type {
   ExtensionConfirmInvocationRequest,
   ExtensionCreateRequest,
   ExtensionCreateResult,
@@ -109,6 +122,14 @@ declare global {
           request: ExtensionConfirmInvocationRequest
         ) => Promise<ExtensionInvocationResult>;
         listLogs: (limit?: number) => Promise<ExtensionInvocationLogRecord[]>;
+      };
+      builtInTools: {
+        getCatalog: () => Promise<BuiltInToolCatalogSnapshot>;
+        execute: (request: BuiltInToolExecutionRequest) => Promise<unknown>;
+        listLogs: (limit?: number) => Promise<BuiltInToolCallLogRecord[]>;
+        getMetrics: () => Promise<AgentQualityMetricSnapshot>;
+        recordMetric: (observation: AgentQualityObservation) => Promise<unknown>;
+        runDevelopmentQa: (request?: BuiltInToolQaRunRequest) => Promise<BuiltInToolQaRunResult>;
       };
       system: {
         openExternal: (url: string) => Promise<boolean>;

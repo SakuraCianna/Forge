@@ -1,7 +1,32 @@
 // 本文件说明: 协调 Forge 渲染层的项目, 对话, 设置和 Agent 执行入口
 import type { ReactElement } from "react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ProjectFileChangePreview, ProjectFilePreview, ProjectTextFile } from "@shared/fileTypes";
+import type {
+  ProjectFileChangePreview,
+  ProjectFileDeleteResult,
+  ProjectFilePreview,
+  ProjectTextFile
+} from "@shared/fileTypes";
+import {
+  deriveAgentToolSideEffect,
+  type AgentQualityMetricSnapshot,
+  type AgentQualityObservation,
+  type AgentTaskComplexity,
+  type AgentValidationKind
+} from "@shared/agentQualityMetrics";
+import type {
+  BuiltInToolBlockedResult,
+  BuiltInToolCallLogRecord,
+  BuiltInToolExecutionContext,
+  BuiltInToolFailureResult,
+  NotImplementedToolResult
+} from "@shared/builtInToolTypes";
+import type { BuiltInToolQaRunResult } from "@shared/builtInToolQaTypes";
+import { getBuiltInToolDefinition } from "@shared/builtInToolCatalog";
+import {
+  createBuiltInToolConfirmationView,
+  resolveBuiltInToolConfirmationContext
+} from "@shared/builtInToolConfirmation";
 import type {
   ExtensionCreateRequest,
   ExtensionCreateResult,
@@ -19,7 +44,7 @@ import type {
   AgentImageAttachment,
   AgentProfileContext
 } from "@shared/agentTypes";
-import type { ProjectGitCommitResult, ProjectGitStatus } from "@shared/gitTypes";
+import type { ProjectGitCommitResult, ProjectGitPushResult, ProjectGitStatus } from "@shared/gitTypes";
 import type { ForgeModel, ForgeProvider, Language } from "@shared/modelTypes";
 import type {
   LocalPluginSkillCreateRequest,
@@ -287,12 +312,174 @@ type CommandDialogState = {
   }>;
 };
 
+type BuiltInToolProblemResult =
+  | BuiltInToolBlockedResult
+  | BuiltInToolFailureResult
+  | NotImplementedToolResult;
+
+type BuiltInToolConfirmationContextInput = Pick<
+  BuiltInToolExecutionContext,
+  "confirmed" | "secondConfirmed" | "typedConfirmation"
+>;
+
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
 const fileTreeDirectoryEntryLimit = 2000;
 const projectUnderstandingMaxFiles = 32;
 const projectUnderstandingMaxFileSize = 240_000;
 const projectUnderstandingMaxCharsPerFile = 6_000;
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isBuiltInToolProblemResult(value: unknown): value is BuiltInToolProblemResult {
+  if (!isObjectRecord(value)) {
+    return false;
+  }
+
+  return (
+    value.status === "blocked" ||
+    value.status === "failed" ||
+    value.status === "not_implemented"
+  );
+}
+
+function formatBuiltInToolProblemNotice(
+  language: Language,
+  result: BuiltInToolProblemResult
+): string {
+  if (result.status === "failed") {
+    return language === "zh-CN"
+      ? `内置工具 ${result.toolName} 执行失败: ${result.error.message}`
+      : `Built-in tool ${result.toolName} failed: ${result.error.message}`;
+  }
+
+  return language === "zh-CN"
+    ? `内置工具 ${result.toolName} 未执行: ${result.message}`
+    : `Built-in tool ${result.toolName} did not run: ${result.message}`;
+}
+
+function formatBuiltInToolExecutionOutputForThread(
+  toolName: string,
+  output: unknown,
+  maxChars = 4000
+): string {
+  const serialized = safeStringifyToolOutput(output);
+  const truncated =
+    serialized.length > maxChars ? `${serialized.slice(0, maxChars)}\n... [truncated]` : serialized;
+
+  return `Built-in tool ${toolName} result:\n${truncated}`;
+}
+
+function safeStringifyToolOutput(output: unknown): string {
+  if (typeof output === "string") {
+    return output;
+  }
+
+  try {
+    return JSON.stringify(output, null, 2);
+  } catch {
+    return String(output);
+  }
+}
+
+function formatBuiltInToolActionTargetSummary(action: AgentAction): string {
+  const input = action.builtInToolInput ?? {};
+  const parts: string[] = [];
+
+  for (const key of [
+    "relativePath",
+    "relativePaths",
+    "from",
+    "to",
+    "branch",
+    "remote",
+    "command",
+    "packageName",
+    "packageNames",
+    "script"
+  ]) {
+    const value = input[key];
+
+    if (typeof value === "string" && value.trim()) {
+      parts.push(`${key}: ${value.trim()}`);
+    } else if (Array.isArray(value) && value.length > 0) {
+      parts.push(`${key}: ${value.map(String).join(", ")}`);
+    }
+  }
+
+  return parts.join(" | ") || action.target || action.builtInToolName || action.label;
+}
+
+function classifyAgentTaskComplexity(actions: AgentAction[]): AgentTaskComplexity {
+  const executableActions = actions.filter((action) => action.kind !== "manual");
+  const mutationActions = executableActions.filter(isProjectMutationAction);
+
+  if (executableActions.length <= 3 && mutationActions.length <= 1) {
+    return "simple";
+  }
+
+  if (executableActions.length <= 8 && mutationActions.length <= 3) {
+    return "medium";
+  }
+
+  return "complex";
+}
+
+function hasAgentActionFailureHistory(thread: TaskThread): boolean {
+  return thread.events.some((event) => event.agentActionRun?.status === "failed");
+}
+
+function hasActionFailureHistory(thread: TaskThread, actionId: string): boolean {
+  return thread.events.some(
+    (event) => event.agentActionRun?.actionId === actionId && event.agentActionRun.status === "failed"
+  );
+}
+
+function hasCompletedProjectMutation(thread: TaskThread | null): boolean {
+  return Boolean(
+    thread?.agentActions?.some(
+      (action) => action.status === "completed" && isProjectMutationAction(action)
+    )
+  );
+}
+
+function isProjectMutationAction(action: AgentAction): boolean {
+  if (action.kind === "edit-file") {
+    return true;
+  }
+
+  if (action.kind !== "built-in-tool" || !action.builtInToolName) {
+    return false;
+  }
+
+  return ["delete", "move", "write"].includes(
+    deriveAgentToolSideEffect(action.builtInToolName)
+  );
+}
+
+function inferValidationKindFromCommand(command: string): AgentValidationKind | null {
+  const normalized = command.trim().replace(/\s+/g, " ").toLowerCase();
+
+  if (!normalized) {
+    return null;
+  }
+
+  if (/\b(typecheck|type-check)\b/u.test(normalized) || /\btsc\b.*\b--noemit\b/u.test(normalized)) {
+    return "typecheck";
+  }
+
+  if (/\blint\b/u.test(normalized) || /\beslint\b/u.test(normalized)) {
+    return "lint";
+  }
+
+  if (/\bbuild\b/u.test(normalized) || /\b(?:vite|electron-vite)\s+build\b/u.test(normalized)) {
+    return "build";
+  }
+
+  return null;
+}
 
 function selectInitialProjectFromPreferences(
   projects: ForgeProject[],
@@ -601,6 +788,12 @@ export function App(): ReactElement {
     createEmptyExtensionRegistrySnapshot()
   );
   const [extensionLogs, setExtensionLogs] = useState<ExtensionInvocationLogRecord[]>([]);
+  const [builtInToolLogs, setBuiltInToolLogs] = useState<BuiltInToolCallLogRecord[]>([]);
+  const [agentQualityMetrics, setAgentQualityMetrics] =
+    useState<AgentQualityMetricSnapshot | null>(null);
+  const [developmentQaResult, setDevelopmentQaResult] =
+    useState<BuiltInToolQaRunResult | null>(null);
+  const [developmentQaRunning, setDevelopmentQaRunning] = useState(false);
   const [commandDialog, setCommandDialog] = useState<CommandDialogState | null>(null);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -682,6 +875,9 @@ export function App(): ReactElement {
   const activeAutoFailureFixKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixAttemptedKeysRef = useRef<Set<string>>(new Set());
   const autoFailureFixCountsRef = useRef<Map<string, number>>(new Map());
+  const recordedFailureRecoveryKeysRef = useRef<Set<string>>(new Set());
+  const recordedTaskOutcomeThreadIdsRef = useRef<Set<string>>(new Set());
+  const recordedValidationRunKeysRef = useRef<Set<string>>(new Set());
   const currentProjectPathRef = useRef<string | null>(currentProject?.path ?? null);
   const {
     clearAgentToolResults,
@@ -773,13 +969,159 @@ export function App(): ReactElement {
   }
 
   async function loadExtensionsState(): Promise<void> {
-    const [registry, logs] = await Promise.all([
+    const [registry, logs, toolLogs, metrics] = await Promise.all([
       window.forge.extensions.getRegistry(),
-      window.forge.extensions.listLogs(80)
+      window.forge.extensions.listLogs(80),
+      window.forge.builtInTools.listLogs(120),
+      window.forge.builtInTools.getMetrics()
     ]);
 
     setExtensionRegistry(registry);
     setExtensionLogs(logs);
+    setBuiltInToolLogs(toolLogs);
+    setAgentQualityMetrics(metrics);
+  }
+
+  function requestBuiltInToolConfirmation({
+    notice,
+    targetSummary,
+    toolName
+  }: {
+    notice: (message: string) => void;
+    targetSummary: string;
+    toolName: string;
+  }): BuiltInToolConfirmationContextInput | null {
+    if (typeof window === "undefined") {
+      notice(
+        settings.language === "zh-CN"
+          ? `内置工具 ${toolName} 需要用户确认, 当前环境不能显示确认弹窗。`
+          : `Built-in tool ${toolName} needs confirmation, but this environment cannot show a dialog.`
+      );
+      return null;
+    }
+
+    const definition = getBuiltInToolDefinition(toolName);
+    const view = createBuiltInToolConfirmationView(definition, targetSummary);
+    const reversibleLabel = settings.language === "zh-CN"
+      ? view.reversible ? "是" : "否"
+      : view.reversible ? "Yes" : "No";
+    const firstConfirmed = window.confirm(
+      settings.language === "zh-CN"
+        ? [
+            `工具名: ${view.toolName}`,
+            `风险等级: ${view.riskLevel}`,
+            `即将影响的${view.targetLabel}: ${view.targetSummary}`,
+            `操作后果: ${view.consequence}`,
+            `是否可撤销: ${reversibleLabel}`,
+            view.requiresTypedConfirmation
+              ? `继续后需要输入 ${view.confirmationKeyword} 完成二次确认。`
+              : "选择确定后将执行该操作。"
+          ].join("\n")
+        : [
+            `Tool: ${view.toolName}`,
+            `Risk: ${view.riskLevel}`,
+            `Target ${view.targetLabel}: ${view.targetSummary}`,
+            `Consequence: ${view.consequence}`,
+            `Reversible: ${reversibleLabel}`,
+            view.requiresTypedConfirmation
+              ? `You must type ${view.confirmationKeyword} in the next dialog.`
+              : "Choose OK to execute this operation."
+          ].join("\n")
+    );
+
+    if (!firstConfirmed) {
+      return null;
+    }
+
+    if (view.requiresTypedConfirmation) {
+      const typedConfirmation = window.prompt(
+        settings.language === "zh-CN"
+          ? [
+              `二次确认: ${view.toolName}`,
+              `风险等级: ${view.riskLevel}`,
+              `即将影响的${view.targetLabel}: ${view.targetSummary}`,
+              `操作后果: ${view.consequence}`,
+              `是否可撤销: ${reversibleLabel}`,
+              `请输入 ${view.confirmationKeyword} 以确认执行。`,
+              "点击确定后 Forge 才会继续执行该 critical 操作。"
+            ].join("\n")
+          : [
+              `Second confirmation: ${view.toolName}`,
+              `Risk: ${view.riskLevel}`,
+              `Target ${view.targetLabel}: ${view.targetSummary}`,
+              `Consequence: ${view.consequence}`,
+              `Reversible: ${reversibleLabel}`,
+              `Type ${view.confirmationKeyword} to confirm execution.`,
+              "Choose OK to let Forge continue this critical operation."
+            ].join("\n")
+      );
+      const resolution = resolveBuiltInToolConfirmationContext(definition, {
+        confirmed: true,
+        ...(typedConfirmation ? { typedConfirmation } : {})
+      });
+
+      if (!resolution.ok) {
+        notice(
+          settings.language === "zh-CN"
+            ? `已取消 ${view.toolName}: 二次确认未通过。`
+            : `Cancelled ${view.toolName}: second confirmation did not pass.`
+        );
+        return null;
+      }
+
+      return resolution.context;
+    }
+
+    if (view.confirmationKind === "double") {
+      const secondConfirmed = window.confirm(
+        settings.language === "zh-CN"
+          ? [
+              `二次确认: ${view.toolName}`,
+              `影响目标: ${view.targetSummary}`,
+              "选择确定后将执行该高风险操作。"
+            ].join("\n")
+          : [
+              `Second confirmation: ${view.toolName}`,
+              `Target: ${view.targetSummary}`,
+              "Choose OK to execute this high-risk operation."
+            ].join("\n")
+      );
+
+      if (!secondConfirmed) {
+        return null;
+      }
+    }
+
+    const resolution = resolveBuiltInToolConfirmationContext(definition, {
+      confirmed: true,
+      ...(view.confirmationKind === "double" ? { secondConfirmed: true } : {})
+    });
+
+    if (!resolution.ok) {
+      notice(
+        settings.language === "zh-CN"
+          ? `已取消 ${view.toolName}: ${resolution.message}`
+          : `Cancelled ${view.toolName}: ${resolution.message}`
+      );
+      return null;
+    }
+
+    return resolution.context;
+  }
+
+  async function runDevelopmentBuiltInToolQa(): Promise<void> {
+    setDevelopmentQaRunning(true);
+    setTaskNotice(null);
+
+    try {
+      const result = await window.forge.builtInTools.runDevelopmentQa();
+      setDevelopmentQaResult(result);
+      await loadExtensionsState();
+    } catch (error) {
+      setTaskNotice(formatRuntimeError(settings.language, error));
+    } finally {
+      setDevelopmentQaRunning(false);
+    }
   }
 
   async function updateExtensionSettings(patch: ExtensionSettingsPatch): Promise<void> {
@@ -1907,13 +2249,42 @@ export function App(): ReactElement {
     const targetBranch =
       commitBranch.trim() || gitStatus.currentBranch || gitStatus.branches[0] || undefined;
     const targetRemote = gitRemote.trim() || "origin";
+    const confirmation = requestBuiltInToolConfirmation({
+      notice: setGitNotice,
+      targetSummary: `${targetRemote}/${targetBranch ?? "(current branch)"}`,
+      toolName: "gitPush"
+    });
+
+    if (!confirmation) {
+      return;
+    }
 
     try {
-      const result = await window.forge.git.push({
-        projectRoot: currentProject.path,
-        branch: targetBranch,
+      const input: Record<string, unknown> = {
         remote: targetRemote
+      };
+
+      if (targetBranch) {
+        input.branch = targetBranch;
+      }
+
+      const toolResult = await window.forge.builtInTools.execute({
+        toolName: "gitPush",
+        input,
+        projectRoot: currentProject.path,
+        ...confirmation
       });
+
+      void loadExtensionsState().catch((error) => {
+        setGitNotice(formatRuntimeError(settings.language, error));
+      });
+
+      if (isBuiltInToolProblemResult(toolResult)) {
+        setGitNotice(formatBuiltInToolProblemNotice(settings.language, toolResult));
+        return;
+      }
+
+      const result = toolResult as ProjectGitPushResult;
       setGitStatus(result.status);
       setGitNotice(
         createGitOperationNotice(settings.language, {
@@ -2004,6 +2375,12 @@ export function App(): ReactElement {
     void refreshProjectFilesAfterMutation(currentProject.path, [file.relativePath], {
       expandParents: pendingPreview?.changeKind === "create"
     });
+    recordAgentQualityObservation({
+      kind: "file_modification",
+      createdAt: new Date().toISOString(),
+      wrongFile: false,
+      unrelatedChange: false
+    });
 
     const eventThreadId = pendingPreview?.source?.threadId ?? selectedThreadId;
 
@@ -2079,23 +2456,34 @@ export function App(): ReactElement {
       return;
     }
 
-    const confirmed =
-      typeof window === "undefined" ||
-      window.confirm(
-        settings.language === "zh-CN"
-          ? `确认删除 ${relativePath}？此操作会修改项目文件。`
-          : `Delete ${relativePath}? This will modify project files.`
-      );
+    const confirmation = requestBuiltInToolConfirmation({
+      notice: setTaskNotice,
+      targetSummary: relativePath,
+      toolName: "deleteFile"
+    });
 
-    if (!confirmed) {
+    if (!confirmation) {
       return;
     }
 
     try {
-      const result = await window.forge.files.delete({
+      const toolResult = await window.forge.builtInTools.execute({
+        toolName: "deleteFile",
+        input: { relativePath },
         projectRoot: currentProject.path,
-        relativePath
+        ...confirmation
       });
+
+      void loadExtensionsState().catch((error) => {
+        setTaskNotice(formatRuntimeError(settings.language, error));
+      });
+
+      if (isBuiltInToolProblemResult(toolResult)) {
+        setTaskNotice(formatBuiltInToolProblemNotice(settings.language, toolResult));
+        return;
+      }
+
+      const result = toolResult as ProjectFileDeleteResult;
       const createdAt = new Date().toISOString();
 
       setPreviewFile((current) => (current?.relativePath === result.relativePath ? null : current));
@@ -2256,7 +2644,6 @@ export function App(): ReactElement {
     threadId?: string,
     options: {
       action?: AgentAction | null;
-      autoApply?: boolean;
       source?: FileChangePreviewSource | null;
     } = {}
   ): Promise<boolean | undefined> {
@@ -2344,37 +2731,6 @@ export function App(): ReactElement {
         usage: result.usage,
         createdAt: result.createdAt
       });
-
-      if (options.autoApply) {
-        const writtenFile = await window.forge.files.writeText({
-          projectRoot: currentProject.path,
-          relativePath: sourcedPreview.relativePath,
-          nextContent: sourcedPreview.nextContent
-        });
-
-        setPreviewFile(writtenFile);
-        setFilePreview(createTextFilePreview(writtenFile));
-        setChangePreviews((current) => removeFileChangePreview(current, sourcedPreview.relativePath));
-        void refreshProjectGitStatus();
-        void refreshProjectFilesAfterMutation(currentProject.path, [writtenFile.relativePath], {
-          expandParents: sourcedPreview.changeKind === "create"
-        });
-        setThreads((current) =>
-          appendThreadEvents(current, selectedThread.id, [
-            {
-              id: `${selectedThread.id}-agent-file-applied-${result.createdAt}`,
-              kind: "file",
-              message: `已自动应用文件修改: ${writtenFile.relativePath}`,
-              createdAt: result.createdAt,
-              fileChange: {
-                relativePath: sourcedPreview.relativePath,
-                changeKind: sourcedPreview.changeKind
-              }
-            }
-          ])
-        );
-        return true;
-      }
 
       setChangePreviews((current) => upsertFileChangePreview(current, sourcedPreview));
       setThreads((current) =>
@@ -3124,6 +3480,92 @@ export function App(): ReactElement {
     );
   }
 
+  function recordAgentQualityObservation(observation: AgentQualityObservation): void {
+    void window.forge.builtInTools
+      .recordMetric(observation)
+      .then(() => window.forge.builtInTools.getMetrics())
+      .then(setAgentQualityMetrics)
+      .catch(() => undefined);
+  }
+
+  function recordAgentTaskOutcomeIfComplete(threadId: string): void {
+    if (recordedTaskOutcomeThreadIdsRef.current.has(threadId)) {
+      return;
+    }
+
+    const thread = getLiveThread(threadId);
+    const actions = thread?.agentActions ?? [];
+
+    if (
+      !thread ||
+      actions.length === 0 ||
+      actions.some((action) => action.status !== "completed" && action.status !== "skipped")
+    ) {
+      return;
+    }
+
+    recordedTaskOutcomeThreadIdsRef.current.add(threadId);
+    recordAgentQualityObservation({
+      kind: "task_outcome",
+      createdAt: new Date().toISOString(),
+      complexity: classifyAgentTaskComplexity(actions),
+      completedInFirstAttempt: !hasAgentActionFailureHistory(thread)
+    });
+  }
+
+  function recordValidationMetricFromCommand(
+    threadId: string,
+    result: CommandRunResult
+  ): void {
+    const validation = inferValidationKindFromCommand(result.command);
+
+    if (!validation) {
+      return;
+    }
+
+    const key = result.runId
+      ? `run:${result.runId}`
+      : `${threadId}:${result.command}:${result.exitCode}:${result.timedOut}`;
+
+    if (recordedValidationRunKeysRef.current.has(key)) {
+      return;
+    }
+
+    recordedValidationRunKeysRef.current.add(key);
+    recordAgentQualityObservation({
+      kind: "validation_run",
+      createdAt: new Date().toISOString(),
+      validation,
+      afterModification: hasCompletedProjectMutation(getLiveThread(threadId)),
+      passed: result.exitCode === 0 && !result.timedOut && !result.cancelled
+    });
+  }
+
+  function recordFailureRecoveryIfNeeded(
+    threadId: string,
+    action: AgentAction,
+    recovered: boolean
+  ): void {
+    const key = `${threadId}:${action.id}:${recovered ? "recovered" : "unrecovered"}`;
+
+    if (recordedFailureRecoveryKeysRef.current.has(key)) {
+      return;
+    }
+
+    const thread = getLiveThread(threadId);
+
+    if (!thread || !hasActionFailureHistory(thread, action.id)) {
+      return;
+    }
+
+    recordedFailureRecoveryKeysRef.current.add(key);
+    recordAgentQualityObservation({
+      kind: "failure_recovery",
+      createdAt: new Date().toISOString(),
+      recovered
+    });
+  }
+
   // 更新动作状态并保持线程列表和当前选中线程一致
   function updateAgentActionStatus(
     threadId: string,
@@ -3177,6 +3619,7 @@ export function App(): ReactElement {
     startedAt: string
   ): void {
     const agentProfile = getThreadAgentProfileContext(threadId);
+    const outcomeStatus = typeof outcome === "string" ? outcome : outcome.status;
 
     setThreads((current) =>
       appendAgentActionOutcomeRecord(current, {
@@ -3188,6 +3631,10 @@ export function App(): ReactElement {
         language: settings.language
       })
     );
+
+    if (outcomeStatus === "completed") {
+      recordFailureRecoveryIfNeeded(threadId, action, true);
+    }
   }
 
   // 用户确认或跳过门禁时写入时间线, 让队列推进有可审计记录
@@ -3213,6 +3660,10 @@ export function App(): ReactElement {
 
   // 跳过用户明确放弃的动作, 用于越过被阻止或已过时的队列步骤
   function skipAgentAction(threadId: string, action: AgentAction): void {
+    if (action.status === "failed") {
+      recordFailureRecoveryIfNeeded(threadId, action, false);
+    }
+
     setAgentActionDecisionStatus(threadId, action, "skipped");
   }
 
@@ -3401,6 +3852,8 @@ export function App(): ReactElement {
           generateFileChange: (relativePath) =>
             generateAgentFileChangeAction(threadId, actionToRun, relativePath),
           runCommand: (command) => runThreadCommand(threadId, command, actionToRun.id),
+          executeBuiltInTool: (toolName, input) =>
+            executeAgentBuiltInToolAction(threadId, actionToRun, toolName, input),
           invokeExtension: (extensionId, actionId, input) =>
             invokeAgentExtensionAction(threadId, actionToRun, extensionId, actionId, input),
           blockCommandDenied: (reason) =>
@@ -3498,6 +3951,7 @@ export function App(): ReactElement {
           step
         })
       );
+      window.setTimeout(() => recordAgentTaskOutcomeIfComplete(threadId), 0);
     }, 0);
   }
 
@@ -3614,6 +4068,121 @@ export function App(): ReactElement {
       coordinator: agentRuntimeQueueCoordinator,
       runReservedAction: (action) => runReservedAgentAction(threadId, action)
     });
+  }
+
+  async function executeAgentBuiltInToolAction(
+    threadId: string,
+    action: AgentAction,
+    toolName: string,
+    input: Record<string, unknown>,
+    confirmationContext: BuiltInToolConfirmationContextInput = {}
+  ): Promise<AgentActionRunOutcome> {
+    const createdAt = new Date().toISOString();
+    const result = await window.forge.builtInTools.execute({
+      toolName,
+      input,
+      projectRoot: currentProject?.path ?? null,
+      threadId,
+      ...confirmationContext
+    });
+
+    try {
+      await loadExtensionsState();
+    } catch {
+      // 工具结果已由主进程审计记录, 刷新 UI 失败不应反向标记工具执行失败。
+    }
+
+    if (isBuiltInToolProblemResult(result)) {
+      const message = formatBuiltInToolProblemNotice(settings.language, result);
+
+      setTaskNotice(message);
+
+      if (result.status === "blocked") {
+        updateAgentActionStatus(threadId, action.id, "pending");
+        setThreads((current) =>
+          appendThreadEvents(
+            current,
+            threadId,
+            [
+              {
+                id: `${threadId}-built-in-tool-blocked-${action.id}-${createdAt}`,
+                kind: "plan",
+                message,
+                createdAt
+              }
+            ],
+            "blocked"
+          )
+        );
+        return {
+          status: "pending",
+          continueBatch: false
+        };
+      }
+
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendThreadError(threadId, message);
+      return {
+        status: "failed",
+        continueBatch: false
+      };
+    }
+
+    recordAgentToolResultEvent(
+      threadId,
+      action,
+      "built-in-tool",
+      formatBuiltInToolExecutionOutputForThread(toolName, result),
+      createdAt
+    );
+    return "completed";
+  }
+
+  async function confirmAgentBuiltInToolAction(
+    threadId: string,
+    action: AgentAction
+  ): Promise<void> {
+    if (action.kind !== "built-in-tool" || !action.builtInToolName) {
+      return;
+    }
+
+    const confirmation = requestBuiltInToolConfirmation({
+      toolName: action.builtInToolName,
+      notice: setTaskNotice,
+      targetSummary: formatBuiltInToolActionTargetSummary(action)
+    });
+
+    if (!confirmation) {
+      return;
+    }
+
+    const startedAt = new Date().toISOString();
+
+    appendAgentActionRunEvent(threadId, action, { status: "started", startedAt });
+    updateAgentActionStatus(threadId, action.id, "running");
+
+    try {
+      const outcome = await executeAgentBuiltInToolAction(
+        threadId,
+        action,
+        action.builtInToolName,
+        action.builtInToolInput ?? {},
+        confirmation
+      );
+
+      appendAgentActionOutcomeEvent(threadId, action, outcome, startedAt);
+      scheduleAgentPostActionStep(threadId, outcome);
+    } catch (error) {
+      const message = formatAgentRuntimeError(
+        settings.language,
+        "agent",
+        error instanceof Error ? error.message : String(error)
+      );
+
+      updateAgentActionStatus(threadId, action.id, "failed");
+      appendAgentActionOutcomeEvent(threadId, action, "failed", startedAt);
+      appendThreadError(threadId, message);
+    }
   }
 
   async function invokeAgentExtensionAction(
@@ -4021,11 +4590,9 @@ export function App(): ReactElement {
       setPreviewFile(file);
       setFilePreview(createTextFilePreview(file));
       setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
-      const threadFullAccessMode = getThreadFullAccessMode(threadId);
 
       const generated = await generateProjectFileChange(file.relativePath, file.content, threadId, {
         action,
-        autoApply: threadFullAccessMode,
         source: {
           threadId,
           actionId: action.id,
@@ -4036,11 +4603,6 @@ export function App(): ReactElement {
       if (!generated) {
         updateAgentActionStatus(threadId, action.id, "failed");
         return "failed";
-      }
-
-      if (threadFullAccessMode) {
-        updateAgentActionStatus(threadId, action.id, "completed");
-        return "completed";
       }
 
       updateAgentActionStatus(threadId, action.id, "running");
@@ -4197,6 +4759,7 @@ export function App(): ReactElement {
           status === "completed" ? "running" : "blocked"
         )
       );
+      recordValidationMetricFromCommand(threadId, result);
       return status;
     } catch (error) {
       if (actionId) {
@@ -4371,6 +4934,9 @@ export function App(): ReactElement {
           onRunAgentActions={(threadId, actions) => void runAgentActions(threadId, actions)}
           onApproveAgentCommand={(threadId, action) => void approveAgentCommandAction(threadId, action)}
           onAllowAgentCommand={(threadId, action) => void allowAgentCommandAction(threadId, action)}
+          onConfirmAgentBuiltInTool={(threadId, action) =>
+            void confirmAgentBuiltInToolAction(threadId, action)
+          }
           onConfirmAgentExtension={(threadId, action) => void confirmAgentExtensionAction(threadId, action)}
           onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
           onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
@@ -4905,11 +5471,16 @@ export function App(): ReactElement {
         language={settings.language}
         registry={extensionRegistry}
         logs={extensionLogs}
+        builtInToolLogs={builtInToolLogs}
+        agentQualityMetrics={agentQualityMetrics}
+        developmentQaResult={developmentQaResult}
+        developmentQaRunning={developmentQaRunning}
         onConfirmInvocation={confirmExtensionInvocation}
         onCreateExtension={createCustomExtension}
         onDeleteExtension={deleteCustomExtension}
         onDeleteSecret={deleteExtensionSecret}
         onInvoke={invokeExtensionAction}
+        onRunDevelopmentQa={() => void runDevelopmentBuiltInToolQa()}
         onRefresh={() => void loadExtensionsState()}
         onSaveSecret={saveExtensionSecret}
         onUpdateExtension={updateCustomExtension}
