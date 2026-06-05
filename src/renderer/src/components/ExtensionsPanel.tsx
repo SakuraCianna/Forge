@@ -36,6 +36,12 @@ import {
   builtInToolCategories,
   builtInToolDefinitions
 } from "@shared/builtInToolCatalog";
+import {
+  agentQualityMetricDefinitions,
+  type AgentQualityMetricId,
+  type AgentQualityMetricSnapshot,
+  type AgentQualityMetricValue
+} from "@shared/agentQualityMetrics";
 import type {
   BuiltInToolAvailability,
   BuiltInToolCallLogRecord,
@@ -43,11 +49,6 @@ import type {
   BuiltInToolDefinition,
   BuiltInToolRiskLevel
 } from "@shared/builtInToolTypes";
-import type {
-  AgentQualityMetricId,
-  AgentQualityMetricSnapshot,
-  AgentQualityMetricValue
-} from "@shared/agentQualityMetrics";
 import type { BuiltInToolQaRunResult } from "@shared/builtInToolQaTypes";
 import type { Language } from "@shared/modelTypes";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
@@ -837,6 +838,7 @@ function renderBuiltInToolsSection(
 ): ReactElement {
   const latestLogByToolName = createLatestBuiltInToolLogMap(logs);
   const featuredMetrics = getFeaturedAgentQualityMetrics(metrics);
+  const reviewMetrics = getReviewAgentQualityMetrics(metrics);
 
   return (
     <section className="grid gap-4 rounded-[16px] border border-[#ececf1] bg-white p-5 shadow-[0_12px_36px_rgba(0,0,0,0.04)]">
@@ -884,6 +886,34 @@ function renderBuiltInToolsSection(
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="grid gap-2 rounded-[12px] border border-[#ececf1] bg-[#fbfbfc] p-3">
+        <div className="text-[12px] font-semibold text-[#202123]">
+          {copy.qualityMetricsReview}
+        </div>
+        <div className="grid gap-2">
+          {reviewMetrics.map((metric) => (
+            <div
+              key={metric.id}
+              className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-white px-3 py-2 text-[12px] text-[#565869] md:grid-cols-[minmax(160px,1.3fr)_repeat(5,minmax(0,auto))] md:items-center"
+            >
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-[#202123]">
+                  {copy.qualityMetricLabel(metric.id)}
+                </div>
+                <div className="mt-0.5 text-[11px] text-[#8e8ea0]">
+                  {copy.metricSampleSize(metric)}
+                </div>
+              </div>
+              <span className="font-mono text-[#202123]">{formatMetricPercent(metric)}</span>
+              <span>{metric.numerator}/{metric.denominator}</span>
+              <span>{copy.mvpTier}: {copy.metricTierStatus(metric.mvpPassed)}</span>
+              <span>{copy.usableTier}: {copy.metricTierStatus(metric.usablePassed)}</span>
+              <span>{copy.excellentTier}: {copy.metricTierStatus(metric.excellentPassed)}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {developmentQaResult ? (
@@ -1165,6 +1195,26 @@ function getFeaturedAgentQualityMetrics(
     return (
       metric ?? {
         id,
+        numerator: 0,
+        denominator: 0,
+        value: null,
+        mvpPassed: null,
+        usablePassed: null,
+        excellentPassed: null
+      }
+    );
+  });
+}
+
+function getReviewAgentQualityMetrics(
+  snapshot: AgentQualityMetricSnapshot | null
+): AgentQualityMetricValue[] {
+  return agentQualityMetricDefinitions.map((definition) => {
+    const metric = snapshot?.metrics.find((candidate) => candidate.id === definition.id);
+
+    return (
+      metric ?? {
+        id: definition.id,
         numerator: 0,
         denominator: 0,
         value: null,
@@ -1846,6 +1896,7 @@ function getExtensionsCopy(language: Language) {
     extensionNamePlaceholder: isChinese ? "例如 飞书任务扩展" : "Linear Tasks Extension",
     extensionUpdated: (path: string) =>
       isChinese ? `扩展草稿已更新: ${path}` : `Extension draft updated: ${path}`,
+    excellentTier: isChinese ? "Excellent" : "Excellent",
     fieldDescription: isChinese ? "说明" : "Description",
     fieldLabel: isChinese ? "显示名称" : "Label",
     from: isChinese ? "发件人" : "From",
@@ -1853,6 +1904,7 @@ function getExtensionsCopy(language: Language) {
       ? "输入字段, 用逗号分隔, 例如 query, limit"
       : "Input fields separated by commas, e.g. query, limit",
     logs: isChinese ? "调用日志" : "Invocation logs",
+    mvpTier: isChinese ? "MVP" : "MVP",
     myExtensions: isChinese ? "我的扩展" : "My extensions",
     noRecentToolCall: isChinese ? "暂无记录" : "No recent call",
     noLogs: isChinese ? "暂无调用日志" : "No invocation logs",
@@ -1896,6 +1948,7 @@ function getExtensionsCopy(language: Language) {
     qaTotal: isChinese ? "总数" : "Total",
     qaWriteBeforeConfirmationFailureRate: isChinese ? "写盘失败率" : "Write fail",
     qaWriteBeforeConfirmationFailures: isChinese ? "确认前写盘失败" : "Write-before-confirm failures",
+    qualityMetricsReview: isChinese ? "质量指标复盘" : "Quality metrics review",
     readAction: isChinese ? "读取数据" : "Read data",
     readPermission: isChinese ? "读取权限" : "Read permission",
     refresh: isChinese ? "刷新扩展" : "Refresh extensions",
@@ -1909,6 +1962,7 @@ function getExtensionsCopy(language: Language) {
     subject: isChinese ? "主题" : "Subject",
     title: isChinese ? "扩展" : "Extensions",
     to: isChinese ? "收件人" : "To",
+    usableTier: isChinese ? "Usable" : "Usable",
     permissionMode: (mode: ExtensionPermissionMode) => {
       if (!isChinese) {
         return mode;
@@ -1934,6 +1988,15 @@ function getExtensionsCopy(language: Language) {
       }
 
       return isChinese ? "低于 MVP" : "Below MVP";
+    },
+    metricSampleSize: (metric: AgentQualityMetricValue) =>
+      isChinese ? `样本 ${metric.denominator}` : `Samples ${metric.denominator}`,
+    metricTierStatus: (passed: boolean | null) => {
+      if (passed === null) {
+        return isChinese ? "未证明" : "Unproven";
+      }
+
+      return passed ? (isChinese ? "通过" : "Pass") : isChinese ? "未通过" : "Fail";
     },
     qaRunStatus: (status: BuiltInToolQaRunResult["status"]) => {
       if (!isChinese) {
