@@ -21,6 +21,7 @@
     "quality:metrics": "npm run test:compile && node scripts/summarize-agent-quality-metrics.mjs",
     "quality:regression": "npm run test:compile && node scripts/summarize-v0-2-regression-results.mjs",
     "quality:regression:gate": "npm run test:compile && node scripts/summarize-v0-2-regression-results.mjs --require-complete-set --require-usable-regression",
+    "quality:v0.2:status": "npm run test:compile && node scripts/summarize-v0-2-usability-status.mjs",
     "quality:v0.2": "node scripts/run-v0-2-quality-gate.mjs",
     "quality:v0.2:usable": "node scripts/run-v0-2-usability-gate.mjs",
     "dist:win": "npm run build && electron-builder --win --x64 --publish never",

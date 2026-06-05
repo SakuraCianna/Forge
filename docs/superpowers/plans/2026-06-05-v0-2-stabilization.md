@@ -14,7 +14,7 @@
 
 This baseline was collected on 2026-06-05 on branch `codex/Forge`.
 
-- `npm test`: 86 tests passed, 0 failed.
+- `npm test`: 88 tests passed, 0 failed.
 - `npm run release:check`: ESLint, typecheck, and Electron/Vite build passed.
 - `npm run qa:built-in-tools`: 76 scenarios total, 74 succeeded, 2 skipped browser scenarios, 0 failed, 100% attempted success rate, P0 error rate 0%, write-before-confirmation failures 0.
 - `npm run qa:built-in-tools:browser`: 80 scenarios total, 80 succeeded, 0 skipped, 0 failed, browser screenshot and console checks succeeded.
@@ -23,6 +23,7 @@ This baseline was collected on 2026-06-05 on branch `codex/Forge`.
 - `npm run quality:regression`: added as the manual v0.2.x regression result review entry point. When no regression results file exists, it reports missing and keeps real task regression metrics unproven.
 - `npm run quality:regression:gate`: added as the strict real-task regression usability gate. Missing result files, malformed report shape, missing or mismatched `forgeVersion`, incomplete S1-S5/M1-M5/C1-C3 coverage, unexpected task IDs, duplicate task IDs, invalid runs, zero-denominator regression metrics, or below-usable regression metrics fail the gate.
 - `npm run quality:installer-smoke`: added as the Windows installer manual smoke report gate. Missing `docs\V0_2_INSTALLER_SMOKE.json`, malformed report shape, missing installer artifact, missing checks, failed checks, or an installer filename that does not match the current package version fail the gate.
+- `npm run quality:v0.2:status`: added as the quick usability evidence status summary. It does not run packaging and currently reports `unproven` with blockers `regression-results-missing` and `installer-smoke-missing`.
 - `npm run quality:v0.2:usable`: added as the top-level usability gate. It fails fast through `quality:regression:gate` and `quality:installer-smoke` before running the longer `quality:v0.2` engineering and packaging gate.
 - Packaging warnings to track: electron-builder reported duplicate dependency references, and Node emitted `DEP0190` for child process shell arguments.
 - Missing evidence: no local `agent-quality-metrics.json` snapshot, no complete `docs/V0_2_REGRESSION_RESULTS.json` fixed-task result set, and no `docs\V0_2_INSTALLER_SMOKE.json` manual installer smoke report were found, so real simple, medium, and complex task first-pass completion rates plus installer smoke confidence are not yet proven.
@@ -362,6 +363,8 @@ Current evidence: `npm run quality:v0.2` passed on 2026-06-05. It ran `npm test`
 Additional current evidence: `npm test` passed 86/86 and `npm run release:check` passed on 2026-06-05 after adding the strict regression and installer smoke gate checks.
 
 Latest current evidence: `npm run quality:v0.2` passed again on 2026-06-05 after adding evidence templates. The generated Windows installer was `release\Forge-0.2.0-x64-setup.exe` with size 144,328,757 bytes. Packaging still reports `duplicate-dependencies` and `dep0190-shell-args` warnings, both already tracked as known packaging warnings.
+
+Latest status evidence: `npm run quality:v0.2:status -- --json` reports classification `unproven`, with blockers `regression-results-missing` and `installer-smoke-missing`. `npm test` passed 88/88 after adding the status summary script.
 
 - [ ] **Step 3: Run manual installer smoke test**
 

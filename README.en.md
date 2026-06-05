@@ -159,6 +159,7 @@ npm run qa:built-in-tools:browser
 npm run quality:installer-smoke
 npm run quality:metrics
 npm run quality:regression
+npm run quality:v0.2:status
 ```
 
 For release checks:
@@ -188,6 +189,8 @@ When real-task regression results are used as a v0.2.x usability evidence gate, 
 ```powershell
 npm run quality:regression:gate
 ```
+
+`npm run quality:v0.2:status` quickly summarizes the current usability evidence state without running packaging. When formal regression results or installer smoke reports are missing, it reports `unproven` so you can see the missing evidence before running the full gate.
 
 For release candidates, run the complete v0.2.x quality gate. This command chains tests, release checks, Built-in Tools QA, Browser QA, and Windows installer packaging, so it takes longer because it includes packaging. If `FORGE_QA_PROJECT_ROOT` is not set, it uses `.tmp-test\quality-gate-sandbox` as a controlled QA sandbox:
 
