@@ -170,7 +170,7 @@ function getInvalidMetadata(report, packageVersion, installerSha256Matches) {
     invalidMetadata.push("forgeVersion");
   }
 
-  if (typeof report?.testedAt === "string" && !isIsoTimestampWithTimezone(report.testedAt)) {
+  if (typeof report?.testedAt === "string" && !isAuditableSmokeTimestamp(report.testedAt)) {
     invalidMetadata.push("testedAt");
   }
 
@@ -211,6 +211,10 @@ function isIsoTimestampWithTimezone(value) {
   }
 
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
+}
+
+function isAuditableSmokeTimestamp(value) {
+  return isIsoTimestampWithTimezone(value) && Date.parse(value) <= Date.now();
 }
 
 function isWindowsPlatform(value) {

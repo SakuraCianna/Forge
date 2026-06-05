@@ -378,6 +378,8 @@ Latest fixed-task evidence hardening: strict v0.2 regression reports now require
 
 Latest installer metadata hardening: installer smoke reports now require `testedAt` to be a timezone-qualified ISO timestamp and `platform` to explicitly start with Windows. This prevents ambiguous dates and negated platform text such as `not Windows` from being accepted as usable evidence.
 
+Latest installer timestamp hardening: installer smoke reports now also reject future `testedAt` values. Manual smoke evidence must describe an already completed test run, not a pre-filled or scheduled future timestamp.
+
 Latest regression timestamp hardening: each v0.2 regression run now requires a timezone-qualified ISO `createdAt`. The summary script no longer silently replaces missing run timestamps with the report generation time, so real-task evidence remains auditable per sample.
 
 Latest first-pass evidence hardening: strict v0.2 regression reports now reject runs where `completedInFirstAttempt` is `true` but any recorded validation failed. This prevents first-pass completion metrics from being inflated by samples that still failed typecheck, build, or lint.
