@@ -42,6 +42,8 @@ gh release create v0.2.0 release/Forge-0.2.0-x64-setup.exe --title "Forge v0.2.0
 
 如果 tag 已存在, 使用 `gh release upload v0.2.0 release/Forge-0.2.0-x64-setup.exe --clobber` 更新安装包。
 
+上述 `v0.2.0`, `Forge-0.2.0-x64-setup.exe` 和 `RELEASE_NOTES_v0.2.0.md` 示例必须和 `package.json` 当前版本保持一致; 升级版本时只同步示例版本号, 不改变发布策略或自动发布行为。
+
 ## 冒烟测试清单
 
 - 双击安装包, 确认安装流程可完成
