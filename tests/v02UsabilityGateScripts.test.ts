@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const fixturePackageVersion = "0.2.0";
 
 test("v0.2 usability gate is wired and exposes a safe dry run", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
@@ -68,6 +69,7 @@ test("v0.2 installer smoke script validates the manual smoke report and installe
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     reportPath,
@@ -193,6 +195,7 @@ test("v0.2 installer smoke script fails when report version does not match packa
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     reportPath,
@@ -255,6 +258,7 @@ test("v0.2 installer smoke script rejects installer paths outside the current re
 
   await mkdir(externalReleaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(externalInstallerPath, installerFixture, "utf8");
   await writeFile(
     reportPath,
@@ -315,6 +319,7 @@ test("v0.2 installer smoke script fails when installer SHA-256 is missing or sta
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(installerPath, "new installer fixture", "utf8");
   await writeFile(
     reportPath,
@@ -416,6 +421,7 @@ test("v0.2 installer smoke script fails when required manual checks are missing"
   const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
 
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(
     reportPath,
     JSON.stringify(
@@ -452,6 +458,7 @@ test("v0.2 installer smoke script fails when report metadata is missing or not W
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(installerPath, "fake installer fixture", "utf8");
   await writeFile(
     reportPath,
@@ -521,6 +528,7 @@ test("v0.2 installer smoke script rejects ambiguous smoke metadata", async () =>
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     reportPath,
@@ -580,6 +588,7 @@ test("v0.2 installer smoke script rejects future smoke timestamps", async () => 
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     reportPath,
@@ -639,6 +648,7 @@ test("v0.2 installer smoke script rejects smoke timestamps that are not real cal
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     reportPath,
@@ -694,6 +704,7 @@ test("v0.2 installer smoke script rejects malformed report shape", async () => {
   const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
 
   await mkdir(docsDirectory, { recursive: true });
+  await writePackageVersion(directory);
   await writeFile(
     reportPath,
     JSON.stringify(
@@ -738,4 +749,8 @@ test("v0.2 installer smoke script rejects malformed report shape", async () => {
 
 function createSha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+async function writePackageVersion(directory: string, version = fixturePackageVersion): Promise<void> {
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version }), "utf8");
 }

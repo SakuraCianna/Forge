@@ -6,6 +6,10 @@ Forge is an open-source local AI coding agent desktop app. It is built for real 
 
 Forge aims to move AI coding from "suggestions in a chat box" to a local engineering workflow that is reviewable, recoverable, and verifiable.
 
+> ⚠️ Forge is currently in early 0.x development.
+> Some features may be incomplete, unstable, or subject to breaking changes.
+> It is recommended for testing, feedback, and early exploration, not production use yet.
+
 ## Features
 
 ### Local Project Workbench
@@ -17,7 +21,7 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - Sensitive paths such as `.env`, private keys, certificates, credential folders, and database files are excluded from agent file tools and previews by default.
 - File browsing uses lazy directory loading and paged large directories to avoid rendering a whole large repository at once.
 - Project scan metadata and text-search snapshots are cached in the local app data directory for later reuse.
-- AI-generated file changes enter a review queue and are written to disk only after user confirmation.
+- AI-generated file changes enter a review queue by default and are written to disk only after user confirmation; in Full Access mode, agent-planned ordinary file changes may be applied automatically, while deletion, dependency installation, Git, and critical operations still require confirmation.
 
 ### Agent Task Threads
 

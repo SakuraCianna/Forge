@@ -33,7 +33,7 @@ npm run qa:built-in-tools:browser
 npm run dist:win
 ```
 
-该命令会生成 x64 NSIS 安装包, 并通过 `--publish never` 禁止 electron-builder 自动发布。安装包输出到 `release` 目录, 文件名类似 `Forge-0.2.0-x64-setup.exe`。
+该命令会生成 x64 NSIS 安装包, 并通过 `--publish never` 禁止 electron-builder 自动发布。安装包输出到 `release` 目录, 文件名类似 `Forge-0.2.1-x64-setup.exe`。
 
 ## GitHub Release 发布
 
@@ -46,12 +46,12 @@ Get-ChildItem release -Filter "*setup.exe"
 2. 创建 tag 和 GitHub Release, 并上传安装包
 
 ```powershell
-gh release create v0.2.0 release/Forge-0.2.0-x64-setup.exe --title "Forge v0.2.0" --notes-file release/RELEASE_NOTES_v0.2.0.md
+gh release create v0.2.1 release/Forge-0.2.1-x64-setup.exe --title "Forge v0.2.1" --notes-file docs/RELEASE_NOTES_v0.2.1.md
 ```
 
-如果 tag 已存在, 使用 `gh release upload v0.2.0 release/Forge-0.2.0-x64-setup.exe --clobber` 更新安装包。
+如果 tag 已存在, 使用 `gh release upload v0.2.1 release/Forge-0.2.1-x64-setup.exe --clobber` 更新安装包。
 
-上述 `v0.2.0`, `Forge-0.2.0-x64-setup.exe` 和 `RELEASE_NOTES_v0.2.0.md` 示例必须和 `package.json` 当前版本保持一致; 升级版本时只同步示例版本号, 不改变发布策略或自动发布行为。
+上述 `v0.2.1`, `Forge-0.2.1-x64-setup.exe` 和 `RELEASE_NOTES_v0.2.1.md` 示例必须和 `package.json` 当前版本保持一致; 升级版本时只同步示例版本号, 不改变发布策略或自动发布行为。
 
 ## 冒烟测试清单
 
@@ -74,15 +74,15 @@ npm run quality:installer-smoke
 记录烟测报告前, 先绑定本次实际测试的安装包哈希:
 
 ```powershell
-(Get-FileHash -Algorithm SHA256 -LiteralPath "release\Forge-0.2.0-x64-setup.exe").Hash.ToLowerInvariant()
+(Get-FileHash -Algorithm SHA256 -LiteralPath "release\Forge-0.2.1-x64-setup.exe").Hash.ToLowerInvariant()
 ```
 
 记录格式:
 
 ```json
 {
-  "forgeVersion": "0.2.0",
-  "installerPath": "release/Forge-0.2.0-x64-setup.exe",
+  "forgeVersion": "0.2.1",
+  "installerPath": "release/Forge-0.2.1-x64-setup.exe",
   "installerSha256": "填写上一步得到的 sha256",
   "testedAt": "2026-06-05T12:00:00.000Z",
   "platform": "Windows 11",
@@ -108,7 +108,7 @@ npm run quality:v0.2:usable
 
 ## 当前已知打包警告
 
-- 2026-06-06 复跑 `npm run dist:win` 退出码为 0, 安装包 `release\Forge-0.2.0-x64-setup.exe` 生成成功, 下列两个警告仍出现。
+- 2026-06-06 复跑 `npm run dist:win` 退出码为 0, 安装包 `release\Forge-0.2.1-x64-setup.exe` 生成成功, SHA-256 为 `669b43f60660c3379652217cc723181492404619ad8816e1632bb3411db8f972`, 下列两个警告仍出现。
 - `duplicate dependency references`: 当前由 electron-builder 在扫描 npm 依赖时输出, 安装包仍可生成。后续优化依赖树时再处理, 不为了消除该提示做依赖大升级。
 - `DEP0190`: 当前出现在 electron-builder 打包阶段的子进程调用警告中。Forge 自有质量门禁脚本使用 `shell: false` 和 npm CLI 文件执行命令, 没有为规避该警告改动运行时代码。
 

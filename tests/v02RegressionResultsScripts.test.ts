@@ -1455,12 +1455,14 @@ test("v0.2 regression results strict gate fails when failed path omits recovery 
 test("v0.2 regression results strict gate fails when report version does not match package version", async () => {
   const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-version-"));
   const resultsFile = join(directory, "regression-results.json");
+  const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
+  const mismatchedForgeVersion = "0.0.0";
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.1",
+        forgeVersion: mismatchedForgeVersion,
         runs: [
           ...["S1", "S2", "S3", "S4", "S5"].map((taskId) =>
             createRegressionRun(taskId, "simple", true)
@@ -1494,8 +1496,8 @@ test("v0.2 regression results strict gate fails when report version does not mat
   };
 
   assert.deepEqual(summary.metadata, {
-    forgeVersion: "0.2.1",
-    packageVersion: "0.2.0",
+    forgeVersion: mismatchedForgeVersion,
+    packageVersion: packageJson.version,
     invalidMetadata: ["forgeVersion"]
   });
   assert.equal(summary.gate.regressionUsablePassed, true);
