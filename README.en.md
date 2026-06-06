@@ -192,6 +192,8 @@ npm run quality:regression:gate
 
 `npm run quality:v0.2:status` quickly summarizes the current usability evidence state without running packaging. It reports `unproven` only when formal regression results or installer smoke reports are missing; if any existing evidence has invalid shape, metadata, task coverage, metrics, or installer binding, it reports `blocked` with the matching blockers even when another evidence file is still missing. When evidence files exist but do not pass, text output prints `Regression details` or `Installer smoke details`; with `-- --json`, the same information is available in `regression.details` or `installerSmoke.details` fields for invalid metadata, invalid run counts and reasons, invalid changedFiles, missing tasks, blocking metrics, flagged changedFiles, and missing or failed smoke checks.
 
+The fixed Built-in Tools QA entry points are `npm run qa:built-in-tools` and `npm run qa:built-in-tools:browser`; docs, release notes, and regression records should use these real script names instead of temporary aliases or unverified new QA commands.
+
 For release candidates, run the complete v0.2.x quality gate. This command chains tests, release checks, Built-in Tools QA, Browser QA, and Windows installer packaging, so it takes longer because it includes packaging. If `FORGE_QA_PROJECT_ROOT` is not set, it uses `.tmp-test\quality-gate-sandbox` as a controlled QA sandbox:
 
 ```powershell
@@ -209,6 +211,8 @@ npm run quality:v0.2:usable
 Local development does not require a project-level `.env` file. API keys are saved through the app settings and handled by secure storage on the Electron main-process side.
 
 Do not write API keys, tokens, cookies, private keys, or certificates into README files, commit messages, or logs.
+
+Example configuration should describe variable purpose only; it must not include real credentials, full tokens, cookies, private key bodies, or certificate contents.
 
 ## Project Structure
 
@@ -291,6 +295,8 @@ Forge uses Shiki highlighting for common engineering languages. Less common lang
 Forge is currently in the v0.2.x stabilization line. The core workflow is running, including local project indexing, provider configuration, agent planning, file review, command execution, Git operations, Built-in Tools, plugin and skill context, Extensions, agent profiles, memory, usage tracking, and localized error messages.
 
 The main v0.2.x goal is not feature expansion. It is to stabilize Forge into a usable local AI Coding Agent. Tool-layer QA, lint, typecheck, build, and Windows installer generation have automated verification entry points. Real simple, medium, and complex task first-pass completion rates, wrong-file modification rate, unrelated-change rate, and failure-recovery rate still need enough captured samples before Forge can honestly be called usable by those metrics.
+
+Until `npm run quality:v0.2:usable` passes, README and release docs should describe v0.2.x as a stabilization line, not as already usable.
 
 See `docs/superpowers/plans/2026-06-05-v0-2-stabilization.md` for the stabilization plan and `docs/V0_2_REGRESSION_TASKS.md` for the real-task regression set.
 
