@@ -32,6 +32,11 @@ type ProjectTextFileSnapshot = ProjectTextFile & {
   exists: boolean;
 };
 
+type PendingDirectoryFileEntry = {
+  absolutePath: string;
+  index: number;
+};
+
 const maxInlinePreviewBytes = 40 * 1024 * 1024;
 
 // 读取文本文件前检查路径边界和大小, 防止大文件拖慢预览
@@ -218,6 +223,7 @@ export async function listProjectDirectory({
   }
 
   const entries: ProjectDirectoryEntry[] = [];
+  const pendingFileEntries: PendingDirectoryFileEntry[] = [];
   let truncated = false;
   let visibleEntryIndex = 0;
 
@@ -260,10 +266,19 @@ export async function listProjectDirectory({
             name: entry.name,
             relativePath: entryRelativePath,
             kind: "file",
-            size: (await stat(absolutePath)).size
+            size: 0
           }
     );
+
+    if (entry.isFile()) {
+      pendingFileEntries.push({
+        absolutePath,
+        index: entries.length - 1
+      });
+    }
   }
+
+  await attachDirectoryFileSizes(entries, pendingFileEntries);
 
   return {
     relativePath: normalizedRelativePath,
@@ -271,6 +286,23 @@ export async function listProjectDirectory({
     truncated,
     nextOffset: truncated ? resultOffset + entries.length : undefined
   };
+}
+
+// 当前页内文件大小可以并发读取, 减少展开大目录时逐个 stat 的等待时间。
+async function attachDirectoryFileSizes(
+  entries: ProjectDirectoryEntry[],
+  pendingFileEntries: PendingDirectoryFileEntry[]
+): Promise<void> {
+  await Promise.all(
+    pendingFileEntries.map(async ({ absolutePath, index }) => {
+      const fileStat = await stat(absolutePath);
+      const entry = entries[index];
+
+      if (entry?.kind === "file") {
+        entry.size = fileStat.size;
+      }
+    })
+  );
 }
 
 // 在项目内执行受控 glob 匹配, 用于 Agent 快速定位候选文件
