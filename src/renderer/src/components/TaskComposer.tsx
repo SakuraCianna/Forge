@@ -224,10 +224,18 @@ export function TaskComposer({
         addComposerContext(suggestion.context);
       }
 
-      const mention = suggestion.insertText || `@${suggestion.label} `;
+      const promptFragment = getSuggestionPromptInsertText(suggestion);
+
+      if (!promptFragment) {
+        window.requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+        });
+        return;
+      }
+
       const nextPrompt = prompt.trim().length > 0 && !prompt.endsWith(" ")
-        ? `${prompt} ${mention}`
-        : `${prompt}${mention}`;
+        ? `${prompt} ${promptFragment}`
+        : `${prompt}${promptFragment}`;
       const nextCursor = nextPrompt.length;
 
       setPrompt(nextPrompt);
@@ -274,8 +282,13 @@ export function TaskComposer({
         addComposerContext(suggestion.context);
       }
 
-      insertPromptFragment(promptTrigger.start, promptTrigger.end, suggestion.insertText);
-      setDismissedSuggestionKey(`${promptTrigger.start}:${promptTrigger.start + suggestion.insertText.length}`);
+      const promptFragment = getSuggestionPromptInsertText(suggestion);
+
+      insertPromptFragment(promptTrigger.start, promptTrigger.end, promptFragment);
+
+      if (promptFragment) {
+        setDismissedSuggestionKey(`${promptTrigger.start}:${promptTrigger.start + promptFragment.length}`);
+      }
     },
     [addComposerContext, insertPromptFragment, onRunCommand, promptTrigger]
   );
@@ -698,7 +711,7 @@ function renderComposerContextChip(
   return (
     <span
       key={context.id}
-      className="group inline-flex h-8 max-w-[260px] items-center gap-1.5 rounded-[10px] border border-[#cfe2ff] bg-[#eef6ff] px-2.5 font-medium text-[#0b5cab]"
+      className="group inline-flex h-6 max-w-[220px] items-center gap-1 rounded-[8px] border border-[#cfe2ff] bg-[#eef6ff] px-2 text-[12px] font-medium leading-4 text-[#0b5cab]"
       title={`${getContextKindLabel(context.kind, options.language)}: ${context.label}\n${context.detail}`}
     >
       {renderContextChipIcon(context.kind)}
@@ -740,6 +753,10 @@ function renderContextChipIcon(kind: ComposerContextKind): ReactElement {
   const Icon = getSuggestionIcon(kind);
 
   return <Icon className="h-3.5 w-3.5 shrink-0" />;
+}
+
+function getSuggestionPromptInsertText(suggestion: ComposerSuggestion): string {
+  return suggestion.kind === "plugin" || suggestion.kind === "skill" ? "" : suggestion.insertText;
 }
 
 function getSuggestionIcon(kind: ComposerSuggestion["kind"]): ComponentType<{ className?: string }> {

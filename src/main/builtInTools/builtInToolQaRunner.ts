@@ -107,6 +107,23 @@ export async function runDevelopmentBuiltInToolQa({
   const startedAtDate = now();
   const projectRoot = request?.projectRoot ?? developmentQaSandboxProject.path;
   const modelId = request?.modelId ?? developmentQaSandboxProject.modelId;
+
+  if (!projectRoot) {
+    const endedAtDate = now();
+
+    return createQaRunResult({
+      endedAt: endedAtDate.toISOString(),
+      modelId,
+      projectRoot: "",
+      registry,
+      scenarios: [],
+      skippedReason:
+        "Development QA sandbox project is not configured. Set FORGE_QA_PROJECT_ROOT to run QA against a sandbox project.",
+      startedAt: startedAtDate.toISOString(),
+      status: "skipped"
+    });
+  }
+
   const existingProject = await stat(projectRoot).catch(() => null);
 
   if (!existingProject?.isDirectory()) {
@@ -1134,7 +1151,7 @@ function shouldRunMutationChecks(
   projectRoot: string,
   request: BuiltInToolQaRunRequest | undefined
 ): boolean {
-  return request?.includeMutationChecks ?? projectRoot === developmentQaSandboxProject.path;
+  return request?.includeMutationChecks ?? developmentQaSandboxProject.path === projectRoot;
 }
 
 function createQaRunResult({

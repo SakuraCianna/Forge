@@ -1,0 +1,17 @@
+{
+  "forgeVersion": "0.2.0",
+  "installerPath": "release/Forge-0.2.0-x64-setup.exe",
+  "installerSha256": "1a484629d474fc91b431ba6ce3f62eb2f1af86cefe6e2fe3137172bdc53d8fb1",
+  "testedAt": "2026-06-06T12:28:47.242+08:00",
+  "platform": "Windows 11 Home Chinese (Microsoft Windows 11 家庭版 中文版)",
+  "method": "Installed release/Forge-0.2.0-x64-setup.exe with /S, launched the installed app from the user-level Programs directory, and verified the smoke checks through the installed app renderer over the local DevTools endpoint.",
+  "checks": {
+    "appLaunches": true,
+    "projectOpens": true,
+    "filePreviewWorks": true,
+    "safeCommandRuns": true,
+    "generatedDiffAcceptRejectWorks": true,
+    "gitStatusViewOpens": true,
+    "highRiskRequiresConfirmation": true
+  }
+}

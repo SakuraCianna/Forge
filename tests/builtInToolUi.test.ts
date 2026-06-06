@@ -65,6 +65,19 @@ test("built-in tools QA UI exposes MVP quality gate summary", async () => {
   assert.match(source, /qaCriticalConfirmationFailureRate/u);
 });
 
+test("built-in tools UI exposes all agent quality metrics for review", async () => {
+  const source = await readFile("src/renderer/src/components/ExtensionsPanel.tsx", "utf8");
+
+  assert.match(source, /agentQualityMetricDefinitions/u);
+  assert.match(source, /getReviewAgentQualityMetrics/u);
+  assert.match(source, /reviewMetrics\.map/u);
+  assert.match(source, /copy\.qualityMetricsReview/u);
+  assert.match(source, /copy\.metricSampleSize/u);
+  assert.match(source, /copy\.metricTierStatus\(metric\.mvpPassed/u);
+  assert.match(source, /copy\.metricTierStatus\(metric\.usablePassed/u);
+  assert.match(source, /copy\.metricTierStatus\(metric\.excellentPassed/u);
+});
+
 test("agent built-in tool confirmation UI exposes critical second-confirmation context", async () => {
   const queueSource = await readFile(
     "src/renderer/src/components/AgentConfirmationQueue.tsx",

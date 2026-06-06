@@ -1,0 +1,387 @@
+// 本文件说明: 汇总 v0.2.x 可用性证据状态, 不运行打包门禁, 不生成正式证据
+import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const args = parseArgs(process.argv.slice(2));
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+
+const regressionResult = await runJsonScript("summarize-v0-2-regression-results.mjs", [
+  "--require-complete-set",
+  "--require-usable-regression",
+  "--json"
+]);
+const installerSmokeResult = await runJsonScript("check-v0-2-installer-smoke.mjs", ["--json"]);
+const regressionStatus = getRegressionStatus(regressionResult);
+const installerSmokeStatus = getInstallerSmokeStatus(installerSmokeResult);
+const blockers = [
+  ...getRegressionBlockers(regressionStatus),
+  ...getInstallerSmokeBlockers(installerSmokeStatus)
+];
+const summary = {
+  classification: classifyBlockers(blockers),
+  passed: blockers.length === 0,
+  blockers,
+  regression: createRegressionSummary(regressionStatus, regressionResult.summary),
+  installerSmoke: createInstallerSmokeSummary(installerSmokeStatus, installerSmokeResult.summary)
+};
+
+writeSummary(summary, args.json);
+
+function parseArgs(rawArgs) {
+  return {
+    json: rawArgs.includes("--json")
+  };
+}
+
+function runJsonScript(scriptName, scriptArgs) {
+  return new Promise((resolveResult) => {
+    let stdout = "";
+    const child = spawn(process.execPath, [resolve(scriptDirectory, scriptName), ...scriptArgs], {
+      cwd: process.cwd(),
+      env: process.env,
+      shell: false,
+      windowsHide: true
+    });
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", () => {});
+    child.on("error", (error) => {
+      resolveResult({
+        code: 1,
+        summary: {
+          status: "error",
+          message: error.message
+        }
+      });
+    });
+    child.on("exit", (code) => {
+      resolveResult({
+        code: code ?? 1,
+        summary: parseJsonSummary(stdout)
+      });
+    });
+  });
+}
+
+function parseJsonSummary(stdout) {
+  try {
+    return JSON.parse(stdout);
+  } catch {
+    return {
+      status: "error",
+      message: "Unable to parse JSON summary"
+    };
+  }
+}
+
+function getRegressionStatus(result) {
+  if (result.code === 0 && result.summary?.status === "ok") {
+    return "passed";
+  }
+
+  if (result.summary?.status === "missing") {
+    return "missing";
+  }
+
+  if (result.summary?.status === "error") {
+    return "invalid";
+  }
+
+  if (result.summary?.status === "ok" && hasInvalidRegressionEvidence(result.summary)) {
+    return "invalid";
+  }
+
+  return "failed";
+}
+
+function getInstallerSmokeStatus(result) {
+  if (result.code === 0 && result.summary?.passed === true) {
+    return "passed";
+  }
+
+  if (result.summary?.status === "missing") {
+    return "missing";
+  }
+
+  if (result.summary?.status === "error") {
+    return "invalid";
+  }
+
+  if (result.summary?.status === "ok" && hasInvalidInstallerSmokeEvidence(result.summary)) {
+    return "invalid";
+  }
+
+  return "failed";
+}
+
+function hasInvalidRegressionEvidence(summary) {
+  return (
+    hasItems(summary?.metadata?.invalidMetadata) ||
+    isPositiveNumber(summary?.invalidRunCount) ||
+    isPositiveNumber(summary?.duplicateTaskCount) ||
+    summary?.coverage?.completeTaskSet === false
+  );
+}
+
+function hasInvalidInstallerSmokeEvidence(summary) {
+  return (
+    hasItems(summary?.missingMetadata) ||
+    hasItems(summary?.invalidMetadata) ||
+    hasItems(summary?.missingChecks) ||
+    summary?.installerExists === false
+  );
+}
+
+function hasItems(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function isPositiveNumber(value) {
+  return typeof value === "number" && value > 0;
+}
+
+function classifyBlockers(blockers) {
+  if (blockers.length === 0) {
+    return "evidence-ready";
+  }
+
+  return blockers.every((blocker) => blocker.endsWith("-missing")) ? "unproven" : "blocked";
+}
+
+function createRegressionSummary(status, regressionSummary) {
+  const summary = {
+    status
+  };
+
+  if (status !== "passed" && status !== "missing") {
+    summary.details = {
+      invalidMetadata: asArray(regressionSummary?.metadata?.invalidMetadata),
+      invalidRunCount: asNumber(regressionSummary?.invalidRunCount),
+      invalidRuns: asInvalidRuns(regressionSummary?.invalidRuns),
+      duplicateTaskIds: asArray(regressionSummary?.duplicateTaskIds),
+      missingTaskIds: asArray(regressionSummary?.coverage?.missingTaskIds),
+      unexpectedTaskIds: asArray(regressionSummary?.coverage?.unexpectedTaskIds),
+      blockingMetricIds: asArray(regressionSummary?.gate?.blockingMetricIds),
+      unprovenMetricIds: asArray(regressionSummary?.gate?.unprovenMetricIds),
+      fileModificationEvidence: asFileModificationEvidence(regressionSummary?.fileModificationEvidence),
+      invalidFileModificationEvidence: asInvalidFileModificationEvidence(
+        regressionSummary?.invalidFileModificationEvidence
+      )
+    };
+  }
+
+  return summary;
+}
+
+function createInstallerSmokeSummary(status, installerSmokeSummary) {
+  const summary = {
+    status
+  };
+
+  if (status !== "passed" && status !== "missing") {
+    summary.details = {
+      missingChecks: asArray(installerSmokeSummary?.missingChecks),
+      failedChecks: asArray(installerSmokeSummary?.failedChecks),
+      missingMetadata: asArray(installerSmokeSummary?.missingMetadata),
+      invalidMetadata: asArray(installerSmokeSummary?.invalidMetadata),
+      installerExists: installerSmokeSummary?.installerExists === true,
+      installerSha256Matches: installerSmokeSummary?.installerSha256Matches === true
+    };
+  }
+
+  return summary;
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function asNumber(value) {
+  return typeof value === "number" ? value : 0;
+}
+
+function asInvalidRuns(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((run) => isRecord(run))
+    .map((run) => ({
+      index: Number.isInteger(run.index) ? run.index : -1,
+      taskId: typeof run.taskId === "string" ? run.taskId : null,
+      reasons: asArray(run.reasons)
+    }));
+}
+
+function asFileModificationEvidence(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => isRecord(entry))
+    .map((entry) => ({
+      taskId: typeof entry.taskId === "string" ? entry.taskId : null,
+      changedFiles: asArray(entry.changedFiles).filter((filePath) => typeof filePath === "string"),
+      wrongFileModified: entry.wrongFileModified === true,
+      unrelatedCodeChanged: entry.unrelatedCodeChanged === true
+    }))
+    .filter((entry) => entry.changedFiles.length > 0 && (entry.wrongFileModified || entry.unrelatedCodeChanged));
+}
+
+function asInvalidFileModificationEvidence(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => isRecord(entry))
+    .map((entry) => ({
+      index: Number.isInteger(entry.index) ? entry.index : -1,
+      taskId: typeof entry.taskId === "string" ? entry.taskId : null,
+      changedFiles: asArray(entry.changedFiles).filter((filePath) => typeof filePath === "string"),
+      wrongFileModified: entry.wrongFileModified === true,
+      unrelatedCodeChanged: entry.unrelatedCodeChanged === true,
+      reasons: asArray(entry.reasons).filter((reason) => typeof reason === "string")
+    }))
+    .filter((entry) => entry.changedFiles.length > 0);
+}
+
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
+}
+
+function getRegressionBlockers(status) {
+  if (status === "passed") {
+    return [];
+  }
+
+  if (status === "missing") {
+    return ["regression-results-missing"];
+  }
+
+  if (status === "invalid") {
+    return ["regression-results-invalid"];
+  }
+
+  return ["regression-results-below-usable"];
+}
+
+function getInstallerSmokeBlockers(status) {
+  if (status === "passed") {
+    return [];
+  }
+
+  if (status === "missing") {
+    return ["installer-smoke-missing"];
+  }
+
+  if (status === "invalid") {
+    return ["installer-smoke-invalid"];
+  }
+
+  return ["installer-smoke-failed"];
+}
+
+function writeSummary(summary, asJson) {
+  if (asJson) {
+    console.log(JSON.stringify(summary));
+    return;
+  }
+
+  console.log(`v0.2 usability status: ${summary.classification}`);
+  console.log(`Regression evidence: ${summary.regression.status}`);
+  console.log(`Installer smoke evidence: ${summary.installerSmoke.status}`);
+
+  if (summary.blockers.length > 0) {
+    console.log(`Blockers: ${summary.blockers.join(", ")}`);
+  }
+
+  writeRegressionDetails(summary.regression.details);
+  writeInstallerSmokeDetails(summary.installerSmoke.details);
+}
+
+function writeRegressionDetails(details) {
+  if (!details) {
+    return;
+  }
+
+  console.log("Regression details:");
+  console.log(`Invalid metadata: ${formatList(details.invalidMetadata)}`);
+  console.log(`Invalid runs: ${details.invalidRunCount}`);
+  console.log(`Invalid run details: ${formatInvalidRuns(details.invalidRuns)}`);
+  console.log(`Duplicate task IDs: ${formatList(details.duplicateTaskIds)}`);
+  console.log(`Missing task IDs: ${formatList(details.missingTaskIds)}`);
+  console.log(`Unexpected task IDs: ${formatList(details.unexpectedTaskIds)}`);
+  console.log(`Blocking metrics: ${formatList(details.blockingMetricIds)}`);
+  console.log(`Unproven metrics: ${formatList(details.unprovenMetricIds)}`);
+  console.log(`Changed files: ${formatFileModificationEvidence(details.fileModificationEvidence)}`);
+  console.log(`Invalid changed files: ${formatInvalidFileModificationEvidence(details.invalidFileModificationEvidence)}`);
+}
+
+function writeInstallerSmokeDetails(details) {
+  if (!details) {
+    return;
+  }
+
+  console.log("Installer smoke details:");
+  console.log(`Missing checks: ${formatList(details.missingChecks)}`);
+  console.log(`Failed checks: ${formatList(details.failedChecks)}`);
+  console.log(`Missing metadata: ${formatList(details.missingMetadata)}`);
+  console.log(`Invalid metadata: ${formatList(details.invalidMetadata)}`);
+  console.log(`Installer artifact: ${details.installerExists ? "found" : "missing"}`);
+  console.log(`Installer SHA-256: ${details.installerSha256Matches ? "matched" : "missing-or-mismatched"}`);
+}
+
+function formatList(value) {
+  return value.length > 0 ? value.join(", ") : "none";
+}
+
+function formatInvalidRuns(value) {
+  return value.length > 0
+    ? value
+        .map((run) => {
+          const label = run.taskId ? `${run.index}:${run.taskId}` : `${run.index}`;
+          return `${label} [${formatList(run.reasons)}]`;
+        })
+        .join(", ")
+    : "none";
+}
+
+function formatFileModificationEvidence(value) {
+  return value.length > 0
+    ? value
+        .map((entry) => {
+          const label = entry.taskId ?? "unknown";
+          const flags = [
+            entry.wrongFileModified ? "wrong-file" : null,
+            entry.unrelatedCodeChanged ? "unrelated-change" : null
+          ].filter(Boolean);
+          const suffix = flags.length > 0 ? ` (${flags.join(", ")})` : "";
+
+          return `${label} [${formatList(entry.changedFiles)}]${suffix}`;
+        })
+        .join("; ")
+    : "none";
+}
+
+function formatInvalidFileModificationEvidence(value) {
+  return value.length > 0
+    ? value
+        .map((entry) => {
+          const label = entry.taskId ? `${entry.index}:${entry.taskId}` : `${entry.index}`;
+          const flags = [
+            entry.wrongFileModified ? "wrong-file" : null,
+            entry.unrelatedCodeChanged ? "unrelated-change" : null
+          ].filter(Boolean);
+          const flagsSuffix = flags.length > 0 ? ` (${flags.join(", ")})` : "";
+
+          return `${label} [${formatList(entry.changedFiles)}] [${formatList(entry.reasons)}]${flagsSuffix}`;
+        })
+        .join("; ")
+    : "none";
+}

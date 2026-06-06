@@ -101,6 +101,7 @@ type ThreadWorkspaceProps = {
   onConfirmAgentExtension?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onGenerateContinuationPlan?: (threadId: string) => void;
+  onRetryThreadPrompt?: (threadId: string) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
   onSkipAgentAction?: (threadId: string, action: AgentAction) => void;
   onResumeAgent?: (threadId: string) => void;
@@ -208,6 +209,7 @@ export function ThreadWorkspace({
   onConfirmAgentExtension,
   onGenerateCommandFix,
   onGenerateContinuationPlan,
+  onRetryThreadPrompt,
   onCompleteAgentAction,
   onSkipAgentAction,
   onResumeAgent,
@@ -254,6 +256,16 @@ export function ThreadWorkspace({
     : null;
   const canEditPreview = Boolean(onPreviewChange || onApplyChange || onGenerateFileChange);
   const diffHunkCopy = getDiffHunkCopy(language);
+  const retryPromptCopy =
+    language === "zh-CN"
+      ? {
+          label: "重发并撤销",
+          aria: "撤销本轮文件操作并重新发送提示词"
+        }
+      : {
+          label: "Retry and revert",
+          aria: "Revert this turn's file operations and resend the prompt"
+        };
   const threadActivitySummary = useMemo(
     () =>
       selectedThread
@@ -414,6 +426,19 @@ export function ThreadWorkspace({
           <div className="order-2 flex min-h-full w-full max-w-[760px] flex-col gap-7 xl:order-1">
             <article className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-sm leading-5 text-[#202123]">
               <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
+              {onRetryThreadPrompt ? (
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    aria-label={retryPromptCopy.aria}
+                    onClick={() => onRetryThreadPrompt(selectedThread.id)}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#565869] transition hover:border-[#c7c7d1] hover:text-[#202123] active:scale-[0.99]"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    {retryPromptCopy.label}
+                  </button>
+                </div>
+              ) : null}
             </article>
 
             {renderCompactMemoryContext(selectedThread.contextMemories ?? [])}
@@ -2306,7 +2331,20 @@ export function ThreadWorkspace({
                   <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
                     {planCopy.userRequest}
                   </div>
-                  {selectedThread.prompt}
+                  <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
+                  {onRetryThreadPrompt ? (
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        aria-label={retryPromptCopy.aria}
+                        onClick={() => onRetryThreadPrompt(selectedThread.id)}
+                        className="inline-flex h-7 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#565869] transition hover:border-[#c7c7d1] hover:text-[#202123] active:scale-[0.99]"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        {retryPromptCopy.label}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </article>
               <div className="pt-4">

@@ -3,6 +3,19 @@ import type { ProjectFileChangePreview } from "@shared/fileTypes";
 
 export type FileChangePreviewSource = NonNullable<ProjectFileChangePreview["source"]>;
 
+type AutoApplyGeneratedFileChangeOptions = {
+  fullAccess: boolean;
+  hasActionSource: boolean;
+};
+
+// 完全访问只自动应用 Agent 已规划出的文件生成动作, 手工预览仍留给用户确认。
+export function shouldAutoApplyGeneratedFileChange({
+  fullAccess,
+  hasActionSource
+}: AutoApplyGeneratedFileChangeOptions): boolean {
+  return fullAccess && hasActionSource;
+}
+
 // 给文件变更预览挂上 Agent 来源, 后续应用或丢弃时能回写动作状态
 export function attachFileChangePreviewSource(
   preview: ProjectFileChangePreview,

@@ -5,6 +5,12 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "types": ["node"],
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/renderer/src/*.ts", "src/renderer/src/*.tsx"],
+      "@shared/*": ["src/shared/*.ts"]
+    },
     "skipLibCheck": true,
     "rootDir": ".",
     "outDir": ".tmp-test"

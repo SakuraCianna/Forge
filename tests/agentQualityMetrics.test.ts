@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  agentQualityMetricDefinitions,
   createAgentQualityMetricSnapshot,
   getAgentQualityMetricValue,
   isAgentQualityObservation,
+  type AgentQualityMetricValue,
   type AgentQualityObservation
 } from "../src/shared/agentQualityMetrics.js";
 
@@ -76,6 +78,79 @@ test("safety metrics detect high risk and write-before-confirmation misfires", (
   assert.equal(getAgentQualityMetricValue(snapshot, "writeBeforeConfirmationRate").mvpPassed, false);
 });
 
+test("agent quality metrics keep empty denominators unproven", () => {
+  const snapshot = createAgentQualityMetricSnapshot([], createdAt);
+  const metricIds = snapshot.metrics.map((metric) => metric.id);
+
+  assert.deepEqual(
+    metricIds,
+    agentQualityMetricDefinitions.map((definition) => definition.id)
+  );
+
+  for (const metricId of metricIds) {
+    const metricValue = getAgentQualityMetricValue(snapshot, metricId);
+
+    assertUnprovenMetric(metricValue);
+  }
+});
+
+test("agent quality metrics calculate task complexity buckets independently", () => {
+  const snapshot = createAgentQualityMetricSnapshot([
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "simple",
+      completedInFirstAttempt: true
+    },
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "simple",
+      completedInFirstAttempt: false
+    },
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "medium",
+      completedInFirstAttempt: true
+    },
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "complex",
+      completedInFirstAttempt: false
+    }
+  ]);
+
+  assert.deepEqual(
+    pickMetricEvidence(getAgentQualityMetricValue(snapshot, "simpleTaskFirstPassCompletionRate")),
+    {
+      numerator: 1,
+      denominator: 2,
+      value: 0.5,
+      usablePassed: false
+    }
+  );
+  assert.deepEqual(
+    pickMetricEvidence(getAgentQualityMetricValue(snapshot, "mediumTaskFirstPassCompletionRate")),
+    {
+      numerator: 1,
+      denominator: 1,
+      value: 1,
+      usablePassed: true
+    }
+  );
+  assert.deepEqual(
+    pickMetricEvidence(getAgentQualityMetricValue(snapshot, "complexTaskFirstPassCompletionRate")),
+    {
+      numerator: 0,
+      denominator: 1,
+      value: 0,
+      usablePassed: false
+    }
+  );
+});
+
 test("agent quality observation validator rejects malformed metric records", () => {
   assert.equal(
     isAgentQualityObservation({
@@ -131,5 +206,24 @@ function toolCall(
     confirmedBeforeExecution: false,
     sideEffect: "none",
     ...patch
+  };
+}
+
+function assertUnprovenMetric(metricValue: AgentQualityMetricValue): void {
+  assert.equal(metricValue.denominator, 0);
+  assert.equal(metricValue.value, null);
+  assert.equal(metricValue.mvpPassed, null);
+  assert.equal(metricValue.usablePassed, null);
+  assert.equal(metricValue.excellentPassed, null);
+}
+
+function pickMetricEvidence(
+  metricValue: AgentQualityMetricValue
+): Pick<AgentQualityMetricValue, "denominator" | "numerator" | "usablePassed" | "value"> {
+  return {
+    numerator: metricValue.numerator,
+    denominator: metricValue.denominator,
+    value: metricValue.value,
+    usablePassed: metricValue.usablePassed
   };
 }

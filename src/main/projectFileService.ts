@@ -32,6 +32,11 @@ type ProjectTextFileSnapshot = ProjectTextFile & {
   exists: boolean;
 };
 
+type PendingDirectoryFileEntry = {
+  absolutePath: string;
+  index: number;
+};
+
 const maxInlinePreviewBytes = 40 * 1024 * 1024;
 
 // 读取文本文件前检查路径边界和大小, 防止大文件拖慢预览
@@ -218,6 +223,7 @@ export async function listProjectDirectory({
   }
 
   const entries: ProjectDirectoryEntry[] = [];
+  const pendingFileEntries: PendingDirectoryFileEntry[] = [];
   let truncated = false;
   let visibleEntryIndex = 0;
 
@@ -260,10 +266,19 @@ export async function listProjectDirectory({
             name: entry.name,
             relativePath: entryRelativePath,
             kind: "file",
-            size: (await stat(absolutePath)).size
+            size: 0
           }
     );
+
+    if (entry.isFile()) {
+      pendingFileEntries.push({
+        absolutePath,
+        index: entries.length - 1
+      });
+    }
   }
+
+  await attachDirectoryFileSizes(entries, pendingFileEntries);
 
   return {
     relativePath: normalizedRelativePath,
@@ -271,6 +286,23 @@ export async function listProjectDirectory({
     truncated,
     nextOffset: truncated ? resultOffset + entries.length : undefined
   };
+}
+
+// 当前页内文件大小可以并发读取, 减少展开大目录时逐个 stat 的等待时间。
+async function attachDirectoryFileSizes(
+  entries: ProjectDirectoryEntry[],
+  pendingFileEntries: PendingDirectoryFileEntry[]
+): Promise<void> {
+  await Promise.all(
+    pendingFileEntries.map(async ({ absolutePath, index }) => {
+      const fileStat = await stat(absolutePath);
+      const entry = entries[index];
+
+      if (entry?.kind === "file") {
+        entry.size = fileStat.size;
+      }
+    })
+  );
 }
 
 // 在项目内执行受控 glob 匹配, 用于 Agent 快速定位候选文件
@@ -529,6 +561,13 @@ function createUnavailablePreview(
 }
 
 function resolvePreviewMedia(relativePath: string): ProjectPreviewMedia {
+  const normalizedFileName = getFileName(relativePath).toLocaleLowerCase();
+  const namedTextMediaType = textMediaTypeByFileName[normalizedFileName];
+
+  if (namedTextMediaType) {
+    return { kind: "text", mediaType: namedTextMediaType };
+  }
+
   const extension = getFileExtension(relativePath);
 
   if (extension === "pdf") {
@@ -569,10 +608,14 @@ function resolvePreviewMedia(relativePath: string): ProjectPreviewMedia {
 }
 
 function getFileExtension(relativePath: string): string {
-  const fileName = normalizeRelativePath(relativePath).split("/").pop() ?? "";
+  const fileName = getFileName(relativePath);
   const match = /\.([^.]+)$/u.exec(fileName);
 
   return match?.[1]?.toLocaleLowerCase() ?? "";
+}
+
+function getFileName(relativePath: string): string {
+  return normalizeRelativePath(relativePath).split("/").pop() ?? "";
 }
 
 const imageMediaTypeByExtension: Record<string, string> = {
@@ -646,6 +689,20 @@ const textMediaTypeByExtension: Record<string, string> = {
   xml: "application/xml; charset=utf-8",
   yaml: "application/yaml; charset=utf-8",
   yml: "application/yaml; charset=utf-8"
+};
+
+const textMediaTypeByFileName: Record<string, string> = {
+  ".env": "text/plain; charset=utf-8",
+  ".env.example": "text/plain; charset=utf-8",
+  ".gitignore": "text/plain; charset=utf-8",
+  "dockerfile": "text/plain; charset=utf-8",
+  "makefile": "text/plain; charset=utf-8",
+  "package.json": "application/json; charset=utf-8",
+  "package-lock.json": "application/json; charset=utf-8",
+  "pnpm-lock.yaml": "application/yaml; charset=utf-8",
+  "readme": "text/plain; charset=utf-8",
+  "tsconfig.json": "application/json; charset=utf-8",
+  "vite.config.ts": "text/typescript; charset=utf-8"
 };
 
 // 读取目录时目录排在文件前面, 再按名称排序, 保持文件树和受控工具输出一致
