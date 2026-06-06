@@ -192,7 +192,7 @@ npm run quality:regression:gate
 
 `npm run quality:v0.2:status` quickly summarizes the current usability evidence state without running packaging. It reports `unproven` only when formal regression results or installer smoke reports are missing; if any existing evidence has invalid shape, metadata, task coverage, metrics, or installer binding, it reports `blocked` with the matching blockers even when another evidence file is still missing. When evidence files exist but do not pass, text output prints `Regression details` or `Installer smoke details`; with `-- --json`, the same information is available in `regression.details` or `installerSmoke.details` fields for invalid metadata, invalid run counts and reasons, invalid changedFiles, missing tasks, blocking metrics, flagged changedFiles, and missing or failed smoke checks.
 
-The fixed Built-in Tools QA entry points are `npm run qa:built-in-tools` and `npm run qa:built-in-tools:browser`; docs, release notes, and regression records should use these real script names instead of temporary aliases or unverified new QA commands.
+The fixed Built-in Tools QA entry points are `npm run qa:built-in-tools` and `npm run qa:built-in-tools:browser`; docs, release notes, and regression records should use these real script names instead of temporary aliases or unverified new QA commands. The browser QA command starts a temporary local fixture page, then uses a hidden Electron window to verify screenshot capture and page-console inspection.
 
 For release candidates, run the complete v0.2.x quality gate. This command chains tests, release checks, Built-in Tools QA, Browser QA, and Windows installer packaging, so it takes longer because it includes packaging. If `FORGE_QA_PROJECT_ROOT` is not set, it uses `.tmp-test\quality-gate-sandbox` as a controlled QA sandbox:
 
@@ -200,7 +200,7 @@ For release candidates, run the complete v0.2.x quality gate. This command chain
 npm run quality:v0.2
 ```
 
-Usability candidates must run the stricter top-level gate. This command first runs a usability evidence preflight and prints all blockers together; only after real-task regression evidence and installer manual smoke evidence pass does it continue to the real-task regression gate, installer smoke gate, complete engineering gate, and packaging gate. If `docs\V0_2_REGRESSION_RESULTS.json` is missing, `docs\V0_2_INSTALLER_SMOKE.json` is missing, evidence report shape is malformed, versions do not match, smoke metadata is invalid, the installer SHA-256 does not match, or any gate is below threshold, it exits non-zero:
+Usability candidates must run the stricter top-level gate. This command first runs a usability evidence preflight and prints all blockers together; only after real-task regression evidence and installer manual smoke evidence pass does it continue to the real-task regression gate, installer smoke gate, and complete engineering gate without rewriting the installer artifact. Generate the installer first with `npm run quality:v0.2` or `npm run dist:win`, then run installer smoke and record the current SHA-256 so the top-level gate does not invalidate its own smoke evidence by packaging again. If `docs\V0_2_REGRESSION_RESULTS.json` is missing, `docs\V0_2_INSTALLER_SMOKE.json` is missing, evidence report shape is malformed, versions do not match, smoke metadata is invalid, the installer SHA-256 does not match, or any gate is below threshold, it exits non-zero:
 
 ```powershell
 npm run quality:v0.2:usable

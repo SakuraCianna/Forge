@@ -3,17 +3,22 @@ import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-const commands = [
+const commandDefinitions = [
   npmCommandSpec("npm test", ["test"]),
   npmCommandSpec("npm run release:check", ["run", "release:check"]),
   npmCommandSpec("npm run qa:built-in-tools", ["run", "qa:built-in-tools"]),
   npmCommandSpec("npm run qa:built-in-tools:browser", ["run", "qa:built-in-tools:browser"]),
   npmCommandSpec("npm run dist:win", ["run", "dist:win"])
 ];
+const skipDist = process.env.FORGE_QUALITY_GATE_SKIP_DIST === "true";
+const commands = skipDist
+  ? commandDefinitions.filter((command) => command.label !== "npm run dist:win")
+  : commandDefinitions;
 
 if (process.env.FORGE_QUALITY_GATE_DRY_RUN === "true") {
   console.log(
     JSON.stringify({
+      skipDist,
       commands: commands.map((command) => command.label)
     })
   );
@@ -117,11 +122,14 @@ function detectWarningLabels(output) {
 }
 
 async function createCommandEnv() {
+  const childEnv = { ...process.env };
+  delete childEnv.FORGE_QUALITY_GATE_SKIP_DIST;
+
   const projectRoot =
     process.env.FORGE_QA_PROJECT_ROOT ?? (await createDefaultQaSandbox());
 
   return {
-    ...process.env,
+    ...childEnv,
     FORGE_QA_MODEL_ID: process.env.FORGE_QA_MODEL_ID ?? "mimo-v2.5-pro",
     FORGE_QA_PROJECT_ROOT: projectRoot
   };

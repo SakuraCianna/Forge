@@ -18,6 +18,15 @@ npm run release:check
 
 该命令会依次运行 ESLint 和 Electron/Vite 构建。
 
+3. 运行 Built-in Tools 和 Browser QA
+
+```powershell
+npm run qa:built-in-tools
+npm run qa:built-in-tools:browser
+```
+
+`npm run qa:built-in-tools:browser` 会临时启动本地 fixture 页面, 并用隐藏 Electron 窗口验证截图和页面控制台检查。发布流程和回归记录应使用这个真实脚本名, 不要写成临时别名。
+
 ## 生成 Windows 安装包
 
 ```powershell
@@ -91,7 +100,7 @@ npm run quality:installer-smoke
 
 报告顶层必须是 JSON object, 且 `checks` 必须是 object。其中 `forgeVersion`, `installerPath`, `installerSha256`, `testedAt`, `platform` 是必填元数据。`forgeVersion` 必须和当前 `package.json` 版本一致; `testedAt` 必须是带时区的 ISO 时间戳, 例如 `2026-06-05T12:00:00.000Z`, 且必须是真实存在的日历日期, 不能晚于当前时间; `platform` 必须明确以 Windows 开头, 例如 `Windows 11`; `installerPath` 必须是当前工作区内的相对路径 `release/Forge-<当前版本>-x64-setup.exe`, 不能指向工作区外的同名安装包; `installerSha256` 必须和该安装包当前内容一致。所有 `checks` 字段都必须存在且为 `true`, 否则 `npm run quality:installer-smoke` 会失败。
 
-可用级候选版本需要同时通过真实任务回归门禁、安装包烟测门禁和工程门禁。总门禁会先运行可用性证据预检并一次列出所有 blocker; 证据通过后, 再执行真实任务回归门禁、安装包烟测门禁以及耗时更长的完整工程和打包检查:
+可用级候选版本需要同时通过真实任务回归门禁、安装包烟测门禁和工程门禁。先运行 `npm run quality:v0.2` 或 `npm run dist:win` 生成当前安装包, 再安装烟测并记录当前 SHA-256。总门禁会先运行可用性证据预检并一次列出所有 blocker; 证据通过后, 再执行真实任务回归门禁、安装包烟测门禁以及不重写安装包的完整工程检查, 避免在烟测后重新打包导致 `installerSha256` 失效:
 
 ```powershell
 npm run quality:v0.2:usable
@@ -99,6 +108,7 @@ npm run quality:v0.2:usable
 
 ## 当前已知打包警告
 
+- 2026-06-06 复跑 `npm run dist:win` 退出码为 0, 安装包 `release\Forge-0.2.0-x64-setup.exe` 生成成功, 下列两个警告仍出现。
 - `duplicate dependency references`: 当前由 electron-builder 在扫描 npm 依赖时输出, 安装包仍可生成。后续优化依赖树时再处理, 不为了消除该提示做依赖大升级。
 - `DEP0190`: 当前出现在 electron-builder 打包阶段的子进程调用警告中。Forge 自有质量门禁脚本使用 `shell: false` 和 npm CLI 文件执行命令, 没有为规避该警告改动运行时代码。
 

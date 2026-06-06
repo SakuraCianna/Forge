@@ -24,19 +24,46 @@ test("v0.2 quality gate script is wired and exposes a safe dry run", async () =>
     {
       env: {
         ...process.env,
-        FORGE_QUALITY_GATE_DRY_RUN: "true"
+        FORGE_QUALITY_GATE_DRY_RUN: "true",
+        FORGE_QUALITY_GATE_SKIP_DIST: "false"
       },
       windowsHide: true
     }
   );
 
-  const dryRun = JSON.parse(stdout) as { commands: string[] };
+  const dryRun = JSON.parse(stdout) as { commands: string[]; skipDist: boolean };
 
+  assert.equal(dryRun.skipDist, false);
   assert.deepEqual(dryRun.commands, [
     "npm test",
     "npm run release:check",
     "npm run qa:built-in-tools",
     "npm run qa:built-in-tools:browser",
     "npm run dist:win"
+  ]);
+});
+
+test("v0.2 quality gate dry run can skip rebuilding the installer artifact", async () => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ["scripts/run-v0-2-quality-gate.mjs"],
+    {
+      env: {
+        ...process.env,
+        FORGE_QUALITY_GATE_DRY_RUN: "true",
+        FORGE_QUALITY_GATE_SKIP_DIST: "true"
+      },
+      windowsHide: true
+    }
+  );
+
+  const dryRun = JSON.parse(stdout) as { commands: string[]; skipDist: boolean };
+
+  assert.equal(dryRun.skipDist, true);
+  assert.deepEqual(dryRun.commands, [
+    "npm test",
+    "npm run release:check",
+    "npm run qa:built-in-tools",
+    "npm run qa:built-in-tools:browser"
   ]);
 });

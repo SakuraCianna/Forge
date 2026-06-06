@@ -12,7 +12,12 @@ const evidencePreflightCommand = commandSpec(
 const commands = [
   npmCommandSpec("npm run quality:regression:gate", ["run", "quality:regression:gate"]),
   npmCommandSpec("npm run quality:installer-smoke", ["run", "quality:installer-smoke"]),
-  npmCommandSpec("npm run quality:v0.2", ["run", "quality:v0.2"])
+  {
+    ...npmCommandSpec("npm run quality:v0.2 (skip dist)", ["run", "quality:v0.2"]),
+    env: {
+      FORGE_QUALITY_GATE_SKIP_DIST: "true"
+    }
+  }
 ];
 
 if (process.env.FORGE_USABILITY_GATE_DRY_RUN === "true") {
@@ -94,6 +99,10 @@ function npmCommandSpec(label, args) {
 function runCommand(command) {
   return new Promise((resolve) => {
     const child = spawn(command.executable, command.args, {
+      env: {
+        ...process.env,
+        ...(command.env ?? {})
+      },
       shell: false,
       stdio: "inherit",
       windowsHide: true

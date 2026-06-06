@@ -35,7 +35,7 @@ test("v0.2 usability gate is wired and exposes a safe dry run", async () => {
     "node scripts/summarize-v0-2-usability-status.mjs --json",
     "npm run quality:regression:gate",
     "npm run quality:installer-smoke",
-    "npm run quality:v0.2"
+    "npm run quality:v0.2 (skip dist)"
   ]);
 });
 

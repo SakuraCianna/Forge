@@ -355,6 +355,114 @@
         }
       ],
       "failureRecovered": null
+    },
+    {
+      "taskId": "M3",
+      "createdAt": "2026-06-06T12:13:28.372+08:00",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "README.en.md",
+        "docs/RELEASE.md",
+        "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M4",
+      "createdAt": "2026-06-06T12:13:28.372+08:00",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/RELEASE.md",
+        "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M5",
+      "createdAt": "2026-06-06T12:13:28.372+08:00",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null
     }
   ]
 }

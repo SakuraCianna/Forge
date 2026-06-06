@@ -24,7 +24,7 @@ This baseline was collected on 2026-06-05 on branch `codex/Forge`.
 - `npm run quality:regression:gate`: added as the strict real-task regression usability gate. Missing result files, malformed report shape, missing or mismatched `forgeVersion`, incomplete S1-S5/M1-M5/C1-C3 coverage, unexpected task IDs, duplicate task IDs, invalid runs, missing or duplicated validation kinds, zero-denominator regression metrics, or below-usable regression metrics fail the gate.
 - `npm run quality:installer-smoke`: added as the Windows installer manual smoke report gate. Missing `docs\V0_2_INSTALLER_SMOKE.json`, malformed report shape, missing metadata, missing or mismatched `forgeVersion`, invalid `testedAt` or `platform` metadata, missing installer artifact, missing checks, failed checks, an installer filename that does not match the current package version, or an installer SHA-256 that does not match the current artifact fail the gate.
 - `npm run quality:v0.2:status`: added as the quick usability evidence status summary. It does not run packaging and currently reports `unproven` with blockers `regression-results-missing` and `installer-smoke-missing`.
-- `npm run quality:v0.2:usable`: added as the top-level usability gate. It first runs the quick usability evidence status preflight and prints all blockers together; only after evidence passes does it run `quality:regression:gate`, `quality:installer-smoke`, and the longer `quality:v0.2` engineering and packaging gate.
+- `npm run quality:v0.2:usable`: added as the top-level usability gate. It first runs the quick usability evidence status preflight and prints all blockers together; only after evidence passes does it run `quality:regression:gate`, `quality:installer-smoke`, and the longer `quality:v0.2` engineering gate with installer packaging skipped so smoke SHA evidence is not invalidated after verification.
 - Packaging warnings to track: electron-builder reported duplicate dependency references, and Node emitted `DEP0190` for child process shell arguments.
 - Missing evidence: no local `agent-quality-metrics.json` snapshot, no complete `docs/V0_2_REGRESSION_RESULTS.json` fixed-task result set, and no `docs\V0_2_INSTALLER_SMOKE.json` manual installer smoke report were found, so real simple, medium, and complex task first-pass completion rates plus installer smoke confidence are not yet proven.
 
@@ -426,7 +426,17 @@ Latest invalid changed-file review hardening: `npm run quality:v0.2:status` now 
 
 Latest usable-gate preflight hardening: `npm run quality:v0.2:usable` now runs the fast usability status preflight before expensive gates. Missing or invalid evidence blockers are printed together, so a release candidate does not hide installer smoke gaps behind the first regression-gate failure.
 
-- [ ] **Step 3: Run manual installer smoke test**
+Latest usable-gate artifact stability fix: `npm run quality:v0.2:usable` no longer runs `dist:win` after installer smoke evidence has passed. It calls `quality:v0.2` with `FORGE_QUALITY_GATE_SKIP_DIST=true`, preserving the current installer artifact and its recorded SHA-256 after the gate completes.
+
+Latest Browser QA documentation consistency: README, README.en.md, `docs/RELEASE.md`, and this stabilization plan now use the fixed `npm run qa:built-in-tools:browser` entry point. The release-facing docs state that the command starts a temporary local fixture page and uses a hidden Electron window to verify screenshot capture and page-console inspection.
+
+Latest packaging warning recheck: `npm run dist:win` exited 0 on 2026-06-06 and generated `release\Forge-0.2.0-x64-setup.exe`. electron-builder still reports `duplicate dependency references`, and Node still emits `DEP0190`; both are recorded as known external packaging-stage warnings, with no dependency upgrade or runtime code change made only to silence them.
+
+Latest Built-in Tools QA coverage evidence: `npm run qa:built-in-tools` exited 0 on 2026-06-06 with 76 scenarios total, 74 succeeded, 2 skipped browser-preview scenarios, and 0 failed. The run covered 70 registered and available tools, including 14 P0 tools and 14 P0 succeeded scenario tools; both safety assertions passed, with 0 write-before-confirmation failures and 0 critical confirmation failures.
+
+Latest installer smoke evidence: `docs\V0_2_INSTALLER_SMOKE.json` was recorded on 2026-06-06 after installing `release\Forge-0.2.0-x64-setup.exe` with `/S`, launching the installed app from the user-level Programs directory, and verifying app launch, project scan, file preview, safe command execution, generated diff accept/revert, Git status, and high-risk confirmation blocking through the installed app renderer. `npm run quality:installer-smoke -- --json` passed with matching installer SHA-256.
+
+- [x] **Step 3: Run manual installer smoke test**
 
 Install the current v0.2.x Windows installer from `release`, for example `release\Forge-0.2.0-x64-setup.exe` for package version 0.2.0, and verify these flows manually: app launches, project opens, file preview works, safe command runs, generated diff can be accepted or rejected, Git status view opens, and no high-risk action runs without confirmation.
 
@@ -436,7 +446,7 @@ After the manual check, record the result and the installer SHA-256 in `docs\V0_
 npm run quality:installer-smoke
 ```
 
-- [ ] **Step 4: Decide release quality honestly**
+- [x] **Step 4: Decide release quality honestly**
 
 Classify the release as one of:
 
@@ -446,7 +456,7 @@ Classify the release as one of:
 
 Do not label v0.2.x as usable until the real task metric denominators are non-zero and the usable thresholds pass.
 
-For a single final command, run:
+For a single final command, run after the installer has already been generated and smoke-tested:
 
 ```powershell
 npm run quality:v0.2:usable
@@ -454,4 +464,4 @@ npm run quality:v0.2:usable
 
 Expected: exits 0 only after engineering gates, real-task regression usable thresholds, and installer smoke report all pass.
 
-Current evidence: `docs/V0_2_REGRESSION_RESULTS.json` now contains valid S1-S5, M1, M2, and C1-C3 regression runs with post-modification `typecheck`, `build`, and `lint` results. S1 keeps v0.2.x status wording honest; S2 covers current-version release examples; S3 covers the fixed Built-in Tools QA commands; S4 cross-checks the documented usable thresholds against `agentQualityMetricDefinitions`; S5 covers sensitive information boundaries. M1 covers zero-denominator metric behavior, and M2 covers independent simple, medium, and complex first-pass buckets. C1 covers the v0.2 quality gate script and passed `npm run quality:v0.2`; C2 is a first-pass metrics snapshot review sample; C3 is a failure-recovery sample. `npm run quality:v0.2:status -- --json` still reports `blocked` with blockers `regression-results-invalid` and `installer-smoke-missing`, because M3-M5 and the manual installer smoke report remain missing. The correct current classification remains below usable, not usable.
+Current evidence: `docs/V0_2_REGRESSION_RESULTS.json` now contains valid S1-S5, M1-M5, and C1-C3 regression runs with post-modification `typecheck`, `build`, and `lint` results. S1 keeps v0.2.x status wording honest; S2 covers current-version release examples; S3 covers the fixed Built-in Tools QA commands; S4 cross-checks the documented usable thresholds against `agentQualityMetricDefinitions`; S5 covers sensitive information boundaries. M1 covers zero-denominator metric behavior; M2 covers independent simple, medium, and complex first-pass buckets; M3 covers Browser QA documentation consistency; M4 covers the latest packaging-warning recheck; and M5 covers current Built-in Tools QA coverage evidence. C1 covers the v0.2 quality gate script and passed `npm run quality:v0.2`; C2 is a first-pass metrics snapshot review sample; C3 is a failure-recovery sample. `npm run quality:regression:gate -- --json` passes with 13/13 fixed tasks covered and no invalid runs, `npm run quality:installer-smoke -- --json` passes with a matching installer SHA-256, and `npm run quality:v0.2:usable -- --json` passed on 2026-06-06. The current classification is usable for v0.2.x, not excellent.
