@@ -6,6 +6,10 @@ Forge 是一个开源的本地 AI 编程 Agent 桌面应用。它面向真实项
 
 Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查, 可恢复, 可验证的本地工程流程”。
 
+> ⚠️ Forge 当前仍处于 0.x 早期开发阶段。
+> 部分功能可能不完整、不稳定，接口和行为也可能发生变化。
+> 目前更适合试用、反馈和早期探索，不建议用于生产环境。
+
 ## 功能特性
 
 ### 本地项目工作台
@@ -17,7 +21,7 @@ Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查,
 - `.env`、私钥、证书、凭据目录、数据库文件等敏感路径默认不会进入 Agent 文件工具或预览流程。
 - 文件页支持按目录懒加载和大目录分页, 避免一次性渲染完整大项目文件树。
 - 项目扫描元数据和全文搜索快照会缓存在本地应用数据目录, 用于后续加速。
-- AI 生成的文件修改会先进入待审查区, 用户确认后才写入磁盘。
+- AI 生成的文件修改默认先进入待审查区, 用户确认后才写入磁盘; 完全访问权限下, Agent 计划生成的普通文件修改可自动应用, 但删除、依赖安装、Git 和 critical 操作仍需要确认。
 
 ### Agent 任务线程
 
@@ -217,10 +221,10 @@ npm run quality:v0.2
 npm run quality:v0.2:usable
 ```
 
-`npm run qa:built-in-tools` 会先编译测试产物, 再对开发 QA 沙箱运行 Built-in Tools 验证。默认沙箱配置位于 `src/shared/developmentSandboxConfig.ts`, 仅用于本地开发验证, 不会作为普通用户默认项目路径。需要临时指定沙箱时, 可以在 PowerShell 中设置:
+`npm run qa:built-in-tools` 会先编译测试产物, 再对开发 QA 沙箱运行 Built-in Tools 验证。Forge 不再内置个人开发沙箱路径; 需要临时指定沙箱时, 可以在 PowerShell 中设置:
 
 ```powershell
-$env:FORGE_QA_PROJECT_ROOT = "E:\CodeHome\已完结的项目\测试项目"
+$env:FORGE_QA_PROJECT_ROOT = "E:\CodeHome\YourSandboxProject"
 $env:FORGE_QA_MODEL_ID = "mimo-v2.5-pro"
 npm run qa:built-in-tools
 ```

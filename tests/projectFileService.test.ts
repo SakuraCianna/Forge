@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listProjectDirectory } from "../src/main/projectFileService.js";
+import { listProjectDirectory, previewProjectFile } from "../src/main/projectFileService.js";
 
 test("listProjectDirectory pages visible entries and keeps sensitive paths hidden", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-files-"));
@@ -57,6 +57,28 @@ test("listProjectDirectory pages visible entries and keeps sensitive paths hidde
     );
     assert.equal(secondPage.truncated, false);
     assert.equal(secondPage.nextOffset, undefined);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("previewProjectFile treats package.json as text even when the new file is empty", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-preview-special-name-"));
+
+  try {
+    await writeFile(join(projectRoot, "package.json"), "", "utf8");
+
+    const preview = await previewProjectFile({
+      projectRoot,
+      relativePath: "package.json"
+    });
+
+    assert.equal(preview.kind, "text");
+
+    if (preview.kind === "text") {
+      assert.equal(preview.content, "");
+      assert.match(preview.mediaType, /json/u);
+    }
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }

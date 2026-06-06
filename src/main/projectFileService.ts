@@ -561,6 +561,13 @@ function createUnavailablePreview(
 }
 
 function resolvePreviewMedia(relativePath: string): ProjectPreviewMedia {
+  const normalizedFileName = getFileName(relativePath).toLocaleLowerCase();
+  const namedTextMediaType = textMediaTypeByFileName[normalizedFileName];
+
+  if (namedTextMediaType) {
+    return { kind: "text", mediaType: namedTextMediaType };
+  }
+
   const extension = getFileExtension(relativePath);
 
   if (extension === "pdf") {
@@ -601,10 +608,14 @@ function resolvePreviewMedia(relativePath: string): ProjectPreviewMedia {
 }
 
 function getFileExtension(relativePath: string): string {
-  const fileName = normalizeRelativePath(relativePath).split("/").pop() ?? "";
+  const fileName = getFileName(relativePath);
   const match = /\.([^.]+)$/u.exec(fileName);
 
   return match?.[1]?.toLocaleLowerCase() ?? "";
+}
+
+function getFileName(relativePath: string): string {
+  return normalizeRelativePath(relativePath).split("/").pop() ?? "";
 }
 
 const imageMediaTypeByExtension: Record<string, string> = {
@@ -678,6 +689,20 @@ const textMediaTypeByExtension: Record<string, string> = {
   xml: "application/xml; charset=utf-8",
   yaml: "application/yaml; charset=utf-8",
   yml: "application/yaml; charset=utf-8"
+};
+
+const textMediaTypeByFileName: Record<string, string> = {
+  ".env": "text/plain; charset=utf-8",
+  ".env.example": "text/plain; charset=utf-8",
+  ".gitignore": "text/plain; charset=utf-8",
+  "dockerfile": "text/plain; charset=utf-8",
+  "makefile": "text/plain; charset=utf-8",
+  "package.json": "application/json; charset=utf-8",
+  "package-lock.json": "application/json; charset=utf-8",
+  "pnpm-lock.yaml": "application/yaml; charset=utf-8",
+  "readme": "text/plain; charset=utf-8",
+  "tsconfig.json": "application/json; charset=utf-8",
+  "vite.config.ts": "text/typescript; charset=utf-8"
 };
 
 // 读取目录时目录排在文件前面, 再按名称排序, 保持文件树和受控工具输出一致

@@ -157,6 +157,7 @@ import {
   attachFileChangePreviewSource,
   findFileChangePreviewSource,
   removeFileChangePreview,
+  shouldAutoApplyGeneratedFileChange,
   upsertFileChangePreview,
   type FileChangePreviewSource
 } from "@/state/fileChanges";
@@ -227,6 +228,7 @@ import {
   cancelThread,
   completeNextPendingAgentAction,
   createCommandApprovalEvent,
+  createThreadPromptRetryPlan,
   deleteThread,
   restoreThread,
   toggleThreadPinned,
@@ -317,6 +319,12 @@ type BuiltInToolProblemResult =
   | BuiltInToolBlockedResult
   | BuiltInToolFailureResult
   | NotImplementedToolResult;
+
+type SubmitTaskOptions = {
+  forceNewThread?: boolean;
+};
+
+type ProjectFileChangeApplicationResult = "queued-for-review" | "applied";
 
 type BuiltInToolConfirmationContextInput = Pick<
   BuiltInToolExecutionContext,
@@ -2394,7 +2402,10 @@ export function App(): ReactElement {
           fileChange: pendingPreview
             ? {
                 relativePath: pendingPreview.relativePath,
-                changeKind: pendingPreview.changeKind
+                changeKind: pendingPreview.changeKind,
+                previousContent:
+                  pendingPreview.changeKind === "create" ? null : pendingPreview.currentContent,
+                nextContent: pendingPreview.nextContent
               }
             : undefined
         }
@@ -2462,6 +2473,12 @@ export function App(): ReactElement {
     }
 
     try {
+      const previousPreview = await window.forge.files.preview({
+        projectRoot: currentProject.path,
+        relativePath
+      }).catch(() => null);
+      const previousContent =
+        previousPreview?.kind === "text" ? previousPreview.content : undefined;
       const toolResult = await window.forge.builtInTools.execute({
         toolName: "deleteFile",
         input: { relativePath },
@@ -2504,7 +2521,9 @@ export function App(): ReactElement {
             createdAt,
             fileChange: {
               relativePath: result.relativePath,
-              changeKind: "delete"
+              changeKind: "delete",
+              ...(previousContent === undefined ? {} : { previousContent }),
+              nextContent: null
             }
           }
         ])
@@ -2568,7 +2587,9 @@ export function App(): ReactElement {
             createdAt,
             fileChange: {
               relativePath: preview.relativePath,
-              changeKind: preview.changeKind
+              changeKind: preview.changeKind,
+              previousContent: preview.changeKind === "create" ? null : preview.currentContent,
+              nextContent: preview.nextContent
             }
           }
         ]);
@@ -2641,7 +2662,7 @@ export function App(): ReactElement {
       action?: AgentAction | null;
       source?: FileChangePreviewSource | null;
     } = {}
-  ): Promise<boolean | undefined> {
+  ): Promise<ProjectFileChangeApplicationResult | false | undefined> {
     if (!currentProject) {
       return false;
     }
@@ -2727,6 +2748,59 @@ export function App(): ReactElement {
         createdAt: result.createdAt
       });
 
+      if (
+        shouldAutoApplyGeneratedFileChange({
+          fullAccess: getThreadFullAccessMode(selectedThread.id),
+          hasActionSource: Boolean(sourcedPreview.source?.actionId)
+        })
+      ) {
+        const writtenFile = await window.forge.files.writeText({
+          projectRoot: currentProject.path,
+          relativePath: sourcedPreview.relativePath,
+          nextContent: sourcedPreview.nextContent
+        });
+
+        setPreviewFile(writtenFile);
+        setFilePreview(createTextFilePreview(writtenFile));
+        setFileFormatterMode(getDefaultCodeFormatterMode(writtenFile.relativePath));
+        setChangePreviews((current) => removeFileChangePreview(current, writtenFile.relativePath));
+        void refreshProjectGitStatus();
+        void refreshProjectFilesAfterMutation(currentProject.path, [writtenFile.relativePath], {
+          expandParents: sourcedPreview.changeKind === "create"
+        });
+        recordAgentQualityObservation({
+          kind: "file_modification",
+          createdAt: result.createdAt,
+          wrongFile: false,
+          unrelatedChange: false
+        });
+
+        setThreads((current) => {
+          const withEvent = appendThreadEvents(current, selectedThread.id, [
+            {
+              id: `${selectedThread.id}-agent-file-applied-${result.createdAt}`,
+              kind: "file",
+              message:
+                settings.language === "zh-CN"
+                  ? `已自动应用文件修改: ${writtenFile.relativePath}`
+                  : `Automatically applied file change: ${writtenFile.relativePath}`,
+              createdAt: result.createdAt,
+              fileChange: {
+                relativePath: sourcedPreview.relativePath,
+                changeKind: sourcedPreview.changeKind,
+                previousContent:
+                  sourcedPreview.changeKind === "create" ? null : sourcedPreview.currentContent,
+                nextContent: sourcedPreview.nextContent
+              }
+            }
+          ]);
+
+          return updateThreadAgentActionFromFileChangePreview(withEvent, sourcedPreview, "completed");
+        });
+
+        return "applied";
+      }
+
       setChangePreviews((current) => upsertFileChangePreview(current, sourcedPreview));
       setThreads((current) =>
         appendThreadEvents(current, selectedThread.id, [
@@ -2738,7 +2812,7 @@ export function App(): ReactElement {
           }
         ])
       );
-      return true;
+      return "queued-for-review";
     } catch (error) {
       appendThreadError(
         selectedThread.id,
@@ -2768,15 +2842,19 @@ export function App(): ReactElement {
   function submitTask(
     prompt: string,
     attachments?: AgentImageAttachment[],
-    attachmentContexts?: AgentAttachmentContext[]
+    attachmentContexts?: AgentAttachmentContext[],
+    options: SubmitTaskOptions = {}
   ): void {
-    const activeThread = selectThreadById(threads, selectedThreadId);
+    const activeThread = options.forceNewThread ? null : selectThreadById(threads, selectedThreadId);
     const submittedAttachments = resolveVisionAttachments(
       settings.models.find((model) => model.id === settings.currentModelId) ?? null,
       attachments
     );
 
-    if (shouldSubmitAsContinuation(activeThread, currentProject?.path ?? null, prompt)) {
+    if (
+      !options.forceNewThread &&
+      shouldSubmitAsContinuation(activeThread, currentProject?.path ?? null, prompt)
+    ) {
       const createdAt = new Date().toISOString();
 
       setTaskNotice(null);
@@ -2855,6 +2933,93 @@ export function App(): ReactElement {
     }
 
     void generateThreadPlan(execution.modelExecution);
+  }
+
+  async function retryThreadPrompt(threadId: string): Promise<void> {
+    const thread = getLiveThread(threadId);
+
+    if (!thread) {
+      return;
+    }
+
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      return;
+    }
+
+    const retryPlan = createThreadPromptRetryPlan({ thread });
+    const revertedPaths: string[] = [];
+
+    if (thread.status === "running" && selectedThreadId === threadId) {
+      cancelActiveThread();
+    }
+
+    setTaskNotice(null);
+
+    for (const revert of retryPlan.fileReverts) {
+      try {
+        if (revert.previousContent === null) {
+          await window.forge.files.delete({
+            projectRoot: currentProject.path,
+            relativePath: revert.relativePath
+          });
+        } else {
+          await window.forge.files.writeText({
+            projectRoot: currentProject.path,
+            relativePath: revert.relativePath,
+            nextContent: revert.previousContent
+          });
+        }
+
+        revertedPaths.push(revert.relativePath);
+      } catch (error) {
+        if (revert.previousContent === null && isMissingProjectFileError(error)) {
+          continue;
+        }
+
+        const message =
+          settings.language === "zh-CN"
+            ? `撤销 ${revert.relativePath} 失败: ${formatRuntimeError(settings.language, error)}`
+            : `Failed to revert ${revert.relativePath}: ${formatRuntimeError(settings.language, error)}`;
+        setTaskNotice(message);
+        appendThreadError(threadId, message);
+        return;
+      }
+    }
+
+    setChangePreviews((current) =>
+      current.filter((preview) => preview.source?.threadId !== threadId)
+    );
+
+    if (revertedPaths.length > 0) {
+      void refreshProjectGitStatus();
+      void refreshProjectFilesAfterMutation(currentProject.path, revertedPaths, {
+        expandParents: true
+      });
+    }
+
+    const createdAt = new Date().toISOString();
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        {
+          id: `${threadId}-retry-${createdAt}`,
+          kind: "file",
+          message:
+            settings.language === "zh-CN"
+              ? revertedPaths.length > 0
+                ? `已撤销 ${revertedPaths.length} 个文件操作, 正在重新发送提示词`
+                : "正在重新发送提示词"
+              : revertedPaths.length > 0
+                ? `Reverted ${revertedPaths.length} file operations and resending the prompt`
+                : "Resending the prompt",
+          createdAt
+        }
+      ])
+    );
+
+    submitTask(retryPlan.prompt, thread.attachments, thread.attachmentContexts, {
+      forceNewThread: true
+    });
   }
 
   function getTaskSubmissionNoticeMessage(reason: TaskSubmissionNoticeReason): string {
@@ -4596,6 +4761,11 @@ export function App(): ReactElement {
         return "failed";
       }
 
+      if (generated === "applied") {
+        updateAgentActionStatus(threadId, action.id, "completed");
+        return { status: "completed", continueBatch: true };
+      }
+
       updateAgentActionStatus(threadId, action.id, "running");
       return { status: "running", continueBatch: false };
     } catch (error) {
@@ -4931,6 +5101,7 @@ export function App(): ReactElement {
           onConfirmAgentExtension={(threadId, action) => void confirmAgentExtensionAction(threadId, action)}
           onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
           onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
+          onRetryThreadPrompt={(threadId) => void retryThreadPrompt(threadId)}
           onCompleteAgentAction={completeAgentAction}
           onSkipAgentAction={skipAgentAction}
           onResumeAgent={resumeAgentThread}

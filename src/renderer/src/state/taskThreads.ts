@@ -9,7 +9,6 @@ import type {
 } from "@shared/agentTypes";
 import type { CommandOutputChunk } from "@shared/commandTypes";
 import type { ProjectFileChangePreview } from "@shared/fileTypes";
-import { getEnabledModels } from "./modelSettings";
 
 type TaskThreadStatus = "planned" | "running" | "blocked" | "completed";
 
@@ -70,6 +69,19 @@ export type AgentActionRunRecord = {
 export type FileChangeRecord = {
   relativePath: string;
   changeKind: "create" | "edit" | "delete";
+  previousContent?: string | null;
+  nextContent?: string | null;
+};
+
+export type ThreadFileRevertOperation = {
+  relativePath: string;
+  previousContent: string | null;
+};
+
+export type ThreadPromptRetryPlan = {
+  prompt: string;
+  fileReverts: ThreadFileRevertOperation[];
+  retainedEvents: TaskThreadEvent[];
 };
 
 export type TaskThreadEvent = {
@@ -137,7 +149,7 @@ export function createThreadFromSettings(
     return { ok: false, reason: "empty-prompt" };
   }
 
-  const enabledModels = getEnabledModels(settings);
+  const enabledModels = getEnabledThreadModels(settings);
   const selectedModel =
     enabledModels.find((model) => model.id === settings.currentModelId) ?? enabledModels[0] ?? null;
 
@@ -166,6 +178,35 @@ export function createThreadFromSettings(
       events: []
     }
   };
+}
+
+function getEnabledThreadModels(settings: ModelSettings): ModelSettings["models"] {
+  return [...settings.models]
+    .filter((model) => model.enabled)
+    .sort((first, second) => {
+      if (first.id === settings.currentModelId && second.id !== settings.currentModelId) {
+        return -1;
+      }
+
+      if (second.id === settings.currentModelId && first.id !== settings.currentModelId) {
+        return 1;
+      }
+
+      const selectionDelta = (second.selectionCount ?? 0) - (first.selectionCount ?? 0);
+
+      if (selectionDelta !== 0) {
+        return selectionDelta;
+      }
+
+      const recencyDelta =
+        Date.parse(second.lastSelectedAt ?? "") - Date.parse(first.lastSelectedAt ?? "");
+
+      if (Number.isFinite(recencyDelta) && recencyDelta !== 0) {
+        return recencyDelta;
+      }
+
+      return first.label.localeCompare(second.label);
+    });
 }
 
 function cloneAgentProfileContext(agentProfile: AgentProfileContext): AgentProfileContext {
@@ -271,6 +312,47 @@ export function appendThreadFollowUpPrompt(
         }
       : thread
   );
+}
+
+// 为“从上一条提示词重发”构造回滚计划。只回滚有明确旧内容快照的文件事件。
+export function createThreadPromptRetryPlan({
+  thread,
+  userEventId
+}: {
+  thread: TaskThread;
+  userEventId?: string;
+}): ThreadPromptRetryPlan {
+  const userEventIndex =
+    userEventId === undefined
+      ? -1
+      : thread.events.findIndex((event) => event.id === userEventId && event.kind === "user");
+  const retryUserEvent = userEventIndex >= 0 ? thread.events[userEventIndex] : null;
+  const eventsAfterPrompt = thread.events.slice(userEventIndex + 1);
+  const retainedEvents = userEventIndex >= 0 ? thread.events.slice(0, userEventIndex) : [];
+  const fileReverts: ThreadFileRevertOperation[] = [];
+
+  for (let index = eventsAfterPrompt.length - 1; index >= 0; index -= 1) {
+    const fileChange = eventsAfterPrompt[index]?.fileChange;
+
+    if (!fileChange || !Object.prototype.hasOwnProperty.call(fileChange, "previousContent")) {
+      continue;
+    }
+
+    if (fileChange.previousContent === undefined) {
+      continue;
+    }
+
+    fileReverts.push({
+      relativePath: fileChange.relativePath,
+      previousContent: fileChange.previousContent
+    });
+  }
+
+  return {
+    prompt: retryUserEvent?.message ?? thread.prompt,
+    fileReverts,
+    retainedEvents
+  };
 }
 
 // 固定本次请求注入模型的记忆快照, 让界面能解释回答用了哪些上下文

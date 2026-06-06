@@ -83,6 +83,16 @@ export function registerAgentHandlers(
 
         return result;
       } catch (error) {
+        if (isAgentStreamCancellation(error, "Agent ask stream cancelled")) {
+          const result = createCancelledAskResult(normalizedRequest);
+          sendAskStreamChunk(event, {
+            requestId: normalizedRequestId,
+            type: "done",
+            result
+          });
+          return result;
+        }
+
         sendAskStreamChunk(event, {
           requestId: normalizedRequestId,
           type: "error",
@@ -135,6 +145,16 @@ export function registerAgentHandlers(
 
         return result;
       } catch (error) {
+        if (isAgentStreamCancellation(error, "Agent plan stream cancelled")) {
+          const result = createCancelledPlanResult(normalizedRequest);
+          sendPlanStreamChunk(event, {
+            requestId: normalizedRequestId,
+            type: "done",
+            result
+          });
+          return result;
+        }
+
         sendPlanStreamChunk(event, {
           requestId: normalizedRequestId,
           type: "error",
@@ -211,6 +231,29 @@ function assertRequestId(value: unknown): string {
   }
 
   return value;
+}
+
+function isAgentStreamCancellation(error: unknown, message: string): boolean {
+  return error instanceof Error && error.message === message;
+}
+
+function createCancelledAskResult(request: GenerateAgentAskRequest): AgentAskResult {
+  return {
+    providerId: request.provider.id,
+    modelId: request.model.id,
+    text: "",
+    createdAt: new Date().toISOString()
+  };
+}
+
+function createCancelledPlanResult(request: GenerateAgentPlanRequest): AgentPlanResult {
+  return {
+    providerId: request.provider.id,
+    modelId: request.model.id,
+    text: "",
+    steps: [],
+    createdAt: new Date().toISOString()
+  };
 }
 
 // 把回答分片发回原窗口, 窗口已关闭时直接忽略

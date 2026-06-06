@@ -5,11 +5,11 @@ import type {
   AgentProfileContext
 } from "@shared/agentTypes";
 import type { ModelSettings } from "@shared/modelTypes";
-import { canAppendDirectAnswerToThread, isDirectAnswerPrompt } from "./conversationRouting";
+import { canAppendDirectAnswerToThread, isDirectAnswerPrompt } from "./conversationRouting.js";
 import {
   createThreadFromSettings,
   type TaskThread
-} from "./taskThreads";
+} from "./taskThreads.js";
 
 export type TaskSubmissionRoute =
   | { kind: "invalid"; reason: "empty-prompt" | "missing-model" }
@@ -95,14 +95,6 @@ export function createTaskSubmissionRoute({
 
   if (!result.ok) {
     return { kind: "invalid", reason: result.reason };
-  }
-
-  if (
-    activeThread &&
-    activeThread.status !== "running" &&
-    activeThread.projectPath === currentProjectPath
-  ) {
-    return { kind: "project-follow-up", draftThread: result.thread, thread: activeThread };
   }
 
   return {
