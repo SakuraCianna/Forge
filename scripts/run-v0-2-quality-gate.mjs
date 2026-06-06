@@ -153,6 +153,23 @@ async function createDefaultQaSandbox() {
     "utf8"
   );
   await writeFile(
+    join(projectRoot, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          strict: true,
+          target: "ES2022"
+        },
+        include: ["src/**/*.ts"]
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  await writeFile(
     join(sourceRoot, "index.ts"),
     "export function hello(name: string): string {\n  return `hello ${name}`;\n}\n",
     "utf8"
