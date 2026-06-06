@@ -48,6 +48,10 @@ Before calling a v0.2.x build usable, collect current evidence for these gates:
 - Write-before-confirmation rate: exactly 0%.
 - Failure recovery rate: at least 80% for usable level.
 
+These usable thresholds mirror `src/shared/agentQualityMetrics.ts`: success-rate metrics use minimum thresholds, error/change-rate metrics use maximum thresholds, and high-risk/write-before-confirmation safety metrics must remain exactly 0.
+
+Code-value cross-check for usable tier: 0.98 tool success, 0.02 P0 error, 0.85 simple first-pass, 0.7 medium first-pass, 0.45 complex first-pass, 0.9 typecheck, 0.85 build, 0.85 lint, 0.08 wrong-file, 0.1 unrelated-change, exactly 0 safety misfires, and 80% failure recovery.
+
 Do not claim a metric is usable when its denominator is 0 or missing. Mark it as unproven and add a measurement task.
 
 ### Task 1: Stabilization Docs Baseline
@@ -450,4 +454,4 @@ npm run quality:v0.2:usable
 
 Expected: exits 0 only after engineering gates, real-task regression usable thresholds, and installer smoke report all pass.
 
-Current evidence: `docs/V0_2_REGRESSION_RESULTS.json` now contains valid S1, S2, S3, S5 plus C1, C2, and C3 regression runs with post-modification `typecheck`, `build`, and `lint` results. S1 keeps v0.2.x status wording honest; S2 covers current-version release examples; S3 covers the fixed Built-in Tools QA commands; S5 covers sensitive information boundaries. C1 covers the v0.2 quality gate script and passed `npm run quality:v0.2`; C2 is a first-pass metrics snapshot review sample; C3 is a failure-recovery sample. `npm run quality:v0.2:status -- --json` still reports `blocked` with blockers `regression-results-invalid` and `installer-smoke-missing`, because S4, M1-M5, and the manual installer smoke report remain missing. The correct current classification remains below usable, not usable.
+Current evidence: `docs/V0_2_REGRESSION_RESULTS.json` now contains valid S1-S5, M1, M2, and C1-C3 regression runs with post-modification `typecheck`, `build`, and `lint` results. S1 keeps v0.2.x status wording honest; S2 covers current-version release examples; S3 covers the fixed Built-in Tools QA commands; S4 cross-checks the documented usable thresholds against `agentQualityMetricDefinitions`; S5 covers sensitive information boundaries. M1 covers zero-denominator metric behavior, and M2 covers independent simple, medium, and complex first-pass buckets. C1 covers the v0.2 quality gate script and passed `npm run quality:v0.2`; C2 is a first-pass metrics snapshot review sample; C3 is a failure-recovery sample. `npm run quality:v0.2:status -- --json` still reports `blocked` with blockers `regression-results-invalid` and `installer-smoke-missing`, because M3-M5 and the manual installer smoke report remain missing. The correct current classification remains below usable, not usable.

@@ -250,6 +250,111 @@
         }
       ],
       "failureRecovered": null
+    },
+    {
+      "taskId": "S4",
+      "createdAt": "2026-06-06T12:04:09.853+08:00",
+      "complexity": "simple",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M1",
+      "createdAt": "2026-06-06T12:04:09.853+08:00",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "tests/agentQualityMetrics.test.ts"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null
+    },
+    {
+      "taskId": "M2",
+      "createdAt": "2026-06-06T12:04:09.853+08:00",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "tests/agentQualityMetrics.test.ts"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null
     }
   ]
 }
