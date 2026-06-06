@@ -94,6 +94,7 @@ import {
   resolveAgentFailureFixPlanStart,
   type FailureFixPlanOptions
 } from "@/agent/agentFailureRecoveryPlan";
+import { resolveFailureRecoveryMetricDecision } from "@/agent/failureRecoveryMetrics";
 import {
   appendAgentActionOutcomeRecord,
   appendAgentActionRunRecord,
@@ -429,12 +430,6 @@ function classifyAgentTaskComplexity(actions: AgentAction[]): AgentTaskComplexit
 
 function hasAgentActionFailureHistory(thread: TaskThread): boolean {
   return thread.events.some((event) => event.agentActionRun?.status === "failed");
-}
-
-function hasActionFailureHistory(thread: TaskThread, actionId: string): boolean {
-  return thread.events.some(
-    (event) => event.agentActionRun?.actionId === actionId && event.agentActionRun.status === "failed"
-  );
 }
 
 function hasCompletedProjectMutation(thread: TaskThread | null): boolean {
@@ -3546,24 +3541,20 @@ export function App(): ReactElement {
     action: AgentAction,
     recovered: boolean
   ): void {
-    const key = `${threadId}:${action.id}:${recovered ? "recovered" : "unrecovered"}`;
-
-    if (recordedFailureRecoveryKeysRef.current.has(key)) {
-      return;
-    }
-
-    const thread = getLiveThread(threadId);
-
-    if (!thread || !hasActionFailureHistory(thread, action.id)) {
-      return;
-    }
-
-    recordedFailureRecoveryKeysRef.current.add(key);
-    recordAgentQualityObservation({
-      kind: "failure_recovery",
-      createdAt: new Date().toISOString(),
-      recovered
+    const decision = resolveFailureRecoveryMetricDecision({
+      threadId,
+      action,
+      recovered,
+      recordedKeys: recordedFailureRecoveryKeysRef.current,
+      thread: getLiveThread(threadId)
     });
+
+    if (decision.kind !== "record") {
+      return;
+    }
+
+    recordedFailureRecoveryKeysRef.current.add(decision.key);
+    recordAgentQualityObservation(decision.observation);
   }
 
   // 更新动作状态并保持线程列表和当前选中线程一致
