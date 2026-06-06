@@ -1,0 +1,42 @@
+{
+  "forgeVersion": "0.2.0",
+  "runs": [
+    {
+      "taskId": "C3",
+      "createdAt": "2026-06-06T11:28:35.723+08:00",
+      "complexity": "complex",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "src/renderer/src/App.tsx",
+        "src/renderer/src/agent/failureRecoveryMetrics.ts",
+        "tests/failureRecoveryMetrics.test.ts"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": true
+    }
+  ]
+}

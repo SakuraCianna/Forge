@@ -450,4 +450,4 @@ npm run quality:v0.2:usable
 
 Expected: exits 0 only after engineering gates, real-task regression usable thresholds, and installer smoke report all pass.
 
-Current evidence: `npm run quality:v0.2:usable` fails at `npm run quality:regression:gate` because no regression results file exists. The correct current classification remains below usable / unproven, not usable.
+Current evidence: `docs/V0_2_REGRESSION_RESULTS.json` now contains one valid C3 failure-recovery regression run with post-modification `typecheck`, `build`, and `lint` results. `npm run quality:v0.2:status -- --json` still reports `blocked` with blockers `regression-results-invalid` and `installer-smoke-missing`, because S1-S5, M1-M5, C1, C2, and the manual installer smoke report remain missing. The correct current classification remains below usable, not usable.
