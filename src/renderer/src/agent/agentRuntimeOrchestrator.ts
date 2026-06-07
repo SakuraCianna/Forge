@@ -117,14 +117,20 @@ export type AgentRuntimePostActionStep =
       kind: "idle";
     };
 
-// Full Access 不能绕过写盘, commit 或人工审查门禁; Runtime 始终停在用户审查点。
+// Full Access 语义统一为自动接管本地 Agent 队列门禁, 普通模式仍等待用户审查。
 export function resolveAgentRuntimeManualGateStep({
-  execution: _execution,
-  fullAccess: _fullAccess
+  execution,
+  fullAccess
 }: {
   execution: ManualGateExecution;
   fullAccess: boolean;
 }): AgentRuntimeManualGateStep {
+  if (fullAccess) {
+    return {
+      kind: execution.reason === "commit" ? "auto-commit" : "auto-complete"
+    };
+  }
+
   return {
     kind: "wait-for-review"
   };
@@ -256,11 +262,13 @@ export async function runAgentRuntimeExecution({
 export function resolveAgentRuntimePreflightDecision({
   action,
   liveAction,
-  agentProfile
+  agentProfile,
+  fullAccess = false
 }: {
   action: AgentAction;
   liveAction?: AgentAction | null;
   agentProfile?: AgentProfileContext;
+  fullAccess?: boolean;
 }): AgentRuntimePreflightDecision {
   const reusableLiveOutcome = liveAction ? getReusableActionOutcome(liveAction) : null;
 
@@ -293,7 +301,7 @@ export function resolveAgentRuntimePreflightDecision({
     };
   }
 
-  const execution = resolveAgentActionExecution(actionToRun);
+  const execution = resolveAgentActionExecution(actionToRun, { fullAccess });
 
   if (execution.kind === "manual-gate") {
     return {

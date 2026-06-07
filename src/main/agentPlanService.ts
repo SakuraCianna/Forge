@@ -125,6 +125,10 @@ const projectEngineeringPresetInstructions = [
   "For full-stack requests, include both server and client entrypoints plus the integration contract between them.",
   "Do not satisfy app-building requests with only a dependency file or one isolated source file unless the existing project truly requires no other files.",
   "When the user names a framework or architecture, use the framework's normal project structure instead of inventing a flat demo.",
+  "For generated applications, keep dependencies, imports, annotations, schema/seed data, API responses, frontend types, and rendered fields mutually consistent.",
+  "Do not use framework helpers such as Lombok annotations unless the matching dependency is present in the planned build file; prefer plain constructors, getters, and setters when uncertain.",
+  "For frontend/backend projects, define one API contract and reuse it everywhere: route path, HTTP method, JSON field names, seed data columns, frontend types, and UI columns must agree.",
+  "For Vite frontend clients talking to a local backend, prefer a relative /api path with a dev proxy instead of hardcoding http://localhost origins in components.",
   "Project scaffolding requests are not tiny edits: if the project is empty or bare, plan a coherent skeleton with build config, source entrypoints, runtime config, and verification.",
   'For scaffold edit steps, prefer a "files" string array so Forge can expand one architectural step into several controlled file edits without wasting the plan budget.'
 ] as const;
@@ -527,7 +531,9 @@ function createAgentFileChangeInstructions(personalization?: string): string {
     "Rewrite the selected file to satisfy the user task.",
     "Return only the complete replacement file content.",
     "Do not include explanations, markdown fences, diffs, or patch markers.",
-    "Preserve existing style and imports unless the task requires changes."
+    "Preserve existing style and imports unless the task requires changes.",
+    "For multi-file scaffolds, make this file compatible with the queued and existing companion files: build dependencies, imports, entity fields, database seed data, API paths, frontend types, and UI columns must line up.",
+    "Do not introduce a library, annotation, runtime helper, API field, or database column unless the rest of the project contract supports it."
   ], personalization);
 }
 
@@ -916,6 +922,11 @@ function formatProjectScaffoldPlanningContext(request: GenerateAgentPlanRequest)
       ? "The selected project appears empty or bare. Treat this as a scaffold task, not a single-file edit."
       : "The selected project already has files. Preserve its structure and fill the missing layers only.",
     "The plan must cover these layers when relevant: dependency/build files, backend entrypoint, domain/model, API/controller, runtime configuration, frontend package/config, frontend entrypoint, UI component/page, and verification command.",
+    "For Spring Boot + H2 scaffolds, include Spring Web, Spring Data JPA, H2, and test dependencies when those features are used; include seed data only when its columns exactly match the entity/table mapping.",
+    "For student-list demos with no custom fields requested, keep a minimal stable Student contract such as id, name, age, and gender, then reuse exactly those fields in the entity, data.sql, controller response, frontend API type, and displayed table.",
+    "If using Lombok, declare Lombok in the build file and configure compilation; otherwise write plain Java fields, constructors, getters, and setters.",
+    "For Vue/Vite clients, place backend access behind a small API client that calls a relative /api route and let vite.config configure the proxy.",
+    "Include at least one backend contract test or smoke test for generated API endpoints so compile-time dependency mistakes and JSON field mismatches fail during verification.",
     "For frontend package scaffolds, include dependency installation before verification so local binaries such as tsc and vite exist before build commands run.",
     'Use grouped edit steps with a "files" array for related files, for example backend foundation files or frontend foundation files.',
     "Do not use shell heredocs or PowerShell file-writing scripts to create project files; use Forge edit steps instead."

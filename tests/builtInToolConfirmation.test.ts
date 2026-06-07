@@ -61,6 +61,18 @@ test("critical typed confirmation must match before execution context can pass",
   );
 });
 
+test("full access satisfies built-in tool confirmation without typed input", () => {
+  const definition = getBuiltInToolDefinition("deleteFile");
+
+  assert.deepEqual(resolveBuiltInToolConfirmationContext(definition, { fullAccess: true }), {
+    ok: true,
+    context: {
+      confirmed: true,
+      secondConfirmed: true
+    }
+  });
+});
+
 test("high-risk non-critical tools still require confirmation but not typed confirmation", () => {
   const definition = getBuiltInToolDefinition("applyEdit");
 

@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README.en.md)
 
-Forge is an open-source local AI coding agent desktop app. It is built for real project workflows. It is not a VS Code fork and not an editor plugin marketplace. Users can open a local project, configure their own models and providers, ask the agent to generate plans, review file changes, run verification commands, and perform Git operations after explicit confirmation.
+Forge is an open-source local AI coding agent desktop app. It is built for real project workflows. It is not a VS Code fork and not an editor plugin marketplace. Users can open a local project, configure their own models and providers, ask the agent to generate plans, review file changes, run verification commands, and perform Git operations according to the active permission mode.
 
 Forge aims to move AI coding from "suggestions in a chat box" to a local engineering workflow that is reviewable, recoverable, and verifiable.
 
@@ -21,7 +21,7 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - Sensitive paths such as `.env`, private keys, certificates, credential folders, and database files are excluded from agent file tools and previews by default.
 - File browsing uses lazy directory loading and paged large directories to avoid rendering a whole large repository at once.
 - Project scan metadata and text-search snapshots are cached in the local app data directory for later reuse.
-- AI-generated file changes enter a review queue by default and are written to disk only after user confirmation; in Full Access mode, agent-planned ordinary file changes may be applied automatically, while deletion, dependency installation, Git, and critical operations still require confirmation.
+- AI-generated file changes enter a review queue by default and are written to disk only after user confirmation; in Full Access mode, agent-planned file changes and local commands run automatically without extra command approval or built-in tool confirmation prompts.
 
 ### Agent Task Threads
 
@@ -30,7 +30,7 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - Agent profiles control system prompts, context budgets, planning limits, automatic run limits, verification behavior, recovery behavior, recovery limits, and tool permissions.
 - The confirmation queue collects pending diffs, command approvals, manual gates, commit gates, and recovery steps.
 - Stop pauses the queue without skipping diff review, command approval, or commit gates.
-- Failure recovery can generate follow-up plans from real tool results and command output, while dependency installation, external permissions, high-risk deletion, and production deployment still require user intervention.
+- Failure recovery can generate follow-up plans from real tool results and command output. In Full Access mode, local dependency installation, file deletion, and Git actions keep moving automatically; external service permissions and production deployment still follow the relevant extension or platform policy.
 - Normal Q&A, explanation, memory, and chat requests are not forced into the project-change workflow.
 
 ### Composer, Attachments, And Context References
@@ -84,11 +84,11 @@ The model picker supports:
 - Run controlled commands inside the current project directory.
 - Stream command output into the task thread.
 - Cancel running commands.
-- Use command safety rules and manual approval.
+- Use command safety rules and manual approval in review mode.
 - Choose between read-only, review, and full-access permission modes.
 - View Git status and diff summaries.
 - Create Git commits after entering a commit message.
-- Push explicitly or choose push during commit. Forge does not push without confirmation.
+- Push explicitly or choose push during commit. Review mode asks for confirmation, while Full Access can run agent-queued push actions automatically.
 - Create persistent Git worktrees from the project menu and add them to recent projects.
 
 ### Personalization, Memory, And Usage
@@ -259,11 +259,11 @@ docs/
 
 ## Safety Boundaries
 
-- File changes require user confirmation.
-- Command execution is constrained by project directory, permission mode, and command rules.
+- In review mode, file changes require user confirmation. In Full Access mode, agent-queued file changes can be written automatically.
+- Command execution is constrained by project directory and permission mode. In Full Access mode, agent-queued local commands run automatically.
 - Read-only mode does not generate edits, run commands, or perform Git operations.
 - Sensitive files and sensitive attachments are skipped by default.
-- Git commit and push require explicit user action.
+- In review mode, Git commit and push require explicit user action. In Full Access mode, agent-queued Git actions can run automatically.
 - The current version does not automatically install or execute third-party GitHub plugin code.
 - External-service write actions are constrained by extension permissions and confirmation policies. Sending email always requires a second confirmation.
 - Forge does not automatically publish, deploy, or delete files outside the project.
@@ -280,7 +280,7 @@ No. The current GitHub extension entry only opens repositories for manual inspec
 
 ### Does Forge push code automatically?
 
-No. Forge does not push without confirmation. Users can explicitly push from source control or choose push during commit.
+In review mode, Forge does not push without confirmation. Users can explicitly push from source control or choose push during commit. In Full Access mode, agent-queued push actions run automatically.
 
 ### Does Forge send email automatically?
 

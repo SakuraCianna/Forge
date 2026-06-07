@@ -8,7 +8,7 @@ test("built-in tool prompt context exposes catalog and safety rules", () => {
 
   assert.match(prompt, /Forge Built-in Tools/u);
   assert.match(prompt, /"tool": "built_in_tool"/u);
-  assert.match(prompt, /Full Access does not bypass/u);
+  assert.match(prompt, /Full Access mode, Forge auto-executes/u);
   assert.match(prompt, /Before any code or file mutation/u);
   assert.match(prompt, /previewDiff or proposeEdit/u);
   assert.match(prompt, /Never read, search, summarize, or inject sensitive project files/u);

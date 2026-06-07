@@ -189,11 +189,12 @@ function createToolCallMetricObservation({
     status,
     requiresConfirmation: definition.requiresConfirmation,
     confirmedBeforeExecution: Boolean(
-      context.confirmed &&
+      context.fullAccess ||
+        (context.confirmed &&
         (definition.riskLevel !== "critical" ||
           context.secondConfirmed ||
           (definition.confirmation?.kind === "typed" &&
-            context.typedConfirmation === definition.confirmation.confirmationKeyword))
+            context.typedConfirmation === definition.confirmation.confirmationKeyword)))
     ),
     sideEffect: deriveAgentToolSideEffect(definition.name)
   };

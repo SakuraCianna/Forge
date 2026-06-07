@@ -403,7 +403,7 @@ async function executeControlledMutationQa({
     return scenarios;
   }
 
-  scenarios.push(...(await executeFullAccessBlockedQa({ now, projectRoot, registry })));
+  scenarios.push(...createFullAccessExternalMutationSkippedQa());
   scenarios.push(...(await executeSandboxFileOperationQa({ baselineContent, now, projectRoot, registry })));
   scenarios.push(...(await executePackageScriptQa({ now, projectRoot, registry })));
   scenarios.push(...(await executeProjectMemoryMutationQa({ now, projectRoot, registry })));
@@ -520,93 +520,25 @@ async function executeBlockedMutationSafetyScenario({
   };
 }
 
-async function executeFullAccessBlockedQa({
-  now,
-  projectRoot,
-  registry
-}: {
-  now: () => Date;
-  projectRoot: string;
-  registry: BuiltInTool[];
-}): Promise<BuiltInToolQaScenarioResult[]> {
-  const scenarios: BuiltInToolQaScenario[] = [
-    {
-      id: "full-access-install-dependency-blocked",
-      toolName: "installDependency",
-      input: { packages: ["left-pad"], dev: true },
-      fullAccess: true
-    },
-    {
-      id: "full-access-create-commit-blocked",
-      toolName: "createCommit",
-      input: { message: "Forge QA should not create a commit" },
-      fullAccess: true
-    },
-    {
-      id: "full-access-create-branch-blocked",
-      toolName: "createBranch",
-      input: { branch: "forge-qa-branch" },
-      fullAccess: true
-    },
-    {
-      id: "full-access-checkout-branch-typed-blocked",
-      toolName: "checkoutBranch",
-      input: { branch: "main" },
-      confirmed: true,
-      fullAccess: true,
-      typedConfirmation: "wrong"
-    },
-    {
-      id: "full-access-create-worktree-blocked",
-      toolName: "createWorktree",
-      input: { name: "forge-qa-worktree" },
-      fullAccess: true
-    },
-    {
-      id: "full-access-revert-changes-typed-blocked",
-      toolName: "revertChanges",
-      input: { scope: "all" },
-      confirmed: true,
-      fullAccess: true,
-      typedConfirmation: "wrong"
-    },
-    {
-      id: "full-access-git-push-typed-blocked",
-      toolName: "gitPush",
-      input: { remote: "origin", branch: "codex/Forge" },
-      confirmed: true,
-      fullAccess: true,
-      typedConfirmation: "wrong"
-    },
-    {
-      id: "full-access-delete-memory-typed-blocked",
-      toolName: "deleteMemory",
-      input: { id: "forge-qa-memory" },
-      confirmed: true,
-      fullAccess: true,
-      typedConfirmation: "wrong"
-    },
-    {
-      id: "full-access-create-instructions-blocked",
-      toolName: "createProjectInstructions",
-      input: { content: "# Forge QA\n" },
-      fullAccess: true
-    },
-    {
-      id: "full-access-update-instructions-blocked",
-      toolName: "updateProjectInstructions",
-      input: { relativePath: "AGENTS.md", content: "# Forge QA\n" },
-      fullAccess: true
-    }
+function createFullAccessExternalMutationSkippedQa(): BuiltInToolQaScenarioResult[] {
+  const skippedReason =
+    "Full Access now auto-executes this tool; development QA skips it to avoid real dependency, Git, or project-instruction side effects.";
+  const scenarios: Array<{ id: string; toolName: string }> = [
+    { id: "full-access-install-dependency-auto-skipped", toolName: "installDependency" },
+    { id: "full-access-create-commit-auto-skipped", toolName: "createCommit" },
+    { id: "full-access-create-branch-auto-skipped", toolName: "createBranch" },
+    { id: "full-access-checkout-branch-auto-skipped", toolName: "checkoutBranch" },
+    { id: "full-access-create-worktree-auto-skipped", toolName: "createWorktree" },
+    { id: "full-access-revert-changes-auto-skipped", toolName: "revertChanges" },
+    { id: "full-access-git-push-auto-skipped", toolName: "gitPush" },
+    { id: "full-access-delete-memory-auto-skipped", toolName: "deleteMemory" },
+    { id: "full-access-create-instructions-auto-skipped", toolName: "createProjectInstructions" },
+    { id: "full-access-update-instructions-auto-skipped", toolName: "updateProjectInstructions" }
   ];
 
-  const results = [];
-
-  for (const scenario of scenarios) {
-    results.push(await executeExpectedBlockedScenario({ now, projectRoot, registry, scenario }));
-  }
-
-  return results;
+  return scenarios.map((scenario) =>
+    createSkippedScenario(scenario.id, scenario.toolName, skippedReason)
+  );
 }
 
 async function executeSandboxFileOperationQa({
@@ -941,35 +873,6 @@ async function executeProjectMemoryMutationQa({
   }
 
   return results;
-}
-
-async function executeExpectedBlockedScenario({
-  now,
-  projectRoot,
-  registry,
-  scenario
-}: {
-  now: () => Date;
-  projectRoot: string;
-  registry: BuiltInTool[];
-  scenario: BuiltInToolQaScenario;
-}): Promise<BuiltInToolQaScenarioResult> {
-  const result = await executeQaScenario({ now, projectRoot, registry, scenario });
-  const blockedAsExpected = result.status === "blocked";
-  const details = {
-    expectedBlockedStatus: "blocked",
-    actualStatus: result.status,
-    blockedMessage: result.errorMessage ?? null,
-    fullAccess: Boolean(scenario.fullAccess)
-  };
-  const { errorMessage: _expectedBlockedMessage, ...safeResult } = result;
-
-  return {
-    ...safeResult,
-    status: blockedAsExpected ? "succeeded" : "failed",
-    outputSummary: summarizeValue(details),
-    ...(blockedAsExpected ? {} : { errorMessage: "Expected tool call to be blocked before execution." })
-  };
 }
 
 async function readQaTextFile(projectRoot: string, relativePath: string): Promise<string | null> {

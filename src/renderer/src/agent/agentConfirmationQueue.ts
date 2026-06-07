@@ -255,21 +255,29 @@ function formatBuiltInToolInputValue(value: unknown): string | null {
   return null;
 }
 
-// 文件预览代表待写盘内容, Full Access 也必须停在用户确认前。
+// Full Access 下, Agent 队列产生的文件预览会自动写盘, 手动预览仍留在审查队列。
 export function getBlockingFileChangePreviews(
   changePreviews: AgentChangePreviewForQueue[],
-  _options: {
+  options: {
     fullAccess?: boolean;
     isFullAccessThread?: (threadId: string) => boolean;
   } = {}
 ): AgentChangePreviewForQueue[] {
-  return changePreviews;
+  return changePreviews.filter((preview) => {
+    const sourceThreadId = preview.source?.threadId;
+    const sourceActionId = preview.source?.actionId;
+    const previewFullAccess = sourceThreadId
+      ? (options.isFullAccessThread?.(sourceThreadId) ?? options.fullAccess)
+      : options.fullAccess;
+
+    return !(previewFullAccess && sourceActionId);
+  });
 }
 
 export function getAgentConfirmationKind(
   action: AgentAction,
   commandSafetyPolicy: AgentCommandSafetyPolicy,
-  _fullAccess: boolean
+  fullAccess: boolean
 ): AgentConfirmationItemKind | null {
   if (action.status === "failed") {
     return "failed-action";
@@ -279,15 +287,15 @@ export function getAgentConfirmationKind(
     return null;
   }
 
-  if (action.kind === "manual") {
+  if (action.kind === "manual" && !fullAccess) {
     return "manual-gate";
   }
 
-  if (action.kind === "commit") {
+  if (action.kind === "commit" && !fullAccess) {
     return "commit-gate";
   }
 
-  if (action.kind === "built-in-tool" && action.requiresConfirmation) {
+  if (action.kind === "built-in-tool" && action.requiresConfirmation && !fullAccess) {
     return "built-in-tool-confirmation";
   }
 

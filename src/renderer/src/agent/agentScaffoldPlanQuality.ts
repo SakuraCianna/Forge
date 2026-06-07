@@ -8,13 +8,17 @@ export type ScaffoldLayer =
   | "domainModel"
   | "api"
   | "runtimeConfig"
+  | "dataSeed"
+  | "backendContractTest"
   | "frontendConfig"
   | "frontendEntry"
+  | "frontendApiClient"
   | "frontendPage"
   | "verification";
 
 type ScaffoldStack = {
   springBoot: boolean;
+  h2: boolean;
   vue: boolean;
   react: boolean;
   vite: boolean;
@@ -79,7 +83,7 @@ export function supplementBareProjectScaffoldActions({
   }
 
   return {
-    actions: [...actions, ...completionActions],
+    actions: insertScaffoldCompletionActions(actions, completionActions),
     addedActions: completionActions.length,
     missingLayers
   };
@@ -105,12 +109,21 @@ function getExpectedScaffoldLayers(prompt: string): ScaffoldLayer[] {
     layers.add("domainModel");
     layers.add("api");
     layers.add("runtimeConfig");
+    if (stack.springBoot && stack.h2) {
+      layers.add("dataSeed");
+    }
+    if (stack.springBoot) {
+      layers.add("backendContractTest");
+    }
     layers.add("verification");
   }
 
   if (stack.frontend || stack.vue || stack.react || stack.vite) {
     layers.add("frontendConfig");
     layers.add("frontendEntry");
+    if (stack.backend || stack.springBoot) {
+      layers.add("frontendApiClient");
+    }
     layers.add("frontendPage");
     layers.add("verification");
   }
@@ -153,8 +166,20 @@ function detectCoveredScaffoldLayers(actions: AgentAction[]): Set<ScaffoldLayer>
       coveredLayers.add("runtimeConfig");
     }
 
+    if (/(^|\/)src\/main\/resources\/(?:data|schema)\.sql$/iu.test(target)) {
+      coveredLayers.add("dataSeed");
+    }
+
+    if (/(^|\/)src\/test\/(?:java|kotlin)\/.*(?:controller|api).*test\.(?:java|kt)$/iu.test(target)) {
+      coveredLayers.add("backendContractTest");
+    }
+
     if (/(^|\/)(frontend|client|web)\/src\/main\.[jt]s$/iu.test(target)) {
       coveredLayers.add("frontendEntry");
+    }
+
+    if (/(^|\/)(frontend|client|web)\/src\/(?:api|services)\/[^/]+\.[jt]s$/iu.test(target)) {
+      coveredLayers.add("frontendApiClient");
     }
 
     if (
@@ -220,6 +245,32 @@ function createScaffoldCompletionActions(
     }));
 }
 
+function insertScaffoldCompletionActions(
+  actions: AgentAction[],
+  completionActions: AgentAction[]
+): AgentAction[] {
+  const firstVerificationIndex = actions.findIndex(isScaffoldVerificationAction);
+
+  if (firstVerificationIndex < 0) {
+    return [...actions, ...completionActions];
+  }
+
+  return [
+    ...actions.slice(0, firstVerificationIndex),
+    ...completionActions,
+    ...actions.slice(firstVerificationIndex)
+  ];
+}
+
+function isScaffoldVerificationAction(action: AgentAction): boolean {
+  const command = action.command?.trim() ?? "";
+
+  return (
+    action.kind === "run-command" &&
+    /(test|build|lint|typecheck|verify|mvn|gradle|npm|pnpm|yarn)/iu.test(command)
+  );
+}
+
 function createScaffoldLayerCandidates(
   layer: ScaffoldLayer,
   context: {
@@ -232,6 +283,7 @@ function createScaffoldLayerCandidates(
 ): ScaffoldCompletionCandidate[] {
   const { stack, projectSlug, backendRoot, javaRoot, frontendRoot } = context;
   const entityName = inferDomainEntityName(projectSlug);
+  const entityResourceName = toPluralResourceName(entityName);
 
   switch (layer) {
     case "foundation":
@@ -295,6 +347,28 @@ function createScaffoldLayerCandidates(
             }
           ]
         : [];
+    case "dataSeed":
+      return stack.springBoot && stack.h2
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${backendRoot}src/main/resources/data.sql`,
+              target: `${backendRoot}src/main/resources/data.sql`
+            }
+          ]
+        : [];
+    case "backendContractTest":
+      return stack.springBoot
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${backendRoot}src/test/java/com/example/${projectSlug}/controller/${entityName}ControllerTest.java`,
+              target: `${backendRoot}src/test/java/com/example/${projectSlug}/controller/${entityName}ControllerTest.java`
+            }
+          ]
+        : [];
     case "frontendConfig":
       return stack.frontend || stack.vue || stack.react || stack.vite
         ? [
@@ -326,6 +400,17 @@ function createScaffoldLayerCandidates(
               kind: "edit-file",
               label: `创建 ${frontendRoot}src/main.ts`,
               target: `${frontendRoot}src/main.ts`
+            }
+          ]
+        : [];
+    case "frontendApiClient":
+      return stack.frontend || stack.vue || stack.react || stack.vite
+        ? [
+            {
+              layer,
+              kind: "edit-file",
+              label: `创建 ${frontendRoot}src/api/${entityResourceName}.ts`,
+              target: `${frontendRoot}src/api/${entityResourceName}.ts`
             }
           ]
         : [];
@@ -387,6 +472,7 @@ function createVerificationCandidates(
 function detectScaffoldStack(prompt: string): ScaffoldStack {
   const normalizedPrompt = prompt.toLocaleLowerCase();
   const springBoot = /spring\s*boot|springboot/u.test(normalizedPrompt);
+  const h2 = /\bh2\b/u.test(normalizedPrompt);
   const vue = /\bvue\b|vue3|vue\s*3/u.test(normalizedPrompt);
   const react = /\breact\b/u.test(normalizedPrompt);
   const vite = /\bvite\b/u.test(normalizedPrompt) || vue || react;
@@ -396,6 +482,7 @@ function detectScaffoldStack(prompt: string): ScaffoldStack {
 
   return {
     springBoot,
+    h2,
     vue,
     react,
     vite,
@@ -445,6 +532,24 @@ function toPascalCase(value: string): string {
     .join("");
 }
 
+function toPluralResourceName(entityName: string): string {
+  const normalizedName = entityName.trim().toLocaleLowerCase();
+
+  if (!normalizedName) {
+    return "items";
+  }
+
+  if (/[^aeiou]y$/u.test(normalizedName)) {
+    return `${normalizedName.slice(0, -1)}ies`;
+  }
+
+  if (/(?:s|x|z|ch|sh)$/u.test(normalizedName)) {
+    return `${normalizedName}es`;
+  }
+
+  return `${normalizedName}s`;
+}
+
 function formatScaffoldLayerLabel(layer: ScaffoldLayer, language: Language): string {
   const zhLabels: Record<ScaffoldLayer, string> = {
     foundation: "依赖/构建配置",
@@ -452,8 +557,11 @@ function formatScaffoldLayerLabel(layer: ScaffoldLayer, language: Language): str
     domainModel: "领域模型",
     api: "API",
     runtimeConfig: "运行配置",
+    dataSeed: "数据库初始化",
+    backendContractTest: "后端契约测试",
     frontendConfig: "前端配置",
     frontendEntry: "前端入口",
+    frontendApiClient: "前端 API 客户端",
     frontendPage: "页面组件",
     verification: "验证命令"
   };
@@ -463,8 +571,11 @@ function formatScaffoldLayerLabel(layer: ScaffoldLayer, language: Language): str
     domainModel: "domain model",
     api: "API",
     runtimeConfig: "runtime config",
+    dataSeed: "database seed data",
+    backendContractTest: "backend contract test",
     frontendConfig: "frontend config",
     frontendEntry: "frontend entrypoint",
+    frontendApiClient: "frontend API client",
     frontendPage: "UI page",
     verification: "verification command"
   };

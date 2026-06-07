@@ -108,9 +108,10 @@ npm run quality:v0.2:usable
 
 ## 当前已知打包警告
 
-- 2026-06-06 复跑 `npm run dist:win` 退出码为 0, 安装包 `release\Forge-0.2.1-x64-setup.exe` 生成成功, SHA-256 为 `669b43f60660c3379652217cc723181492404619ad8816e1632bb3411db8f972`, 下列两个警告仍出现。
-- `duplicate dependency references`: 当前由 electron-builder 在扫描 npm 依赖时输出, 安装包仍可生成。后续优化依赖树时再处理, 不为了消除该提示做依赖大升级。
-- `DEP0190`: 当前出现在 electron-builder 打包阶段的子进程调用警告中。Forge 自有质量门禁脚本使用 `shell: false` 和 npm CLI 文件执行命令, 没有为规避该警告改动运行时代码。
+- 2026-06-06 发布用 `npm run dist:win` 初始复跑退出码为 0, 安装包 `release\Forge-0.2.1-x64-setup.exe` 生成成功, 当时产物 SHA-256 为 `669b43f60660c3379652217cc723181492404619ad8816e1632bb3411db8f972`。
+- 2026-06-06 后续代码质量复跑将 Vite 可打包的 renderer/worker 依赖移出 production dependencies 后, 当前本地发布收口安装包 SHA-256 为 `68e9e039b1d97f515186f5ee4347e8c7cd58d5deca499e0d304782581045e014`; 安装包约从 144 MB 降到 104 MB, `app.asar` 约从 168 MB 降到 17 MB, 且不再生成 `app.asar.unpacked`。
+- `duplicate dependency references`: 仍由 electron-builder 扫描 npm production 依赖时输出, 但已从前端和构建依赖的大量重复项收敛到邮件解析链路的少量传递依赖, 例如 `libmime`, `@zone-eu/mailsplit`, `domhandler`。
+- `DEP0190`: `NODE_OPTIONS=--trace-deprecation` 显示调用栈位于 `node_modules\app-builder-lib\src\node-module-collector\nodeModulesCollector.ts`; 这是 electron-builder 依赖扫描阶段的上游警告。Forge 自有质量门禁脚本使用 `shell: false` 和 npm CLI 文件执行命令, 没有为规避该警告改动运行时代码。
 
 ## 发布注意事项
 

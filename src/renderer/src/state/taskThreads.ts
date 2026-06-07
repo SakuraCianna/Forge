@@ -568,7 +568,9 @@ export function attachThreadAgentActions(
     thread.id === threadId
       ? {
           ...thread,
-          agentActions: actions
+          status: thread.status === "completed" && actions.length > 0 ? "planned" : thread.status,
+          agentActions: actions,
+          events: thread.events.filter((event) => !isAgentCompletionSummaryEvent(threadId, event))
         }
       : thread
   );
@@ -660,6 +662,10 @@ function updateThreadActionStatus(
     }),
     agentActions
   };
+}
+
+function isAgentCompletionSummaryEvent(threadId: string, event: TaskThreadEvent): boolean {
+  return event.kind === "result" && event.id.startsWith(`${threadId}-agent-summary-`);
 }
 
 // 从动作队列推导线程状态; full access 线程里的 manual/commit 只是可自动完成的动作, 不应提前把线程标成 blocked。

@@ -655,8 +655,12 @@ export function getBuiltInToolDefinition(toolName: string): BuiltInToolDefinitio
 
 export function canAutoExecuteBuiltInTool(
   definition: BuiltInToolDefinition,
-  { confirmed = false, secondConfirmed = false }: AutoExecuteOptions = {}
+  { confirmed = false, fullAccess = false, secondConfirmed = false }: AutoExecuteOptions = {}
 ): boolean {
+  if (fullAccess) {
+    return definition.availability === "available";
+  }
+
   if (definition.riskLevel === "critical") {
     return definition.requiresConfirmation && confirmed && secondConfirmed;
   }

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -38,6 +39,43 @@ test("v0.2 usability gate is wired and exposes a safe dry run", async () => {
     "npm run quality:installer-smoke",
     "npm run quality:v0.2 (skip dist)"
   ]);
+});
+
+test("v0.2 formal usability evidence metadata follows the package version", async () => {
+  const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { version?: string };
+  const regressionReport = JSON.parse(await readFile("docs/V0_2_REGRESSION_RESULTS.json", "utf8")) as {
+    forgeVersion?: string;
+  };
+  const smokeReport = JSON.parse(await readFile("docs/V0_2_INSTALLER_SMOKE.json", "utf8")) as {
+    forgeVersion?: string;
+    installerPath?: string;
+    installerSha256?: string;
+  };
+
+  assert.equal(typeof packageJson.version, "string");
+
+  const expectedInstallerPath = `release/Forge-${packageJson.version}-x64-setup.exe`;
+  const installerSha256 = smokeReport.installerSha256;
+
+  assert.equal(regressionReport.forgeVersion, packageJson.version);
+  assert.equal(smokeReport.forgeVersion, packageJson.version);
+  assert.equal(smokeReport.installerPath?.replace(/\\/gu, "/"), expectedInstallerPath);
+
+  if (typeof installerSha256 !== "string") {
+    assert.fail("installer smoke evidence must include installerSha256");
+  }
+
+  assert.match(installerSha256, /^[a-f0-9]{64}$/u);
+
+  const localInstallerPath = join(process.cwd(), ...expectedInstallerPath.split("/"));
+
+  if (existsSync(localInstallerPath)) {
+    const localInstallerSha256 = createHash("sha256")
+      .update(await readFile(localInstallerPath))
+      .digest("hex");
+
+    assert.equal(installerSha256, localInstallerSha256);
+  }
 });
 
 test("v0.2 usability gate reports all missing evidence blockers before expensive gates", async () => {
