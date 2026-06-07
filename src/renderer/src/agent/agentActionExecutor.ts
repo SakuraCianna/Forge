@@ -58,7 +58,10 @@ const unknownCommandReason = "command is not in the safe allowlist";
 const shellOutputRedirectionReason = "command may write files through shell redirection";
 
 // 根据动作类型决定执行方式, 不能自动执行的动作返回阻塞原因
-export function resolveAgentActionExecution(action: AgentAction): AgentActionExecution {
+export function resolveAgentActionExecution(
+  action: AgentAction,
+  policy: AgentCommandSafetyPolicy = {}
+): AgentActionExecution {
   if (action.kind === "manual" || action.kind === "commit") {
     return { kind: "manual-gate", reason: action.kind === "commit" ? "commit" : "review" };
   }
@@ -110,7 +113,7 @@ export function resolveAgentActionExecution(action: AgentAction): AgentActionExe
   if (action.kind === "built-in-tool" && action.builtInToolName) {
     const definition = getBuiltInToolDefinition(action.builtInToolName);
 
-    if (definition.requiresConfirmation) {
+    if (definition.requiresConfirmation && !policy.fullAccess) {
       return { kind: "manual-gate", reason: "review" };
     }
 
@@ -411,7 +414,7 @@ export function isRunnableAgentAction(
   policy: AgentCommandSafetyPolicy = {}
 ): boolean {
   if (action.kind === "manual" || action.kind === "commit") {
-    return false;
+    return Boolean(policy.fullAccess);
   }
 
   if (
@@ -514,6 +517,10 @@ function resolveSingleCommandRisk(
   const normalized = command.trim().replace(/\s+/g, " ").toLowerCase();
 
   if (!normalized) {
+    return { level: "allow" };
+  }
+
+  if (policy.fullAccess) {
     return { level: "allow" };
   }
 

@@ -65,11 +65,21 @@ export function resolveBuiltInToolConfirmationContext(
   definition: BuiltInToolDefinition,
   context: Pick<
     BuiltInToolExecutionContext,
-    "confirmed" | "secondConfirmed" | "typedConfirmation"
+    "confirmed" | "fullAccess" | "secondConfirmed" | "typedConfirmation"
   >
 ): BuiltInToolConfirmationResolution {
   if (!definition.requiresConfirmation) {
     return { ok: true, context: {} };
+  }
+
+  if (context.fullAccess) {
+    return {
+      ok: true,
+      context: {
+        confirmed: true,
+        ...(definition.riskLevel === "critical" ? { secondConfirmed: true } : {})
+      }
+    };
   }
 
   if (!context.confirmed) {

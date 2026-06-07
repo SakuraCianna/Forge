@@ -118,8 +118,8 @@ test("all registered built-in tools are available", () => {
   );
 });
 
-test("high and critical mutation tools require confirmation even in full access mode", () => {
-  const blockedTools = [
+test("high and critical mutation tools can auto-execute in full access mode", () => {
+  const fullAccessTools = [
     "applyEdit",
     "applyPatch",
     "deleteFile",
@@ -132,19 +132,19 @@ test("high and critical mutation tools require confirmation even in full access 
     "gitPush"
   ];
 
-  for (const toolName of blockedTools) {
+  for (const toolName of fullAccessTools) {
     const definition = getBuiltInToolDefinition(toolName);
 
     assert.equal(definition.requiresConfirmation, true, toolName);
     assert.equal(
       canAutoExecuteBuiltInTool(definition, { fullAccess: true, confirmed: false }),
-      false,
+      true,
       toolName
     );
   }
 });
 
-test("all side-effect tools are blocked before confirmation even in full access mode", () => {
+test("all side-effect tools can auto-execute in full access mode", () => {
   const sideEffectTools = [
     "createFile",
     "deleteFile",
@@ -183,7 +183,7 @@ test("all side-effect tools are blocked before confirmation even in full access 
     assert.equal(definition.requiresConfirmation, true, toolName);
     assert.equal(
       canAutoExecuteBuiltInTool(definition, { fullAccess: true, confirmed: false }),
-      false,
+      true,
       toolName
     );
   }

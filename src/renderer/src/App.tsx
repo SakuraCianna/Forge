@@ -3920,7 +3920,8 @@ export function App(): ReactElement {
     const runtimeDecision = resolveAgentRuntimePreflightDecision({
       action,
       liveAction: getLiveAgentAction(threadId, action.id),
-      agentProfile: activeAgentProfile
+      agentProfile: activeAgentProfile,
+      fullAccess: threadFullAccessMode
     });
 
     if (runtimeDecision.kind === "reuse-status") {
@@ -4239,6 +4240,7 @@ export function App(): ReactElement {
       input,
       projectRoot: currentProject?.path ?? null,
       threadId,
+      fullAccess: getThreadFullAccessMode(threadId),
       ...confirmationContext
     });
 

@@ -1850,8 +1850,8 @@ function getExtensionsCopy(language: Language) {
     builtInToolCount: (count: number) => (isChinese ? `${count} 个工具` : `${count} tools`),
     builtInTools: isChinese ? "Built-in Tools 内置工具" : "Built-in Tools",
     builtInToolsDescription: isChinese
-      ? "Forge 内置工具按 8 大类统一展示。高风险和 critical 工具即使在 Full Access 下也必须确认, 未来不可用工具仍会明确标记为 not_implemented。"
-      : "Forge built-in tools are grouped into 8 categories. High and critical tools still require confirmation in Full Access, and future unavailable tools remain marked not_implemented.",
+      ? "Forge 内置工具按 8 大类统一展示。Full Access 下, Agent 队列会自动执行本地内置工具; 未来不可用工具仍会明确标记为 not_implemented。"
+      : "Forge built-in tools are grouped into 8 categories. In Full Access, the agent queue auto-executes local built-in tools, and future unavailable tools remain marked not_implemented.",
     cancel: isChinese ? "取消" : "Cancel",
     category: isChinese ? "分类" : "Category",
     confirmation: isChinese ? "确认策略" : "Confirmation",

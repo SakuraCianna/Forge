@@ -1,7 +1,7 @@
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { Language } from "@shared/modelTypes";
 import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
-import { countAutoFailureRecoveryAttempts } from "./failureRecoveryAttempts";
+import { countAutoFailureRecoveryAttempts } from "./failureRecoveryAttempts.js";
 
 const ansiEscapePattern = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "gu");
 

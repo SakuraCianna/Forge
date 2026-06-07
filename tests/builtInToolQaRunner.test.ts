@@ -43,7 +43,7 @@ test("development built-in tool QA runner executes read-only scenarios against a
     assert.equal(result.summary.failed, 0);
     assert.equal(result.summary.blocked, 0);
     assert.equal(result.summary.notImplemented, 0);
-    assert.equal(result.summary.skipped, 2);
+    assert.equal(result.summary.skipped, 12);
     assert.equal(result.summary.safety.total, 2);
     assert.equal(result.summary.safety.passed, 2);
     assert.equal(result.summary.safety.failed, 0);
@@ -56,14 +56,14 @@ test("development built-in tool QA runner executes read-only scenarios against a
     assert.ok(result.summary.coverage.p1Tools > 0);
     assert.ok(result.summary.coverage.p2Tools > 0);
     assert.ok(result.summary.coverage.scenarioTools >= 66);
-    assert.ok(result.summary.coverage.attemptedScenarioTools >= 64);
-    assert.ok(result.summary.coverage.succeededScenarioTools >= 64);
+    assert.ok(result.summary.coverage.attemptedScenarioTools >= 55);
+    assert.ok(result.summary.coverage.succeededScenarioTools >= 55);
     assert.equal(result.summary.coverage.p0ScenarioTools, result.summary.coverage.p0Tools);
     assert.equal(result.summary.coverage.p1ScenarioTools, result.summary.coverage.p1Tools);
     assert.ok(result.summary.coverage.p2ScenarioTools >= 25);
     assert.equal(result.summary.coverage.p0SucceededScenarioTools, result.summary.coverage.p0Tools);
-    assert.equal(result.summary.coverage.p1SucceededScenarioTools, result.summary.coverage.p1Tools);
-    assert.ok(result.summary.coverage.p2SucceededScenarioTools >= 23);
+    assert.ok(result.summary.coverage.p1SucceededScenarioTools >= 26);
+    assert.ok(result.summary.coverage.p2SucceededScenarioTools >= 15);
     assert.ok(result.summary.total >= 76);
     assert.ok(result.summary.successRate >= 0.95);
     assert.equal(result.summary.quality.mvpPassed, true);
@@ -145,17 +145,16 @@ test("development built-in tool QA runner executes read-only scenarios against a
     assert.ok(
       result.scenarios.some(
         (scenario) =>
-          scenario.id === "full-access-git-push-typed-blocked" &&
-          scenario.status === "succeeded" &&
-          /expectedBlockedStatus/u.test(scenario.outputSummary ?? "") &&
-          /fullAccess/u.test(scenario.outputSummary ?? "")
+          scenario.id === "full-access-git-push-auto-skipped" &&
+          scenario.status === "skipped" &&
+          /Full Access now auto-executes/u.test(scenario.errorMessage ?? "")
       )
     );
     assert.ok(
       result.scenarios.some(
         (scenario) =>
-          scenario.id === "full-access-install-dependency-blocked" &&
-          scenario.status === "succeeded"
+          scenario.id === "full-access-install-dependency-auto-skipped" &&
+          scenario.status === "skipped"
       )
     );
   } finally {

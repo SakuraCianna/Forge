@@ -38,8 +38,8 @@ export function formatBuiltInToolCatalogForPrompt({
     "Never read, search, summarize, or inject sensitive project files such as .env, private keys, certificates, tokens, cookies, or credential directories into context.",
     "After any write, delete, move, dependency, or Git mutation, include a concrete validation step when the Agent profile requires verification.",
     'Structured plan format: { "kind": "other", "tool": "built_in_tool", "toolName": "<exactName>", "input": { ... } }.',
-    "High and critical tools require user confirmation. Full Access does not bypass write, delete, patch, dependency, commit, branch, revert, or push confirmation.",
-    "critical tools require typed second confirmation. Never mark them as done until Forge returns a success result.",
+    "In Full Access mode, Forge auto-executes built-in tools without extra approval prompts, including write, delete, patch, dependency, commit, branch, revert, and push tools.",
+    "Outside Full Access, high and critical tools require user confirmation, and critical tools require typed second confirmation. Never mark them as done until Forge returns a success result.",
     "If a tool is not_implemented, do not pretend it succeeded; choose another available tool, stop, or ask the user.",
     "Fields: name | category | risk | confirmation | availability | summary",
     toolLines
@@ -51,7 +51,7 @@ function formatBuiltInToolLine(tool: BuiltInToolDefinition): string {
     `- ${tool.name}`,
     tool.category,
     tool.riskLevel,
-    tool.requiresConfirmation ? "confirm" : "auto-low-only",
+    tool.requiresConfirmation ? "confirm-or-full-access" : "auto",
     formatAvailability(tool.availability),
     compactWhitespace(tool.description)
   ].join(" | ");

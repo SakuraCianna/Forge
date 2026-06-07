@@ -12,12 +12,19 @@ export function createFileChangeTaskPrompt(
   const actionQueueContext = formatActionQueueContext(thread.agentActions ?? [], action?.id ?? null);
   const currentActionContext = action ? formatCurrentActionContext(action) : null;
   const toolResultContext = formatControlledToolResultContext(thread, options.toolResults ?? []);
+  const scaffoldConsistencyContext = formatScaffoldConsistencyContext(
+    thread.prompt,
+    thread.agentActions ?? []
+  );
 
   return [
     `Original task:\n${thread.prompt}`,
     `Target file:\n${relativePath}`,
     currentActionContext ? `Current edit action:\n${currentActionContext}` : null,
     actionQueueContext ? `Action queue:\n${actionQueueContext}` : null,
+    scaffoldConsistencyContext
+      ? `Scaffold consistency guardrails:\n${scaffoldConsistencyContext}`
+      : null,
     toolResultContext ? `Prior controlled tool results:\n${toolResultContext}` : null,
     "File change instructions:",
     "Rewrite only the target file shown above.",
@@ -27,6 +34,85 @@ export function createFileChangeTaskPrompt(
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n\n");
+}
+
+function formatScaffoldConsistencyContext(prompt: string, actions: AgentAction[]): string | null {
+  if (!hasScaffoldConsistencyRisk(prompt, actions)) {
+    return null;
+  }
+
+  const normalizedPrompt = prompt.toLocaleLowerCase();
+  const isStudentTask = /(学生|student)/iu.test(prompt);
+  const isSpringBoot = /spring\s*boot|springboot/u.test(normalizedPrompt);
+  const isH2 = /\bh2\b/u.test(normalizedPrompt);
+  const isVueOrVite = /\bvue\b|vue3|vue\s*3|\bvite\b/u.test(normalizedPrompt);
+  const hasBackendAndFrontend =
+    /(前后端|frontend|front-end|client|前端)/iu.test(prompt) &&
+    /(backend|back-end|server|后端|接口|api|spring)/iu.test(prompt);
+  const lines = [
+    "Use one shared contract across all queued files before writing this file."
+  ];
+
+  if (isStudentTask) {
+    lines.push(
+      "For a simple student-list task with no custom fields requested, keep the Student shape minimal and stable: id, name, age, gender. Do not add email, studentClass, className, or other fields unless the original task explicitly asks for them."
+    );
+  }
+
+  if (hasBackendAndFrontend) {
+    lines.push(
+      isStudentTask
+        ? "Use GET /api/students for the student list unless the existing plan already establishes a different route; backend route, frontend client path, JSON fields, and rendered columns must match exactly."
+        : "Backend route, frontend client path, JSON fields, and rendered columns must match exactly."
+    );
+  }
+
+  if (isSpringBoot) {
+    lines.push(
+      "Do not import Lombok or use Lombok annotations unless the Maven/Gradle file declares Lombok; otherwise write plain Java constructors, getters, and setters."
+    );
+  }
+
+  if (isH2) {
+    lines.push(
+      "For H2 schema or seed files, every table and column must match the JPA entity mapping exactly; do not seed columns that the entity does not define."
+    );
+  }
+
+  if (isVueOrVite) {
+    lines.push(
+      "For Vue/Vite frontend files, prefer a relative /api request through vite.config proxy instead of hardcoding http://localhost origins inside components."
+    );
+  }
+
+  lines.push(
+    "Package files must declare the local tools used by queued verification commands, and tests should exercise the generated API contract when a backend is present."
+  );
+
+  return lines.map((line) => `- ${line}`).join("\n");
+}
+
+function hasScaffoldConsistencyRisk(prompt: string, actions: AgentAction[]): boolean {
+  const isCreationTask =
+    /(创建|新建|生成|搭建|实现|做一个|写一个|开发|create|generate|scaffold|build|make|implement)/iu.test(
+      prompt
+    ) &&
+    /(项目|工程|系统|应用|页面|接口|数据库|前端|后端|前后端|project|app|application|system|frontend|backend|spring|vue|react|vite|api)/iu.test(
+      prompt
+    );
+
+  if (!isCreationTask) {
+    return false;
+  }
+
+  const editTargets = actions
+    .filter((action) => action.kind === "edit-file" && action.target)
+    .map((action) => action.target ?? "");
+
+  return (
+    editTargets.length >= 3 ||
+    /(前后端|spring\s*boot|springboot|\bvue\b|vue3|\bh2\b|frontend|backend)/iu.test(prompt)
+  );
 }
 
 // 提取前置受控工具结果, 让后续编辑能利用目录, 搜索, glob 和 Git 检查输出

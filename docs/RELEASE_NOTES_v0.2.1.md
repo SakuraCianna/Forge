@@ -8,7 +8,7 @@
 
 - Improved task-thread routing so a new project request no longer continues from a stopped previous planning flow unless the user explicitly asks to continue.
 - Added a "Retry and revert" flow that can resend a previous prompt after reverting file operations with recorded snapshots.
-- In Full Access mode, agent-planned ordinary file changes can be applied automatically while high-risk operations still require confirmation.
+- In Full Access mode, agent-queued local file changes, commands, built-in tools, and Git actions run automatically without extra approval prompts.
 - Treated user-cancelled agent plan streams as controlled cancellations instead of Electron handler errors.
 - Improved previews for common configuration files such as `package.json`, `.env`, `Dockerfile`, and lock/config files.
 - Removed the built-in personal development QA sandbox path; QA sandboxes now need to be provided explicitly or by the controlled `.tmp-test` release gate.
