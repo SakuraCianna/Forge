@@ -56,6 +56,31 @@ test("default built-in tool executors run P0 file, search and diff tools", async
   }
 });
 
+test("readManyFiles passes maxBytesPerFile through as the per-file size limit", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-read-many-"));
+
+  try {
+    await writeFile(join(projectRoot, "first.txt"), "first file content\n", "utf8");
+    await writeFile(join(projectRoot, "second.txt"), "second file content\n", "utf8");
+
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const result = await getBuiltInToolFromRegistry(registry, "readManyFiles").execute(
+      { relativePaths: ["first.txt", "second.txt"], maxBytesPerFile: 5 },
+      { projectRoot }
+    );
+
+    assert.equal((result as { status: string }).status, "failed");
+    assert.match(
+      (result as { error: { message: string } }).error.message,
+      /File is too large to preview/u
+    );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("default built-in tool executors provide dependency, diagnostic and validation helpers", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-analysis-"));
 
@@ -120,6 +145,37 @@ test("default built-in tool executors provide dependency, diagnostic and validat
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }
+});
+
+test("git branch executors quote branch names before building shell commands", async () => {
+  const commands: string[] = [];
+  const runCommand = async (options: RunProjectCommandOptions) => {
+    commands.push(options.command);
+
+    return {
+      command: options.command,
+      cwd: options.cwd,
+      exitCode: 0,
+      stderr: "",
+      stdout: "",
+      timedOut: false
+    };
+  };
+  const registry = createBuiltInToolRegistry({
+    executors: createDefaultBuiltInToolExecutors({ runCommand })
+  });
+  const createBranchTool = getBuiltInToolFromRegistry(registry, "createBranch");
+  const checkoutBranchTool = getBuiltInToolFromRegistry(registry, "checkoutBranch");
+  const branch = "feature/test'; Write-Output unsafe; '";
+  const projectRoot = "E:\\CodeHome\\Forge";
+
+  await createBranchTool.execute({ branch }, { projectRoot, confirmed: true });
+  await checkoutBranchTool.execute({ branch }, { projectRoot, confirmed: true, typedConfirmation: "CHECKOUT" });
+
+  assert.deepEqual(commands, [
+    "git switch -c 'feature/test''; Write-Output unsafe; '''",
+    "git switch 'feature/test''; Write-Output unsafe; '''"
+  ]);
 });
 
 test("default built-in tool executors run local semantic search without reading sensitive files", async () => {

@@ -84,7 +84,13 @@ export function createDefaultBuiltInToolExecutors({
       };
     },
     createBranch: (input, context) =>
-      runCommand(createCommandOptions(input, context, `git switch -c ${readRequiredString(input, "branch")}`)),
+      runCommand(
+        createCommandOptions(
+          input,
+          context,
+          `git switch -c ${quoteCommandArgument(readRequiredString(input, "branch"))}`
+        )
+      ),
     createCommit: (input, context) =>
       commitProjectChanges({
         projectRoot: requireProjectRoot(input, context),
@@ -332,6 +338,7 @@ export function createDefaultBuiltInToolExecutors({
     readManyFiles: async (input, context) => {
       const projectRoot = requireProjectRoot(input, context);
       const relativePaths = readRequiredStringArray(input, "relativePaths").slice(0, 20);
+      const maxBytesPerFile = readOptionalNumberFromAny(input, ["maxBytesPerFile", "maxBytes"]);
 
       return {
         files: await Promise.all(
@@ -339,7 +346,7 @@ export function createDefaultBuiltInToolExecutors({
             readProjectTextFile({
               projectRoot,
               relativePath,
-              maxBytes: readOptionalNumber(input, "maxBytes")
+              maxBytes: maxBytesPerFile
             })
           )
         )
@@ -2093,6 +2100,18 @@ function readOptionalNumber(input: Record<string, unknown>, key: string): number
   const value = input[key];
 
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readOptionalNumberFromAny(input: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = readOptionalNumber(input, key);
+
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function readOptionalBoolean(input: Record<string, unknown>, key: string): boolean | undefined {
