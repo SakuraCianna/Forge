@@ -21,32 +21,38 @@ export function createFailureFixTaskPrompt(
   ].filter((line): line is string => Boolean(line));
 
   return [
-    `Original task: ${thread.prompt}`,
-    `Current thread status: ${thread.status}`,
-    "",
-    ...failureDetails,
-    runtimePolicyContext,
-    actionQueueContext ? `Action queue:\n${actionQueueContext}` : null,
-    controlledToolContext ? `Prior controlled tool results:\n${controlledToolContext}` : null,
-    recentExecutionContext ? `Recent execution context:\n${recentExecutionContext}` : null,
-    "",
-    "Generate a recovery execution plan for this failure.",
-    "First identify the likely cause using the command output when present, then inspect the smallest useful files, propose focused edits, and finish with verification commands.",
-    "For separated Spring Boot + frontend scaffolds, keep backend fixes under Backend/, frontend fixes under Frontend/, normalize Maven retries to mvn -f Backend/pom.xml test, and normalize frontend retries to npm --prefix Frontend run build unless the existing files prove other roots are already in use.",
-    "If Spring Boot or H2 reports a missing table while loading data.sql, inspect the entity @Table mapping, data.sql/schema.sql, and application config; fix table names, columns, and spring.jpa.defer-datasource-initialization consistently instead of changing only the failing SQL line.",
-    "If a Vue/TypeScript build reports a missing import or export, inspect both the API client and consuming component, then make the exported function name and import/call site match exactly.",
-    "If a package script failed because local tools such as tsc, vite, eslint, or vitest are missing, inspect the relevant package.json and add the package-manager install command for that package root before retrying the verification command.",
-    'Return a JSON object with a "steps" array when possible. Each step must include "kind", "description", and optional "target".',
-    'Allowed step kinds are "inspect", "edit", "verify", "commit", and "other".',
-    "Reuse completed work. Do not repeat already completed inspect or edit actions unless the failure output specifically points back to them.",
-    "Do not turn ordinary fixable failures into manual review steps. Keep repairing automatically until a real external blocker appears.",
-    "Only use an approval/manual step for missing credentials, unavailable local dependencies, elevated OS permissions, destructive operations outside the project, or other work Forge cannot safely execute itself.",
-    thread.agentProfile?.permissionMode === "full"
-      ? "This thread is running with full access: do not add manual review or commit gates unless an explicit deny rule, missing credential, or unavailable dependency makes automation impossible."
-      : "Keep the plan safe: stop before risky commands and final commit steps when normal approval is required."
+    formatPromptSection("original_task", thread.prompt),
+    formatPromptSection("thread_state", `Current thread status: ${thread.status}\n${runtimePolicyContext}`),
+    formatPromptSection("failure_context", failureDetails.join("\n")),
+    actionQueueContext ? formatPromptSection("action_queue", actionQueueContext) : null,
+    controlledToolContext ? formatPromptSection("prior_controlled_tool_results", controlledToolContext) : null,
+    recentExecutionContext ? formatPromptSection("recent_execution_context", recentExecutionContext) : null,
+    formatPromptSection(
+      "recovery_instructions",
+      [
+        "Generate a recovery execution plan for this failure.",
+        "First identify the likely cause using the command output when present, then inspect the smallest useful files, propose focused edits, and finish with verification commands.",
+        "For separated Spring Boot + frontend scaffolds, keep backend fixes under Backend/, frontend fixes under Frontend/, normalize Maven retries to mvn -f Backend/pom.xml test, and normalize frontend retries to npm --prefix Frontend run build unless the existing files prove other roots are already in use.",
+        "If Spring Boot or H2 reports a missing table while loading data.sql, inspect the entity @Table mapping, data.sql/schema.sql, and application config; fix table names, columns, and spring.jpa.defer-datasource-initialization consistently instead of changing only the failing SQL line.",
+        "If a Vue/TypeScript build reports a missing import or export, inspect both the API client and consuming component, then make the exported function name and import/call site match exactly.",
+        "If a package script failed because local tools such as tsc, vite, eslint, or vitest are missing, inspect the relevant package.json and add the package-manager install command for that package root before retrying the verification command.",
+        "Return a JSON object with a steps array when possible. Each step must include kind, description, and optional target.",
+        'Allowed step kinds are "inspect", "edit", "verify", "commit", and "other".',
+        "Reuse completed work. Do not repeat already completed inspect or edit actions unless the failure output specifically points back to them.",
+        "Do not turn ordinary fixable failures into manual review steps. Keep repairing automatically until a real external blocker appears.",
+        "Only use an approval/manual step for missing credentials, unavailable local dependencies, elevated OS permissions, destructive operations outside the project, or other work Forge cannot safely execute itself.",
+        thread.agentProfile?.permissionMode === "full"
+          ? "This thread is running with full access: do not add manual review or commit gates unless an explicit deny rule, missing credential, or unavailable dependency makes automation impossible."
+          : "Keep the plan safe: stop before risky commands and final commit steps when normal approval is required."
+      ].join("\n")
+    )
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");
+}
+
+function formatPromptSection(name: string, content: string): string {
+  return `<${name}>\n${content.trim()}\n</${name}>`;
 }
 
 function formatRuntimePolicyContext(thread: TaskThread): string {

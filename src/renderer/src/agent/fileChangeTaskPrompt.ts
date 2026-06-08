@@ -18,22 +18,31 @@ export function createFileChangeTaskPrompt(
   );
 
   return [
-    `Original task:\n${thread.prompt}`,
-    `Target file:\n${relativePath}`,
-    currentActionContext ? `Current edit action:\n${currentActionContext}` : null,
-    actionQueueContext ? `Action queue:\n${actionQueueContext}` : null,
+    formatPromptSection("original_task", thread.prompt),
+    formatPromptSection("target_file", relativePath),
+    currentActionContext ? formatPromptSection("current_edit_action", currentActionContext) : null,
+    actionQueueContext ? formatPromptSection("action_queue", actionQueueContext) : null,
     scaffoldConsistencyContext
-      ? `Scaffold consistency guardrails:\n${scaffoldConsistencyContext}`
+      ? formatPromptSection("scaffold_consistency_guardrails", scaffoldConsistencyContext)
       : null,
-    toolResultContext ? `Prior controlled tool results:\n${toolResultContext}` : null,
-    "File change instructions:",
-    "Rewrite only the target file shown above.",
-    "Satisfy the current edit action first, then preserve the original task intent.",
-    "If the target file is empty, create the complete file content from scratch.",
-    "Do not invent changes for other files. Mention required follow-up files only through the execution plan, not inside this file."
+    toolResultContext ? formatPromptSection("prior_controlled_tool_results", toolResultContext) : null,
+    formatPromptSection(
+      "file_change_instructions",
+      [
+        "Rewrite only the target file shown above.",
+        "Satisfy the current edit action first, then preserve the original task intent.",
+        "If the target file is empty, create the complete file content from scratch.",
+        "Before returning, check that this file has matching imports/exports, valid references to companion files, and no undeclared dependencies.",
+        "Do not invent changes for other files. Mention required follow-up files only through the execution plan, not inside this file."
+      ].join("\n")
+    )
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n\n");
+}
+
+function formatPromptSection(name: string, content: string): string {
+  return `<${name}>\n${content.trim()}\n</${name}>`;
 }
 
 function formatScaffoldConsistencyContext(prompt: string, actions: AgentAction[]): string | null {

@@ -113,7 +113,8 @@ test("file change prompt repeats full-stack scaffold consistency guardrails", ()
 
   const prompt = createFileChangeTaskPrompt(thread, "Frontend/src/App.vue", actions[2]);
 
-  assert.match(prompt, /Scaffold consistency guardrails/u);
+  assert.match(prompt, /<scaffold_consistency_guardrails>/u);
+  assert.match(prompt, /<file_change_instructions>/u);
   assert.match(prompt, /Backend\/.+Frontend\//u);
   assert.match(prompt, /id, name, age, gender/u);
   assert.match(prompt, /fetchStudents/u);

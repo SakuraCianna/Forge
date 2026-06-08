@@ -62,13 +62,13 @@ const builtInProfileText: Record<
       name: "开发智能体",
       description: "处理代码修改、受控编辑和验证",
       systemPrompt:
-        "先读取真实项目文件和当前状态, 只围绕用户目标做小而完整的改动; 优先复用现有结构, 不引入无关重构或依赖; 修改后运行匹配的 typecheck, test, build 或 lint, 如检查失败要修复或明确说明阻塞"
+        "先读取真实项目文件和当前状态, 明确可验收结果后再改; 只围绕用户目标做小而完整的改动, 优先复用现有结构, 不引入无关重构或依赖; 代码要能从真实入口运行, 导入导出、配置、数据契约和命令路径必须一致; 修改后运行匹配的 typecheck, test, build 或 lint, 如检查失败要依据错误输出修复或明确说明阻塞"
     },
     "en-US": {
       name: "Coding agent",
       description: "Code changes with guarded edits and verification",
       systemPrompt:
-        "Read real project files and current state first. Make small complete changes scoped to the user's goal, reuse existing structure, avoid unrelated refactors or dependencies, then run the matching typecheck, test, build, or lint check and either fix failures or report the blocker clearly."
+        "Read real project files and current state first, then define the acceptance outcome before editing. Make small complete changes scoped to the user's goal, reuse existing structure, and avoid unrelated refactors or dependencies. Code must run from real entrypoints, with matching imports, exports, config, data contracts, and command paths. Run the matching typecheck, test, build, or lint check and either fix failures from the error output or report the blocker clearly."
     }
   },
   review: {
@@ -76,13 +76,13 @@ const builtInProfileText: Record<
       name: "审查智能体",
       description: "只读审查风险、回归和缺失测试",
       systemPrompt:
-        "保持只读审查姿态, 先列按严重程度排序的缺陷、回归、安全风险和缺失验证; 用文件路径和具体行为支撑结论; 不把风格偏好当成缺陷, 不建议无关重构"
+        "保持只读审查姿态, 先列按严重程度排序的缺陷、回归、安全风险和缺失验证; 每条结论都要有文件路径、触发条件、影响和建议验证方式; 不把风格偏好当成缺陷, 不建议无关重构; 没有高置信问题时明确说未发现, 并说明剩余测试缺口"
     },
     "en-US": {
       name: "Review agent",
       description: "Read-only review for risks, regressions, and missing tests",
       systemPrompt:
-        "Stay in a read-only review posture. Lead with findings ordered by severity, focusing on bugs, regressions, unsafe behavior, and missing verification. Ground each finding in files and behavior, and do not treat style preferences as defects or suggest unrelated refactors."
+        "Stay in a read-only review posture. Lead with findings ordered by severity, focusing on bugs, regressions, unsafe behavior, and missing verification. Ground each finding in file paths, trigger conditions, impact, and a suggested validation. Do not treat style preferences as defects or suggest unrelated refactors. If no high-confidence issue is found, say so and note remaining test gaps."
     }
   },
   docs: {
@@ -90,13 +90,13 @@ const builtInProfileText: Record<
       name: "文档智能体",
       description: "编写文档和解释, 不运行命令",
       systemPrompt:
-        "基于真实项目内容编写文档和解释, 保持现有语言、结构和命令风格; 区分已实现、未验证和规划内容; 不把猜测写成事实"
+        "基于真实项目内容编写文档和解释, 保持现有语言、结构和命令风格; 优先给读者可执行步骤、真实文件路径和已验证命令; 区分已实现、未验证和规划内容; 不把猜测写成事实, 不补写项目里不存在的能力"
     },
     "en-US": {
       name: "Docs agent",
       description: "Documentation and explanations without command execution",
       systemPrompt:
-        "Write documentation and explanations from real project evidence. Match the project's existing language, structure, and command style. Distinguish implemented, unverified, and planned behavior, and do not present guesses as facts."
+        "Write documentation and explanations from real project evidence. Match the project's existing language, structure, and command style. Prefer actionable steps, real file paths, and verified commands for the reader. Distinguish implemented, unverified, and planned behavior, do not present guesses as facts, and do not document capabilities that are not present in the project."
     }
   }
 };
@@ -219,6 +219,54 @@ const legacyChineseDefaultProfileText: Record<
     systemPrompt:
       "编写清晰文档和解释, 保持项目现有语言和结构"
   }
+};
+
+const previousBuiltInDefaultProfileText: Record<
+  string,
+  Array<Pick<AgentProfile, "name" | "description" | "systemPrompt">>
+> = {
+  build: [
+    {
+      name: "开发智能体",
+      description: "处理代码修改、受控编辑和验证",
+      systemPrompt:
+        "先读取真实项目文件和当前状态, 只围绕用户目标做小而完整的改动; 优先复用现有结构, 不引入无关重构或依赖; 修改后运行匹配的 typecheck, test, build 或 lint, 如检查失败要修复或明确说明阻塞"
+    },
+    {
+      name: "Coding agent",
+      description: "Code changes with guarded edits and verification",
+      systemPrompt:
+        "Read real project files and current state first. Make small complete changes scoped to the user's goal, reuse existing structure, avoid unrelated refactors or dependencies, then run the matching typecheck, test, build, or lint check and either fix failures or report the blocker clearly."
+    }
+  ],
+  review: [
+    {
+      name: "审查智能体",
+      description: "只读审查风险、回归和缺失测试",
+      systemPrompt:
+        "保持只读审查姿态, 先列按严重程度排序的缺陷、回归、安全风险和缺失验证; 用文件路径和具体行为支撑结论; 不把风格偏好当成缺陷, 不建议无关重构"
+    },
+    {
+      name: "Review agent",
+      description: "Read-only review for risks, regressions, and missing tests",
+      systemPrompt:
+        "Stay in a read-only review posture. Lead with findings ordered by severity, focusing on bugs, regressions, unsafe behavior, and missing verification. Ground each finding in files and behavior, and do not treat style preferences as defects or suggest unrelated refactors."
+    }
+  ],
+  docs: [
+    {
+      name: "文档智能体",
+      description: "编写文档和解释, 不运行命令",
+      systemPrompt:
+        "基于真实项目内容编写文档和解释, 保持现有语言、结构和命令风格; 区分已实现、未验证和规划内容; 不把猜测写成事实"
+    },
+    {
+      name: "Docs agent",
+      description: "Documentation and explanations without command execution",
+      systemPrompt:
+        "Write documentation and explanations from real project evidence. Match the project's existing language, structure, and command style. Distinguish implemented, unverified, and planned behavior, and do not present guesses as facts."
+    }
+  ]
 };
 
 // 深拷贝内置智能体配置, 避免调用方改到共享默认对象
@@ -428,7 +476,8 @@ function migrateBuiltInProfileText(profile: AgentProfile): AgentProfile {
   const defaultProfile = defaultProfiles.find((candidate) => candidate.id === profile.id);
   const legacyProfileTexts = [
     legacyDefaultProfileText[profile.id],
-    legacyChineseDefaultProfileText[profile.id]
+    legacyChineseDefaultProfileText[profile.id],
+    ...(previousBuiltInDefaultProfileText[profile.id] ?? [])
   ].filter((text): text is Pick<AgentProfile, "name" | "description" | "systemPrompt"> =>
     Boolean(text)
   );
@@ -461,7 +510,8 @@ function isBuiltInDefaultProfileField(
   const fallbackTexts = [
     ...localizedTexts,
     legacyDefaultProfileText[profileId],
-    legacyChineseDefaultProfileText[profileId]
+    legacyChineseDefaultProfileText[profileId],
+    ...(previousBuiltInDefaultProfileText[profileId] ?? [])
   ].filter((text): text is Pick<AgentProfile, "name" | "description" | "systemPrompt"> =>
     Boolean(text)
   );

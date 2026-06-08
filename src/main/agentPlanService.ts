@@ -137,6 +137,14 @@ const projectEngineeringPresetInstructions = [
   "Project scaffolding requests are not tiny edits: if the project is empty or bare, plan a coherent skeleton with build config, source entrypoints, runtime config, and verification.",
   'For scaffold edit steps, prefer a "files" string array so Forge can expand one architectural step into several controlled file edits without wasting the plan budget.'
 ] as const;
+const planQualityChecklistInstructions = [
+  "Before returning the plan, ensure every mutating step has a concrete target or files array, every verification command points at the chosen project root, and the plan has an observable acceptance signal.",
+  "When the user gives an error, log, screenshot, or failing command, inspect the named files and nearby configuration before broad rewrites.",
+  "For generated apps, plan minimal but production-shaped code: real entrypoints, typed contracts when the stack supports them, loading/error/empty states for UIs, and tests or smoke checks for the main path.",
+  "Prefer positive, executable steps over vague reminders. If a constraint matters, express the concrete action that satisfies it."
+] as const;
+const planJsonExampleInstruction =
+  'Example shape: {"steps":[{"kind":"inspect","description":"Read existing entrypoints","target":"src/main.ts"},{"kind":"edit","description":"Update implementation and matching test","files":["src/feature.ts","tests/feature.test.ts"]},{"kind":"verify","description":"Run focused verification","target":"npm test"}]}';
 const builtInToolNameByNormalizedName = new Map(
   builtInToolDefinitions.map((tool) => [normalizeBuiltInToolNameKey(tool.name), tool.name])
 );
@@ -507,7 +515,9 @@ function createAgentPlanInstructions(personalization?: string): string {
     "Separate discovery, mutation, and verification. Put read/search/git status steps before risky edits when the current state is unknown, and put validation after edits.",
     "If current framework, package, API, or platform behavior affects the solution, plan web_search, fetchDocs, or another reliable documentation lookup before relying on that fact.",
     "Do not include commit, branch switch, revert, dependency install, push, delete, or external write steps unless the user request or project workflow makes that side effect necessary.",
+    ...planQualityChecklistInstructions,
     'Prefer JSON only: return a JSON object with a "steps" array and no prose before or after it. Each step must include "kind", "description", and optional "target".',
+    planJsonExampleInstruction,
     'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "web_search", "git_status", "bash", "edit", "built_in_tool", or "invoke_extension".',
     'For Built-in Tools, use kind "other", tool "built_in_tool", exact "toolName", and an "input" object. Prefer exact built-in tools over shell commands when the catalog contains a matching capability.',
     'For external Extensions, use kind "other", tool "invoke_extension", plus "extensionId", "actionId", and an "input" object that matches the enabled action schema.',
@@ -539,6 +549,7 @@ function createAgentFileChangeInstructions(personalization?: string): string {
     "Rewrite the selected file to satisfy the user task.",
     "Return only the complete replacement file content.",
     "Do not include explanations, markdown fences, diffs, or patch markers.",
+    "Begin with the natural first token for that file type, such as package, import, <script>, or JSON object syntax; do not omit required boilerplate.",
     "Preserve existing style and imports unless the task requires changes.",
     "Use the current file content as the source of truth. Do not remove existing behavior, exports, validation, accessibility, error handling, or tests unless the user explicitly requested it.",
     "For multi-file scaffolds, make this file compatible with the queued and existing companion files: build dependencies, imports, entity fields, database seed data, API paths, frontend types, and UI columns must line up.",
@@ -546,6 +557,7 @@ function createAgentFileChangeInstructions(personalization?: string): string {
     "For Spring Boot + H2/JPA data.sql files, table names and columns must exactly match the entity mapping, and runtime config must defer data.sql until JPA has created the schema unless schema.sql is supplied.",
     "For Vue/TypeScript files, every imported symbol must have a matching export in the queued companion files; do not call getStudents if the API client exports fetchStudents.",
     "Do not introduce a library, annotation, runtime helper, API field, or database column unless the rest of the project contract supports it.",
+    "Before producing the file, self-check imports, exports, package declarations, config references, schema/table names, and verification commands implied by this file.",
     "Do not silence failures by deleting code, weakening checks, hiding exceptions, or replacing real logic with temporary hardcoding."
   ], personalization);
 }
@@ -945,6 +957,7 @@ function formatProjectScaffoldPlanningContext(request: GenerateAgentPlanRequest)
     "If using Lombok, declare Lombok in the build file and configure compilation; otherwise write plain Java fields, constructors, getters, and setters.",
     "For Vue/Vite clients, place backend access behind a small API client that calls a relative /api route and let vite.config configure the proxy.",
     "For Vue/Vite TypeScript scaffolds, include tsconfig.json and any declaration file needed by the build command before running npm --prefix Frontend run build.",
+    "For generated UI pages, include loading, error, and empty states so backend failures are visible instead of looking like an empty successful response.",
     "Include at least one backend contract test or smoke test for generated API endpoints so compile-time dependency mistakes and JSON field mismatches fail during verification.",
     "For frontend package scaffolds, include dependency installation before verification so local binaries such as tsc and vite exist before build commands run.",
     "Before marking the scaffold done, self-check import/export names, package scripts, command working directories, and database table names against the files in the plan.",
