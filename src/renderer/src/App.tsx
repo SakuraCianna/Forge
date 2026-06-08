@@ -3070,7 +3070,7 @@ export function App(): ReactElement {
     void generateThreadPlan(execution.modelExecution);
   }
 
-  async function retryThreadPrompt(threadId: string): Promise<void> {
+  async function retryThreadPrompt(threadId: string, userEventId?: string): Promise<void> {
     const thread = getLiveThread(threadId);
 
     if (!thread) {
@@ -3082,7 +3082,7 @@ export function App(): ReactElement {
       return;
     }
 
-    const retryPlan = createThreadPromptRetryPlan({ thread });
+    const retryPlan = createThreadPromptRetryPlan({ thread, userEventId });
     const revertedPaths: string[] = [];
 
     if (thread.status === "running" && selectedThreadId === threadId) {
@@ -5238,7 +5238,7 @@ export function App(): ReactElement {
           onConfirmAgentExtension={(threadId, action) => void confirmAgentExtensionAction(threadId, action)}
           onGenerateCommandFix={(threadId, result) => void generateCommandFixPlan(threadId, result)}
           onGenerateContinuationPlan={(threadId) => void generateContinuationPlan(threadId)}
-          onRetryThreadPrompt={(threadId) => void retryThreadPrompt(threadId)}
+          onRetryThreadPrompt={(threadId, userEventId) => void retryThreadPrompt(threadId, userEventId)}
           onCompleteAgentAction={completeAgentAction}
           onSkipAgentAction={skipAgentAction}
           onResumeAgent={resumeAgentThread}
