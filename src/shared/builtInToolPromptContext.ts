@@ -35,12 +35,14 @@ export function formatBuiltInToolCatalogForPrompt({
     "Forge Built-in Tools:",
     "Use low-risk read/inspect tools before planning edits. Do not use shell commands for reading, globbing, searching, git status, or diagnostics when a built-in tool exists.",
     "Before any code or file mutation, first read the relevant file(s). For multi-file edits, plan previewDiff or proposeEdit before applyEdit/applyPatch.",
+    "Use exact tool names and input field names. If required input is unknown, inspect first or ask the user instead of inventing paths, commands, branch names, or IDs.",
     "Never read, search, summarize, or inject sensitive project files such as .env, private keys, certificates, tokens, cookies, or credential directories into context.",
     "After any write, delete, move, dependency, or Git mutation, include a concrete validation step when the Agent profile requires verification.",
+    "For current public docs, package behavior, API changes, or deployment-platform facts, use webSearch, fetchDocs, or fetchUrl instead of relying on stale memory.",
     'Structured plan format: { "kind": "other", "tool": "built_in_tool", "toolName": "<exactName>", "input": { ... } }.',
     "In Full Access mode, Forge auto-executes built-in tools without extra approval prompts, including write, delete, patch, dependency, commit, branch, revert, and push tools.",
     "Outside Full Access, high and critical tools require user confirmation, and critical tools require typed second confirmation. Never mark them as done until Forge returns a success result.",
-    "If a tool is not_implemented, do not pretend it succeeded; choose another available tool, stop, or ask the user.",
+    "If a tool fails, is unavailable, is blocked, or is not_implemented, do not pretend it succeeded; report the blocker, choose another available tool, stop, or ask the user.",
     "Fields: name | category | risk | confirmation | availability | summary",
     toolLines
   ].join("\n");

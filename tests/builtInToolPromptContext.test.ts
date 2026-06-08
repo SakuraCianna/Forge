@@ -11,9 +11,13 @@ test("built-in tool prompt context exposes catalog and safety rules", () => {
   assert.match(prompt, /Full Access mode, Forge auto-executes/u);
   assert.match(prompt, /Before any code or file mutation/u);
   assert.match(prompt, /previewDiff or proposeEdit/u);
+  assert.match(prompt, /Use exact tool names and input field names/u);
   assert.match(prompt, /Never read, search, summarize, or inject sensitive project files/u);
   assert.match(prompt, /\.env, private keys, certificates, tokens, cookies/u);
   assert.match(prompt, /include a concrete validation step/u);
+  assert.match(prompt, /current public docs, package behavior, API changes/u);
+  assert.match(prompt, /webSearch, fetchDocs, or fetchUrl/u);
+  assert.match(prompt, /fails, is unavailable, is blocked, or is not_implemented/u);
   assert.match(prompt, /not_implemented/u);
 
   for (const tool of builtInToolDefinitions) {
