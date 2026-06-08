@@ -83,3 +83,25 @@ test("previewProjectFile treats package.json as text even when the new file is e
     await rm(projectRoot, { recursive: true, force: true });
   }
 });
+
+test("listProjectDirectory returns a missing result when a loaded subdirectory was deleted", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-deleted-directory-"));
+
+  try {
+    await mkdir(join(projectRoot, "backend"));
+    await rm(join(projectRoot, "backend"), { recursive: true, force: true });
+
+    const result = await listProjectDirectory({
+      projectRoot,
+      relativePath: "backend",
+      includeGitIgnored: true
+    });
+
+    assert.equal(result.relativePath, "backend");
+    assert.equal(result.missing, true);
+    assert.equal(result.truncated, false);
+    assert.deepEqual(result.entries, []);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});

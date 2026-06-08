@@ -59,6 +59,7 @@ export type ProjectDirectoryListResult = {
   relativePath: string;
   entries: ProjectDirectoryEntry[];
   truncated: boolean;
+  missing?: boolean;
   nextOffset?: number;
 };
 

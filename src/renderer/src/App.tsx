@@ -200,8 +200,11 @@ import { useAgentRunState } from "@/state/agentRunState";
 import { useComposerSignals } from "@/state/composerSignals";
 import {
   addUniquePath,
+  isLazyPathAtOrInside,
   mergeProjectFileTreeDirectoryEntries,
   normalizeLazyDirectoryPath,
+  removePathAndDescendants,
+  removeProjectFileTreePath,
   removePath
 } from "@/state/lazyProjectFileTree";
 import { getProjectFileParentPaths, type ProjectFileTreeNode } from "@/state/projectFileTree";
@@ -334,6 +337,7 @@ type BuiltInToolConfirmationContextInput = Pick<
 const heroSwapAnimationMs = 900;
 const heroSwapIdleMs = 1500;
 const fileTreeDirectoryEntryLimit = 2000;
+const fileTreeRealtimeRefreshMs = 2000;
 const projectUnderstandingMaxFiles = 32;
 const projectUnderstandingMaxFileSize = 240_000;
 const projectUnderstandingMaxCharsPerFile = 6_000;
@@ -1526,6 +1530,36 @@ export function App(): ReactElement {
   }, [currentProject]);
 
   useEffect(() => {
+    if (!currentProject || currentProjectMissing) {
+      return;
+    }
+
+    const projectPath = currentProject.path;
+    const intervalId = window.setInterval(() => {
+      const directoriesToRefresh = [
+        ...new Set([".", ...loadedFileTreeFolders, ...expandedFileTreeFolders])
+      ];
+      const activePreviewPath = previewFile?.relativePath;
+
+      for (const directoryPath of directoriesToRefresh) {
+        void loadProjectFileTreeDirectory(projectPath, directoryPath, { force: true });
+      }
+
+      if (activePreviewPath) {
+        void refreshActiveProjectTextPreview(projectPath, activePreviewPath);
+      }
+    }, fileTreeRealtimeRefreshMs);
+
+    return () => window.clearInterval(intervalId);
+  }, [
+    currentProject,
+    currentProjectMissing,
+    expandedFileTreeFolders,
+    loadedFileTreeFolders,
+    previewFile?.relativePath
+  ]);
+
+  useEffect(() => {
     let isActive = true;
 
     if (!previewFile) {
@@ -1960,6 +1994,44 @@ export function App(): ReactElement {
     setFileTreeNotice(null);
   }
 
+  function removeUnavailableProjectFileTreeDirectory(relativePath: string): void {
+    const normalizedRelativePath = normalizeLazyDirectoryPath(relativePath);
+    const activePreviewPath = filePreview?.relativePath ?? previewFile?.relativePath ?? null;
+
+    setLazyFileTreeNodes((current) =>
+      removeProjectFileTreePath(current, normalizedRelativePath)
+    );
+    setExpandedFileTreeFolders((current) =>
+      removePathAndDescendants(current, normalizedRelativePath)
+    );
+    setLoadedFileTreeFolders((current) =>
+      removePathAndDescendants(current, normalizedRelativePath)
+    );
+    setLoadingFileTreeFolders((current) =>
+      removePathAndDescendants(current, normalizedRelativePath)
+    );
+    setTruncatedFileTreeFolders((current) =>
+      removePathAndDescendants(current, normalizedRelativePath)
+    );
+    setFileTreeDirectoryNextOffsets((current) => {
+      const updatedOffsets: Record<string, number> = {};
+
+      for (const [path, offset] of Object.entries(current)) {
+        if (!isLazyPathAtOrInside(path, normalizedRelativePath)) {
+          updatedOffsets[path] = offset;
+        }
+      }
+
+      return updatedOffsets;
+    });
+
+    if (activePreviewPath && isLazyPathAtOrInside(activePreviewPath, normalizedRelativePath)) {
+      setPreviewFile(null);
+      setFilePreview(null);
+      setFormattedPreview(null);
+    }
+  }
+
   async function loadProjectFileTreeDirectory(
     projectPath: string,
     relativePath = ".",
@@ -1997,6 +2069,12 @@ export function App(): ReactElement {
         return;
       }
 
+      if (result.missing) {
+        removeUnavailableProjectFileTreeDirectory(normalizedRelativePath);
+        setFileTreeNotice(null);
+        return;
+      }
+
       setLazyFileTreeNodes((current) =>
         mergeProjectFileTreeDirectoryEntries(current, normalizedRelativePath, result.entries, {
           append: options.append
@@ -2021,6 +2099,12 @@ export function App(): ReactElement {
       });
     } catch (error) {
       if (currentProjectPathRef.current === projectPath) {
+        if (normalizedRelativePath !== "." && isMissingProjectFileError(error)) {
+          removeUnavailableProjectFileTreeDirectory(normalizedRelativePath);
+          setFileTreeNotice(null);
+          return;
+        }
+
         setFileTreeNotice(formatRuntimeError(settings.language, error));
       }
     } finally {
@@ -2060,6 +2144,57 @@ export function App(): ReactElement {
 
     for (const parentPath of [".", ...parentPaths]) {
       await loadProjectFileTreeDirectory(projectPath, parentPath);
+    }
+  }
+
+  async function refreshActiveProjectTextPreview(
+    projectPath: string,
+    relativePath: string
+  ): Promise<void> {
+    try {
+      const projectFilePreview = await window.forge.files.preview({
+        projectRoot: projectPath,
+        relativePath
+      });
+
+      if (currentProjectPathRef.current !== projectPath) {
+        return;
+      }
+
+      if (projectFilePreview.kind !== "text") {
+        const fileNoLongerExists =
+          projectFilePreview.kind === "unsupported" &&
+          /no longer exists/i.test(projectFilePreview.reason);
+
+        setPreviewFile((current) => (current?.relativePath === relativePath ? null : current));
+        setFilePreview((current) =>
+          current?.relativePath === relativePath
+            ? fileNoLongerExists
+              ? null
+              : projectFilePreview
+            : current
+        );
+        return;
+      }
+
+      const file: ProjectTextFile = {
+        relativePath: projectFilePreview.relativePath,
+        content: projectFilePreview.content,
+        size: projectFilePreview.size
+      };
+
+      setPreviewFile((current) => (current?.relativePath === relativePath ? file : current));
+      setFilePreview((current) =>
+        current?.relativePath === relativePath ? projectFilePreview : current
+      );
+    } catch (error) {
+      if (
+        currentProjectPathRef.current === projectPath &&
+        isMissingProjectFileError(error)
+      ) {
+        setPreviewFile((current) => (current?.relativePath === relativePath ? null : current));
+        setFilePreview((current) => (current?.relativePath === relativePath ? null : current));
+      }
     }
   }
 

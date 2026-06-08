@@ -210,13 +210,33 @@ export async function listProjectDirectory({
     throw new Error("Directory path must stay inside the selected project");
   }
 
-  const resolvedDirectoryPath = await realpath(absoluteDirectoryPath);
+  let resolvedDirectoryPath: string;
+
+  try {
+    resolvedDirectoryPath = await realpath(absoluteDirectoryPath);
+  } catch (error) {
+    if (isFileNotFoundError(error) && normalizedRelativePath !== ".") {
+      return createMissingDirectoryListResult(normalizedRelativePath);
+    }
+
+    throw error;
+  }
 
   if (!isPathInside(resolvedDirectoryPath, resolvedProjectRoot)) {
     throw new Error("Directory path must stay inside the selected project");
   }
 
-  const directoryStat = await stat(resolvedDirectoryPath);
+  let directoryStat: Stats;
+
+  try {
+    directoryStat = await stat(resolvedDirectoryPath);
+  } catch (error) {
+    if (isFileNotFoundError(error) && normalizedRelativePath !== ".") {
+      return createMissingDirectoryListResult(normalizedRelativePath);
+    }
+
+    throw error;
+  }
 
   if (!directoryStat.isDirectory()) {
     throw new Error("Directory path must point to a folder");
@@ -227,7 +247,19 @@ export async function listProjectDirectory({
   let truncated = false;
   let visibleEntryIndex = 0;
 
-  for (const entry of await readSortedDirectoryEntries(resolvedDirectoryPath)) {
+  let directoryEntries: Dirent[];
+
+  try {
+    directoryEntries = await readSortedDirectoryEntries(resolvedDirectoryPath);
+  } catch (error) {
+    if (isFileNotFoundError(error) && normalizedRelativePath !== ".") {
+      return createMissingDirectoryListResult(normalizedRelativePath);
+    }
+
+    throw error;
+  }
+
+  for (const entry of directoryEntries) {
     const absolutePath = `${resolvedDirectoryPath}${sep}${entry.name}`;
     const entryRelativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
 
@@ -295,7 +327,17 @@ async function attachDirectoryFileSizes(
 ): Promise<void> {
   await Promise.all(
     pendingFileEntries.map(async ({ absolutePath, index }) => {
-      const fileStat = await stat(absolutePath);
+      let fileStat: Stats;
+
+      try {
+        fileStat = await stat(absolutePath);
+      } catch (error) {
+        if (isFileNotFoundError(error)) {
+          return;
+        }
+
+        throw error;
+      }
       const entry = entries[index];
 
       if (entry?.kind === "file") {
@@ -303,6 +345,15 @@ async function attachDirectoryFileSizes(
       }
     })
   );
+}
+
+function createMissingDirectoryListResult(relativePath: string): ProjectDirectoryListResult {
+  return {
+    relativePath,
+    entries: [],
+    truncated: false,
+    missing: true
+  };
 }
 
 // 在项目内执行受控 glob 匹配, 用于 Agent 快速定位候选文件

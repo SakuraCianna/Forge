@@ -1,5 +1,5 @@
 import type { ProjectDirectoryEntry } from "@shared/fileTypes";
-import type { ProjectFileTreeNode } from "./projectFileTree";
+import type { ProjectFileTreeNode } from "./projectFileTree.js";
 
 export function createProjectFileTreeNodesFromDirectoryEntries(
   entries: ProjectDirectoryEntry[]
@@ -66,6 +66,37 @@ export function mergeProjectFileTreeDirectoryEntries(
   });
 }
 
+export function removeProjectFileTreePath(
+  nodes: ProjectFileTreeNode[],
+  relativePath: string
+): ProjectFileTreeNode[] {
+  const normalizedRelativePath = normalizeLazyDirectoryPath(relativePath);
+
+  if (normalizedRelativePath === ".") {
+    return [];
+  }
+
+  return nodes.flatMap((node) => {
+    if (isLazyPathAtOrInside(node.relativePath, normalizedRelativePath)) {
+      return [];
+    }
+
+    if (
+      node.kind === "directory" &&
+      isLazyPathAtOrInside(normalizedRelativePath, node.relativePath)
+    ) {
+      return [
+        {
+          ...node,
+          children: removeProjectFileTreePath(node.children, normalizedRelativePath)
+        }
+      ];
+    }
+
+    return [node];
+  });
+}
+
 // 分页追加时只补新节点, 已经加载过的目录节点保留 children, 避免折叠/展开状态丢失
 function appendProjectFileTreeNodes(
   currentNodes: ProjectFileTreeNode[],
@@ -118,4 +149,21 @@ export function addUniquePath(paths: string[], path: string): string[] {
 
 export function removePath(paths: string[], path: string): string[] {
   return paths.filter((candidate) => candidate !== path);
+}
+
+export function removePathAndDescendants(paths: string[], path: string): string[] {
+  const normalizedPath = normalizeLazyDirectoryPath(path);
+
+  return paths.filter((candidate) => !isLazyPathAtOrInside(candidate, normalizedPath));
+}
+
+export function isLazyPathAtOrInside(candidatePath: string, parentPath: string): boolean {
+  const normalizedCandidatePath = normalizeLazyDirectoryPath(candidatePath);
+  const normalizedParentPath = normalizeLazyDirectoryPath(parentPath);
+
+  return (
+    normalizedParentPath === "." ||
+    normalizedCandidatePath === normalizedParentPath ||
+    normalizedCandidatePath.startsWith(`${normalizedParentPath}/`)
+  );
 }
