@@ -53,9 +53,16 @@ function formatScaffoldConsistencyContext(prompt: string, actions: AgentAction[]
     "Use one shared contract across all queued files before writing this file."
   ];
 
+  if (hasBackendAndFrontend && isSpringBoot) {
+    lines.push(
+      "For a new separated Spring Boot + frontend scaffold, keep backend files under Backend/, frontend files under Frontend/, run Maven as mvn -f Backend/pom.xml ..., and run frontend package commands as npm --prefix Frontend ... unless the existing repository or user explicitly names different roots."
+    );
+  }
+
   if (isStudentTask) {
     lines.push(
-      "For a simple student-list task with no custom fields requested, keep the Student shape minimal and stable: id, name, age, gender. Do not add email, studentClass, className, or other fields unless the original task explicitly asks for them."
+      "For a simple student-list task with no custom fields requested, keep the Student shape minimal and stable: id, name, age, gender. Do not add email, studentClass, className, or other fields unless the original task explicitly asks for them.",
+      "Use one frontend API function name consistently; prefer fetchStudents, export it from src/api/students.ts, and import/call that exact symbol from Vue components."
     );
   }
 
@@ -75,18 +82,22 @@ function formatScaffoldConsistencyContext(prompt: string, actions: AgentAction[]
 
   if (isH2) {
     lines.push(
-      "For H2 schema or seed files, every table and column must match the JPA entity mapping exactly; do not seed columns that the entity does not define."
+      "For H2 schema or seed files, every table and column must match the JPA entity mapping exactly; do not seed columns that the entity does not define.",
+      'For Spring Data JPA + data.sql, either provide matching schema.sql or configure spring.jpa.defer-datasource-initialization=true; for the default student demo use @Table(name = "students") and insert into students (id, name, age, gender).'
     );
   }
 
   if (isVueOrVite) {
     lines.push(
-      "For Vue/Vite frontend files, prefer a relative /api request through vite.config proxy instead of hardcoding http://localhost origins inside components."
+      "For Vue/Vite frontend files, prefer a relative /api request through vite.config proxy instead of hardcoding http://localhost origins inside components.",
+      "For new separated Vue/Vite scaffolds, keep frontend files under Frontend/.",
+      "For Vue/Vite TypeScript scaffolds, include tsconfig.json and make sure package scripts reference only locally declared dependencies."
     );
   }
 
   lines.push(
-    "Package files must declare the local tools used by queued verification commands, and tests should exercise the generated API contract when a backend is present."
+    "Package files must declare the local tools used by queued verification commands, and tests should exercise the generated API contract when a backend is present.",
+    "Before returning this file, self-check that imports have matching exports, generated commands point at existing folders, and the file does not rely on undeclared dependencies."
   );
 
   return lines.map((line) => `- ${line}`).join("\n");

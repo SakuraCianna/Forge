@@ -128,9 +128,11 @@ const projectEngineeringPresetInstructions = [
   "For full-stack requests, include both server and client entrypoints plus the integration contract between them.",
   "Do not satisfy app-building requests with only a dependency file or one isolated source file unless the existing project truly requires no other files.",
   "When the user names a framework or architecture, use the framework's normal project structure instead of inventing a flat demo.",
+  "For new separated full-stack scaffolds in Forge, put Spring/Java/Maven backend files under Backend/ and Vite frontend files under Frontend/ unless the existing repository or user explicitly names another root.",
   "For generated applications, keep dependencies, imports, annotations, schema/seed data, API responses, frontend types, and rendered fields mutually consistent.",
   "Do not use framework helpers such as Lombok annotations unless the matching dependency is present in the planned build file; prefer plain constructors, getters, and setters when uncertain.",
   "For frontend/backend projects, define one API contract and reuse it everywhere: route path, HTTP method, JSON field names, seed data columns, frontend types, and UI columns must agree.",
+  "For TypeScript frontend scaffolds, include the TypeScript project config required by the queued build command, not just package.json and src files.",
   "For Vite frontend clients talking to a local backend, prefer a relative /api path with a dev proxy instead of hardcoding http://localhost origins in components.",
   "Project scaffolding requests are not tiny edits: if the project is empty or bare, plan a coherent skeleton with build config, source entrypoints, runtime config, and verification.",
   'For scaffold edit steps, prefer a "files" string array so Forge can expand one architectural step into several controlled file edits without wasting the plan budget.'
@@ -515,7 +517,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "For edit steps, the target must be exactly one project-relative file path only. Put comparison notes or reasoning in description, never in target.",
     "For inspect steps, target must be one file, folder, glob pattern, or search query. Do not combine several unrelated paths in one target string.",
     "For verify steps, target must be a runnable command such as npm run build, npm run typecheck, mvn test, or git status --short.",
-    "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For subprojects prefer package-manager subdirectory commands such as npm --prefix frontend install before npm --prefix frontend run build; use the same package manager if pnpm, yarn, or bun is already chosen.",
+    "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For new separated frontend subprojects prefer package-manager subdirectory commands such as npm --prefix Frontend install before npm --prefix Frontend run build; use the same package manager if pnpm, yarn, or bun is already chosen.",
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
     'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for project text search queries, "web_search" for current external web information, and "git_status" for git status or diff checks.',
     'Use "built_in_tool" for named Forge Built-in Tools such as readFile, searchText, previewDiff, getGitStatus, getDiagnostics, or runTypecheck.',
@@ -540,6 +542,9 @@ function createAgentFileChangeInstructions(personalization?: string): string {
     "Preserve existing style and imports unless the task requires changes.",
     "Use the current file content as the source of truth. Do not remove existing behavior, exports, validation, accessibility, error handling, or tests unless the user explicitly requested it.",
     "For multi-file scaffolds, make this file compatible with the queued and existing companion files: build dependencies, imports, entity fields, database seed data, API paths, frontend types, and UI columns must line up.",
+    "For separated Spring Boot + frontend scaffolds, keep backend files under Backend/, frontend files under Frontend/, and ensure generated commands target Backend/pom.xml and Frontend/package.json unless the current project already uses different roots.",
+    "For Spring Boot + H2/JPA data.sql files, table names and columns must exactly match the entity mapping, and runtime config must defer data.sql until JPA has created the schema unless schema.sql is supplied.",
+    "For Vue/TypeScript files, every imported symbol must have a matching export in the queued companion files; do not call getStudents if the API client exports fetchStudents.",
     "Do not introduce a library, annotation, runtime helper, API field, or database column unless the rest of the project contract supports it.",
     "Do not silence failures by deleting code, weakening checks, hiding exceptions, or replacing real logic with temporary hardcoding."
   ], personalization);
@@ -932,12 +937,17 @@ function formatProjectScaffoldPlanningContext(request: GenerateAgentPlanRequest)
       ? "The selected project appears empty or bare. Treat this as a scaffold task, not a single-file edit."
       : "The selected project already has files. Preserve its structure and fill the missing layers only.",
     "The plan must cover these layers when relevant: dependency/build files, backend entrypoint, domain/model, API/controller, runtime configuration, frontend package/config, frontend entrypoint, UI component/page, and verification command.",
+    "For a new separated full-stack scaffold, use Backend/ as the backend root and Frontend/ as the frontend root; keep Maven verification as mvn -f Backend/pom.xml test and frontend verification as npm --prefix Frontend run build.",
     "For Spring Boot + H2 scaffolds, include Spring Web, Spring Data JPA, H2, and test dependencies when those features are used; include seed data only when its columns exactly match the entity/table mapping.",
+    'For Spring Data JPA + data.sql, either add schema.sql or set spring.jpa.defer-datasource-initialization=true; for the default student demo use @Table(name = "students") and seed students (id, name, age, gender).',
     "For student-list demos with no custom fields requested, keep a minimal stable Student contract such as id, name, age, and gender, then reuse exactly those fields in the entity, data.sql, controller response, frontend API type, and displayed table.",
+    "For student-list demos, use one API client symbol consistently; prefer fetchStudents exported by src/api/students.ts and imported by the Vue component.",
     "If using Lombok, declare Lombok in the build file and configure compilation; otherwise write plain Java fields, constructors, getters, and setters.",
     "For Vue/Vite clients, place backend access behind a small API client that calls a relative /api route and let vite.config configure the proxy.",
+    "For Vue/Vite TypeScript scaffolds, include tsconfig.json and any declaration file needed by the build command before running npm --prefix Frontend run build.",
     "Include at least one backend contract test or smoke test for generated API endpoints so compile-time dependency mistakes and JSON field mismatches fail during verification.",
     "For frontend package scaffolds, include dependency installation before verification so local binaries such as tsc and vite exist before build commands run.",
+    "Before marking the scaffold done, self-check import/export names, package scripts, command working directories, and database table names against the files in the plan.",
     'Use grouped edit steps with a "files" array for related files, for example backend foundation files or frontend foundation files.',
     "Do not use shell heredocs or PowerShell file-writing scripts to create project files; use Forge edit steps instead."
   ];

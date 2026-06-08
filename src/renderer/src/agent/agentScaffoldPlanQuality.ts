@@ -60,30 +60,31 @@ export function supplementBareProjectScaffoldActions({
     };
   }
 
+  const normalizedActions = normalizeBareScaffoldActionRoots(actions, prompt);
   const expectedLayers = getExpectedScaffoldLayers(prompt);
 
   if (expectedLayers.length === 0) {
     return {
-      actions,
+      actions: normalizedActions,
       addedActions: 0,
       missingLayers: []
     };
   }
 
-  const coveredLayers = detectCoveredScaffoldLayers(actions);
+  const coveredLayers = detectCoveredScaffoldLayers(normalizedActions);
   const missingLayers = expectedLayers.filter((layer) => !coveredLayers.has(layer));
-  const completionActions = createScaffoldCompletionActions(prompt, missingLayers, actions);
+  const completionActions = createScaffoldCompletionActions(prompt, missingLayers, normalizedActions);
 
   if (completionActions.length === 0) {
     return {
-      actions,
+      actions: normalizedActions,
       addedActions: 0,
       missingLayers
     };
   }
 
   return {
-    actions: insertScaffoldCompletionActions(actions, completionActions),
+    actions: insertScaffoldCompletionActions(normalizedActions, completionActions),
     addedActions: completionActions.length,
     missingLayers
   };
@@ -133,6 +134,7 @@ function getExpectedScaffoldLayers(prompt: string): ScaffoldLayer[] {
 
 function detectCoveredScaffoldLayers(actions: AgentAction[]): Set<ScaffoldLayer> {
   const coveredLayers = new Set<ScaffoldLayer>();
+  const frontendConfigFiles = new Set<"index" | "package" | "tsconfig" | "vite">();
 
   for (const action of actions) {
     const target = normalizeProjectPath(action.target ?? "");
@@ -146,8 +148,20 @@ function detectCoveredScaffoldLayers(actions: AgentAction[]): Set<ScaffoldLayer>
       coveredLayers.add("foundation");
     }
 
-    if (/(^|\/)(frontend|client|web)\/(?:package\.json|vite\.config\.[jt]s)$/iu.test(target)) {
-      coveredLayers.add("frontendConfig");
+    if (/(^|\/)(frontend|client|web)\/package\.json$/iu.test(target)) {
+      frontendConfigFiles.add("package");
+    }
+
+    if (/(^|\/)(frontend|client|web)\/vite\.config\.[jt]s$/iu.test(target)) {
+      frontendConfigFiles.add("vite");
+    }
+
+    if (/(^|\/)(frontend|client|web)\/tsconfig\.json$/iu.test(target)) {
+      frontendConfigFiles.add("tsconfig");
+    }
+
+    if (/(^|\/)(frontend|client|web)\/index\.html$/iu.test(target)) {
+      frontendConfigFiles.add("index");
     }
 
     if (/(^|\/)src\/main\/(?:java|kotlin)\/.*application\.(?:java|kt)$/iu.test(target)) {
@@ -198,6 +212,15 @@ function detectCoveredScaffoldLayers(actions: AgentAction[]): Set<ScaffoldLayer>
     }
   }
 
+  if (
+    frontendConfigFiles.has("package") &&
+    frontendConfigFiles.has("vite") &&
+    frontendConfigFiles.has("tsconfig") &&
+    frontendConfigFiles.has("index")
+  ) {
+    coveredLayers.add("frontendConfig");
+  }
+
   return coveredLayers;
 }
 
@@ -208,9 +231,8 @@ function createScaffoldCompletionActions(
 ): AgentAction[] {
   const stack = detectScaffoldStack(prompt);
   const projectSlug = inferProjectSlug(prompt);
-  const backendRoot = stack.separated ? "backend/" : "";
-  const javaRoot = `${backendRoot}src/main/java/com/example/${projectSlug}`;
-  const frontendRoot = stack.separated || stack.backend ? "frontend/" : "";
+  const roots = resolveScaffoldRoots(stack);
+  const javaRoot = `${roots.backendRoot}src/main/java/com/example/${projectSlug}`;
   const existingTargets = new Set(
     actions.flatMap((action) => [action.target, action.command]).filter((value): value is string => Boolean(value))
   );
@@ -221,9 +243,9 @@ function createScaffoldCompletionActions(
       ...createScaffoldLayerCandidates(layer, {
         stack,
         projectSlug,
-        backendRoot,
+        backendRoot: roots.backendRoot,
         javaRoot,
-        frontendRoot
+        frontendRoot: roots.frontendRoot
       })
     );
   }
@@ -381,6 +403,12 @@ function createScaffoldLayerCandidates(
             {
               layer,
               kind: "edit-file",
+              label: `创建 ${frontendRoot}tsconfig.json`,
+              target: `${frontendRoot}tsconfig.json`
+            },
+            {
+              layer,
+              kind: "edit-file",
               label: `创建 ${frontendRoot}vite.config.ts`,
               target: `${frontendRoot}vite.config.ts`
             },
@@ -490,6 +518,163 @@ function detectScaffoldStack(prompt: string): ScaffoldStack {
     backend,
     separated
   };
+}
+
+function resolveScaffoldRoots(stack: ScaffoldStack): {
+  backendRoot: string;
+  frontendRoot: string;
+} {
+  return {
+    // Forge 的空项目全栈脚手架约定: Java/Spring 后端放在 Backend, 前端放在 Frontend。
+    backendRoot: stack.separated ? "Backend/" : "",
+    frontendRoot: stack.separated || stack.backend ? "Frontend/" : ""
+  };
+}
+
+function normalizeBareScaffoldActionRoots(actions: AgentAction[], prompt: string): AgentAction[] {
+  const stack = detectScaffoldStack(prompt);
+
+  if (!stack.separated || !(stack.backend || stack.springBoot)) {
+    return actions;
+  }
+
+  const roots = resolveScaffoldRoots(stack);
+
+  return actions.map((action) => {
+    const nextTarget = action.target
+      ? normalizeBareScaffoldTarget(action.target, roots)
+      : action.target;
+    const nextCommand = action.command
+      ? normalizeBareScaffoldCommand(action.command, roots)
+      : action.command;
+
+    if (nextTarget === action.target && nextCommand === action.command) {
+      return action;
+    }
+
+    return {
+      ...action,
+      label: rewriteActionLabel(action, nextTarget, nextCommand),
+      target: nextTarget,
+      command: nextCommand
+    };
+  });
+}
+
+function normalizeBareScaffoldTarget(
+  target: string,
+  roots: {
+    backendRoot: string;
+    frontendRoot: string;
+  }
+): string {
+  return normalizeBareFrontendTarget(
+    normalizeBareBackendTarget(target, roots.backendRoot),
+    roots.frontendRoot
+  );
+}
+
+function normalizeBareScaffoldCommand(
+  command: string,
+  roots: {
+    backendRoot: string;
+    frontendRoot: string;
+  }
+): string {
+  return normalizeBareFrontendCommand(
+    normalizeBareBackendCommand(command, roots.backendRoot),
+    roots.frontendRoot
+  );
+}
+
+function normalizeBareBackendTarget(target: string, backendRoot: string): string {
+  const normalizedTarget = normalizeProjectPath(target);
+
+  if (!backendRoot || normalizedTarget.startsWith(backendRoot)) {
+    return normalizedTarget;
+  }
+
+  if (normalizedTarget.toLocaleLowerCase().startsWith("backend/")) {
+    return `${backendRoot}${normalizedTarget.slice("backend/".length)}`;
+  }
+
+  if (isRootSpringBootTarget(normalizedTarget)) {
+    return `${backendRoot}${normalizedTarget}`;
+  }
+
+  return normalizedTarget;
+}
+
+function normalizeBareFrontendTarget(target: string, frontendRoot: string): string {
+  const normalizedTarget = normalizeProjectPath(target);
+
+  if (!frontendRoot || normalizedTarget.startsWith(frontendRoot)) {
+    return normalizedTarget;
+  }
+
+  for (const legacyRoot of ["frontend/", "client/", "web/"]) {
+    if (normalizedTarget.toLocaleLowerCase().startsWith(legacyRoot)) {
+      return `${frontendRoot}${normalizedTarget.slice(legacyRoot.length)}`;
+    }
+  }
+
+  return normalizedTarget;
+}
+
+function normalizeBareBackendCommand(command: string, backendRoot: string): string {
+  const backendPom = `${backendRoot}pom.xml`;
+  const trimmedCommand = command.trim();
+
+  if (!backendRoot) {
+    return trimmedCommand;
+  }
+
+  const commandWithCanonicalPom = trimmedCommand.replace(
+    /\bbackend[\\/]+pom\.xml\b/giu,
+    backendPom
+  );
+
+  if (/^mvn\s+test\b/iu.test(commandWithCanonicalPom)) {
+    return commandWithCanonicalPom.replace(/^mvn\s+test\b/iu, `mvn -f ${backendPom} test`);
+  }
+
+  return commandWithCanonicalPom;
+}
+
+function normalizeBareFrontendCommand(command: string, frontendRoot: string): string {
+  const trimmedCommand = command.trim();
+
+  if (!frontendRoot) {
+    return trimmedCommand;
+  }
+
+  return trimmedCommand.replace(
+    /\b(?:frontend|client|web)(?=\s+(?:install|run|test|build)|[\\/])/giu,
+    frontendRoot.replace(/\/$/u, "")
+  );
+}
+
+function isRootSpringBootTarget(target: string): boolean {
+  return (
+    /^(?:pom\.xml|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?)$/iu.test(target) ||
+    /^src\/(?:main|test)\/(?:java|kotlin|resources)\//iu.test(target)
+  );
+}
+
+function rewriteActionLabel(
+  action: AgentAction,
+  target: string | undefined,
+  command: string | undefined
+): string {
+  if (action.kind === "run-command" && command) {
+    return `运行命令 ${command}`;
+  }
+
+  if (target) {
+    return `${action.kind === "edit-file" ? "创建" : "处理"} ${target}`;
+  }
+
+  return action.label;
 }
 
 function inferProjectSlug(prompt: string): string {
