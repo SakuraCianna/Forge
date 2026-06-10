@@ -25,6 +25,19 @@ test("extensions panel does not expose development built-in tool QA surfaces", a
   assert.match(source, /ExtensionManifestDialog/u);
 });
 
+test("extensions panel keeps the service list scrollable when many extensions are installed", async () => {
+  const source = await readFile("src/renderer/src/components/ExtensionsPanel.tsx", "utf8");
+
+  assert.match(
+    source,
+    /<aside className="flex min-h-0 flex-col border-r border-\[#ececf1\] bg-\[#fbfbfc\] p-4">/u
+  );
+  assert.match(
+    source,
+    /className="min-h-0 flex-1 scroll-pb-8 space-y-2 overflow-auto pb-8 pr-1"/u
+  );
+});
+
 test("agent built-in tool confirmation UI exposes critical second-confirmation context", async () => {
   const queueSource = await readFile(
     "src/renderer/src/components/AgentConfirmationQueue.tsx",

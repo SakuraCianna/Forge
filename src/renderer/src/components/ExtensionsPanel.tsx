@@ -457,7 +457,7 @@ export function ExtensionsPanel({
 
   return (
     <section className="grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)] overflow-hidden">
-      <aside className="min-h-0 border-r border-[#ececf1] bg-[#fbfbfc] p-4">
+      <aside className="flex min-h-0 flex-col border-r border-[#ececf1] bg-[#fbfbfc] p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-[#202123]">{copy.title}</h2>
           <div className="flex items-center gap-2">
@@ -479,7 +479,7 @@ export function ExtensionsPanel({
             </button>
           </div>
         </div>
-        <div className="min-h-0 space-y-2 overflow-auto pb-8">
+        <div className="min-h-0 flex-1 scroll-pb-8 space-y-2 overflow-auto pb-8 pr-1">
           {groupedManifests.map((group) =>
             group.items.length > 0 ? (
               <div key={group.label} className="space-y-2">
