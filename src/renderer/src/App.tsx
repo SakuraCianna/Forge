@@ -9,19 +9,16 @@ import type {
 } from "@shared/fileTypes";
 import {
   deriveAgentToolSideEffect,
-  type AgentQualityMetricSnapshot,
   type AgentQualityObservation,
   type AgentTaskComplexity,
   type AgentValidationKind
 } from "@shared/agentQualityMetrics";
 import type {
   BuiltInToolBlockedResult,
-  BuiltInToolCallLogRecord,
   BuiltInToolExecutionContext,
   BuiltInToolFailureResult,
   NotImplementedToolResult
 } from "@shared/builtInToolTypes";
-import type { BuiltInToolQaRunResult } from "@shared/builtInToolQaTypes";
 import { getBuiltInToolDefinition } from "@shared/builtInToolCatalog";
 import {
   createBuiltInToolConfirmationView,
@@ -801,12 +798,6 @@ export function App(): ReactElement {
     createEmptyExtensionRegistrySnapshot()
   );
   const [extensionLogs, setExtensionLogs] = useState<ExtensionInvocationLogRecord[]>([]);
-  const [builtInToolLogs, setBuiltInToolLogs] = useState<BuiltInToolCallLogRecord[]>([]);
-  const [agentQualityMetrics, setAgentQualityMetrics] =
-    useState<AgentQualityMetricSnapshot | null>(null);
-  const [developmentQaResult, setDevelopmentQaResult] =
-    useState<BuiltInToolQaRunResult | null>(null);
-  const [developmentQaRunning, setDevelopmentQaRunning] = useState(false);
   const [commandDialog, setCommandDialog] = useState<CommandDialogState | null>(null);
   const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -982,17 +973,13 @@ export function App(): ReactElement {
   }
 
   async function loadExtensionsState(): Promise<void> {
-    const [registry, logs, toolLogs, metrics] = await Promise.all([
+    const [registry, logs] = await Promise.all([
       window.forge.extensions.getRegistry(),
-      window.forge.extensions.listLogs(80),
-      window.forge.builtInTools.listLogs(120),
-      window.forge.builtInTools.getMetrics()
+      window.forge.extensions.listLogs(80)
     ]);
 
     setExtensionRegistry(registry);
     setExtensionLogs(logs);
-    setBuiltInToolLogs(toolLogs);
-    setAgentQualityMetrics(metrics);
   }
 
   function requestBuiltInToolConfirmation({
@@ -1120,21 +1107,6 @@ export function App(): ReactElement {
     }
 
     return resolution.context;
-  }
-
-  async function runDevelopmentBuiltInToolQa(): Promise<void> {
-    setDevelopmentQaRunning(true);
-    setTaskNotice(null);
-
-    try {
-      const result = await window.forge.builtInTools.runDevelopmentQa();
-      setDevelopmentQaResult(result);
-      await loadExtensionsState();
-    } catch (error) {
-      setTaskNotice(formatRuntimeError(settings.language, error));
-    } finally {
-      setDevelopmentQaRunning(false);
-    }
   }
 
   async function updateExtensionSettings(patch: ExtensionSettingsPatch): Promise<void> {
@@ -3923,8 +3895,6 @@ export function App(): ReactElement {
   function recordAgentQualityObservation(observation: AgentQualityObservation): void {
     void window.forge.builtInTools
       .recordMetric(observation)
-      .then(() => window.forge.builtInTools.getMetrics())
-      .then(setAgentQualityMetrics)
       .catch(() => undefined);
   }
 
@@ -5915,16 +5885,11 @@ export function App(): ReactElement {
         language={settings.language}
         registry={extensionRegistry}
         logs={extensionLogs}
-        builtInToolLogs={builtInToolLogs}
-        agentQualityMetrics={agentQualityMetrics}
-        developmentQaResult={developmentQaResult}
-        developmentQaRunning={developmentQaRunning}
         onConfirmInvocation={confirmExtensionInvocation}
         onCreateExtension={createCustomExtension}
         onDeleteExtension={deleteCustomExtension}
         onDeleteSecret={deleteExtensionSecret}
         onInvoke={invokeExtensionAction}
-        onRunDevelopmentQa={() => void runDevelopmentBuiltInToolQa()}
         onRefresh={() => void loadExtensionsState()}
         onSaveSecret={saveExtensionSecret}
         onUpdateExtension={updateCustomExtension}

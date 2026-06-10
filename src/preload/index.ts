@@ -36,10 +36,6 @@ import type {
   BuiltInToolExecutionRequest
 } from "../shared/builtInToolTypes.js";
 import type {
-  BuiltInToolQaRunRequest,
-  BuiltInToolQaRunResult
-} from "../shared/builtInToolQaTypes.js";
-import type {
   ExtensionConfirmInvocationRequest,
   ExtensionCreateRequest,
   ExtensionCreateResult,
@@ -162,9 +158,7 @@ contextBridge.exposeInMainWorld("forge", {
     getMetrics: (): Promise<AgentQualityMetricSnapshot> =>
       ipcRenderer.invoke(builtInToolChannels.metrics),
     recordMetric: (observation: AgentQualityObservation) =>
-      ipcRenderer.invoke(builtInToolChannels.recordMetric, observation),
-    runDevelopmentQa: (request?: BuiltInToolQaRunRequest): Promise<BuiltInToolQaRunResult> =>
-      ipcRenderer.invoke(builtInToolChannels.developmentQa, request)
+      ipcRenderer.invoke(builtInToolChannels.recordMetric, observation)
   },
   system: {
     openExternal: (url: string): Promise<boolean> =>
