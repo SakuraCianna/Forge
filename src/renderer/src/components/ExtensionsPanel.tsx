@@ -117,6 +117,8 @@ const draftIconButtonClassName =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]";
 const extensionIconSources: Record<string, string> = {
   airtable: new URL("../assets/extension-icons/airtable.ico", import.meta.url).href,
+  calendly: new URL("../assets/extension-icons/calendly.ico", import.meta.url).href,
+  clickup: new URL("../assets/extension-icons/clickup.png", import.meta.url).href,
   discord: new URL("../assets/extension-icons/discord.ico", import.meta.url).href,
   dropbox: new URL("../assets/extension-icons/dropbox.ico", import.meta.url).href,
   figma: new URL("../assets/extension-icons/figma.png", import.meta.url).href,
@@ -125,6 +127,7 @@ const extensionIconSources: Record<string, string> = {
   gitlab: new URL("../assets/extension-icons/gitlab.ico", import.meta.url).href,
   "google-calendar": new URL("../assets/extension-icons/google-calendar.png", import.meta.url).href,
   "google-drive": new URL("../assets/extension-icons/google-drive.png", import.meta.url).href,
+  hubspot: new URL("../assets/extension-icons/hubspot.png", import.meta.url).href,
   "jira-cloud": new URL("../assets/extension-icons/jira-cloud.ico", import.meta.url).href,
   linear: new URL("../assets/extension-icons/linear.svg", import.meta.url).href,
   "microsoft-365": new URL("../assets/extension-icons/microsoft-365.svg", import.meta.url).href,

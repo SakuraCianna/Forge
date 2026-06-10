@@ -447,8 +447,12 @@ function createAuthorizationUrl({
   authorizationUrl.searchParams.set("client_id", clientId);
   authorizationUrl.searchParams.set("redirect_uri", redirectUri);
   authorizationUrl.searchParams.set("response_type", "code");
-  authorizationUrl.searchParams.set("scope", joinScopes(oauth));
   authorizationUrl.searchParams.set("state", state);
+
+  const scopes = joinScopes(oauth);
+  if (scopes) {
+    authorizationUrl.searchParams.set("scope", scopes);
+  }
 
   if (codeVerifier) {
     authorizationUrl.searchParams.set("code_challenge", createCodeChallenge(codeVerifier));
@@ -476,7 +480,11 @@ function createBrokerAuthorizationUrl({
   authorizationUrl.searchParams.set("redirect_uri", redirectUri);
   authorizationUrl.searchParams.set("state", state);
   authorizationUrl.searchParams.set("provider", oauth.provider);
-  authorizationUrl.searchParams.set("scope", joinScopes(oauth));
+
+  const scopes = joinScopes(oauth);
+  if (scopes) {
+    authorizationUrl.searchParams.set("scope", scopes);
+  }
 
   return authorizationUrl;
 }

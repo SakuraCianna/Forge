@@ -11,8 +11,11 @@ The product names and marks belong to their respective owners.
 | Slack | `slack.png` | `https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png` |
 | Notion | `notion.png` | `https://www.notion.com/images/logo-ios.png` |
 | Airtable | `airtable.ico` | `https://airtable.com/favicon.ico` |
+| HubSpot | `hubspot.png` | `https://www.hubspot.com/favicon.ico` |
 | Todoist | `todoist.ico` | `https://todoist.com/favicon.ico` |
+| ClickUp | `clickup.png` | `https://clickup.com/favicon.ico` |
 | Google Calendar | `google-calendar.png` | `https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png` |
+| Calendly | `calendly.ico` | `https://calendly.com/favicon.ico` |
 | Figma | `figma.png` | `https://static.figma.com/app/icon/1/touch-180.png` |
 | Gmail | `gmail.ico` | `https://ssl.gstatic.com/ui/v1/icons/mail/rfr/gmail.ico` |
 | Google Drive | `google-drive.png` | `https://ssl.gstatic.com/images/branding/product/2x/drive_48dp.png` |

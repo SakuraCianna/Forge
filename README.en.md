@@ -61,7 +61,7 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - The sidebar includes a dedicated Extensions page separate from plugins and skills.
 - Extensions connect external services and can read, create, or modify real data outside Forge.
 - The built-in QQ Mail extension can list inbox messages, read email, search email, create drafts, and send email.
-- Built-in service extensions cover GitHub, GitLab, Slack, Notion, Airtable, Todoist, Google Calendar, Figma, Gmail, Google Drive, Dropbox, Microsoft 365, Linear, Jira Cloud, and Discord.
+- Built-in service extensions cover GitHub, GitLab, Slack, Notion, Airtable, HubSpot, Todoist, ClickUp, Google Calendar, Calendly, Figma, Gmail, Google Drive, Dropbox, Microsoft 365, Linear, Jira Cloud, and Discord.
 - Extension credentials are stored through secure storage on the Electron main-process side. The UI only shows configuration status and last-four hints.
 - OAuth metadata and browser authorization are supported. Google Calendar, Gmail, and Google Drive use Forge's built-in desktop OAuth app configuration, GitHub supports device flow, Linear supports loopback + PKCE, and services that require HTTPS callbacks or client secrets can be wired through the Forge OAuth broker.
 - Users only click Authorize in browser from the Extensions page, then Forge saves returned tokens to secure storage. Built-in connector/OAuth extensions no longer show manual token inputs. OAuth Client IDs, Client Secrets, consent-screen setup, and broker deployment are product-maintainer configuration before release, not something normal users should create.
@@ -232,7 +232,7 @@ OAuth-related variables are only for maintainers who build custom releases or de
 - `FORGE_GOOGLE_OAUTH_CLIENT_ID`: overrides the built-in Google desktop OAuth client ID
 - `FORGE_GITHUB_OAUTH_CLIENT_ID`: enables GitHub device flow
 - `FORGE_LINEAR_OAUTH_CLIENT_ID`: enables Linear loopback + PKCE authorization
-- `FORGE_OAUTH_BROKER_BASE_URL`: enables brokered authorization for GitLab, Slack, Notion, Airtable, Todoist, Figma, Dropbox, Microsoft 365, Jira Cloud, and Discord
+- `FORGE_OAUTH_BROKER_BASE_URL`: enables brokered authorization for GitLab, Slack, Notion, Airtable, HubSpot, Todoist, ClickUp, Calendly, Figma, Dropbox, Microsoft 365, Jira Cloud, and Discord
 
 Do not write API keys, tokens, cookies, private keys, or certificates into README files, commit messages, or logs.
 

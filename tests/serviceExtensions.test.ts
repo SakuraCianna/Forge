@@ -20,8 +20,11 @@ test("built-in service extensions expose production manifests for common service
     "slack",
     "notion",
     "airtable",
+    "hubspot",
     "todoist",
+    "clickup",
     "google-calendar",
+    "calendly",
     "figma",
     "gmail",
     "google-drive",
@@ -64,8 +67,11 @@ test("OAuth-capable service extensions declare provider metadata and token field
       "slack",
       "notion",
       "airtable",
+      "hubspot",
       "todoist",
+      "clickup",
       "google-calendar",
+      "calendly",
       "figma",
       "gmail",
       "google-drive",
@@ -131,8 +137,11 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["slack", "slack.png"],
     ["notion", "notion.png"],
     ["airtable", "airtable.ico"],
+    ["hubspot", "hubspot.png"],
     ["todoist", "todoist.ico"],
+    ["clickup", "clickup.png"],
     ["google-calendar", "google-calendar.png"],
+    ["calendly", "calendly.ico"],
     ["figma", "figma.png"],
     ["gmail", "gmail.ico"],
     ["google-drive", "google-drive.png"],
@@ -480,6 +489,62 @@ test("airtable service extension invokes the Web API with connector token auth",
   }
 });
 
+test("hubspot service extension reads CRM objects with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.hubapi.com");
+    assert.equal(requestUrl.pathname, "/crm/objects/2026-03/0-1");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.match(requestUrl.searchParams.get("properties") ?? "", /email/u);
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer hubspot-token");
+
+    return {
+      body: {
+        results: [
+          {
+            id: "contact-1"
+          },
+          {
+            id: "contact-2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "hubspot",
+      "hubspot.read",
+      "accessToken",
+      "hubspot-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "hubspot",
+      actionId: "listContacts",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "HubSpot 返回 2 个联系人");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("todoist service extension reads tasks through the API with connector token auth", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -597,6 +662,116 @@ test("todoist write actions require confirmation before creating tasks", async (
       assert.equal(fetchMock.calls.length, 1);
     } else {
       assert.fail("createTask should require confirmation");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("clickup service extension lists authorized workspaces with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://api.clickup.com/api/v2/team");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer clickup-token");
+
+    return {
+      body: {
+        teams: [
+          {
+            id: "team-1",
+            name: "Product"
+          },
+          {
+            id: "team-2",
+            name: "Engineering"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "clickup",
+      "clickup.read",
+      "accessToken",
+      "clickup-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "clickup",
+      actionId: "listWorkspaces",
+      input: {}
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "ClickUp 返回 2 个工作区");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("calendly service extension lists event types with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.calendly.com");
+    assert.equal(requestUrl.pathname, "/event_types");
+    assert.equal(requestUrl.searchParams.get("user"), "https://api.calendly.com/users/ABC");
+    assert.equal(requestUrl.searchParams.get("count"), "2");
+    assert.equal(requestUrl.searchParams.get("active"), "true");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer calendly-token");
+
+    return {
+      body: {
+        collection: [
+          {
+            uri: "event-type-1"
+          },
+          {
+            uri: "event-type-2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "calendly",
+      "calendly.read",
+      "accessToken",
+      "calendly-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "calendly",
+      actionId: "listEventTypes",
+      input: {
+        active: true,
+        limit: 2,
+        userUri: "https://api.calendly.com/users/ABC"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Calendly 返回 2 个事件类型");
     }
   } finally {
     fetchMock.restore();

@@ -149,8 +149,11 @@ export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createSlackExtension(),
   createNotionExtension(),
   createAirtableExtension(),
+  createHubSpotExtension(),
   createTodoistExtension(),
+  createClickUpExtension(),
   createGoogleCalendarExtension(),
+  createCalendlyExtension(),
   createFigmaExtension(),
   createGmailExtension(),
   createGoogleDriveExtension(),
@@ -865,6 +868,148 @@ function createAirtableExtension(): BuiltInServiceExtension {
   };
 }
 
+function createHubSpotExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "hubspot",
+    name: "HubSpot",
+    description: "读取 HubSpot CRM 联系人、公司和交易摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "HubSpot OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "hubspot_access_token",
+      oauth: {
+        provider: "HubSpot",
+        authorizationUrl: "https://app.hubspot.com/oauth/authorize",
+        tokenUrl: "https://api.hubapi.com/oauth/v1/token",
+        brokerAuthorizationUrl: createBrokerUrl("hubspot", "authorize"),
+        brokerTokenUrl: createBrokerUrl("hubspot", "token"),
+        scopes: [
+          "oauth",
+          "crm.objects.contacts.read",
+          "crm.objects.companies.read",
+          "crm.objects.deals.read"
+        ],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl:
+          "https://developers.hubspot.com/docs/apps/legacy-apps/authentication/oauth-quickstart-guide",
+        setupUrl: "https://app.hubspot.com/developer",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "hubspot.read",
+        label: "读取 HubSpot",
+        description: "允许读取 HubSpot CRM 联系人、公司和交易摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listContacts",
+        label: "列出联系人",
+        description: "读取 HubSpot CRM 联系人摘要",
+        permission: "hubspot.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listCompanies",
+        label: "列出公司",
+        description: "读取 HubSpot CRM 公司摘要",
+        permission: "hubspot.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listDeals",
+        label: "列出交易",
+        description: "读取 HubSpot CRM 交易摘要",
+        permission: "hubspot.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listContacts: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "HubSpot access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await hubspotRequest({
+        method: "GET",
+        path: "/crm/objects/2026-03/0-1",
+        query: {
+          limit: String(limit),
+          properties: "email,firstname,lastname,company,createdate,lastmodifieddate"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `HubSpot 返回 ${readArrayLength(readRecord(result).results)} 个联系人`
+      };
+    },
+    listCompanies: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "HubSpot access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await hubspotRequest({
+        method: "GET",
+        path: "/crm/objects/2026-03/0-2",
+        query: {
+          limit: String(limit),
+          properties: "name,domain,industry,createdate,lastmodifieddate"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `HubSpot 返回 ${readArrayLength(readRecord(result).results)} 个公司`
+      };
+    },
+    listDeals: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "HubSpot access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await hubspotRequest({
+        method: "GET",
+        path: "/crm/objects/2026-03/0-3",
+        query: {
+          limit: String(limit),
+          properties: "dealname,dealstage,amount,closedate,createdate,lastmodifieddate"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `HubSpot 返回 ${readArrayLength(readRecord(result).results)} 个交易`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `hubspot ${actionId}`
+  };
+}
+
 function createTodoistExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "todoist",
@@ -1020,6 +1165,164 @@ function createTodoistExtension(): BuiltInServiceExtension {
   };
 }
 
+function createClickUpExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "clickup",
+    name: "ClickUp",
+    description: "读取 ClickUp 当前用户、工作区、空间和任务摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "ClickUp OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "clickup_access_token",
+      oauth: {
+        provider: "ClickUp",
+        authorizationUrl: "https://app.clickup.com/api",
+        tokenUrl: "https://api.clickup.com/api/v2/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("clickup", "authorize"),
+        brokerTokenUrl: createBrokerUrl("clickup", "token"),
+        scopes: [],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developer.clickup.com/docs/authentication",
+        setupUrl: "https://app.clickup.com/settings/apps",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "clickup.read",
+        label: "读取 ClickUp",
+        description: "允许读取 ClickUp 当前用户、工作区、空间和任务摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 ClickUp 用户资料",
+        permission: "clickup.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listWorkspaces",
+        label: "列出工作区",
+        description: "读取当前授权账号可访问的 ClickUp 工作区",
+        permission: "clickup.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listSpaces",
+        label: "列出空间",
+        description: "读取指定 ClickUp 工作区下的空间",
+        permission: "clickup.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["teamId"],
+        properties: {
+          teamId: { type: "string", description: "ClickUp 工作区 team ID" },
+          archived: { type: "boolean", description: "是否包含归档空间, 默认 false" }
+        }
+      }),
+      createAction({
+        id: "listTasks",
+        label: "列出任务",
+        description: "读取指定 ClickUp list 下的任务",
+        permission: "clickup.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["listId"],
+        properties: {
+          listId: { type: "string", description: "ClickUp list ID" },
+          includeClosed: { type: "boolean", description: "是否包含已关闭任务, 默认 false" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "ClickUp access token");
+      const result = await clickupRequest({
+        method: "GET",
+        path: "/user",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `ClickUp 当前用户: ${readNestedObjectText(result, ["user", "username"], "unknown")}`
+      };
+    },
+    listWorkspaces: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "ClickUp access token");
+      const result = await clickupRequest({
+        method: "GET",
+        path: "/team",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `ClickUp 返回 ${readArrayLength(readRecord(result).teams)} 个工作区`
+      };
+    },
+    listSpaces: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "ClickUp access token");
+      const teamId = readRequiredString(input.teamId, "teamId", 120);
+      const includeArchived = input.archived === true;
+      const result = await clickupRequest({
+        method: "GET",
+        path: `/team/${encodePathSegment(teamId)}/space`,
+        query: {
+          archived: String(includeArchived)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `ClickUp 返回 ${readArrayLength(readRecord(result).spaces)} 个空间`
+      };
+    },
+    listTasks: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "ClickUp access token");
+      const listId = readRequiredString(input.listId, "listId", 120);
+      const includeClosed = input.includeClosed === true;
+      const result = await clickupRequest({
+        method: "GET",
+        path: `/list/${encodePathSegment(listId)}/task`,
+        query: {
+          include_closed: String(includeClosed)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `ClickUp 返回 ${readArrayLength(readRecord(result).tasks)} 个任务`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listTasks"
+        ? `clickup list ${String(input.listId ?? "")}`
+        : `clickup ${String(input.teamId ?? actionId)}`
+  };
+}
+
 function createGoogleCalendarExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "google-calendar",
@@ -1150,6 +1453,153 @@ function createGoogleCalendarExtension(): BuiltInServiceExtension {
       actionId === "createEvent"
         ? `calendar create ${String(input.summary ?? "")}`
         : `calendar ${String(input.calendarId ?? "primary")}`
+  };
+}
+
+function createCalendlyExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "calendly",
+    name: "Calendly",
+    description: "读取 Calendly 当前用户、事件类型和已预约事件摘要",
+    version: "0.2.1",
+    category: "calendar",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Calendly OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "calendly_access_token",
+      oauth: {
+        provider: "Calendly",
+        authorizationUrl: "https://auth.calendly.com/oauth/authorize",
+        tokenUrl: "https://auth.calendly.com/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("calendly", "authorize"),
+        brokerTokenUrl: createBrokerUrl("calendly", "token"),
+        scopes: ["users:read", "event_types:read", "scheduled_events:read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developer.calendly.com/authentication",
+        setupUrl: "https://developer.calendly.com/creating-an-oauth-app",
+        redirectUriMode: "brokered",
+        usePkce: true,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "calendly.read",
+        label: "读取 Calendly",
+        description: "允许读取 Calendly 当前用户、事件类型和已预约事件摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 Calendly 用户资料",
+        permission: "calendly.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listEventTypes",
+        label: "列出事件类型",
+        description: "读取指定 Calendly 用户的事件类型",
+        permission: "calendly.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["userUri"],
+        properties: {
+          userUri: { type: "string", description: "Calendly user URI, 可从 getCurrentUser 返回值获取" },
+          active: { type: "boolean", description: "是否只返回启用中的事件类型" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listScheduledEvents",
+        label: "列出预约事件",
+        description: "读取指定 Calendly 用户的已预约事件",
+        permission: "calendly.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["userUri"],
+        properties: {
+          userUri: { type: "string", description: "Calendly user URI, 可从 getCurrentUser 返回值获取" },
+          minStartTime: { type: "string", description: "可选 ISO 起始时间" },
+          maxStartTime: { type: "string", description: "可选 ISO 结束时间" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Calendly access token");
+      const result = await calendlyRequest({
+        method: "GET",
+        path: "/users/me",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Calendly 当前用户: ${readNestedObjectText(result, ["resource", "name"], "unknown")}`
+      };
+    },
+    listEventTypes: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Calendly access token");
+      const userUri = readRequiredString(input.userUri, "userUri", 500);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await calendlyRequest({
+        method: "GET",
+        path: "/event_types",
+        query: {
+          count: String(limit),
+          user: userUri,
+          ...(typeof input.active === "boolean" ? { active: String(input.active) } : {})
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Calendly 返回 ${readArrayLength(readRecord(result).collection)} 个事件类型`
+      };
+    },
+    listScheduledEvents: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Calendly access token");
+      const userUri = readRequiredString(input.userUri, "userUri", 500);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const minStartTime = readOptionalString(input.minStartTime, 120);
+      const maxStartTime = readOptionalString(input.maxStartTime, 120);
+      const result = await calendlyRequest({
+        method: "GET",
+        path: "/scheduled_events",
+        query: {
+          count: String(limit),
+          sort: "start_time:asc",
+          user: userUri,
+          ...(minStartTime ? { min_start_time: minStartTime } : {}),
+          ...(maxStartTime ? { max_start_time: maxStartTime } : {})
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Calendly 返回 ${readArrayLength(readRecord(result).collection)} 个预约事件`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "getCurrentUser"
+        ? "calendly user"
+        : `calendly ${String(input.userUri ?? actionId)}`
   };
 }
 
@@ -2191,6 +2641,27 @@ async function googleCalendarRequest({
   });
 }
 
+async function calendlyRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Calendly",
+    url: withQuery(`https://api.calendly.com${path}`, query)
+  });
+}
+
 async function gmailRequest({
   method,
   path,
@@ -2254,6 +2725,27 @@ async function airtableRequest({
   });
 }
 
+async function hubspotRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "HubSpot",
+    url: withQuery(`https://api.hubapi.com${path}`, query)
+  });
+}
+
 async function todoistRequest({
   body,
   method,
@@ -2275,6 +2767,27 @@ async function todoistRequest({
     method,
     service: "Todoist",
     url: withQuery(`https://api.todoist.com/api/v1${path}`, query)
+  });
+}
+
+async function clickupRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "ClickUp",
+    url: withQuery(`https://api.clickup.com/api/v2${path}`, query)
   });
 }
 
