@@ -72,11 +72,11 @@ Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查,
 - 侧边栏提供独立的扩展页面, 与插件和技能区分开。
 - 扩展用于连接外部服务, 能读取、创建或修改外部系统中的真实数据。
 - 内置 QQ Mail 扩展支持列出收件箱、读取邮件、搜索邮件、创建草稿和发送邮件。
-- 内置服务扩展覆盖 GitHub、GitLab、Bitbucket、Slack、Notion、Airtable、HubSpot、Salesforce、Zendesk、Intercom、Todoist、Asana、ClickUp、monday.com、Trello、Stripe、Shopify、Google Calendar、Calendly、Miro、Zoom、Figma、Gmail、Google Drive、Dropbox、Microsoft 365、Linear、Sentry、PagerDuty、Datadog、Jira Cloud 和 Discord。
+- 内置服务扩展覆盖 GitHub、GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Todoist、Asana、ClickUp、monday.com、Trello、Stripe、Shopify、Mailchimp、Postmark、Twilio、Google Calendar、Calendly、Miro、Zoom、Figma、Gmail、Google Drive、Dropbox、Microsoft 365、Linear、Sentry、PagerDuty、Datadog、Cloudflare、Okta、Jira Cloud 和 Discord。
 - 扩展凭据保存在 Electron 主进程侧的安全存储中, 页面只展示配置状态和尾号提示。
 - 支持 OAuth 元数据和网页登录授权基座。Google Calendar、Gmail 和 Google Drive 使用 Forge 内置桌面 OAuth 应用配置, GitHub 支持 device flow, Linear 支持 loopback + PKCE, 需要 HTTPS 回调或 client secret 的服务通过 Forge OAuth broker 接入。
 - 用户只需在扩展页点击“网页登录授权”, 授权完成后 token 会自动保存到安全存储。走连接器/OAuth 的内置扩展不再展示手动 token 输入框。OAuth Client ID、Client Secret、同意屏幕和 broker 部署属于产品维护者发布前配置, 不应要求普通用户自行创建。
-- Salesforce、Zendesk、Intercom、Trello、Stripe、Shopify、PagerDuty 和 Datadog 当前使用手动保存的服务 token 或 API key, 适合先开放稳定的只读动作。
+- Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shopify、Mailchimp、Postmark、Twilio、PagerDuty、Datadog、Cloudflare 和 Okta 当前使用手动保存的服务 token 或 API key, 适合先开放稳定的只读动作。
 - 扩展权限支持 allow、ask 和 deny, 调用日志只保存输入和输出摘要。
 - Agent 可以把已启用扩展作为工具动作调用, 但必须通过 Agent Profile 工具权限和扩展权限检查。
 - `sendEmail` 始终要求用户二次确认, Forge 不会让 Agent 静默发送邮件。
@@ -267,7 +267,7 @@ OAuth 相关变量仅供维护者在自定义构建或部署 Forge OAuth broker 
 - `FORGE_GOOGLE_OAUTH_CLIENT_ID`: 覆盖内置 Google 桌面 OAuth client ID
 - `FORGE_GITHUB_OAUTH_CLIENT_ID`: 启用 GitHub device flow
 - `FORGE_LINEAR_OAUTH_CLIENT_ID`: 启用 Linear loopback + PKCE 授权
-- `FORGE_OAUTH_BROKER_BASE_URL`: 启用 GitLab、Bitbucket、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 的 brokered 授权入口
+- `FORGE_OAUTH_BROKER_BASE_URL`: 启用 GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 的 brokered 授权入口
 
 请不要把 API Key、token、cookie、私钥或证书写入 README、提交信息或日志。
 

@@ -61,11 +61,11 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - The sidebar includes a dedicated Extensions page separate from plugins and skills.
 - Extensions connect external services and can read, create, or modify real data outside Forge.
 - The built-in QQ Mail extension can list inbox messages, read email, search email, create drafts, and send email.
-- Built-in service extensions cover GitHub, GitLab, Bitbucket, Slack, Notion, Airtable, HubSpot, Salesforce, Zendesk, Intercom, Todoist, Asana, ClickUp, monday.com, Trello, Stripe, Shopify, Google Calendar, Calendly, Miro, Zoom, Figma, Gmail, Google Drive, Dropbox, Microsoft 365, Linear, Sentry, PagerDuty, Datadog, Jira Cloud, and Discord.
+- Built-in service extensions cover GitHub, GitLab, Bitbucket, Confluence Cloud, Slack, Notion, Airtable, HubSpot, Salesforce, Zendesk, Intercom, Freshdesk, Pipedrive, Todoist, Asana, ClickUp, monday.com, Trello, Stripe, Shopify, Mailchimp, Postmark, Twilio, Google Calendar, Calendly, Miro, Zoom, Figma, Gmail, Google Drive, Dropbox, Microsoft 365, Linear, Sentry, PagerDuty, Datadog, Cloudflare, Okta, Jira Cloud, and Discord.
 - Extension credentials are stored through secure storage on the Electron main-process side. The UI only shows configuration status and last-four hints.
 - OAuth metadata and browser authorization are supported. Google Calendar, Gmail, and Google Drive use Forge's built-in desktop OAuth app configuration, GitHub supports device flow, Linear supports loopback + PKCE, and services that require HTTPS callbacks or client secrets can be wired through the Forge OAuth broker.
 - Users only click Authorize in browser from the Extensions page, then Forge saves returned tokens to secure storage. Built-in connector/OAuth extensions no longer show manual token inputs. OAuth Client IDs, Client Secrets, consent-screen setup, and broker deployment are product-maintainer configuration before release, not something normal users should create.
-- Salesforce, Zendesk, Intercom, Trello, Stripe, Shopify, PagerDuty, and Datadog currently use manually saved service tokens or API keys and expose stable read-only actions first.
+- Salesforce, Zendesk, Intercom, Freshdesk, Pipedrive, Trello, Stripe, Shopify, Mailchimp, Postmark, Twilio, PagerDuty, Datadog, Cloudflare, and Okta currently use manually saved service tokens or API keys and expose stable read-only actions first.
 - Extension permissions support allow, ask, and deny. Invocation logs store sanitized input and output summaries.
 - The agent can call enabled extensions as tool actions, but calls must pass agent-profile tool permissions and extension permissions.
 - `sendEmail` always requires explicit confirmation. Forge does not let the agent silently send email.
@@ -233,7 +233,7 @@ OAuth-related variables are only for maintainers who build custom releases or de
 - `FORGE_GOOGLE_OAUTH_CLIENT_ID`: overrides the built-in Google desktop OAuth client ID
 - `FORGE_GITHUB_OAUTH_CLIENT_ID`: enables GitHub device flow
 - `FORGE_LINEAR_OAUTH_CLIENT_ID`: enables Linear loopback + PKCE authorization
-- `FORGE_OAUTH_BROKER_BASE_URL`: enables brokered authorization for GitLab, Bitbucket, Slack, Notion, Airtable, HubSpot, Todoist, Asana, ClickUp, monday.com, Calendly, Miro, Zoom, Figma, Dropbox, Microsoft 365, Sentry, Jira Cloud, and Discord
+- `FORGE_OAUTH_BROKER_BASE_URL`: enables brokered authorization for GitLab, Bitbucket, Confluence Cloud, Slack, Notion, Airtable, HubSpot, Todoist, Asana, ClickUp, monday.com, Calendly, Miro, Zoom, Figma, Dropbox, Microsoft 365, Sentry, Jira Cloud, and Discord
 
 Do not write API keys, tokens, cookies, private keys, or certificates into README files, commit messages, or logs.
 

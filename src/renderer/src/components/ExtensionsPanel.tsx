@@ -121,10 +121,13 @@ const extensionIconSources: Record<string, string> = {
   bitbucket: new URL("../assets/extension-icons/bitbucket.ico", import.meta.url).href,
   calendly: new URL("../assets/extension-icons/calendly.ico", import.meta.url).href,
   clickup: new URL("../assets/extension-icons/clickup.png", import.meta.url).href,
+  cloudflare: new URL("../assets/extension-icons/cloudflare.ico", import.meta.url).href,
+  confluence: new URL("../assets/extension-icons/confluence.ico", import.meta.url).href,
   datadog: new URL("../assets/extension-icons/datadog.ico", import.meta.url).href,
   discord: new URL("../assets/extension-icons/discord.ico", import.meta.url).href,
   dropbox: new URL("../assets/extension-icons/dropbox.ico", import.meta.url).href,
   figma: new URL("../assets/extension-icons/figma.png", import.meta.url).href,
+  freshdesk: new URL("../assets/extension-icons/freshdesk.ico", import.meta.url).href,
   gmail: new URL("../assets/extension-icons/gmail.ico", import.meta.url).href,
   github: new URL("../assets/extension-icons/github.png", import.meta.url).href,
   gitlab: new URL("../assets/extension-icons/gitlab.ico", import.meta.url).href,
@@ -137,8 +140,12 @@ const extensionIconSources: Record<string, string> = {
   "microsoft-365": new URL("../assets/extension-icons/microsoft-365.svg", import.meta.url).href,
   miro: new URL("../assets/extension-icons/miro.png", import.meta.url).href,
   monday: new URL("../assets/extension-icons/monday.ico", import.meta.url).href,
+  mailchimp: new URL("../assets/extension-icons/mailchimp.ico", import.meta.url).href,
   notion: new URL("../assets/extension-icons/notion.png", import.meta.url).href,
+  okta: new URL("../assets/extension-icons/okta.ico", import.meta.url).href,
   pagerduty: new URL("../assets/extension-icons/pagerduty.ico", import.meta.url).href,
+  pipedrive: new URL("../assets/extension-icons/pipedrive.ico", import.meta.url).href,
+  postmark: new URL("../assets/extension-icons/postmark.ico", import.meta.url).href,
   "qq-mail": new URL("../assets/extension-icons/qq-mail.ico", import.meta.url).href,
   salesforce: new URL("../assets/extension-icons/salesforce.ico", import.meta.url).href,
   sentry: new URL("../assets/extension-icons/sentry.ico", import.meta.url).href,
@@ -147,6 +154,7 @@ const extensionIconSources: Record<string, string> = {
   stripe: new URL("../assets/extension-icons/stripe.ico", import.meta.url).href,
   todoist: new URL("../assets/extension-icons/todoist.ico", import.meta.url).href,
   trello: new URL("../assets/extension-icons/trello.ico", import.meta.url).href,
+  twilio: new URL("../assets/extension-icons/twilio.ico", import.meta.url).href,
   zendesk: new URL("../assets/extension-icons/zendesk.ico", import.meta.url).href,
   zoom: new URL("../assets/extension-icons/zoom.ico", import.meta.url).href
 };
@@ -1370,7 +1378,7 @@ function getOAuthPrerequisiteFieldIds(oauth: ExtensionOAuthDefinition | undefine
   }
 
   if (oauth.redirectUriMode === "brokered") {
-    return oauth.brokerAuthorizationUrl && oauth.brokerTokenUrl ? [] : ["Forge OAuth broker"];
+    return oauth.brokerAuthorizationUrl && oauth.brokerTokenUrl ? [] : ["Forge OAuth 授权服务地址"];
   }
 
   const hasProductClientId = Boolean(oauth.productClientId);
@@ -1719,8 +1727,8 @@ function getExtensionsCopy(language: Language) {
     oauthMissingButton: isChinese ? "当前构建未配置网页登录" : "OAuth not configured in this build",
     oauthMissingPrerequisites: (fields: string[]) =>
       isChinese
-        ? `当前 Forge 构建缺少网页登录所需的产品方 OAuth 配置: ${fields.join(", ")}。普通用户不需要自己创建 OAuth app。`
-        : `This Forge build is missing product OAuth configuration: ${fields.join(", ")}. End users should not create OAuth apps themselves.`,
+        ? `当前 Forge 构建缺少网页登录所需的维护者配置: ${fields.join(", ")}。这不是普通用户要填写的内容, 需要发布方先配置 Forge OAuth broker 或产品 OAuth app。`
+        : `This Forge build is missing maintainer OAuth configuration: ${fields.join(", ")}. End users should not fill this in; the publisher must configure the Forge OAuth broker or product OAuth app first.`,
     oauthRegisteredCallback: isChinese ? "等待 Forge 官方授权服务" : "Waiting for Forge OAuth service",
     oauthSetup: isChinese ? "打开 OAuth 配置页" : "Open OAuth setup",
     oauthSetupHint: (provider: string, usesProductClient: boolean) =>
@@ -1729,8 +1737,8 @@ function getExtensionsCopy(language: Language) {
           ? `Forge 已内置 ${provider} 登录应用配置, 用户只需要点击网页登录授权。`
           : `Forge includes the ${provider} OAuth app configuration; users only need to authorize in the browser.`
         : isChinese
-          ? `当前构建还没有内置 ${provider} OAuth app 或 Forge 授权服务, 需要维护者配置后再发布给用户。`
-          : `This build does not include a ${provider} OAuth app or Forge OAuth service yet; the maintainer must configure it before release.`,
+          ? `当前构建还没有内置 ${provider} OAuth app 或 Forge OAuth broker, 需要维护者配置后再发布给用户。`
+          : `This build does not include a ${provider} OAuth app or Forge OAuth broker yet; the maintainer must configure it before release.`,
     oauthStart: isChinese ? "网页登录授权" : "Authorize in browser",
     oauthStarting: (provider: string) =>
       isChinese ? `正在打开 ${provider} 授权页` : `Opening ${provider} authorization`,

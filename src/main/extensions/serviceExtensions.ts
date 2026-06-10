@@ -1,4 +1,5 @@
 // 本文件说明: 注册常见外部服务内置 Extension, 通过官方 REST API 执行受控动作
+import { Buffer } from "node:buffer";
 import type {
   ExtensionActionDefinition,
   ExtensionAuthDefinition,
@@ -147,6 +148,7 @@ export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createGitHubExtension(),
   createGitLabExtension(),
   createBitbucketExtension(),
+  createConfluenceExtension(),
   createSlackExtension(),
   createNotionExtension(),
   createAirtableExtension(),
@@ -154,6 +156,8 @@ export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createSalesforceExtension(),
   createZendeskExtension(),
   createIntercomExtension(),
+  createFreshdeskExtension(),
+  createPipedriveExtension(),
   createTodoistExtension(),
   createAsanaExtension(),
   createClickUpExtension(),
@@ -161,6 +165,9 @@ export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createTrelloExtension(),
   createStripeExtension(),
   createShopifyExtension(),
+  createMailchimpExtension(),
+  createPostmarkExtension(),
+  createTwilioExtension(),
   createGoogleCalendarExtension(),
   createCalendlyExtension(),
   createMiroExtension(),
@@ -174,6 +181,8 @@ export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createSentryExtension(),
   createPagerDutyExtension(),
   createDatadogExtension(),
+  createCloudflareExtension(),
+  createOktaExtension(),
   createJiraCloudExtension(),
   createDiscordExtension()
 ];
@@ -624,6 +633,152 @@ function createBitbucketExtension(): BuiltInServiceExtension {
       actionId === "getCurrentUser"
         ? "bitbucket user"
         : `bitbucket ${String(input.workspace ?? "")}/${String(input.repoSlug ?? "")}`
+  };
+}
+
+function createConfluenceExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "confluence",
+    name: "Confluence Cloud",
+    description: "读取 Atlassian Confluence Cloud 空间和页面搜索结果",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Atlassian OAuth access token, 需要 Confluence read scope",
+      accessTokenPlaceholder: "atlassian_access_token",
+      oauth: {
+        provider: "Atlassian",
+        authorizationUrl: "https://auth.atlassian.com/authorize",
+        tokenUrl: "https://auth.atlassian.com/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("confluence", "authorize"),
+        brokerTokenUrl: createBrokerUrl("confluence", "token"),
+        scopes: ["read:confluence-content.summary", "read:confluence-space.summary", "read:me", "offline_access"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps/",
+        setupUrl: "https://developer.atlassian.com/console/myapps/",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "body",
+        tokenRequestBody: "json",
+        extraAuthorizeParams: {
+          audience: "api.atlassian.com",
+          prompt: "consent"
+        }
+      }
+    }),
+    permissions: [
+      {
+        id: "confluence.read",
+        label: "读取 Confluence",
+        description: "允许读取 Confluence Cloud 站点、空间和页面搜索摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listAccessibleResources",
+        label: "列出 Confluence 站点",
+        description: "读取当前 token 可访问的 Atlassian Cloud 资源",
+        permission: "confluence.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listSpaces",
+        label: "列出空间",
+        description: "读取指定 Confluence Cloud 站点的空间列表",
+        permission: "confluence.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["cloudId"],
+        properties: {
+          cloudId: { type: "string", description: "Atlassian Cloud resource ID" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "searchPages",
+        label: "搜索页面",
+        description: "使用 CQL 搜索 Confluence 页面",
+        permission: "confluence.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["cloudId", "query"],
+        properties: {
+          cloudId: { type: "string", description: "Atlassian Cloud resource ID" },
+          query: { type: "string", description: "页面关键词, 会自动转为 CQL text 搜索" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listAccessibleResources: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Atlassian access token");
+      const result = await jiraApiRequest({
+        method: "GET",
+        path: "/oauth/token/accessible-resources",
+        token
+      });
+
+      return {
+        output: Array.isArray(result) ? { resources: result } : toOutputRecord(result),
+        outputSummary: `Confluence Cloud 返回 ${readArrayLength(result)} 个站点`
+      };
+    },
+    listSpaces: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Atlassian access token");
+      const cloudId = readRequiredString(input.cloudId, "cloudId", 200);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await confluenceApiRequest({
+        cloudId,
+        method: "GET",
+        path: "/rest/api/space",
+        query: {
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Confluence Cloud 返回 ${readArrayLength(readRecord(result).results)} 个空间`
+      };
+    },
+    searchPages: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Atlassian access token");
+      const cloudId = readRequiredString(input.cloudId, "cloudId", 200);
+      const query = readRequiredString(input.query, "query", 500);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await confluenceApiRequest({
+        cloudId,
+        method: "GET",
+        path: "/rest/api/content/search",
+        query: {
+          cql: `type = page AND text ~ "${query.replace(/"/gu, '\\"')}"`,
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Confluence Cloud 搜索返回 ${readArrayLength(readRecord(result).results)} 个页面`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "searchPages"
+        ? `confluence ${String(input.query ?? "")}`
+        : `confluence ${String(input.cloudId ?? "")}`
   };
 }
 
@@ -1542,6 +1697,256 @@ function createIntercomExtension(): BuiltInServiceExtension {
     handlers,
     manifest,
     summarizeInput: (actionId) => `intercom ${actionId}`
+  };
+}
+
+function createFreshdeskExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "freshdesk",
+    name: "Freshdesk",
+    description: "读取 Freshdesk 工单、联系人和公司摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "domain",
+          label: "Freshdesk domain",
+          description: "Freshdesk 域名, 例如 example.freshdesk.com 或 example",
+          placeholder: "example.freshdesk.com"
+        },
+        {
+          id: "apiKey",
+          label: "Freshdesk API key",
+          description: "Freshdesk API key, 建议使用只读角色或最小权限账号",
+          placeholder: "freshdesk_api_key"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "freshdesk.read",
+        label: "读取 Freshdesk",
+        description: "允许读取 Freshdesk 工单、联系人和公司摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listTickets",
+        label: "列出工单",
+        description: "读取 Freshdesk 最近工单摘要",
+        permission: "freshdesk.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listContacts",
+        label: "列出联系人",
+        description: "读取 Freshdesk 联系人摘要",
+        permission: "freshdesk.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listCompanies",
+        label: "列出公司",
+        description: "读取 Freshdesk 公司摘要",
+        permission: "freshdesk.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listTickets: async (input, context) => {
+      const credentials = await readFreshdeskCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await freshdeskRequest({
+        credentials,
+        method: "GET",
+        path: "/tickets",
+        query: {
+          per_page: String(limit)
+        }
+      });
+
+      return {
+        output: Array.isArray(result) ? { tickets: result } : toOutputRecord(result),
+        outputSummary: `Freshdesk 返回 ${readArrayLength(result)} 个工单`
+      };
+    },
+    listContacts: async (input, context) => {
+      const credentials = await readFreshdeskCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await freshdeskRequest({
+        credentials,
+        method: "GET",
+        path: "/contacts",
+        query: {
+          per_page: String(limit)
+        }
+      });
+
+      return {
+        output: Array.isArray(result) ? { contacts: result } : toOutputRecord(result),
+        outputSummary: `Freshdesk 返回 ${readArrayLength(result)} 个联系人`
+      };
+    },
+    listCompanies: async (input, context) => {
+      const credentials = await readFreshdeskCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await freshdeskRequest({
+        credentials,
+        method: "GET",
+        path: "/companies",
+        query: {
+          per_page: String(limit)
+        }
+      });
+
+      return {
+        output: Array.isArray(result) ? { companies: result } : toOutputRecord(result),
+        outputSummary: `Freshdesk 返回 ${readArrayLength(result)} 个公司`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `freshdesk ${actionId}`
+  };
+}
+
+function createPipedriveExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "pipedrive",
+    name: "Pipedrive",
+    description: "读取 Pipedrive 当前用户、交易和组织摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "apiToken",
+          label: "Pipedrive API token",
+          description: "Pipedrive app 里生成的 API token",
+          placeholder: "pipedrive_api_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "pipedrive.read",
+        label: "读取 Pipedrive",
+        description: "允许读取 Pipedrive 当前用户、交易和组织摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 Pipedrive 用户资料",
+        permission: "pipedrive.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listDeals",
+        label: "列出交易",
+        description: "读取 Pipedrive Deals 摘要",
+        permission: "pipedrive.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listOrganizations",
+        label: "列出组织",
+        description: "读取 Pipedrive Organizations 摘要",
+        permission: "pipedrive.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "apiToken", "Pipedrive API token");
+      const result = await pipedriveRequest({
+        method: "GET",
+        path: "/users/me",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Pipedrive 当前用户: ${readNestedObjectText(result, ["data", "name"], "unknown")}`
+      };
+    },
+    listDeals: async (input, context) => {
+      const token = await readSecret(context, "apiToken", "Pipedrive API token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await pipedriveRequest({
+        method: "GET",
+        path: "/deals",
+        query: {
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Pipedrive 返回 ${readArrayLength(readRecord(result).data)} 个交易`
+      };
+    },
+    listOrganizations: async (input, context) => {
+      const token = await readSecret(context, "apiToken", "Pipedrive API token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await pipedriveRequest({
+        method: "GET",
+        path: "/organizations",
+        query: {
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Pipedrive 返回 ${readArrayLength(readRecord(result).data)} 个组织`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `pipedrive ${actionId}`
   };
 }
 
@@ -2591,6 +2996,402 @@ function createShopifyExtension(): BuiltInServiceExtension {
       actionId === "listProducts" || actionId === "listOrders"
         ? `shopify ${actionId} ${String(input.query ?? "")}`
         : `shopify ${actionId}`
+  };
+}
+
+function createMailchimpExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "mailchimp",
+    name: "Mailchimp",
+    description: "读取 Mailchimp 账号、受众和营销活动摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "serverPrefix",
+          label: "Mailchimp server prefix",
+          description: "Mailchimp API key 末尾的 data center 前缀, 例如 us21",
+          placeholder: "us21"
+        },
+        {
+          id: "apiKey",
+          label: "Mailchimp API key",
+          description: "Mailchimp Marketing API key",
+          placeholder: "mailchimp_api_key"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "mailchimp.read",
+        label: "读取 Mailchimp",
+        description: "允许读取 Mailchimp 账号、受众和营销活动摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getAccount",
+        label: "查看账号",
+        description: "读取当前 Mailchimp 账号摘要",
+        permission: "mailchimp.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listAudiences",
+        label: "列出受众",
+        description: "读取 Mailchimp audiences/lists 摘要",
+        permission: "mailchimp.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listCampaigns",
+        label: "列出活动",
+        description: "读取 Mailchimp campaigns 摘要",
+        permission: "mailchimp.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getAccount: async (_input, context) => {
+      const credentials = await readMailchimpCredentials(context);
+      const result = await mailchimpRequest({
+        credentials,
+        method: "GET",
+        path: "/"
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Mailchimp 账号: ${readObjectText(result, "account_name", "unknown")}`
+      };
+    },
+    listAudiences: async (input, context) => {
+      const credentials = await readMailchimpCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await mailchimpRequest({
+        credentials,
+        method: "GET",
+        path: "/lists",
+        query: {
+          count: String(limit)
+        }
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Mailchimp 返回 ${readArrayLength(readRecord(result).lists)} 个受众`
+      };
+    },
+    listCampaigns: async (input, context) => {
+      const credentials = await readMailchimpCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await mailchimpRequest({
+        credentials,
+        method: "GET",
+        path: "/campaigns",
+        query: {
+          count: String(limit)
+        }
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Mailchimp 返回 ${readArrayLength(readRecord(result).campaigns)} 个活动`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `mailchimp ${actionId}`
+  };
+}
+
+function createPostmarkExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "postmark",
+    name: "Postmark",
+    description: "读取 Postmark 消息摘要, 并在确认后发送事务邮件",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "serverToken",
+          label: "Postmark server token",
+          description: "Postmark Server API token, 测试可使用 POSTMARK_API_TEST",
+          placeholder: "postmark_server_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "postmark.read",
+        label: "读取 Postmark",
+        description: "允许读取 Postmark outbound/inbound 消息摘要",
+        defaultMode: "ask"
+      },
+      {
+        id: "postmark.send",
+        label: "发送 Postmark 邮件",
+        description: "允许通过 Postmark 发送真实事务邮件",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listOutboundMessages",
+        label: "列出发件",
+        description: "读取 Postmark outbound messages 摘要",
+        permission: "postmark.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listInboundMessages",
+        label: "列出收件",
+        description: "读取 Postmark inbound messages 摘要",
+        permission: "postmark.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "sendEmail",
+        label: "发送邮件",
+        description: "通过 Postmark 发送事务邮件",
+        permission: "postmark.send",
+        risk: "send",
+        confirmation: "always",
+        required: ["from", "to", "subject", "textBody"],
+        properties: {
+          from: { type: "string", description: "发件人邮箱" },
+          to: { type: "string", description: "收件人邮箱, 多人用逗号分隔" },
+          subject: { type: "string", description: "邮件标题" },
+          textBody: { type: "string", description: "纯文本正文" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listOutboundMessages: async (input, context) => {
+      const token = await readSecret(context, "serverToken", "Postmark server token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await postmarkRequest({
+        method: "GET",
+        path: "/messages/outbound",
+        query: {
+          count: String(limit),
+          offset: "0"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Postmark 返回 ${readArrayLength(readRecord(result).Messages)} 个发件`
+      };
+    },
+    listInboundMessages: async (input, context) => {
+      const token = await readSecret(context, "serverToken", "Postmark server token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await postmarkRequest({
+        method: "GET",
+        path: "/messages/inbound",
+        query: {
+          count: String(limit),
+          offset: "0"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Postmark 返回 ${readArrayLength(readRecord(result).InboundMessages)} 个收件`
+      };
+    },
+    sendEmail: async (input, context) => {
+      const token = await readSecret(context, "serverToken", "Postmark server token");
+      const from = readRequiredString(input.from, "from", 320);
+      const to = readRequiredString(input.to, "to", 2_000);
+      const subject = readRequiredString(input.subject, "subject", 300);
+      const textBody = readRequiredString(input.textBody, "textBody", 20_000);
+      const result = await postmarkRequest({
+        body: {
+          From: from,
+          To: to,
+          Subject: subject,
+          TextBody: textBody
+        },
+        method: "POST",
+        path: "/email",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `已通过 Postmark 发送邮件: ${subject}`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "sendEmail"
+        ? `postmark send ${String(input.subject ?? "")}`
+        : `postmark ${actionId}`
+  };
+}
+
+function createTwilioExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "twilio",
+    name: "Twilio",
+    description: "读取 Twilio 账号、短信和通话摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "accountSid",
+          label: "Twilio Account SID",
+          description: "Twilio Account SID",
+          placeholder: "AC..."
+        },
+        {
+          id: "authToken",
+          label: "Twilio Auth Token",
+          description: "Twilio Auth Token 或用于测试的受限凭据",
+          placeholder: "twilio_auth_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "twilio.read",
+        label: "读取 Twilio",
+        description: "允许读取 Twilio 账号、短信和通话摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getAccount",
+        label: "查看账号",
+        description: "读取 Twilio 账号摘要",
+        permission: "twilio.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listMessages",
+        label: "列出短信",
+        description: "读取 Twilio Message 日志摘要",
+        permission: "twilio.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listCalls",
+        label: "列出通话",
+        description: "读取 Twilio Call 日志摘要",
+        permission: "twilio.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getAccount: async (_input, context) => {
+      const credentials = await readTwilioCredentials(context);
+      const result = await twilioRequest({
+        credentials,
+        method: "GET",
+        path: `/2010-04-01/Accounts/${encodePathSegment(credentials.accountSid)}.json`
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Twilio 账号: ${readObjectText(result, "friendly_name", credentials.accountSid)}`
+      };
+    },
+    listMessages: async (input, context) => {
+      const credentials = await readTwilioCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await twilioRequest({
+        credentials,
+        method: "GET",
+        path: `/2010-04-01/Accounts/${encodePathSegment(credentials.accountSid)}/Messages.json`,
+        query: {
+          PageSize: String(limit)
+        }
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Twilio 返回 ${readArrayLength(readRecord(result).messages)} 条短信`
+      };
+    },
+    listCalls: async (input, context) => {
+      const credentials = await readTwilioCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await twilioRequest({
+        credentials,
+        method: "GET",
+        path: `/2010-04-01/Accounts/${encodePathSegment(credentials.accountSid)}/Calls.json`,
+        query: {
+          PageSize: String(limit)
+        }
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Twilio 返回 ${readArrayLength(readRecord(result).calls)} 条通话记录`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `twilio ${actionId}`
   };
 }
 
@@ -4159,6 +4960,257 @@ function createDatadogExtension(): BuiltInServiceExtension {
   };
 }
 
+function createCloudflareExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "cloudflare",
+    name: "Cloudflare",
+    description: "读取 Cloudflare 账号、域名和 Workers 脚本摘要",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "apiToken",
+          label: "Cloudflare API token",
+          description: "Cloudflare API token, 建议只授予 Account/Zone 读取权限",
+          placeholder: "cloudflare_api_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "cloudflare.read",
+        label: "读取 Cloudflare",
+        description: "允许读取 Cloudflare 账号、域名和 Workers 脚本摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listAccounts",
+        label: "列出账号",
+        description: "读取 Cloudflare accounts 摘要",
+        permission: "cloudflare.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listZones",
+        label: "列出域名",
+        description: "读取 Cloudflare zones 摘要",
+        permission: "cloudflare.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listWorkerScripts",
+        label: "列出 Workers",
+        description: "读取指定 Cloudflare account 下的 Workers 脚本",
+        permission: "cloudflare.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["accountId"],
+        properties: {
+          accountId: { type: "string", description: "Cloudflare account ID" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listAccounts: async (input, context) => {
+      const token = await readSecret(context, "apiToken", "Cloudflare API token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await cloudflareRequest({
+        method: "GET",
+        path: "/accounts",
+        query: {
+          per_page: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Cloudflare 返回 ${readArrayLength(readRecord(result).result)} 个账号`
+      };
+    },
+    listZones: async (input, context) => {
+      const token = await readSecret(context, "apiToken", "Cloudflare API token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await cloudflareRequest({
+        method: "GET",
+        path: "/zones",
+        query: {
+          per_page: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Cloudflare 返回 ${readArrayLength(readRecord(result).result)} 个域名`
+      };
+    },
+    listWorkerScripts: async (input, context) => {
+      const token = await readSecret(context, "apiToken", "Cloudflare API token");
+      const accountId = readRequiredString(input.accountId, "accountId", 200);
+      const result = await cloudflareRequest({
+        method: "GET",
+        path: `/accounts/${encodePathSegment(accountId)}/workers/scripts`,
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Cloudflare 返回 ${readArrayLength(readRecord(result).result)} 个 Workers 脚本`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listWorkerScripts"
+        ? `cloudflare ${String(input.accountId ?? "")}`
+        : `cloudflare ${actionId}`
+  };
+}
+
+function createOktaExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "okta",
+    name: "Okta",
+    description: "读取 Okta 当前用户、应用和用户组摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "orgUrl",
+          label: "Okta org URL",
+          description: "Okta 组织地址, 例如 https://example.okta.com",
+          placeholder: "https://example.okta.com"
+        },
+        {
+          id: "apiToken",
+          label: "Okta API token",
+          description: "Okta SSWS API token, 建议使用最小权限服务账号",
+          placeholder: "okta_api_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "okta.read",
+        label: "读取 Okta",
+        description: "允许读取 Okta 当前用户、应用和用户组摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 Okta token 对应用户摘要",
+        permission: "okta.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listApplications",
+        label: "列出应用",
+        description: "读取 Okta apps 摘要",
+        permission: "okta.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listGroups",
+        label: "列出用户组",
+        description: "读取 Okta groups 摘要",
+        permission: "okta.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const credentials = await readOktaCredentials(context);
+      const result = await oktaRequest({
+        credentials,
+        method: "GET",
+        path: "/api/v1/users/me"
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Okta 当前用户: ${readNestedObjectText(result, ["profile", "login"], "unknown")}`
+      };
+    },
+    listApplications: async (input, context) => {
+      const credentials = await readOktaCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await oktaRequest({
+        credentials,
+        method: "GET",
+        path: "/api/v1/apps",
+        query: {
+          limit: String(limit)
+        }
+      });
+
+      return {
+        output: Array.isArray(result) ? { applications: result } : toOutputRecord(result),
+        outputSummary: `Okta 返回 ${readArrayLength(result)} 个应用`
+      };
+    },
+    listGroups: async (input, context) => {
+      const credentials = await readOktaCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await oktaRequest({
+        credentials,
+        method: "GET",
+        path: "/api/v1/groups",
+        query: {
+          limit: String(limit)
+        }
+      });
+
+      return {
+        output: Array.isArray(result) ? { groups: result } : toOutputRecord(result),
+        outputSummary: `Okta 返回 ${readArrayLength(result)} 个用户组`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `okta ${actionId}`
+  };
+}
+
 function createJiraCloudExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "jira-cloud",
@@ -5022,6 +6074,33 @@ async function jiraApiRequest({
   });
 }
 
+async function confluenceApiRequest({
+  cloudId,
+  method,
+  path,
+  query,
+  token
+}: {
+  cloudId: string;
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Confluence Cloud",
+    url: withQuery(
+      `https://api.atlassian.com/ex/confluence/${encodePathSegment(cloudId)}/wiki${path}`,
+      query
+    )
+  });
+}
+
 async function sentryRequest({
   method,
   path,
@@ -5084,6 +6163,157 @@ async function datadogRequest({
     method,
     service: "Datadog",
     url: withQuery(`https://api.${credentials.site}${path}`, query)
+  });
+}
+
+async function cloudflareRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Cloudflare",
+    url: withQuery(`https://api.cloudflare.com/client/v4${path}`, query)
+  });
+}
+
+async function freshdeskRequest({
+  credentials,
+  method,
+  path,
+  query
+}: {
+  credentials: { apiKey: string; domain: string };
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: createBasicAuthHeader(credentials.apiKey, "X")
+    },
+    method,
+    service: "Freshdesk",
+    url: withQuery(`https://${credentials.domain}/api/v2${path}`, query)
+  });
+}
+
+async function mailchimpRequest({
+  credentials,
+  method,
+  path,
+  query
+}: {
+  credentials: { apiKey: string; serverPrefix: string };
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: createBasicAuthHeader("Forge", credentials.apiKey)
+    },
+    method,
+    service: "Mailchimp",
+    url: withQuery(`https://${credentials.serverPrefix}.api.mailchimp.com/3.0${path}`, query)
+  });
+}
+
+async function oktaRequest({
+  credentials,
+  method,
+  path,
+  query
+}: {
+  credentials: { apiToken: string; orgUrl: string };
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `SSWS ${credentials.apiToken}`
+    },
+    method,
+    service: "Okta",
+    url: withQuery(`${credentials.orgUrl}${path}`, query)
+  });
+}
+
+async function pipedriveRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    method,
+    service: "Pipedrive",
+    url: withQuery(`https://api.pipedrive.com/v1${path}`, {
+      ...query,
+      api_token: token
+    })
+  });
+}
+
+async function postmarkRequest({
+  body,
+  method,
+  path,
+  query,
+  token
+}: {
+  body?: Record<string, unknown>;
+  method: "GET" | "POST";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    body,
+    headers: {
+      Accept: "application/json",
+      "X-Postmark-Server-Token": token
+    },
+    method,
+    service: "Postmark",
+    url: withQuery(`https://api.postmarkapp.com${path}`, query)
+  });
+}
+
+async function twilioRequest({
+  credentials,
+  method,
+  path,
+  query
+}: {
+  credentials: { accountSid: string; authToken: string };
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: createBasicAuthHeader(credentials.accountSid, credentials.authToken)
+    },
+    method,
+    service: "Twilio",
+    url: withQuery(`https://api.twilio.com${path}`, query)
   });
 }
 
@@ -5239,6 +6469,45 @@ async function readDatadogCredentials(
   return { apiKey, applicationKey, site };
 }
 
+async function readFreshdeskCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ apiKey: string; domain: string }> {
+  const rawDomain = await readSecret(context, "domain", "Freshdesk domain");
+  const apiKey = await readSecret(context, "apiKey", "Freshdesk API key");
+  const domain = normalizeFreshdeskDomain(rawDomain);
+
+  return { apiKey, domain };
+}
+
+async function readMailchimpCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ apiKey: string; serverPrefix: string }> {
+  const rawServerPrefix = await readSecret(context, "serverPrefix", "Mailchimp server prefix");
+  const apiKey = await readSecret(context, "apiKey", "Mailchimp API key");
+  const serverPrefix = normalizeSimpleHostLabel(rawServerPrefix, "Mailchimp server prefix");
+
+  return { apiKey, serverPrefix };
+}
+
+async function readOktaCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ apiToken: string; orgUrl: string }> {
+  const rawOrgUrl = await readSecret(context, "orgUrl", "Okta org URL");
+  const apiToken = await readSecret(context, "apiToken", "Okta API token");
+  const orgUrl = normalizeHttpsOrigin(rawOrgUrl, "Okta org URL");
+
+  return { apiToken, orgUrl };
+}
+
+async function readTwilioCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ accountSid: string; authToken: string }> {
+  const accountSid = await readSecret(context, "accountSid", "Twilio Account SID");
+  const authToken = await readSecret(context, "authToken", "Twilio Auth Token");
+
+  return { accountSid, authToken };
+}
+
 async function readSecret(
   context: ExtensionActionHandlerContext,
   fieldId: string,
@@ -5370,6 +6639,41 @@ function normalizeDatadogSite(value: string): string {
   }
 
   return normalized;
+}
+
+function normalizeFreshdeskDomain(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/^https?:\/\//u, "")
+    .replace(/\/.*$/u, "")
+    .toLowerCase();
+  const domain = normalized.endsWith(".freshdesk.com")
+    ? normalized
+    : `${normalizeSimpleHostLabel(normalized, "Freshdesk domain")}.freshdesk.com`;
+
+  if (!/^[a-z0-9][a-z0-9-]*\.freshdesk\.com$/u.test(domain)) {
+    throw new Error("Freshdesk domain must look like example.freshdesk.com");
+  }
+
+  return domain;
+}
+
+function normalizeSimpleHostLabel(value: string, label: string): string {
+  const normalized = value
+    .trim()
+    .replace(/^https?:\/\//u, "")
+    .replace(/\/.*$/u, "")
+    .toLowerCase();
+
+  if (!/^[a-z0-9][a-z0-9-]*$/u.test(normalized)) {
+    throw new Error(`${label} is invalid`);
+  }
+
+  return normalized;
+}
+
+function createBasicAuthHeader(username: string, password: string): string {
+  return `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`;
 }
 
 function readEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {

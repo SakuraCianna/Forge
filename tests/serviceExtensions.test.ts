@@ -18,6 +18,7 @@ test("built-in service extensions expose production manifests for common service
     "github",
     "gitlab",
     "bitbucket",
+    "confluence",
     "slack",
     "notion",
     "airtable",
@@ -25,6 +26,8 @@ test("built-in service extensions expose production manifests for common service
     "salesforce",
     "zendesk",
     "intercom",
+    "freshdesk",
+    "pipedrive",
     "todoist",
     "asana",
     "clickup",
@@ -32,6 +35,9 @@ test("built-in service extensions expose production manifests for common service
     "trello",
     "stripe",
     "shopify",
+    "mailchimp",
+    "postmark",
+    "twilio",
     "google-calendar",
     "calendly",
     "miro",
@@ -45,6 +51,8 @@ test("built-in service extensions expose production manifests for common service
     "sentry",
     "pagerduty",
     "datadog",
+    "cloudflare",
+    "okta",
     "jira-cloud",
     "discord"
   ]);
@@ -79,6 +87,7 @@ test("OAuth-capable service extensions declare provider metadata and token field
       "github",
       "gitlab",
       "bitbucket",
+      "confluence",
       "slack",
       "notion",
       "airtable",
@@ -155,6 +164,7 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["github", "github.png"],
     ["gitlab", "gitlab.ico"],
     ["bitbucket", "bitbucket.ico"],
+    ["confluence", "confluence.ico"],
     ["slack", "slack.png"],
     ["notion", "notion.png"],
     ["airtable", "airtable.ico"],
@@ -162,6 +172,8 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["salesforce", "salesforce.ico"],
     ["zendesk", "zendesk.ico"],
     ["intercom", "intercom.ico"],
+    ["freshdesk", "freshdesk.ico"],
+    ["pipedrive", "pipedrive.ico"],
     ["todoist", "todoist.ico"],
     ["asana", "asana.ico"],
     ["clickup", "clickup.png"],
@@ -169,6 +181,9 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["trello", "trello.ico"],
     ["stripe", "stripe.ico"],
     ["shopify", "shopify.ico"],
+    ["mailchimp", "mailchimp.ico"],
+    ["postmark", "postmark.ico"],
+    ["twilio", "twilio.ico"],
     ["google-calendar", "google-calendar.png"],
     ["calendly", "calendly.ico"],
     ["miro", "miro.png"],
@@ -182,6 +197,8 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["sentry", "sentry.ico"],
     ["pagerduty", "pagerduty.ico"],
     ["datadog", "datadog.ico"],
+    ["cloudflare", "cloudflare.ico"],
+    ["okta", "okta.ico"],
     ["jira-cloud", "jira-cloud.ico"],
     ["discord", "discord.ico"]
   ]);
@@ -203,11 +220,11 @@ test("extensions panel explains OAuth setup before browser authorization", async
   const source = await readFile("src/renderer/src/components/ExtensionsPanel.tsx", "utf8");
 
   assert.match(source, /oauthMissingPrerequisites/u);
-  assert.match(source, /普通用户不需要自己创建 OAuth app/u);
+  assert.match(source, /这不是普通用户要填写的内容/u);
   assert.match(source, /selectedOAuthUsesProductClient/u);
   assert.match(source, /canStartSelectedOAuth/u);
   assert.match(source, /disabled=\{\s*busyOAuthExtensionId === selectedManifest\.id \|\|/u);
-  assert.match(source, /Forge 授权服务/u);
+  assert.match(source, /Forge OAuth broker/u);
   assert.match(source, /getManualAuthFields/u);
   assert.match(source, /oauthOnlyCredentials/u);
   assert.match(source, /manualInput !== false/u);
@@ -533,6 +550,68 @@ test("bitbucket service extension lists repositories with connector token auth",
   }
 });
 
+test("confluence service extension searches pages with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.atlassian.com");
+    assert.equal(
+      requestUrl.pathname,
+      "/ex/confluence/cloud-1/wiki/rest/api/content/search"
+    );
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.match(requestUrl.searchParams.get("cql") ?? "", /type = page/u);
+    assert.match(requestUrl.searchParams.get("cql") ?? "", /release/u);
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer atlassian-token");
+
+    return {
+      body: {
+        results: [
+          {
+            id: "page-1"
+          },
+          {
+            id: "page-2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "confluence",
+      "confluence.read",
+      "accessToken",
+      "atlassian-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "confluence",
+      actionId: "searchPages",
+      input: {
+        cloudId: "cloud-1",
+        limit: 2,
+        query: "release"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Confluence Cloud 搜索返回 2 个页面");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("airtable service extension invokes the Web API with connector token auth", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -795,6 +874,114 @@ test("intercom service extension lists conversations with token auth", async () 
 
     if (result.ok) {
       assert.equal(result.outputSummary, "Intercom 返回 2 个会话");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("freshdesk service extension lists tickets with API key auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://acme.freshdesk.com");
+    assert.equal(requestUrl.pathname, "/api/v2/tickets");
+    assert.equal(requestUrl.searchParams.get("per_page"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal(
+      (init?.headers as Record<string, string>).Authorization,
+      `Basic ${Buffer.from("freshdesk-key:X").toString("base64")}`
+    );
+
+    return {
+      body: [
+        {
+          id: 1
+        },
+        {
+          id: 2
+        }
+      ],
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "freshdesk", "freshdesk.read", {
+      apiKey: "freshdesk-key",
+      domain: "acme"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "freshdesk",
+      actionId: "listTickets",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Freshdesk 返回 2 个工单");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("pipedrive service extension lists deals with API token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.pipedrive.com");
+    assert.equal(requestUrl.pathname, "/v1/deals");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.equal(requestUrl.searchParams.get("api_token"), "pipedrive-token");
+    assert.equal(init?.method, "GET");
+
+    return {
+      body: {
+        data: [
+          {
+            id: 1
+          },
+          {
+            id: 2
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "pipedrive",
+      "pipedrive.read",
+      "apiToken",
+      "pipedrive-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "pipedrive",
+      actionId: "listDeals",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Pipedrive 返回 2 个交易");
     }
   } finally {
     fetchMock.restore();
@@ -1279,6 +1466,182 @@ test("shopify service extension queries products through Admin GraphQL", async (
   }
 });
 
+test("mailchimp service extension lists audiences with API key auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://us21.api.mailchimp.com");
+    assert.equal(requestUrl.pathname, "/3.0/lists");
+    assert.equal(requestUrl.searchParams.get("count"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal(
+      (init?.headers as Record<string, string>).Authorization,
+      `Basic ${Buffer.from("Forge:mailchimp-key").toString("base64")}`
+    );
+
+    return {
+      body: {
+        lists: [
+          {
+            id: "audience-1"
+          },
+          {
+            id: "audience-2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "mailchimp", "mailchimp.read", {
+      apiKey: "mailchimp-key",
+      serverPrefix: "us21"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "mailchimp",
+      actionId: "listAudiences",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Mailchimp 返回 2 个受众");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("postmark send actions require confirmation before sending email", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://api.postmarkapp.com/email");
+    assert.equal(init?.method, "POST");
+    assert.equal((init?.headers as Record<string, string>)["X-Postmark-Server-Token"], "postmark-token");
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      From: "sender@example.com",
+      Subject: "Hello",
+      TextBody: "Sent from Forge",
+      To: "receiver@example.com"
+    });
+
+    return {
+      body: {
+        MessageID: "message-1"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await fixture.registry.updateSettings({
+      extensionId: "postmark",
+      enabled: true,
+      permissions: [
+        { permissionId: "postmark.read", mode: "allow" },
+        { permissionId: "postmark.send", mode: "allow" }
+      ]
+    });
+    await fixture.registry.saveSecret({
+      extensionId: "postmark",
+      fieldId: "serverToken",
+      value: "postmark-token"
+    });
+
+    const pending = await fixture.registry.invoke({
+      extensionId: "postmark",
+      actionId: "sendEmail",
+      input: {
+        from: "sender@example.com",
+        subject: "Hello",
+        textBody: "Sent from Forge",
+        to: "receiver@example.com"
+      }
+    });
+
+    assert.equal(pending.ok, false);
+    assert.equal(fetchMock.calls.length, 0);
+
+    if (!pending.ok && "requiresConfirmation" in pending) {
+      const confirmed = await fixture.registry.confirmInvocation({
+        token: pending.confirmation.token
+      });
+
+      assert.equal(confirmed.ok, true);
+      assert.equal(fetchMock.calls.length, 1);
+    } else {
+      assert.fail("sendEmail should require confirmation");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("twilio service extension lists messages with basic auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.twilio.com");
+    assert.equal(requestUrl.pathname, "/2010-04-01/Accounts/AC123/Messages.json");
+    assert.equal(requestUrl.searchParams.get("PageSize"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal(
+      (init?.headers as Record<string, string>).Authorization,
+      `Basic ${Buffer.from("AC123:twilio-token").toString("base64")}`
+    );
+
+    return {
+      body: {
+        messages: [
+          {
+            sid: "SM1"
+          },
+          {
+            sid: "SM2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "twilio", "twilio.read", {
+      accountSid: "AC123",
+      authToken: "twilio-token"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "twilio",
+      actionId: "listMessages",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Twilio 返回 2 条短信");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("calendly service extension lists event types with connector token auth", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -1740,6 +2103,112 @@ test("datadog service extension lists incidents with API and application keys", 
 
     if (result.ok) {
       assert.equal(result.outputSummary, "Datadog 返回 2 个事件");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("cloudflare service extension lists zones with API token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.cloudflare.com");
+    assert.equal(requestUrl.pathname, "/client/v4/zones");
+    assert.equal(requestUrl.searchParams.get("per_page"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer cloudflare-token");
+
+    return {
+      body: {
+        result: [
+          {
+            id: "zone-1"
+          },
+          {
+            id: "zone-2"
+          }
+        ],
+        success: true
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "cloudflare",
+      "cloudflare.read",
+      "apiToken",
+      "cloudflare-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "cloudflare",
+      actionId: "listZones",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Cloudflare 返回 2 个域名");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("okta service extension lists groups with SSWS token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://example.okta.com");
+    assert.equal(requestUrl.pathname, "/api/v1/groups");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "SSWS okta-token");
+
+    return {
+      body: [
+        {
+          id: "group-1"
+        },
+        {
+          id: "group-2"
+        }
+      ],
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "okta", "okta.read", {
+      apiToken: "okta-token",
+      orgUrl: "https://example.okta.com"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "okta",
+      actionId: "listGroups",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Okta 返回 2 个用户组");
     }
   } finally {
     fetchMock.restore();

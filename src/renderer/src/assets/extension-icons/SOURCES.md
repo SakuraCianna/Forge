@@ -9,6 +9,7 @@ The product names and marks belong to their respective owners.
 | GitHub | `github.png` | `https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png` |
 | GitLab | `gitlab.ico` | `https://about.gitlab.com/favicon.ico` |
 | Bitbucket | `bitbucket.ico` | `https://bitbucket.org/favicon.ico` |
+| Confluence Cloud | `confluence.ico` | `https://www.atlassian.com/favicon.ico` |
 | Slack | `slack.png` | `https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png` |
 | Notion | `notion.png` | `https://www.notion.com/images/logo-ios.png` |
 | Airtable | `airtable.ico` | `https://airtable.com/favicon.ico` |
@@ -16,6 +17,8 @@ The product names and marks belong to their respective owners.
 | Salesforce | `salesforce.ico` | `https://www.salesforce.com/favicon.ico` |
 | Zendesk | `zendesk.ico` | `https://www.zendesk.com/favicon.ico` |
 | Intercom | `intercom.ico` | `https://www.intercom.com/intercom-marketing-site/favicons/favicon.ico` |
+| Freshdesk | `freshdesk.ico` | `https://www.freshworks.com/favicons/favicon.ico` |
+| Pipedrive | `pipedrive.ico` | `https://www.pipedrive.com/favicon.ico` |
 | Todoist | `todoist.ico` | `https://todoist.com/favicon.ico` |
 | Asana | `asana.ico` | `https://asana.com/favicon.ico` |
 | ClickUp | `clickup.png` | `https://clickup.com/favicon.ico` |
@@ -23,6 +26,9 @@ The product names and marks belong to their respective owners.
 | Trello | `trello.ico` | `https://trello.com/favicon.ico` |
 | Stripe | `stripe.ico` | `https://stripe.com/favicon.ico` |
 | Shopify | `shopify.ico` | `https://www.shopify.com/favicon.ico` |
+| Mailchimp | `mailchimp.ico` | `https://mailchimp.com/favicon.ico` |
+| Postmark | `postmark.ico` | `https://postmarkapp.com/favicon.ico` |
+| Twilio | `twilio.ico` | `https://www.twilio.com/favicon.ico` |
 | Google Calendar | `google-calendar.png` | `https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png` |
 | Calendly | `calendly.ico` | `https://calendly.com/favicon.ico` |
 | Miro | `miro.png` | `https://miro.com/favicon.ico` |
@@ -36,5 +42,7 @@ The product names and marks belong to their respective owners.
 | Sentry | `sentry.ico` | `https://sentry.io/favicon.ico` |
 | PagerDuty | `pagerduty.ico` | `https://www.pagerduty.com/favicon.ico` |
 | Datadog | `datadog.ico` | `https://www.datadoghq.com/favicon.ico` |
+| Cloudflare | `cloudflare.ico` | `https://www.cloudflare.com/favicon.ico` |
+| Okta | `okta.ico` | `https://www.okta.com/favicon.ico` |
 | Jira Cloud | `jira-cloud.ico` | `https://jira.atlassian.com/favicon.ico` |
 | Discord | `discord.ico` | `https://discord.com/assets/favicon.ico` |

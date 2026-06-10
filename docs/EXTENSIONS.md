@@ -39,6 +39,7 @@ Registry 负责:
 - `github`: GitHub REST API 扩展。
 - `gitlab`: GitLab REST API 扩展。
 - `bitbucket`: Bitbucket Cloud REST API 扩展。
+- `confluence`: Confluence Cloud REST API 扩展。
 - `slack`: Slack Web API 扩展。
 - `notion`: Notion API 扩展。
 - `airtable`: Airtable Web API 扩展。
@@ -46,6 +47,8 @@ Registry 负责:
 - `salesforce`: Salesforce REST API 扩展。
 - `zendesk`: Zendesk Support API 扩展。
 - `intercom`: Intercom REST API 扩展。
+- `freshdesk`: Freshdesk Support API 扩展。
+- `pipedrive`: Pipedrive REST API 扩展。
 - `todoist`: Todoist API 扩展。
 - `asana`: Asana API 扩展。
 - `clickup`: ClickUp API 扩展。
@@ -53,6 +56,9 @@ Registry 负责:
 - `trello`: Trello REST API 扩展。
 - `stripe`: Stripe REST API 扩展。
 - `shopify`: Shopify Admin GraphQL API 扩展。
+- `mailchimp`: Mailchimp Marketing API 扩展。
+- `postmark`: Postmark API 扩展。
+- `twilio`: Twilio REST API 扩展。
 - `google-calendar`: Google Calendar API 扩展。
 - `calendly`: Calendly API 扩展。
 - `miro`: Miro REST API 扩展。
@@ -66,6 +72,8 @@ Registry 负责:
 - `sentry`: Sentry REST API 扩展。
 - `pagerduty`: PagerDuty REST API 扩展。
 - `datadog`: Datadog REST API 扩展。
+- `cloudflare`: Cloudflare REST API 扩展。
+- `okta`: Okta Core API 扩展。
 - `jira-cloud`: Jira Cloud API 扩展。
 - `discord`: Discord API 扩展。
 
@@ -195,7 +203,7 @@ Forge 当前实现了三类产品化授权路径:
 
 1. 产品维护者在发布前为可本地回调的服务配置 OAuth app。Google Calendar、Gmail 和 Google Drive 默认使用 Forge 内置桌面 OAuth client ID。
 2. GitHub 使用 device flow。Forge 打开本地说明页显示一次性验证码, 用户在 GitHub 官方页面输入验证码后, 主进程轮询 token endpoint 并保存 token。
-3. GitLab、Bitbucket、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 使用 brokered 模式。桌面端只打开 Forge 官方 OAuth 服务, 由服务端持有 client secret 并处理 HTTPS callback, 再把短期 broker code 回跳给本机 Forge。
+3. GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 使用 brokered 模式。桌面端只打开 Forge 官方 OAuth 服务, 由服务端持有 client secret 并处理 HTTPS callback, 再把短期 broker code 回跳给本机 Forge。
 4. 普通用户进入扩展页, 直接点击“网页登录授权”, 不需要自己创建 OAuth app、复制 client ID 或保存 client secret。
 5. 对已声明 OAuth 的内置扩展, access token 和 refresh token 由网页登录授权自动写入本机安全存储, 扩展页不会再展示手动粘贴 token 的输入框。
 6. 如果某个构建缺少产品方 OAuth 配置或 Forge OAuth broker, UI 会明确标注“当前构建未配置网页登录”, 这是维护者需要处理的发布配置问题。
@@ -207,16 +215,16 @@ Forge 当前实现了三类产品化授权路径:
 12. access token 和 refresh token 写入 Electron 主进程密钥库。
 13. 扩展 Registry 刷新密钥状态, Agent 只看到动作 schema, 看不到 token。
 
-不是所有服务都允许桌面端 loopback redirect。GitLab、Bitbucket、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud、Discord 等通常要求在服务后台预注册 HTTPS 回调地址或使用 confidential client。Forge 会在 UI 中标注这类服务需要 Forge 官方授权服务, 不会假装它们能直接用本地回调完成授权。
+不是所有服务都允许桌面端 loopback redirect。GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud、Discord 等通常要求在服务后台预注册 HTTPS 回调地址或使用 confidential client。Forge 会在 UI 中标注这类服务需要 Forge 官方授权服务, 不会假装它们能直接用本地回调完成授权。
 
-Salesforce、Zendesk、Intercom、Trello、Stripe、Shopify、PagerDuty 和 Datadog 当前先以手动凭据方式接入, 即用户在扩展页保存服务 token、API key 或站点域名后调用只读动作。后续如果接入产品级连接器, 应继续隐藏普通用户不该维护的 client secret, 并把 token exchange 放到 Forge 官方授权服务。
+Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shopify、Mailchimp、Postmark、Twilio、PagerDuty、Datadog、Cloudflare 和 Okta 当前先以手动凭据方式接入, 即用户在扩展页保存服务 token、API key 或站点域名后调用只读动作。后续如果接入产品级连接器, 应继续隐藏普通用户不该维护的 client secret, 并把 token exchange 放到 Forge 官方授权服务。
 
 维护者配置项:
 
 - `FORGE_GOOGLE_OAUTH_CLIENT_ID`: 覆盖内置 Google 桌面 OAuth client ID。
 - `FORGE_GITHUB_OAUTH_CLIENT_ID`: 启用 GitHub device flow。
 - `FORGE_LINEAR_OAUTH_CLIENT_ID`: 启用 Linear loopback + PKCE 授权。
-- `FORGE_OAUTH_BROKER_BASE_URL`: 启用 GitLab、Bitbucket、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 的 Forge brokered 授权入口。
+- `FORGE_OAUTH_BROKER_BASE_URL`: 启用 GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 的 Forge brokered 授权入口。
 
 不要把 client secret 写进桌面端代码或仓库; 需要 confidential client 的服务必须接入 Forge 官方 HTTPS 授权代理后再开放给普通用户。
 
@@ -228,6 +236,7 @@ Salesforce、Zendesk、Intercom、Trello、Stripe、Shopify、PagerDuty 和 Data
 - GitHub OAuth Apps 支持 device flow, 适合 CLI 和桌面应用这类不应保存 client secret 的场景。
 - GitLab REST API 支持 OAuth 2.0 Bearer token, `read_user` 和 `read_api` 覆盖用户资料和只读 API 调用。
 - Bitbucket Cloud OAuth 2.0 使用 `https://bitbucket.org/site/oauth2/authorize` 授权入口, API 请求通过 `Authorization: Bearer {access_token}` 调用 `https://api.bitbucket.org/2.0`。
+- Confluence Cloud OAuth 2.0 使用 Atlassian `api.atlassian.com/ex/confluence/{cloudId}/wiki` 路径访问空间和页面搜索 API。
 - Linear OAuth 支持 PKCE, refresh token 需要安全保存并用于后续刷新。
 - Figma REST OAuth 需要配置 redirect URL; 对文件读取和评论读取分别使用 `file_content:read` 和 `file_comments:read` 等细粒度 scope。
 - Notion token exchange 使用 HTTP Basic Authentication。
@@ -238,6 +247,8 @@ Salesforce、Zendesk、Intercom、Trello、Stripe、Shopify、PagerDuty 和 Data
 - Salesforce REST API 通过 OAuth Bearer token 访问实例域名下的 REST resources, SOQL 查询使用 `/services/data/{version}/query`。
 - Zendesk Support API 支持 OAuth access token, 工单、用户和搜索 API 都在对应子域名的 `/api/v2` 下调用。
 - Intercom REST API 使用 Bearer token 调用 `https://api.intercom.io`, 联系人和会话是常见的只读集成对象。
+- Freshdesk API 使用子域名下的 `/api/v2` 路径, API key 通过 HTTP Basic Auth 传入。
+- Pipedrive API 支持通过 `api_token` 查询参数调用 deals、organizations 和 users 等资源。
 - Todoist OAuth 的 `data:read_write` scope 覆盖读取项目/任务和创建任务。
 - Asana OAuth 支持 authorization-code + PKCE, 用户授权入口是 `https://app.asana.com/-/oauth_authorize`, token endpoint 是 `https://app.asana.com/-/oauth_token`, 读取工作区、项目和任务分别使用 `workspaces:read`, `projects:read`, `tasks:read`。
 - ClickUp OAuth 使用 `https://app.clickup.com/api` 授权入口和 `https://api.clickup.com/api/v2/oauth/token` token endpoint, 用户授权后可读取已授权 Workspaces。
@@ -245,6 +256,9 @@ Salesforce、Zendesk、Intercom、Trello、Stripe、Shopify、PagerDuty 和 Data
 - Trello REST API 可以通过 API key 和用户 token 作为查询参数调用, token 必须视为敏感凭据保存。
 - Stripe API 使用 secret key 或 restricted key 鉴权, 只读集成应优先使用受限 key。
 - Shopify Admin GraphQL API 使用 Admin API access token 和店铺域名调用, 商品读取需要 `read_products`, 订单读取需要 `read_orders` 等 scope。
+- Mailchimp Marketing API 使用 API key 和 server prefix 调用 `https://{prefix}.api.mailchimp.com/3.0`。
+- Postmark API 通过 `X-Postmark-Server-Token` 请求头调用, 发送邮件类动作必须二次确认。
+- Twilio REST API 使用 Account SID 和 Auth Token 的 HTTP Basic Auth 调用账号、消息和通话记录接口。
 - Calendly 推荐公共应用使用 OAuth 2.1, `users:read`, `event_types:read` 和 `scheduled_events:read` 分别覆盖当前用户、事件类型和预约事件读取。
 - Miro REST API 应用需要 OAuth 2.0 authorization-code flow, `boards:read` 可读取 boards, `identity:read` 可读取当前身份信息。
 - Zoom OAuth 使用 `https://zoom.us/oauth/authorize` 和 `https://zoom.us/oauth/token`, API base URL 是 `https://api.zoom.us/v2/`, 请求用 Bearer token。
@@ -253,6 +267,8 @@ Salesforce、Zendesk、Intercom、Trello、Stripe、Shopify、PagerDuty 和 Data
 - Sentry 支持 OAuth2 authorization-code grant, 授权入口是 `https://sentry.io/oauth/authorize/`, token endpoint 是 `https://sentry.io/oauth/token/`, 常用只读 scope 包括 `org:read`, `project:read`, `event:read`。
 - PagerDuty REST API 支持 API token, 事件和服务读取通过 `https://api.pagerduty.com` 调用。
 - Datadog API 使用 `DD-API-KEY` 和 `DD-APPLICATION-KEY` 请求头鉴权, 不同站点使用不同 API host。
+- Cloudflare API 使用 Bearer API token 调用 `https://api.cloudflare.com/client/v4`, 建议使用最小权限 token。
+- Okta Core API 使用 `SSWS` API token 调用组织域名下的 `/api/v1` 资源。
 
 ### GitHub
 
