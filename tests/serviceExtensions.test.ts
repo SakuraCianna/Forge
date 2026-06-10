@@ -22,10 +22,16 @@ test("built-in service extensions expose production manifests for common service
     "notion",
     "airtable",
     "hubspot",
+    "salesforce",
+    "zendesk",
+    "intercom",
     "todoist",
     "asana",
     "clickup",
     "monday",
+    "trello",
+    "stripe",
+    "shopify",
     "google-calendar",
     "calendly",
     "miro",
@@ -37,6 +43,8 @@ test("built-in service extensions expose production manifests for common service
     "microsoft-365",
     "linear",
     "sentry",
+    "pagerduty",
+    "datadog",
     "jira-cloud",
     "discord"
   ]);
@@ -151,10 +159,16 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["notion", "notion.png"],
     ["airtable", "airtable.ico"],
     ["hubspot", "hubspot.png"],
+    ["salesforce", "salesforce.ico"],
+    ["zendesk", "zendesk.ico"],
+    ["intercom", "intercom.ico"],
     ["todoist", "todoist.ico"],
     ["asana", "asana.ico"],
     ["clickup", "clickup.png"],
     ["monday", "monday.ico"],
+    ["trello", "trello.ico"],
+    ["stripe", "stripe.ico"],
+    ["shopify", "shopify.ico"],
     ["google-calendar", "google-calendar.png"],
     ["calendly", "calendly.ico"],
     ["miro", "miro.png"],
@@ -166,6 +180,8 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["microsoft-365", "microsoft-365.svg"],
     ["linear", "linear.svg"],
     ["sentry", "sentry.ico"],
+    ["pagerduty", "pagerduty.ico"],
+    ["datadog", "datadog.ico"],
     ["jira-cloud", "jira-cloud.ico"],
     ["discord", "discord.ico"]
   ]);
@@ -620,6 +636,172 @@ test("hubspot service extension reads CRM objects with connector token auth", as
   }
 });
 
+test("salesforce service extension queries account records with token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://acme.my.salesforce.com");
+    assert.equal(requestUrl.pathname, "/services/data/v61.0/query");
+    assert.match(requestUrl.searchParams.get("q") ?? "", /FROM Account/u);
+    assert.match(requestUrl.searchParams.get("q") ?? "", /LIMIT 2/u);
+    assert.equal(init?.method, "GET");
+    assert.equal(
+      (init?.headers as Record<string, string>).Authorization,
+      "Bearer salesforce-token"
+    );
+
+    return {
+      body: {
+        records: [
+          {
+            Id: "001A"
+          },
+          {
+            Id: "001B"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "salesforce", "salesforce.read", {
+      accessToken: "salesforce-token",
+      instanceUrl: "https://acme.my.salesforce.com/"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "salesforce",
+      actionId: "listAccounts",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Salesforce 返回 2 个客户");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("zendesk service extension searches tickets with token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://acme.zendesk.com");
+    assert.equal(requestUrl.pathname, "/api/v2/search.json");
+    assert.equal(requestUrl.searchParams.get("per_page"), "2");
+    assert.equal(requestUrl.searchParams.get("query"), "type:ticket status:open");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer zendesk-token");
+
+    return {
+      body: {
+        results: [
+          {
+            id: 1
+          },
+          {
+            id: 2
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "zendesk", "zendesk.read", {
+      accessToken: "zendesk-token",
+      subdomain: "https://acme.zendesk.com"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "zendesk",
+      actionId: "searchTickets",
+      input: {
+        limit: 2,
+        query: "status:open"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Zendesk 搜索返回 2 个工单");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("intercom service extension lists conversations with token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.intercom.io");
+    assert.equal(requestUrl.pathname, "/conversations");
+    assert.equal(requestUrl.searchParams.get("per_page"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer intercom-token");
+    assert.equal((init?.headers as Record<string, string>)["Intercom-Version"], "2.15");
+
+    return {
+      body: {
+        conversations: [
+          {
+            id: "conversation-1"
+          },
+          {
+            id: "conversation-2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "intercom",
+      "intercom.read",
+      "accessToken",
+      "intercom-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "intercom",
+      actionId: "listConversations",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Intercom 返回 2 个会话");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("todoist service extension reads tasks through the API with connector token auth", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -913,6 +1095,183 @@ test("monday service extension invokes the GraphQL API with connector token auth
 
     if (result.ok) {
       assert.equal(result.outputSummary, "monday.com 返回 2 个看板");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("trello service extension lists board cards with key and token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.trello.com");
+    assert.equal(requestUrl.pathname, "/1/boards/board-1/cards");
+    assert.equal(requestUrl.searchParams.get("key"), "trello-key");
+    assert.equal(requestUrl.searchParams.get("token"), "trello-token");
+    assert.equal(requestUrl.searchParams.get("filter"), "open");
+    assert.match(requestUrl.searchParams.get("fields") ?? "", /dateLastActivity/u);
+    assert.equal(init?.method, "GET");
+
+    return {
+      body: [
+        {
+          id: "card-1"
+        },
+        {
+          id: "card-2"
+        }
+      ],
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "trello", "trello.read", {
+      apiKey: "trello-key",
+      token: "trello-token"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "trello",
+      actionId: "listBoardCards",
+      input: {
+        boardId: "board-1"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Trello 看板 board-1 返回 2 张卡片");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("stripe service extension lists charges with secret key auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.stripe.com");
+    assert.equal(requestUrl.pathname, "/v1/charges");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer sk_test_123");
+
+    return {
+      body: {
+        data: [
+          {
+            id: "ch_1"
+          },
+          {
+            id: "ch_2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "stripe",
+      "stripe.read",
+      "secretKey",
+      "sk_test_123"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "stripe",
+      actionId: "listCharges",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Stripe 返回 2 条付款记录");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("shopify service extension queries products through Admin GraphQL", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://acme.myshopify.com");
+    assert.equal(requestUrl.pathname, "/admin/api/2026-04/graphql.json");
+    assert.equal(init?.method, "POST");
+    assert.equal(
+      (init?.headers as Record<string, string>)["X-Shopify-Access-Token"],
+      "shopify-token"
+    );
+
+    const body = JSON.parse(String(init?.body)) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
+
+    assert.match(body.query, /products\(first: \$first, query: \$query\)/u);
+    assert.deepEqual(body.variables, {
+      first: 2,
+      query: "status:active"
+    });
+
+    return {
+      body: {
+        data: {
+          products: {
+            nodes: [
+              {
+                id: "gid://shopify/Product/1"
+              },
+              {
+                id: "gid://shopify/Product/2"
+              }
+            ]
+          }
+        }
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "shopify", "shopify.read", {
+      adminAccessToken: "shopify-token",
+      storeDomain: "https://acme.myshopify.com/admin"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "shopify",
+      actionId: "listProducts",
+      input: {
+        limit: 2,
+        query: "status:active"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Shopify 返回 2 个商品");
     }
   } finally {
     fetchMock.restore();
@@ -1272,6 +1631,122 @@ test("sentry service extension lists organization issues with connector token au
   }
 });
 
+test("pagerduty service extension lists incidents with API token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.pagerduty.com");
+    assert.equal(requestUrl.pathname, "/incidents");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.equal(requestUrl.searchParams.get("statuses[]"), "triggered");
+    assert.equal(init?.method, "GET");
+    assert.equal(
+      (init?.headers as Record<string, string>).Authorization,
+      "Token token=pagerduty-token"
+    );
+
+    return {
+      body: {
+        incidents: [
+          {
+            id: "incident-1"
+          },
+          {
+            id: "incident-2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "pagerduty",
+      "pagerduty.read",
+      "apiToken",
+      "pagerduty-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "pagerduty",
+      actionId: "listIncidents",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "PagerDuty 返回 2 个事件");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("datadog service extension lists incidents with API and application keys", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.datadoghq.eu");
+    assert.equal(requestUrl.pathname, "/api/v2/incidents");
+    assert.equal(requestUrl.searchParams.get("page[size]"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>)["DD-API-KEY"], "datadog-api-key");
+    assert.equal(
+      (init?.headers as Record<string, string>)["DD-APPLICATION-KEY"],
+      "datadog-app-key"
+    );
+
+    return {
+      body: {
+        data: [
+          {
+            id: "incident-1"
+          },
+          {
+            id: "incident-2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "datadog", "datadog.read", {
+      apiKey: "datadog-api-key",
+      applicationKey: "datadog-app-key",
+      site: "https://api.datadoghq.eu"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "datadog",
+      actionId: "listIncidents",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Datadog 返回 2 个事件");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("enabled service extensions appear in the agent prompt only after credentials are configured", async () => {
   const fixture = await createRegistryFixture();
 
@@ -1450,6 +1925,27 @@ async function configureReadOnlyExtension(
     fieldId,
     value
   });
+}
+
+async function configureReadOnlyExtensionSecrets(
+  fixture: Awaited<ReturnType<typeof createRegistryFixture>>,
+  extensionId: string,
+  permissionId: string,
+  secrets: Record<string, string>
+): Promise<void> {
+  await fixture.registry.updateSettings({
+    extensionId,
+    enabled: true,
+    permissions: [{ permissionId, mode: "allow" }]
+  });
+
+  for (const [fieldId, value] of Object.entries(secrets)) {
+    await fixture.registry.saveSecret({
+      extensionId,
+      fieldId,
+      value
+    });
+  }
 }
 
 async function createRegistryFixture() {

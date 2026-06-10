@@ -121,6 +121,7 @@ const extensionIconSources: Record<string, string> = {
   bitbucket: new URL("../assets/extension-icons/bitbucket.ico", import.meta.url).href,
   calendly: new URL("../assets/extension-icons/calendly.ico", import.meta.url).href,
   clickup: new URL("../assets/extension-icons/clickup.png", import.meta.url).href,
+  datadog: new URL("../assets/extension-icons/datadog.ico", import.meta.url).href,
   discord: new URL("../assets/extension-icons/discord.ico", import.meta.url).href,
   dropbox: new URL("../assets/extension-icons/dropbox.ico", import.meta.url).href,
   figma: new URL("../assets/extension-icons/figma.png", import.meta.url).href,
@@ -130,16 +131,23 @@ const extensionIconSources: Record<string, string> = {
   "google-calendar": new URL("../assets/extension-icons/google-calendar.png", import.meta.url).href,
   "google-drive": new URL("../assets/extension-icons/google-drive.png", import.meta.url).href,
   hubspot: new URL("../assets/extension-icons/hubspot.png", import.meta.url).href,
+  intercom: new URL("../assets/extension-icons/intercom.ico", import.meta.url).href,
   "jira-cloud": new URL("../assets/extension-icons/jira-cloud.ico", import.meta.url).href,
   linear: new URL("../assets/extension-icons/linear.svg", import.meta.url).href,
   "microsoft-365": new URL("../assets/extension-icons/microsoft-365.svg", import.meta.url).href,
   miro: new URL("../assets/extension-icons/miro.png", import.meta.url).href,
   monday: new URL("../assets/extension-icons/monday.ico", import.meta.url).href,
   notion: new URL("../assets/extension-icons/notion.png", import.meta.url).href,
+  pagerduty: new URL("../assets/extension-icons/pagerduty.ico", import.meta.url).href,
   "qq-mail": new URL("../assets/extension-icons/qq-mail.ico", import.meta.url).href,
+  salesforce: new URL("../assets/extension-icons/salesforce.ico", import.meta.url).href,
   sentry: new URL("../assets/extension-icons/sentry.ico", import.meta.url).href,
+  shopify: new URL("../assets/extension-icons/shopify.ico", import.meta.url).href,
   slack: new URL("../assets/extension-icons/slack.png", import.meta.url).href,
+  stripe: new URL("../assets/extension-icons/stripe.ico", import.meta.url).href,
   todoist: new URL("../assets/extension-icons/todoist.ico", import.meta.url).href,
+  trello: new URL("../assets/extension-icons/trello.ico", import.meta.url).href,
+  zendesk: new URL("../assets/extension-icons/zendesk.ico", import.meta.url).href,
   zoom: new URL("../assets/extension-icons/zoom.ico", import.meta.url).href
 };
 
@@ -204,6 +212,9 @@ export function ExtensionsPanel({
       ),
     [selectedManifest]
   );
+  const selectedExtensionDetail = selectedManifest
+    ? createExtensionDetail(selectedManifest, language)
+    : "";
   const groupedManifests = useMemo(
     () => [
       {
@@ -546,6 +557,9 @@ export function ExtensionsPanel({
                 <h1 className="text-xl font-semibold text-[#202123]">{selectedManifest.name}</h1>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[#565869]">
                   {selectedManifest.description}
+                </p>
+                <p className="mt-2 max-w-3xl text-[13px] leading-6 text-[#6e6e80]">
+                  {selectedExtensionDetail}
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1576,6 +1590,39 @@ function splitRecipients(value: string): string[] {
     .split(/[;,]/u)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function createExtensionDetail(manifest: ExtensionManifest, language: Language): string {
+  const actionLabels = manifest.actions.map((action) => action.label);
+  const visibleActions = actionLabels.slice(0, 5).join(language === "zh-CN" ? "、" : ", ");
+  const actionSummary =
+    actionLabels.length > 5
+      ? language === "zh-CN"
+        ? `${visibleActions} 等 ${actionLabels.length} 个动作`
+        : `${visibleActions}, and ${actionLabels.length - 5} more actions`
+      : visibleActions;
+  const credentialSummary = manifest.auth.oauth
+    ? language === "zh-CN"
+      ? "支持网页登录授权或连接器托管凭据, 授权成功后 token 会保存到本地安全存储"
+      : "It supports browser authorization or connector-managed credentials, with tokens saved to local secure storage after authorization"
+    : language === "zh-CN"
+      ? "需要先在凭据区保存对应服务的访问令牌或 API key"
+      : "It requires saving the service access token or API key in the credentials section first";
+  const riskyActionCount = manifest.actions.filter((action) =>
+    ["write", "send", "delete"].includes(action.risk)
+  ).length;
+  const safetySummary =
+    riskyActionCount > 0
+      ? language === "zh-CN"
+        ? `其中 ${riskyActionCount} 个写入或发送类动作会继续遵守权限策略和二次确认`
+        : `${riskyActionCount} write, send or delete actions still follow permission policy and confirmation`
+      : language === "zh-CN"
+        ? "当前内置动作以读取和检索为主, 适合让 Agent 先理解外部系统状态"
+        : "Current built-in actions focus on reading and retrieval so the agent can understand external system state first";
+
+  return language === "zh-CN"
+    ? `这个扩展会让 Forge Agent 在你启用并授权后访问 ${manifest.name} 的官方 API。当前可执行 ${actionSummary}。${credentialSummary}。${safetySummary}。`
+    : `This extension lets the Forge agent access the official ${manifest.name} API after you enable and authorize it. It can run ${actionSummary}. ${credentialSummary}. ${safetySummary}.`;
 }
 
 function getExtensionsCopy(language: Language) {

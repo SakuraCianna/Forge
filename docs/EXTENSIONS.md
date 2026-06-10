@@ -43,10 +43,16 @@ Registry 负责:
 - `notion`: Notion API 扩展。
 - `airtable`: Airtable Web API 扩展。
 - `hubspot`: HubSpot CRM API 扩展。
+- `salesforce`: Salesforce REST API 扩展。
+- `zendesk`: Zendesk Support API 扩展。
+- `intercom`: Intercom REST API 扩展。
 - `todoist`: Todoist API 扩展。
 - `asana`: Asana API 扩展。
 - `clickup`: ClickUp API 扩展。
 - `monday`: monday.com GraphQL API 扩展。
+- `trello`: Trello REST API 扩展。
+- `stripe`: Stripe REST API 扩展。
+- `shopify`: Shopify Admin GraphQL API 扩展。
 - `google-calendar`: Google Calendar API 扩展。
 - `calendly`: Calendly API 扩展。
 - `miro`: Miro REST API 扩展。
@@ -58,6 +64,8 @@ Registry 负责:
 - `microsoft-365`: Microsoft Graph API 扩展。
 - `linear`: Linear GraphQL API 扩展。
 - `sentry`: Sentry REST API 扩展。
+- `pagerduty`: PagerDuty REST API 扩展。
+- `datadog`: Datadog REST API 扩展。
 - `jira-cloud`: Jira Cloud API 扩展。
 - `discord`: Discord API 扩展。
 
@@ -170,7 +178,7 @@ QQ Mail 凭据:
 
 ## 常用服务扩展
 
-以下内置服务使用用户保存的 token 通过官方 REST API 调用。Forge 只保存密钥状态, 不会把 token 写入调用日志或线程上下文。写入、发送和创建类动作都设置为 `always` 确认, 即使权限被设为 `allow`, 主进程也会先返回确认 token。
+以下内置服务使用用户保存的 token 或 API key 通过官方 API 调用。Forge 只保存密钥状态, 不会把 token 写入调用日志或线程上下文。写入、发送和创建类动作都设置为 `always` 确认, 即使权限被设为 `allow`, 主进程也会先返回确认 token。
 
 ### 网页登录授权
 
@@ -201,6 +209,8 @@ Forge 当前实现了三类产品化授权路径:
 
 不是所有服务都允许桌面端 loopback redirect。GitLab、Bitbucket、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud、Discord 等通常要求在服务后台预注册 HTTPS 回调地址或使用 confidential client。Forge 会在 UI 中标注这类服务需要 Forge 官方授权服务, 不会假装它们能直接用本地回调完成授权。
 
+Salesforce、Zendesk、Intercom、Trello、Stripe、Shopify、PagerDuty 和 Datadog 当前先以手动凭据方式接入, 即用户在扩展页保存服务 token、API key 或站点域名后调用只读动作。后续如果接入产品级连接器, 应继续隐藏普通用户不该维护的 client secret, 并把 token exchange 放到 Forge 官方授权服务。
+
 维护者配置项:
 
 - `FORGE_GOOGLE_OAUTH_CLIENT_ID`: 覆盖内置 Google 桌面 OAuth client ID。
@@ -225,16 +235,24 @@ Forge 当前实现了三类产品化授权路径:
 - Airtable OAuth 常用读取 scope 包括 `schema.bases:read` 和 `data.records:read`。
 - HubSpot OAuth 使用 authorization-code grant, 授权入口是 `https://app.hubspot.com/oauth/authorize`, token endpoint 是 `https://api.hubapi.com/oauth/v1/token`。
 - HubSpot CRM object API 可以通过 date-versioned object endpoints 读取联系人、公司和交易记录, 推荐优先使用细粒度 `crm.objects.*.read` scope。
+- Salesforce REST API 通过 OAuth Bearer token 访问实例域名下的 REST resources, SOQL 查询使用 `/services/data/{version}/query`。
+- Zendesk Support API 支持 OAuth access token, 工单、用户和搜索 API 都在对应子域名的 `/api/v2` 下调用。
+- Intercom REST API 使用 Bearer token 调用 `https://api.intercom.io`, 联系人和会话是常见的只读集成对象。
 - Todoist OAuth 的 `data:read_write` scope 覆盖读取项目/任务和创建任务。
 - Asana OAuth 支持 authorization-code + PKCE, 用户授权入口是 `https://app.asana.com/-/oauth_authorize`, token endpoint 是 `https://app.asana.com/-/oauth_token`, 读取工作区、项目和任务分别使用 `workspaces:read`, `projects:read`, `tasks:read`。
 - ClickUp OAuth 使用 `https://app.clickup.com/api` 授权入口和 `https://api.clickup.com/api/v2/oauth/token` token endpoint, 用户授权后可读取已授权 Workspaces。
 - monday.com OAuth 使用 `https://auth.monday.com/oauth2/authorize` 和 `https://auth.monday.com/oauth2/token`, API 调用集中到 GraphQL endpoint `https://api.monday.com/v2`。
+- Trello REST API 可以通过 API key 和用户 token 作为查询参数调用, token 必须视为敏感凭据保存。
+- Stripe API 使用 secret key 或 restricted key 鉴权, 只读集成应优先使用受限 key。
+- Shopify Admin GraphQL API 使用 Admin API access token 和店铺域名调用, 商品读取需要 `read_products`, 订单读取需要 `read_orders` 等 scope。
 - Calendly 推荐公共应用使用 OAuth 2.1, `users:read`, `event_types:read` 和 `scheduled_events:read` 分别覆盖当前用户、事件类型和预约事件读取。
 - Miro REST API 应用需要 OAuth 2.0 authorization-code flow, `boards:read` 可读取 boards, `identity:read` 可读取当前身份信息。
 - Zoom OAuth 使用 `https://zoom.us/oauth/authorize` 和 `https://zoom.us/oauth/token`, API base URL 是 `https://api.zoom.us/v2/`, 请求用 Bearer token。
 - Dropbox OAuth 文档建议桌面端这类公开客户端使用 PKCE; 用户不应为使用产品而自行注册 Dropbox app, 产品维护者应只注册一次应用。
 - Microsoft identity platform 通过 scope 请求 Microsoft Graph 权限, Forge 只请求 `User.Read`, `Mail.Read`, `Calendars.Read`, `Files.Read` 和 `offline_access`。
 - Sentry 支持 OAuth2 authorization-code grant, 授权入口是 `https://sentry.io/oauth/authorize/`, token endpoint 是 `https://sentry.io/oauth/token/`, 常用只读 scope 包括 `org:read`, `project:read`, `event:read`。
+- PagerDuty REST API 支持 API token, 事件和服务读取通过 `https://api.pagerduty.com` 调用。
+- Datadog API 使用 `DD-API-KEY` 和 `DD-APPLICATION-KEY` 请求头鉴权, 不同站点使用不同 API host。
 
 ### GitHub
 
@@ -331,6 +349,36 @@ Forge 当前实现了三类产品化授权路径:
 - `crm.objects.companies.read`
 - `crm.objects.deals.read`
 
+### Salesforce
+
+`salesforce` 使用 Salesforce 实例 URL 和 OAuth access token。当前先提供手动保存凭据的只读动作, 适合连接已有 Connected App 或 CLI 获取的访问令牌。
+
+支持动作:
+
+- `getIdentity`: 读取当前 Salesforce OAuth 身份摘要。
+- `listAccounts`: 通过 SOQL 读取 Account 摘要。
+- `listOpportunities`: 通过 SOQL 读取 Opportunity 摘要。
+
+### Zendesk
+
+`zendesk` 使用 Zendesk 子域名和 OAuth access token。当前先提供手动保存凭据的只读动作。
+
+支持动作:
+
+- `getCurrentUser`: 读取当前 Zendesk 用户资料。
+- `listTickets`: 读取最近工单摘要。
+- `searchTickets`: 按 Zendesk 搜索语法读取工单摘要。
+
+### Intercom
+
+`intercom` 使用 Intercom private app access token 或 OAuth access token。当前先提供手动保存凭据的只读动作。
+
+支持动作:
+
+- `getCurrentAdmin`: 读取当前 Intercom 管理员和 workspace 摘要。
+- `listContacts`: 读取 Intercom 联系人摘要。
+- `listConversations`: 读取 Intercom 会话摘要。
+
 ### Todoist
 
 `todoist` 使用 Todoist OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
@@ -389,6 +437,41 @@ Forge 当前实现了三类产品化授权路径:
 - `me:read`
 - `boards:read`
 - `workspaces:read`
+
+### Trello
+
+`trello` 使用 Trello API key 和用户 token。当前先提供手动保存凭据的只读动作。
+
+支持动作:
+
+- `getCurrentMember`: 读取当前 Trello 成员资料。
+- `listBoards`: 读取当前成员可见的 Trello 看板。
+- `listBoardCards`: 读取指定 Trello 看板的打开卡片。
+
+### Stripe
+
+`stripe` 使用 Stripe secret key 或 restricted key。建议使用只读 restricted key, 不要把高权限 live secret key 用作普通测试凭据。
+
+支持动作:
+
+- `getAccount`: 读取当前 Stripe 账号摘要。
+- `listCustomers`: 读取 Stripe 客户列表。
+- `listCharges`: 读取 Stripe charges 摘要。
+
+### Shopify
+
+`shopify` 使用 Shopify 店铺域名和 Admin API access token。当前通过 Shopify Admin GraphQL API 提供只读动作。
+
+支持动作:
+
+- `getShop`: 读取 Shopify 店铺摘要。
+- `listProducts`: 读取 Shopify 商品摘要。
+- `listOrders`: 读取 Shopify 订单摘要。
+
+建议 Admin API scope:
+
+- `read_products`
+- `read_orders`
 
 ### Google Calendar
 
@@ -522,6 +605,26 @@ Forge 当前实现了三类产品化授权路径:
 - `org:read`
 - `project:read`
 - `event:read`
+
+### PagerDuty
+
+`pagerduty` 使用 PagerDuty REST API token。当前先提供手动保存凭据的只读动作。
+
+支持动作:
+
+- `getCurrentUser`: 读取当前 PagerDuty 用户资料。
+- `listIncidents`: 读取 PagerDuty incidents 摘要。
+- `listServices`: 读取 PagerDuty services 摘要。
+
+### Datadog
+
+`datadog` 使用 Datadog site、API key 和 application key。当前先提供手动保存凭据的只读动作。
+
+支持动作:
+
+- `listMonitors`: 读取 Datadog monitors 摘要。
+- `listIncidents`: 读取 Datadog incidents 摘要。
+- `listDashboards`: 读取 Datadog dashboards 摘要。
 
 ### Jira Cloud
 

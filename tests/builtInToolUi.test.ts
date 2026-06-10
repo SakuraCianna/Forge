@@ -38,6 +38,16 @@ test("extensions panel keeps the service list scrollable when many extensions ar
   );
 });
 
+test("extensions panel shows a detailed per-extension capability summary", async () => {
+  const source = await readFile("src/renderer/src/components/ExtensionsPanel.tsx", "utf8");
+
+  assert.match(source, /selectedExtensionDetail/u);
+  assert.match(source, /createExtensionDetail/u);
+  assert.match(source, /当前可执行/u);
+  assert.match(source, /网页登录授权或连接器托管凭据/u);
+  assert.match(source, /权限策略和二次确认/u);
+});
+
 test("agent built-in tool confirmation UI exposes critical second-confirmation context", async () => {
   const queueSource = await readFile(
     "src/renderer/src/components/AgentConfirmationQueue.tsx",

@@ -151,10 +151,16 @@ export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createNotionExtension(),
   createAirtableExtension(),
   createHubSpotExtension(),
+  createSalesforceExtension(),
+  createZendeskExtension(),
+  createIntercomExtension(),
   createTodoistExtension(),
   createAsanaExtension(),
   createClickUpExtension(),
   createMondayExtension(),
+  createTrelloExtension(),
+  createStripeExtension(),
+  createShopifyExtension(),
   createGoogleCalendarExtension(),
   createCalendlyExtension(),
   createMiroExtension(),
@@ -166,6 +172,8 @@ export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createMicrosoft365Extension(),
   createLinearExtension(),
   createSentryExtension(),
+  createPagerDutyExtension(),
+  createDatadogExtension(),
   createJiraCloudExtension(),
   createDiscordExtension()
 ];
@@ -1156,6 +1164,387 @@ function createHubSpotExtension(): BuiltInServiceExtension {
   };
 }
 
+function createSalesforceExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "salesforce",
+    name: "Salesforce",
+    description: "通过 Salesforce REST API 读取账号、联系人和商机摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "instanceUrl",
+          label: "Salesforce instance URL",
+          description: "Salesforce 实例地址, 例如 https://your-domain.my.salesforce.com",
+          placeholder: "https://your-domain.my.salesforce.com"
+        },
+        {
+          id: "accessToken",
+          label: "OAuth access token",
+          description: "Salesforce Connected App OAuth access token",
+          placeholder: "salesforce_access_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "salesforce.read",
+        label: "读取 Salesforce",
+        description: "允许读取 Salesforce 当前用户、账号、联系人和商机摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getIdentity",
+        label: "查看身份",
+        description: "读取当前 Salesforce OAuth 身份摘要",
+        permission: "salesforce.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listAccounts",
+        label: "列出客户",
+        description: "读取 Salesforce Account 摘要",
+        permission: "salesforce.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listOpportunities",
+        label: "列出商机",
+        description: "读取 Salesforce Opportunity 摘要",
+        permission: "salesforce.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getIdentity: async (_input, context) => {
+      const { instanceUrl, token } = await readSalesforceCredentials(context);
+      const result = await salesforceRequest({
+        instanceUrl,
+        method: "GET",
+        path: "/services/oauth2/userinfo",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Salesforce 当前用户: ${readObjectText(result, "name", "unknown")}`
+      };
+    },
+    listAccounts: async (input, context) => {
+      const { instanceUrl, token } = await readSalesforceCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await salesforceRequest({
+        instanceUrl,
+        method: "GET",
+        path: "/services/data/v61.0/query",
+        query: {
+          q: `SELECT Id, Name, Industry, Type, LastModifiedDate FROM Account ORDER BY LastModifiedDate DESC LIMIT ${limit}`
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Salesforce 返回 ${readArrayLength(readRecord(result).records)} 个客户`
+      };
+    },
+    listOpportunities: async (input, context) => {
+      const { instanceUrl, token } = await readSalesforceCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await salesforceRequest({
+        instanceUrl,
+        method: "GET",
+        path: "/services/data/v61.0/query",
+        query: {
+          q: `SELECT Id, Name, StageName, Amount, CloseDate, LastModifiedDate FROM Opportunity ORDER BY LastModifiedDate DESC LIMIT ${limit}`
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Salesforce 返回 ${readArrayLength(readRecord(result).records)} 个商机`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `salesforce ${actionId}`
+  };
+}
+
+function createZendeskExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "zendesk",
+    name: "Zendesk",
+    description: "读取 Zendesk Support 当前用户、工单列表和工单搜索结果",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "subdomain",
+          label: "Zendesk subdomain",
+          description: "Zendesk 子域名, 例如 example 表示 https://example.zendesk.com",
+          placeholder: "example"
+        },
+        {
+          id: "accessToken",
+          label: "OAuth access token",
+          description: "Zendesk OAuth access token",
+          placeholder: "zendesk_access_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "zendesk.read",
+        label: "读取 Zendesk",
+        description: "允许读取 Zendesk 当前用户、工单和搜索结果摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 Zendesk 用户资料",
+        permission: "zendesk.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listTickets",
+        label: "列出工单",
+        description: "读取 Zendesk 最近工单摘要",
+        permission: "zendesk.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "searchTickets",
+        label: "搜索工单",
+        description: "按 Zendesk 搜索语法读取工单摘要",
+        permission: "zendesk.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          query: { type: "string", description: "搜索条件, 会自动追加 type:ticket" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const { subdomain, token } = await readZendeskCredentials(context);
+      const result = await zendeskRequest({
+        method: "GET",
+        path: "/users/me.json",
+        subdomain,
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Zendesk 当前用户: ${readNestedObjectText(result, ["user", "name"], "unknown")}`
+      };
+    },
+    listTickets: async (input, context) => {
+      const { subdomain, token } = await readZendeskCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await zendeskRequest({
+        method: "GET",
+        path: "/tickets.json",
+        query: {
+          per_page: String(limit)
+        },
+        subdomain,
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Zendesk 返回 ${readArrayLength(readRecord(result).tickets)} 个工单`
+      };
+    },
+    searchTickets: async (input, context) => {
+      const { subdomain, token } = await readZendeskCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const query = readOptionalString(input.query, 500);
+      const result = await zendeskRequest({
+        method: "GET",
+        path: "/search.json",
+        query: {
+          per_page: String(limit),
+          query: query ? `type:ticket ${query}` : "type:ticket"
+        },
+        subdomain,
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Zendesk 搜索返回 ${readArrayLength(readRecord(result).results)} 个工单`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "searchTickets"
+        ? `zendesk ${String(input.query ?? "")}`
+        : `zendesk ${actionId}`
+  };
+}
+
+function createIntercomExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "intercom",
+    name: "Intercom",
+    description: "读取 Intercom 当前管理员、联系人和会话摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "accessToken",
+          label: "Access token",
+          description: "Intercom private app access token 或 OAuth access token",
+          placeholder: "intercom_access_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "intercom.read",
+        label: "读取 Intercom",
+        description: "允许读取 Intercom 当前管理员、联系人和会话摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentAdmin",
+        label: "查看当前管理员",
+        description: "读取当前授权 Intercom 管理员和 workspace 摘要",
+        permission: "intercom.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listContacts",
+        label: "列出联系人",
+        description: "读取 Intercom 联系人摘要",
+        permission: "intercom.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listConversations",
+        label: "列出会话",
+        description: "读取 Intercom 会话摘要",
+        permission: "intercom.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentAdmin: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Intercom access token");
+      const result = await intercomRequest({
+        method: "GET",
+        path: "/me",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Intercom 当前管理员: ${readObjectText(result, "name", "unknown")}`
+      };
+    },
+    listContacts: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Intercom access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await intercomRequest({
+        method: "GET",
+        path: "/contacts",
+        query: {
+          per_page: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Intercom 返回 ${readArrayLength(readRecord(result).data)} 个联系人`
+      };
+    },
+    listConversations: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Intercom access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await intercomRequest({
+        method: "GET",
+        path: "/conversations",
+        query: {
+          per_page: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Intercom 返回 ${readArrayLength(readRecord(result).conversations)} 个会话`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `intercom ${actionId}`
+  };
+}
+
 function createTodoistExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "todoist",
@@ -1786,6 +2175,422 @@ function createMondayExtension(): BuiltInServiceExtension {
     handlers,
     manifest,
     summarizeInput: (actionId) => `monday ${actionId}`
+  };
+}
+
+function createTrelloExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "trello",
+    name: "Trello",
+    description: "读取 Trello 当前成员、看板和卡片摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "apiKey",
+          label: "Trello API key",
+          description: "Trello Power-Up API key",
+          placeholder: "trello_api_key"
+        },
+        {
+          id: "token",
+          label: "Trello token",
+          description: "通过 Trello 授权页面生成的用户 token",
+          placeholder: "trello_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "trello.read",
+        label: "读取 Trello",
+        description: "允许读取 Trello 当前成员、看板和卡片摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentMember",
+        label: "查看当前成员",
+        description: "读取当前 Trello 成员资料",
+        permission: "trello.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listBoards",
+        label: "列出看板",
+        description: "读取当前成员可见的 Trello 看板",
+        permission: "trello.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listBoardCards",
+        label: "列出卡片",
+        description: "读取指定 Trello 看板的打开卡片",
+        permission: "trello.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["boardId"],
+        properties: {
+          boardId: { type: "string", description: "Trello board ID" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentMember: async (_input, context) => {
+      const credentials = await readTrelloCredentials(context);
+      const result = await trelloRequest({
+        credentials,
+        method: "GET",
+        path: "/members/me",
+        query: {
+          fields: "username,fullName,url"
+        }
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Trello 当前成员: ${readObjectText(result, "username", "unknown")}`
+      };
+    },
+    listBoards: async (_input, context) => {
+      const credentials = await readTrelloCredentials(context);
+      const result = await trelloRequest({
+        credentials,
+        method: "GET",
+        path: "/members/me/boards",
+        query: {
+          fields: "name,url,dateLastActivity",
+          filter: "open",
+          lists: "none"
+        }
+      });
+
+      return {
+        output: Array.isArray(result) ? { boards: result } : toOutputRecord(result),
+        outputSummary: `Trello 返回 ${readArrayLength(result)} 个看板`
+      };
+    },
+    listBoardCards: async (input, context) => {
+      const credentials = await readTrelloCredentials(context);
+      const boardId = readRequiredString(input.boardId, "boardId", 120);
+      const result = await trelloRequest({
+        credentials,
+        method: "GET",
+        path: `/boards/${encodePathSegment(boardId)}/cards`,
+        query: {
+          fields: "name,url,due,dateLastActivity,idList",
+          filter: "open"
+        }
+      });
+
+      return {
+        output: Array.isArray(result) ? { cards: result } : toOutputRecord(result),
+        outputSummary: `Trello 看板 ${boardId} 返回 ${readArrayLength(result)} 张卡片`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listBoardCards"
+        ? `trello ${String(input.boardId ?? "")}`
+        : `trello ${actionId}`
+  };
+}
+
+function createStripeExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "stripe",
+    name: "Stripe",
+    description: "读取 Stripe 账号、客户和付款摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "secretKey",
+          label: "Stripe secret key",
+          description: "Stripe restricted key 或 secret key, 建议只授予读取权限",
+          placeholder: "sk_live_..."
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "stripe.read",
+        label: "读取 Stripe",
+        description: "允许读取 Stripe 账号、客户和付款摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getAccount",
+        label: "查看账号",
+        description: "读取当前 Stripe 账号摘要",
+        permission: "stripe.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listCustomers",
+        label: "列出客户",
+        description: "读取 Stripe 客户列表",
+        permission: "stripe.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listCharges",
+        label: "列出付款",
+        description: "读取 Stripe charges 摘要",
+        permission: "stripe.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getAccount: async (_input, context) => {
+      const token = await readSecret(context, "secretKey", "Stripe secret key");
+      const result = await stripeRequest({
+        method: "GET",
+        path: "/account",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Stripe 账号: ${readObjectText(result, "id", "unknown")}`
+      };
+    },
+    listCustomers: async (input, context) => {
+      const token = await readSecret(context, "secretKey", "Stripe secret key");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await stripeRequest({
+        method: "GET",
+        path: "/customers",
+        query: {
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Stripe 返回 ${readArrayLength(readRecord(result).data)} 个客户`
+      };
+    },
+    listCharges: async (input, context) => {
+      const token = await readSecret(context, "secretKey", "Stripe secret key");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await stripeRequest({
+        method: "GET",
+        path: "/charges",
+        query: {
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Stripe 返回 ${readArrayLength(readRecord(result).data)} 条付款记录`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `stripe ${actionId}`
+  };
+}
+
+function createShopifyExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "shopify",
+    name: "Shopify",
+    description: "通过 Shopify Admin API 读取店铺、商品和订单摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "storeDomain",
+          label: "Shopify store domain",
+          description: "Shopify 店铺域名, 例如 example.myshopify.com",
+          placeholder: "example.myshopify.com"
+        },
+        {
+          id: "adminAccessToken",
+          label: "Admin API access token",
+          description: "Shopify Admin API access token, 建议只授予读取商品和订单的 scope",
+          placeholder: "shpat_..."
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "shopify.read",
+        label: "读取 Shopify",
+        description: "允许读取 Shopify 店铺、商品和订单摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getShop",
+        label: "查看店铺",
+        description: "读取 Shopify 店铺摘要",
+        permission: "shopify.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listProducts",
+        label: "列出商品",
+        description: "读取 Shopify 商品摘要",
+        permission: "shopify.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" },
+          query: { type: "string", description: "Shopify 商品搜索语法" }
+        }
+      }),
+      createAction({
+        id: "listOrders",
+        label: "列出订单",
+        description: "读取 Shopify 订单摘要",
+        permission: "shopify.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" },
+          query: { type: "string", description: "Shopify 订单搜索语法" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getShop: async (_input, context) => {
+      const credentials = await readShopifyCredentials(context);
+      const result = await shopifyGraphqlRequest({
+        credentials,
+        query: `query ForgeShop {
+          shop {
+            name
+            myshopifyDomain
+            primaryDomain {
+              url
+            }
+          }
+        }`
+      });
+
+      return {
+        output: result,
+        outputSummary: `Shopify 店铺: ${readNestedObjectText(result, ["shop", "name"], "unknown")}`
+      };
+    },
+    listProducts: async (input, context) => {
+      const credentials = await readShopifyCredentials(context);
+      const first = readLimit(input.limit, defaultListLimit);
+      const queryText = readOptionalString(input.query, 500);
+      const result = await shopifyGraphqlRequest({
+        credentials,
+        query: `query ForgeProducts($first: Int!, $query: String) {
+          products(first: $first, query: $query) {
+            nodes {
+              id
+              title
+              handle
+              status
+              updatedAt
+            }
+          }
+        }`,
+        variables: {
+          first,
+          query: queryText || null
+        }
+      });
+
+      return {
+        output: result,
+        outputSummary: `Shopify 返回 ${readArrayLength(readNestedRecord(result, ["products"]).nodes)} 个商品`
+      };
+    },
+    listOrders: async (input, context) => {
+      const credentials = await readShopifyCredentials(context);
+      const first = readLimit(input.limit, defaultListLimit);
+      const queryText = readOptionalString(input.query, 500);
+      const result = await shopifyGraphqlRequest({
+        credentials,
+        query: `query ForgeOrders($first: Int!, $query: String) {
+          orders(first: $first, query: $query) {
+            nodes {
+              id
+              name
+              displayFinancialStatus
+              displayFulfillmentStatus
+              updatedAt
+              totalPriceSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+            }
+          }
+        }`,
+        variables: {
+          first,
+          query: queryText || null
+        }
+      });
+
+      return {
+        output: result,
+        outputSummary: `Shopify 返回 ${readArrayLength(readNestedRecord(result, ["orders"]).nodes)} 个订单`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listProducts" || actionId === "listOrders"
+        ? `shopify ${actionId} ${String(input.query ?? "")}`
+        : `shopify ${actionId}`
   };
 }
 
@@ -3091,6 +3896,269 @@ function createSentryExtension(): BuiltInServiceExtension {
   };
 }
 
+function createPagerDutyExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "pagerduty",
+    name: "PagerDuty",
+    description: "读取 PagerDuty 当前用户、事件和服务摘要",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "apiToken",
+          label: "PagerDuty API token",
+          description: "PagerDuty REST API token, 建议使用只读权限",
+          placeholder: "pd_api_token"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "pagerduty.read",
+        label: "读取 PagerDuty",
+        description: "允许读取 PagerDuty 当前用户、事件和服务摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 PagerDuty 用户资料",
+        permission: "pagerduty.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listIncidents",
+        label: "列出事件",
+        description: "读取 PagerDuty incidents 摘要",
+        permission: "pagerduty.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" },
+          status: { type: "string", enum: ["triggered", "acknowledged", "resolved"], description: "事件状态, 默认 triggered" }
+        }
+      }),
+      createAction({
+        id: "listServices",
+        label: "列出服务",
+        description: "读取 PagerDuty services 摘要",
+        permission: "pagerduty.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "apiToken", "PagerDuty API token");
+      const result = await pagerDutyRequest({
+        method: "GET",
+        path: "/users/me",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `PagerDuty 当前用户: ${readNestedObjectText(result, ["user", "name"], "unknown")}`
+      };
+    },
+    listIncidents: async (input, context) => {
+      const token = await readSecret(context, "apiToken", "PagerDuty API token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const status = readEnum(input.status, ["triggered", "acknowledged", "resolved"], "triggered");
+      const result = await pagerDutyRequest({
+        method: "GET",
+        path: "/incidents",
+        query: {
+          limit: String(limit),
+          "statuses[]": status
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `PagerDuty 返回 ${readArrayLength(readRecord(result).incidents)} 个事件`
+      };
+    },
+    listServices: async (input, context) => {
+      const token = await readSecret(context, "apiToken", "PagerDuty API token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await pagerDutyRequest({
+        method: "GET",
+        path: "/services",
+        query: {
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `PagerDuty 返回 ${readArrayLength(readRecord(result).services)} 个服务`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `pagerduty ${actionId}`
+  };
+}
+
+function createDatadogExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "datadog",
+    name: "Datadog",
+    description: "读取 Datadog monitors、incidents 和 dashboard 摘要",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: {
+      type: "secret",
+      fields: [
+        {
+          id: "site",
+          label: "Datadog site",
+          description: "Datadog 站点域名, 例如 datadoghq.com 或 datadoghq.eu",
+          placeholder: "datadoghq.com",
+          required: false
+        },
+        {
+          id: "apiKey",
+          label: "Datadog API key",
+          description: "Datadog API key",
+          placeholder: "dd_api_key"
+        },
+        {
+          id: "applicationKey",
+          label: "Datadog application key",
+          description: "Datadog application key, 用于调用 REST API",
+          placeholder: "dd_app_key"
+        }
+      ]
+    },
+    permissions: [
+      {
+        id: "datadog.read",
+        label: "读取 Datadog",
+        description: "允许读取 Datadog monitors、incidents 和 dashboard 摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listMonitors",
+        label: "列出监控",
+        description: "读取 Datadog monitors 摘要",
+        permission: "datadog.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" },
+          query: { type: "string", description: "Datadog monitor 搜索查询" }
+        }
+      }),
+      createAction({
+        id: "listIncidents",
+        label: "列出事件",
+        description: "读取 Datadog incidents 摘要",
+        permission: "datadog.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listDashboards",
+        label: "列出仪表盘",
+        description: "读取 Datadog dashboards 摘要",
+        permission: "datadog.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listMonitors: async (input, context) => {
+      const credentials = await readDatadogCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const query = readOptionalString(input.query, 500);
+      const result = await datadogRequest({
+        credentials,
+        method: "GET",
+        path: "/api/v1/monitor",
+        query: {
+          ...(query ? { query } : {}),
+          per_page: String(limit)
+        }
+      });
+
+      return {
+        output: Array.isArray(result) ? { monitors: result } : toOutputRecord(result),
+        outputSummary: `Datadog 返回 ${readArrayLength(result)} 个监控`
+      };
+    },
+    listIncidents: async (input, context) => {
+      const credentials = await readDatadogCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await datadogRequest({
+        credentials,
+        method: "GET",
+        path: "/api/v2/incidents",
+        query: {
+          "page[size]": String(limit)
+        }
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Datadog 返回 ${readArrayLength(readRecord(result).data)} 个事件`
+      };
+    },
+    listDashboards: async (input, context) => {
+      const credentials = await readDatadogCredentials(context);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await datadogRequest({
+        credentials,
+        method: "GET",
+        path: "/api/v1/dashboard",
+        query: {
+          count: String(limit)
+        }
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Datadog 返回 ${readArrayLength(readRecord(result).dashboards)} 个仪表盘`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `datadog ${actionId}`
+  };
+}
+
 function createJiraCloudExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "jira-cloud",
@@ -3644,6 +4712,74 @@ async function hubspotRequest({
   });
 }
 
+async function salesforceRequest({
+  instanceUrl,
+  method,
+  path,
+  query,
+  token
+}: {
+  instanceUrl: string;
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Salesforce",
+    url: withQuery(`${trimTrailingSlash(instanceUrl)}${path}`, query)
+  });
+}
+
+async function zendeskRequest({
+  method,
+  path,
+  query,
+  subdomain,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  subdomain: string;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Zendesk",
+    url: withQuery(`https://${subdomain}.zendesk.com/api/v2${path}`, query)
+  });
+}
+
+async function intercomRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Intercom-Version": "2.15"
+    },
+    method,
+    service: "Intercom",
+    url: withQuery(`https://api.intercom.io${path}`, query)
+  });
+}
+
 async function todoistRequest({
   body,
   method,
@@ -3728,6 +4864,79 @@ async function microsoftGraphRequest({
     service: "Microsoft Graph",
     url: withQuery(`https://graph.microsoft.com/v1.0${path}`, query)
   });
+}
+
+async function trelloRequest({
+  credentials,
+  method,
+  path,
+  query
+}: {
+  credentials: { apiKey: string; token: string };
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+}): Promise<unknown> {
+  return requestJson({
+    method,
+    service: "Trello",
+    url: withQuery(`https://api.trello.com/1${path}`, {
+      ...query,
+      key: credentials.apiKey,
+      token: credentials.token
+    })
+  });
+}
+
+async function stripeRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Stripe",
+    url: withQuery(`https://api.stripe.com/v1${path}`, query)
+  });
+}
+
+async function shopifyGraphqlRequest({
+  credentials,
+  query,
+  variables
+}: {
+  credentials: { adminAccessToken: string; storeDomain: string };
+  query: string;
+  variables?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const result = await requestJson({
+    body: {
+      query,
+      ...(variables ? { variables } : {})
+    },
+    headers: {
+      "X-Shopify-Access-Token": credentials.adminAccessToken
+    },
+    method: "POST",
+    service: "Shopify",
+    url: `https://${credentials.storeDomain}/admin/api/2026-04/graphql.json`
+  });
+  const record = readRecord(result);
+
+  if (Array.isArray(record.errors) && record.errors.length > 0) {
+    throw new Error(`Shopify API request failed: ${formatErrorPayload(record.errors[0])}`);
+  }
+
+  return readRecord(record.data);
 }
 
 async function mondayGraphqlRequest({
@@ -3834,6 +5043,50 @@ async function sentryRequest({
   });
 }
 
+async function pagerDutyRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Accept: "application/vnd.pagerduty+json;version=2",
+      Authorization: `Token token=${token}`
+    },
+    method,
+    service: "PagerDuty",
+    url: withQuery(`https://api.pagerduty.com${path}`, query)
+  });
+}
+
+async function datadogRequest({
+  credentials,
+  method,
+  path,
+  query
+}: {
+  credentials: { apiKey: string; applicationKey: string; site: string };
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      "DD-API-KEY": credentials.apiKey,
+      "DD-APPLICATION-KEY": credentials.applicationKey
+    },
+    method,
+    service: "Datadog",
+    url: withQuery(`https://api.${credentials.site}${path}`, query)
+  });
+}
+
 async function discordRequest({
   method,
   path,
@@ -3928,6 +5181,64 @@ function formatErrorPayload(value: unknown): string {
   return JSON.stringify(value).slice(0, 300);
 }
 
+async function readSalesforceCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ instanceUrl: string; token: string }> {
+  const rawInstanceUrl = await readSecret(context, "instanceUrl", "Salesforce instance URL");
+  const token = await readSecret(context, "accessToken", "Salesforce access token");
+  const instanceUrl = normalizeHttpsOrigin(rawInstanceUrl, "Salesforce instance URL");
+
+  return { instanceUrl, token };
+}
+
+async function readZendeskCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ subdomain: string; token: string }> {
+  const rawSubdomain = await readSecret(context, "subdomain", "Zendesk subdomain");
+  const token = await readSecret(context, "accessToken", "Zendesk access token");
+  const subdomain = normalizeZendeskSubdomain(rawSubdomain);
+
+  return { subdomain, token };
+}
+
+async function readTrelloCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ apiKey: string; token: string }> {
+  const apiKey = await readSecret(context, "apiKey", "Trello API key");
+  const token = await readSecret(context, "token", "Trello token");
+
+  return { apiKey, token };
+}
+
+async function readShopifyCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ adminAccessToken: string; storeDomain: string }> {
+  const rawStoreDomain = await readSecret(context, "storeDomain", "Shopify store domain");
+  const adminAccessToken = await readSecret(
+    context,
+    "adminAccessToken",
+    "Shopify Admin API access token"
+  );
+  const storeDomain = normalizeShopifyStoreDomain(rawStoreDomain);
+
+  return { adminAccessToken, storeDomain };
+}
+
+async function readDatadogCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ apiKey: string; applicationKey: string; site: string }> {
+  const rawSite = await context.readSecret("site");
+  const apiKey = await readSecret(context, "apiKey", "Datadog API key");
+  const applicationKey = await readSecret(
+    context,
+    "applicationKey",
+    "Datadog application key"
+  );
+  const site = normalizeDatadogSite(rawSite || "datadoghq.com");
+
+  return { apiKey, applicationKey, site };
+}
+
 async function readSecret(
   context: ExtensionActionHandlerContext,
   fieldId: string,
@@ -4000,6 +5311,67 @@ function readLimit(value: unknown, fallback: number): number {
   return Math.min(maxListLimit, Math.max(1, Math.round(value)));
 }
 
+function normalizeHttpsOrigin(value: string, label: string): string {
+  const normalized = value.trim().replace(/\/+$/u, "");
+  let parsed: URL;
+
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`${label} must be a valid https URL`);
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error(`${label} must use https`);
+  }
+
+  return parsed.origin;
+}
+
+function normalizeZendeskSubdomain(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/^https?:\/\//u, "")
+    .replace(/\.zendesk\.com.*$/u, "")
+    .replace(/\/.*$/u, "")
+    .toLowerCase();
+
+  if (!/^[a-z0-9-]+$/u.test(normalized)) {
+    throw new Error("Zendesk subdomain is invalid");
+  }
+
+  return normalized;
+}
+
+function normalizeShopifyStoreDomain(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/^https?:\/\//u, "")
+    .replace(/\/.*$/u, "")
+    .toLowerCase();
+
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/u.test(normalized)) {
+    throw new Error("Shopify store domain must look like example.myshopify.com");
+  }
+
+  return normalized;
+}
+
+function normalizeDatadogSite(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/^https?:\/\//u, "")
+    .replace(/^api\./u, "")
+    .replace(/\/.*$/u, "")
+    .toLowerCase();
+
+  if (!/^[a-z0-9.-]+$/u.test(normalized)) {
+    throw new Error("Datadog site is invalid");
+  }
+
+  return normalized;
+}
+
 function readEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? value as T : fallback;
 }
@@ -4045,6 +5417,16 @@ function readNestedObjectText(value: unknown, fields: string[], fallback: string
   }
 
   return typeof current === "string" && current.trim() ? current : fallback;
+}
+
+function readNestedRecord(value: unknown, fields: string[]): Record<string, unknown> {
+  let current: unknown = value;
+
+  for (const field of fields) {
+    current = readRecord(current)[field];
+  }
+
+  return readRecord(current);
 }
 
 function readArrayLength(value: unknown): number {
