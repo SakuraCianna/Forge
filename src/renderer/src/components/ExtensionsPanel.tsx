@@ -3,6 +3,8 @@ import type { FormEvent, ReactElement } from "react";
 import { useMemo, useState } from "react";
 import {
   CheckCircle2,
+  ExternalLink,
+  Globe2,
   KeyRound,
   Pencil,
   Play,
@@ -24,6 +26,8 @@ import type {
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
   ExtensionManifest,
+  ExtensionOAuthStartRequest,
+  ExtensionOAuthStartResult,
   ExtensionPermissionDefinition,
   ExtensionPermissionMode,
   ExtensionRegistrySnapshot,
@@ -47,9 +51,11 @@ type ExtensionsPanelProps = {
   onCreateExtension: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
   onDeleteExtension: (extensionId: string) => Promise<ExtensionDeleteResult>;
   onInvoke: (request: ExtensionInvocationRequest) => Promise<ExtensionInvocationResult>;
+  onOpenExternal: (url: string) => void;
   onRefresh: () => void;
   onSaveSecret: (extensionId: string, fieldId: string, value: string) => Promise<void>;
   onDeleteSecret: (extensionId: string, fieldId: string) => Promise<void>;
+  onStartOAuth: (request: ExtensionOAuthStartRequest) => Promise<ExtensionOAuthStartResult>;
   onUpdateExtension: (request: ExtensionUpdateRequest) => Promise<ExtensionUpdateResult>;
   onUpdateSettings: (patch: ExtensionSettingsPatch) => Promise<void>;
 };
@@ -109,9 +115,14 @@ const draftInputClassName =
 const draftIconButtonClassName =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]";
 const extensionIconSources: Record<string, string> = {
+  discord: new URL("../assets/extension-icons/discord.ico", import.meta.url).href,
   figma: new URL("../assets/extension-icons/figma.png", import.meta.url).href,
+  gmail: new URL("../assets/extension-icons/gmail.ico", import.meta.url).href,
   github: new URL("../assets/extension-icons/github.png", import.meta.url).href,
   "google-calendar": new URL("../assets/extension-icons/google-calendar.png", import.meta.url).href,
+  "google-drive": new URL("../assets/extension-icons/google-drive.png", import.meta.url).href,
+  "jira-cloud": new URL("../assets/extension-icons/jira-cloud.ico", import.meta.url).href,
+  linear: new URL("../assets/extension-icons/linear.svg", import.meta.url).href,
   notion: new URL("../assets/extension-icons/notion.png", import.meta.url).href,
   "qq-mail": new URL("../assets/extension-icons/qq-mail.ico", import.meta.url).href,
   slack: new URL("../assets/extension-icons/slack.png", import.meta.url).href
@@ -126,8 +137,10 @@ export function ExtensionsPanel({
   onDeleteExtension,
   onDeleteSecret,
   onInvoke,
+  onOpenExternal,
   onRefresh,
   onSaveSecret,
+  onStartOAuth,
   onUpdateExtension,
   onUpdateSettings
 }: ExtensionsPanelProps): ReactElement {
@@ -138,6 +151,7 @@ export function ExtensionsPanel({
   const [draftDialog, setDraftDialog] = useState<ExtensionDraftDialogState | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [busyOAuthExtensionId, setBusyOAuthExtensionId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<ExtensionActionConfirmation | null>(null);
   const [listLimit, setListLimit] = useState("10");
@@ -315,6 +329,27 @@ export function ExtensionsPanel({
     await onSaveSecret(manifest.id, fieldId, value);
     setSecretDrafts((current) => ({ ...current, [key]: "" }));
     setNotice(copy.secretSaved);
+  }
+
+  async function startOAuthAuthorization(manifest: ExtensionManifest): Promise<void> {
+    if (!manifest.auth.oauth) {
+      return;
+    }
+
+    setBusyOAuthExtensionId(manifest.id);
+    setNotice(copy.oauthStarting(manifest.auth.oauth.provider));
+
+    try {
+      const result = await onStartOAuth({ extensionId: manifest.id });
+
+      setNotice(copy.oauthSucceeded(result.provider, result.savedFields.length));
+    } catch (error) {
+      setNotice(
+        `${copy.oauthFailed}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      setBusyOAuthExtensionId(null);
+    }
   }
 
   async function invokeAction(
@@ -555,6 +590,51 @@ export function ExtensionsPanel({
 
             <section className="grid gap-3 rounded-[12px] border border-[#ececf1] p-4">
               <h3 className="text-sm font-semibold text-[#202123]">{copy.credentials}</h3>
+              {selectedManifest.auth.oauth ? (
+                <div className="grid gap-3 rounded-[10px] border border-[#d9e7ff] bg-[#f8fbff] p-3">
+                  <div className="flex items-start gap-2">
+                    <Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-[#2563eb]" />
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold text-[#202123]">
+                        {copy.oauthTitle(selectedManifest.auth.oauth.provider)}
+                      </div>
+                      <div className="mt-1 text-[12px] leading-5 text-[#565869]">
+                        {copy.oauthDescription(
+                          selectedManifest.auth.oauth.redirectUriMode,
+                          selectedManifest.auth.oauth.scopes
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpenExternal(selectedManifest.auth.oauth?.setupUrl ?? "")}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#c7d7fe] bg-white px-2.5 text-[12px] font-semibold text-[#1d4ed8] transition hover:bg-[#eef4ff]"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      {copy.oauthSetup}
+                    </button>
+                    {selectedManifest.auth.oauth.redirectUriMode === "loopback" ? (
+                      <button
+                        type="button"
+                        disabled={busyOAuthExtensionId === selectedManifest.id}
+                        onClick={() => void startOAuthAuthorization(selectedManifest)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#2563eb] px-2.5 text-[12px] font-semibold text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Globe2 className="h-3.5 w-3.5" />
+                        {busyOAuthExtensionId === selectedManifest.id
+                          ? copy.oauthAuthorizing
+                          : copy.oauthStart}
+                      </button>
+                    ) : (
+                      <span className="inline-flex min-h-8 items-center rounded-[10px] border border-[#d9e7ff] bg-white px-2.5 text-[12px] text-[#565869]">
+                        {copy.oauthRegisteredCallback}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : null}
               {selectedManifest.auth.fields.length === 0 ? (
                 <p className="rounded-[10px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-sm text-[#565869]">
                   {copy.noCredentialsRequired}
@@ -573,6 +653,9 @@ export function ExtensionsPanel({
                     >
                       <label className="text-[12px] font-semibold text-[#202123]">
                         {field.label}
+                        {field.required === false ? (
+                          <span className="ml-1 font-normal text-[#8e8ea0]">{copy.optional}</span>
+                        ) : null}
                       </label>
                       <input
                         type="password"
@@ -1432,6 +1515,33 @@ function getExtensionsCopy(language: Language) {
     noLogs: isChinese ? "暂无调用日志" : "No invocation logs",
     noCredentialsRequired: isChinese ? "暂无凭据要求" : "No credentials required",
     notConnected: isChinese ? "未连接" : "Not connected",
+    oauthAuthorizing: isChinese ? "授权中" : "Authorizing",
+    oauthDescription: (redirectMode: string, scopes: string[]) => {
+      const scopeText = scopes.length > 0 ? scopes.join(", ") : (isChinese ? "由服务端决定" : "service default");
+      const modeText =
+        redirectMode === "loopback"
+          ? isChinese
+            ? "支持本地回调网页登录授权"
+            : "Supports browser authorization with a local callback"
+          : isChinese
+            ? "需要在服务后台配置 HTTPS 回调地址"
+            : "Requires an HTTPS callback registered in the service console";
+
+      return isChinese ? `${modeText}。Scope: ${scopeText}` : `${modeText}. Scope: ${scopeText}`;
+    },
+    oauthFailed: isChinese ? "网页登录授权失败" : "Browser authorization failed",
+    oauthRegisteredCallback: isChinese ? "需配置 HTTPS 回调" : "HTTPS callback required",
+    oauthSetup: isChinese ? "打开官方配置" : "Open provider setup",
+    oauthStart: isChinese ? "网页登录授权" : "Authorize in browser",
+    oauthStarting: (provider: string) =>
+      isChinese ? `正在打开 ${provider} 授权页` : `Opening ${provider} authorization`,
+    oauthSucceeded: (provider: string, savedFieldCount: number) =>
+      isChinese
+        ? `${provider} 授权完成, 已保存 ${savedFieldCount} 个凭据字段`
+        : `${provider} authorization completed, saved ${savedFieldCount} credential fields`,
+    oauthTitle: (provider: string) =>
+      isChinese ? `${provider} 网页授权` : `${provider} browser authorization`,
+    optional: isChinese ? "可选" : "Optional",
     permission: isChinese ? "权限" : "Permission",
     permissions: isChinese ? "权限" : "Permissions",
     placeholder: isChinese ? "占位提示" : "Placeholder",

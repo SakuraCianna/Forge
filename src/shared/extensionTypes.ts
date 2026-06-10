@@ -16,11 +16,39 @@ export type ExtensionSecretField = {
   label: string;
   description: string;
   placeholder?: string;
+  required?: boolean;
+};
+
+export type ExtensionOAuthRedirectMode = "loopback" | "registered-https";
+
+export type ExtensionOAuthTokenRequestAuth = "basic" | "body" | "none";
+
+export type ExtensionOAuthTokenRequestBody = "form" | "json";
+
+export type ExtensionOAuthDefinition = {
+  provider: string;
+  authorizationUrl: string;
+  tokenUrl: string;
+  scopes: string[];
+  accessTokenFieldId: string;
+  refreshTokenFieldId?: string;
+  clientIdFieldId: string;
+  clientSecretFieldId?: string;
+  docsUrl: string;
+  setupUrl: string;
+  redirectUriMode: ExtensionOAuthRedirectMode;
+  usePkce: boolean;
+  tokenRequestAuth: ExtensionOAuthTokenRequestAuth;
+  tokenRequestBody?: ExtensionOAuthTokenRequestBody;
+  scopeSeparator?: "space" | "comma";
+  extraAuthorizeParams?: Record<string, string>;
+  extraTokenParams?: Record<string, string>;
 };
 
 export type ExtensionAuthDefinition = {
   type: "secret";
   fields: ExtensionSecretField[];
+  oauth?: ExtensionOAuthDefinition;
 };
 
 export type ExtensionPermissionDefinition = {
@@ -154,6 +182,18 @@ export type ExtensionSecretSaveRequest = {
   extensionId: string;
   fieldId: string;
   value: string;
+};
+
+export type ExtensionOAuthStartRequest = {
+  extensionId: string;
+};
+
+export type ExtensionOAuthStartResult = {
+  extensionId: string;
+  provider: string;
+  savedFields: string[];
+  expiresInSeconds?: number;
+  registry: ExtensionRegistrySnapshot;
 };
 
 export type ExtensionSettingsPatch = {

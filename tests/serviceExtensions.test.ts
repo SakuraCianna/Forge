@@ -13,7 +13,18 @@ test("built-in service extensions expose production manifests for common service
   const manifests = serviceExtensionDefinitions.map((definition) => definition.manifest);
   const ids = manifests.map((manifest) => manifest.id);
 
-  assert.deepEqual(ids, ["github", "slack", "notion", "google-calendar", "figma"]);
+  assert.deepEqual(ids, [
+    "github",
+    "slack",
+    "notion",
+    "google-calendar",
+    "figma",
+    "gmail",
+    "google-drive",
+    "linear",
+    "jira-cloud",
+    "discord"
+  ]);
 
   for (const manifest of manifests) {
     assert.equal(manifest.builtIn, true);
@@ -35,6 +46,47 @@ test("built-in service extensions expose production manifests for common service
   );
 });
 
+test("OAuth-capable service extensions declare provider metadata and token fields", () => {
+  const manifests = serviceExtensionDefinitions.map((definition) => definition.manifest);
+  const oauthManifests = manifests.filter((manifest) => manifest.auth.oauth);
+
+  assert.deepEqual(
+    oauthManifests.map((manifest) => manifest.id),
+    [
+      "github",
+      "slack",
+      "notion",
+      "google-calendar",
+      "gmail",
+      "google-drive",
+      "linear",
+      "jira-cloud",
+      "discord"
+    ]
+  );
+
+  for (const manifest of oauthManifests) {
+    const oauth = manifest.auth.oauth;
+
+    assert.ok(oauth);
+    assert.ok(manifest.auth.fields.some((field) => field.id === oauth.accessTokenFieldId));
+    assert.ok(manifest.auth.fields.some((field) => field.id === oauth.clientIdFieldId));
+    assert.ok(oauth.authorizationUrl.startsWith("https://"));
+    assert.ok(oauth.tokenUrl.startsWith("https://"));
+    assert.ok(oauth.docsUrl.startsWith("https://"));
+    assert.ok(oauth.setupUrl.startsWith("https://"));
+  }
+
+  assert.equal(
+    manifests.find((manifest) => manifest.id === "gmail")?.auth.oauth?.redirectUriMode,
+    "loopback"
+  );
+  assert.equal(
+    manifests.find((manifest) => manifest.id === "slack")?.auth.oauth?.redirectUriMode,
+    "registered-https"
+  );
+});
+
 test("extensions panel maps built-in services to product icon assets", async () => {
   const source = await readFile("src/renderer/src/components/ExtensionsPanel.tsx", "utf8");
   const expectedAssets = new Map([
@@ -43,7 +95,12 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["slack", "slack.png"],
     ["notion", "notion.png"],
     ["google-calendar", "google-calendar.png"],
-    ["figma", "figma.png"]
+    ["figma", "figma.png"],
+    ["gmail", "gmail.ico"],
+    ["google-drive", "google-drive.png"],
+    ["linear", "linear.svg"],
+    ["jira-cloud", "jira-cloud.ico"],
+    ["discord", "discord.ico"]
   ]);
 
   assert.match(source, /const extensionIconSources/u);
@@ -56,6 +113,58 @@ test("extensions panel maps built-in services to product icon assets", async () 
     const asset = await stat(`src/renderer/src/assets/extension-icons/${filename}`);
     assert.equal(asset.isFile(), true);
     assert.ok(asset.size > 0);
+  }
+});
+
+test("gmail OAuth loopback authorization saves access and refresh tokens", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://oauth2.googleapis.com/token");
+    assert.equal(init?.method, "POST");
+
+    const body = new URLSearchParams(String(init?.body));
+
+    assert.equal(body.get("grant_type"), "authorization_code");
+    assert.equal(body.get("code"), "gmail-code");
+    assert.equal(body.get("client_id"), "google-client-id");
+    assert.ok(body.get("code_verifier"));
+    assert.match(body.get("redirect_uri") ?? "", /^http:\/\/127\.0\.0\.1:\d+\/oauth\/callback$/u);
+
+    return {
+      body: {
+        access_token: "ya29-test-token",
+        expires_in: 3600,
+        refresh_token: "refresh-test-token"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await fixture.registry.saveSecret({
+      extensionId: "gmail",
+      fieldId: "oauthClientId",
+      value: "google-client-id"
+    });
+
+    const result = await fixture.registry.startOAuth({
+      extensionId: "gmail"
+    });
+
+    assert.equal(result.provider, "Google");
+    assert.deepEqual(result.savedFields, ["accessToken", "refreshToken"]);
+    assert.equal(fetchMock.calls.length, 1);
+
+    const gmailStatus = result.registry.secretStatuses.find(
+      (status) => status.extensionId === "gmail"
+    );
+
+    assert.equal(gmailStatus?.configured, true);
+    assert.equal(gmailStatus?.fields.accessToken.hasValue, true);
+    assert.equal(gmailStatus?.fields.refreshToken.hasValue, true);
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
   }
 });
 
@@ -226,6 +335,19 @@ async function createRegistryFixture() {
   const registry = createExtensionRegistry({
     customExtensionDirectory: join(directory, "custom"),
     logStore: createExtensionInvocationLogStore({ directory }),
+    openExternal: async (url) => {
+      const authorizationUrl = new URL(url);
+      const redirectUri = authorizationUrl.searchParams.get("redirect_uri");
+      const state = authorizationUrl.searchParams.get("state");
+
+      if (redirectUri && state) {
+        setTimeout(() => {
+          void fetch(`${redirectUri}?code=gmail-code&state=${encodeURIComponent(state)}`);
+        }, 0);
+      }
+
+      return true;
+    },
     store: createExtensionStore({ directory }),
     vault
   });
@@ -290,6 +412,11 @@ function installMockFetch(
 
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+    if (url.startsWith("http://127.0.0.1:")) {
+      return originalFetch(input, init);
+    }
+
     calls.push({ init, url });
     const response = await handler(url, init);
 

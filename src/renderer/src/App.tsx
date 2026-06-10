@@ -31,6 +31,8 @@ import type {
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
+  ExtensionOAuthStartRequest,
+  ExtensionOAuthStartResult,
   ExtensionRegistrySnapshot,
   ExtensionSettingsPatch,
   ExtensionUpdateRequest,
@@ -1130,6 +1132,16 @@ export function App(): ReactElement {
     const registry = await window.forge.extensions.deleteSecret(extensionId, fieldId);
 
     setExtensionRegistry(registry);
+  }
+
+  async function startExtensionOAuth(
+    request: ExtensionOAuthStartRequest
+  ): Promise<ExtensionOAuthStartResult> {
+    const result = await window.forge.extensions.startOAuth(request);
+
+    setExtensionRegistry(result.registry);
+    setExtensionLogs(await window.forge.extensions.listLogs(80));
+    return result;
   }
 
   async function invokeExtensionAction(
@@ -5890,8 +5902,10 @@ export function App(): ReactElement {
         onDeleteExtension={deleteCustomExtension}
         onDeleteSecret={deleteExtensionSecret}
         onInvoke={invokeExtensionAction}
+        onOpenExternal={openExternalUrl}
         onRefresh={() => void loadExtensionsState()}
         onSaveSecret={saveExtensionSecret}
+        onStartOAuth={startExtensionOAuth}
         onUpdateExtension={updateCustomExtension}
         onUpdateSettings={updateExtensionSettings}
       />

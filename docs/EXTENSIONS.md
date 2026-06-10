@@ -41,6 +41,11 @@ Registry 负责:
 - `notion`: Notion API 扩展。
 - `google-calendar`: Google Calendar API 扩展。
 - `figma`: Figma REST API 扩展。
+- `gmail`: Gmail API 扩展。
+- `google-drive`: Google Drive API 扩展。
+- `linear`: Linear GraphQL API 扩展。
+- `jira-cloud`: Jira Cloud API 扩展。
+- `discord`: Discord API 扩展。
 
 ## Manifest
 
@@ -48,6 +53,7 @@ Manifest 描述扩展能力:
 
 - `id`, `name`, `description`, `version`, `category`, `builtIn`
 - `auth.fields`: 需要保存的密钥字段
+- `auth.oauth`: 可选 OAuth 元数据, 用于网页登录授权
 - `permissions`: 用户可配置的权限项
 - `actions`: 可调用动作, 包含权限、风险、确认策略、输入和输出 schema
 
@@ -150,7 +156,40 @@ QQ Mail 凭据:
 
 ## 常用服务扩展
 
-以下内置服务使用用户手动保存的 token 通过官方 REST API 调用。Forge 只保存密钥状态, 不会把 token 写入调用日志或线程上下文。写入、发送和创建类动作都设置为 `always` 确认, 即使权限被设为 `allow`, 主进程也会先返回确认 token。
+以下内置服务使用用户保存的 token 通过官方 REST API 调用。Forge 只保存密钥状态, 不会把 token 写入调用日志或线程上下文。写入、发送和创建类动作都设置为 `always` 确认, 即使权限被设为 `allow`, 主进程也会先返回确认 token。
+
+### 网页登录授权
+
+支持 OAuth 的内置扩展会在 manifest 中声明:
+
+- 授权端点和 token 端点。
+- `scope` 列表。
+- access token 和 refresh token 写入的密钥字段。
+- client ID / client secret 字段。
+- 是否支持 PKCE。
+- redirect 模式。
+
+Forge 当前实现了桌面端 loopback 授权基座:
+
+1. 用户先在扩展凭据中保存该服务 OAuth app 的 client ID, 如果服务要求 confidential client, 还需要保存 client secret。
+2. 点击网页登录授权。
+3. 主进程在 `127.0.0.1` 随机端口启动短期 HTTP 回调监听。
+4. Forge 生成 `state`, 支持的服务同时生成 PKCE `code_verifier` 和 `code_challenge`。
+5. Forge 用系统浏览器打开官方授权页。
+6. 服务回跳到本地 callback 后, 主进程校验 `state`。
+7. 主进程向官方 token endpoint 换取 token。
+8. access token 和 refresh token 写入 Electron 主进程密钥库。
+9. 扩展 Registry 刷新密钥状态, Agent 只看到动作 schema, 看不到 token。
+
+不是所有服务都允许桌面端 loopback redirect。Slack、Notion、Jira Cloud、Discord 等通常要求在服务后台预注册 HTTPS 回调地址或使用 confidential client。Forge 会在 UI 中标注这类服务为“需配置 HTTPS 回调”, 不会假装它们能直接用本地回调完成授权。
+
+参考官方做法:
+
+- Google installed apps 使用系统浏览器、本地 redirect URI、PKCE、`state` 和 token exchange。
+- GitHub OAuth Apps 支持 `state` 和 PKCE, 桌面应用可使用 loopback redirect。
+- Linear OAuth 支持 PKCE, refresh token 需要安全保存并用于后续刷新。
+- Notion token exchange 使用 HTTP Basic Authentication。
+- Slack OAuth 要求 redirect URI 与 App Management 中的配置匹配, 且通常必须是 HTTPS。
 
 ### GitHub
 
@@ -201,16 +240,62 @@ QQ Mail 凭据:
 
 ### Figma
 
-`figma` 使用 Figma personal access token 或 OAuth token。
+`figma` 使用 Figma personal access token。
 
 支持动作:
 
 - `getFile`: 读取 Figma 文件 JSON 摘要。
 - `listComments`: 读取 Figma 文件评论。
 
+### Gmail
+
+`gmail` 使用 Gmail API OAuth access token, 也可以通过支持 loopback + PKCE 的网页登录授权保存 token。
+
+支持动作:
+
+- `getProfile`: 读取当前 Gmail 账号摘要。
+- `listMessages`: 按 Gmail 搜索语法读取邮件 ID 和线程摘要。
+
+### Google Drive
+
+`google-drive` 使用 Google Drive API OAuth access token, 也可以通过支持 loopback + PKCE 的网页登录授权保存 token。
+
+支持动作:
+
+- `listFiles`: 搜索 Google Drive 文件列表。
+- `getFileMetadata`: 读取指定文件元数据。
+
+### Linear
+
+`linear` 使用 Linear API token 或 OAuth access token。OAuth 模式支持 PKCE。
+
+支持动作:
+
+- `getViewer`: 读取当前 Linear 用户摘要。
+- `listIssues`: 读取最近更新的 Linear Issue 列表。
+
+### Jira Cloud
+
+`jira-cloud` 使用 Atlassian OAuth access token。
+
+支持动作:
+
+- `listAccessibleResources`: 读取当前 token 可访问的 Atlassian Cloud 资源。
+- `searchIssues`: 在指定 Jira Cloud 站点按 JQL 搜索 Issue。
+
+### Discord
+
+`discord` 使用 Discord OAuth access token。
+
+支持动作:
+
+- `getCurrentUser`: 读取当前 Discord 用户摘要。
+- `listGuilds`: 读取当前用户加入的服务器列表。
+
 ## 限制
 
-- 当前内置服务使用手动 token 配置, 还没有内置 OAuth 授权向导。
+- OAuth 基座当前只自动处理 `loopback` redirect 的授权码流程, 需要服务本身允许本地回调。
+- 当前保存 refresh token, 但还没有后台自动刷新 access token。
 - 当前还没有第三方 Extension 安装包格式。
 - 当前日志是本地摘要日志, 不是完整审计数据库。
 - 邮件附件只返回摘要, 不下载附件内容。

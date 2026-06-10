@@ -1,6 +1,8 @@
 // 本文件说明: 注册常见外部服务内置 Extension, 通过官方 REST API 执行受控动作
 import type {
   ExtensionActionDefinition,
+  ExtensionAuthDefinition,
+  ExtensionOAuthDefinition,
   ExtensionManifest
 } from "../../shared/extensionTypes.js";
 import type {
@@ -26,12 +28,98 @@ const defaultListLimit = 20;
 const maxListLimit = 100;
 const notionVersion = "2022-06-28";
 
+const googleOAuthAuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth";
+const googleOAuthTokenUrl = "https://oauth2.googleapis.com/token";
+const googleOAuthDocsUrl = "https://developers.google.com/identity/protocols/oauth2/native-app";
+
+function createGoogleOAuth(scopes: string[], setupUrl: string): ExtensionOAuthDefinition {
+  return {
+    provider: "Google",
+    authorizationUrl: googleOAuthAuthorizeUrl,
+    tokenUrl: googleOAuthTokenUrl,
+    scopes,
+    accessTokenFieldId: "accessToken",
+    refreshTokenFieldId: "refreshToken",
+    clientIdFieldId: "oauthClientId",
+    docsUrl: googleOAuthDocsUrl,
+    setupUrl,
+    redirectUriMode: "loopback",
+    usePkce: true,
+    tokenRequestAuth: "none",
+    extraAuthorizeParams: {
+      access_type: "offline",
+      prompt: "consent"
+    }
+  };
+}
+
+function createOAuthTokenAuth({
+  accessTokenDescription,
+  accessTokenFieldId = "accessToken",
+  accessTokenLabel = "OAuth access token",
+  accessTokenPlaceholder = "Bearer access token",
+  clientSecret = false,
+  oauth,
+  refreshTokenFieldId = "refreshToken"
+}: {
+  accessTokenDescription: string;
+  accessTokenFieldId?: string;
+  accessTokenLabel?: string;
+  accessTokenPlaceholder?: string;
+  clientSecret?: boolean;
+  oauth?: ExtensionOAuthDefinition;
+  refreshTokenFieldId?: string;
+}): ExtensionAuthDefinition {
+  return {
+    type: "secret",
+    fields: [
+      {
+        id: accessTokenFieldId,
+        label: accessTokenLabel,
+        description: accessTokenDescription,
+        placeholder: accessTokenPlaceholder
+      },
+      {
+        id: refreshTokenFieldId,
+        label: "OAuth refresh token",
+        description: "OAuth 刷新令牌, 由网页登录授权自动保存, 手动 token 可留空",
+        placeholder: "refresh_token",
+        required: false
+      },
+      {
+        id: "oauthClientId",
+        label: "OAuth client ID",
+        description: "网页登录授权使用的 OAuth app client ID, 手动 token 可留空",
+        placeholder: "client_id",
+        required: false
+      },
+      ...(clientSecret
+        ? [
+            {
+              id: "oauthClientSecret",
+              label: "OAuth client secret",
+              description: "网页登录授权使用的 OAuth app client secret, 手动 token 可留空",
+              placeholder: "client_secret",
+              required: false
+            }
+          ]
+        : [])
+    ],
+    ...(oauth ? { oauth } : {})
+  };
+}
+
 export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createGitHubExtension(),
   createSlackExtension(),
   createNotionExtension(),
   createGoogleCalendarExtension(),
-  createFigmaExtension()
+  createFigmaExtension(),
+  createGmailExtension(),
+  createGoogleDriveExtension(),
+  createLinearExtension(),
+  createJiraCloudExtension(),
+  createDiscordExtension()
 ];
 
 export function createServiceExtensionInputSummary(
@@ -54,17 +142,33 @@ function createGitHubExtension(): BuiltInServiceExtension {
     version: "0.2.1",
     category: "developer",
     builtIn: true,
-    auth: {
-      type: "secret",
-      fields: [
-        {
-          id: "token",
-          label: "Personal access token",
-          description: "GitHub fine-grained 或 classic token, 建议只授予目标仓库所需权限",
-          placeholder: "github_pat_..."
+    auth: createOAuthTokenAuth({
+      accessTokenDescription:
+        "GitHub fine-grained/classic token 或 OAuth access token, 建议只授予目标仓库所需权限",
+      accessTokenFieldId: "token",
+      accessTokenLabel: "Personal access token",
+      accessTokenPlaceholder: "github_pat_...",
+      clientSecret: true,
+      oauth: {
+        provider: "GitHub",
+        authorizationUrl: "https://github.com/login/oauth/authorize",
+        tokenUrl: "https://github.com/login/oauth/access_token",
+        scopes: ["repo", "read:user"],
+        accessTokenFieldId: "token",
+        refreshTokenFieldId: "refreshToken",
+        clientIdFieldId: "oauthClientId",
+        clientSecretFieldId: "oauthClientSecret",
+        docsUrl:
+          "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps",
+        setupUrl: "https://github.com/settings/developers",
+        redirectUriMode: "loopback",
+        usePkce: true,
+        tokenRequestAuth: "body",
+        extraAuthorizeParams: {
+          allow_signup: "false"
         }
-      ]
-    },
+      }
+    }),
     permissions: [
       {
         id: "github.read",
@@ -198,17 +302,30 @@ function createSlackExtension(): BuiltInServiceExtension {
     version: "0.2.1",
     category: "other",
     builtIn: true,
-    auth: {
-      type: "secret",
-      fields: [
-        {
-          id: "botToken",
-          label: "Bot token",
-          description: "Slack app 的 xoxb bot token, 建议只授予 channels:read 和 chat:write 等必要 scope",
-          placeholder: "xoxb-..."
-        }
-      ]
-    },
+    auth: createOAuthTokenAuth({
+      accessTokenDescription:
+        "Slack app 的 xoxb bot token, 建议只授予 channels:read, groups:read 和 chat:write 等必要 scope",
+      accessTokenFieldId: "botToken",
+      accessTokenLabel: "Bot token",
+      accessTokenPlaceholder: "xoxb-...",
+      clientSecret: true,
+      oauth: {
+        provider: "Slack",
+        authorizationUrl: "https://slack.com/oauth/v2/authorize",
+        tokenUrl: "https://slack.com/api/oauth.v2.access",
+        scopes: ["channels:read", "groups:read", "chat:write"],
+        accessTokenFieldId: "botToken",
+        refreshTokenFieldId: "refreshToken",
+        clientIdFieldId: "oauthClientId",
+        clientSecretFieldId: "oauthClientSecret",
+        docsUrl: "https://docs.slack.dev/authentication/installing-with-oauth/",
+        setupUrl: "https://api.slack.com/apps",
+        redirectUriMode: "registered-https",
+        usePkce: false,
+        tokenRequestAuth: "body",
+        scopeSeparator: "comma"
+      }
+    }),
     permissions: [
       {
         id: "slack.read",
@@ -312,17 +429,33 @@ function createNotionExtension(): BuiltInServiceExtension {
     version: "0.2.1",
     category: "other",
     builtIn: true,
-    auth: {
-      type: "secret",
-      fields: [
-        {
-          id: "integrationToken",
-          label: "Integration token",
-          description: "Notion internal integration secret, 需要把目标页面或数据库分享给该连接",
-          placeholder: "secret_..."
+    auth: createOAuthTokenAuth({
+      accessTokenDescription:
+        "Notion internal integration secret 或 OAuth access token, 需要把目标页面或数据库分享给该连接",
+      accessTokenFieldId: "integrationToken",
+      accessTokenLabel: "Integration token",
+      accessTokenPlaceholder: "secret_...",
+      clientSecret: true,
+      oauth: {
+        provider: "Notion",
+        authorizationUrl: "https://api.notion.com/v1/oauth/authorize",
+        tokenUrl: "https://api.notion.com/v1/oauth/token",
+        scopes: [],
+        accessTokenFieldId: "integrationToken",
+        refreshTokenFieldId: "refreshToken",
+        clientIdFieldId: "oauthClientId",
+        clientSecretFieldId: "oauthClientSecret",
+        docsUrl: "https://developers.notion.com/guides/get-started/authorization",
+        setupUrl: "https://www.notion.so/profile/integrations",
+        redirectUriMode: "registered-https",
+        usePkce: false,
+        tokenRequestAuth: "basic",
+        tokenRequestBody: "json",
+        extraAuthorizeParams: {
+          owner: "user"
         }
-      ]
-    },
+      }
+    }),
     permissions: [
       {
         id: "notion.read",
@@ -459,17 +592,17 @@ function createGoogleCalendarExtension(): BuiltInServiceExtension {
     version: "0.2.1",
     category: "calendar",
     builtIn: true,
-    auth: {
-      type: "secret",
-      fields: [
-        {
-          id: "accessToken",
-          label: "OAuth access token",
-          description: "Google Calendar API OAuth 访问令牌, 需要 calendar 相关 scope",
-          placeholder: "ya29..."
-        }
-      ]
-    },
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Google Calendar API OAuth 访问令牌, 需要 calendar 相关 scope",
+      accessTokenPlaceholder: "ya29...",
+      oauth: createGoogleOAuth(
+        [
+          "https://www.googleapis.com/auth/calendar.events",
+          "https://www.googleapis.com/auth/calendar.readonly"
+        ],
+        "https://console.cloud.google.com/apis/credentials"
+      )
+    }),
     permissions: [
       {
         id: "calendar.read",
@@ -598,7 +731,7 @@ function createFigmaExtension(): BuiltInServiceExtension {
         {
           id: "personalAccessToken",
           label: "Personal access token",
-          description: "Figma personal access token 或 OAuth token, 需要文件读取权限",
+          description: "Figma personal access token, 需要文件读取权限",
           placeholder: "figd_..."
         }
       ]
@@ -679,6 +812,505 @@ function createFigmaExtension(): BuiltInServiceExtension {
     handlers,
     manifest,
     summarizeInput: (_actionId, input) => `figma ${String(input.fileKey ?? "")}`
+  };
+}
+
+function createGmailExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "gmail",
+    name: "Gmail",
+    description: "读取 Gmail 当前账号资料和邮件摘要",
+    version: "0.2.1",
+    category: "mail",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Gmail API OAuth 访问令牌, 需要 gmail.readonly scope",
+      accessTokenPlaceholder: "ya29...",
+      oauth: createGoogleOAuth(
+        ["https://www.googleapis.com/auth/gmail.readonly"],
+        "https://console.cloud.google.com/apis/credentials"
+      )
+    }),
+    permissions: [
+      {
+        id: "gmail.read",
+        label: "读取 Gmail",
+        description: "允许读取 Gmail 账号资料和邮件摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getProfile",
+        label: "查看 Gmail 账号",
+        description: "读取当前 Gmail 账号 profile 摘要",
+        permission: "gmail.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listMessages",
+        label: "列出邮件",
+        description: "按 Gmail 搜索语法读取邮件 ID 和线程摘要",
+        permission: "gmail.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          query: { type: "string", description: "Gmail 搜索语法, 例如 from:alice newer:7d" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getProfile: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Gmail access token");
+      const profile = await gmailRequest({
+        method: "GET",
+        path: "/users/me/profile",
+        token
+      });
+
+      return {
+        output: toOutputRecord(profile),
+        outputSummary: `Gmail 当前账号: ${readObjectText(profile, "emailAddress", "unknown")}`
+      };
+    },
+    listMessages: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Gmail access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const query = readOptionalString(input.query, 500);
+      const result = await gmailRequest({
+        method: "GET",
+        path: "/users/me/messages",
+        query: {
+          maxResults: String(limit),
+          ...(query ? { q: query } : {})
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Gmail 返回 ${readArrayLength(readRecord(result).messages)} 封邮件摘要`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listMessages" ? `gmail ${String(input.query ?? "")}` : "gmail profile"
+  };
+}
+
+function createGoogleDriveExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "google-drive",
+    name: "Google Drive",
+    description: "搜索 Google Drive 文件并读取文件元数据",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Google Drive API OAuth 访问令牌, 需要 drive.metadata.readonly scope",
+      accessTokenPlaceholder: "ya29...",
+      oauth: createGoogleOAuth(
+        ["https://www.googleapis.com/auth/drive.metadata.readonly"],
+        "https://console.cloud.google.com/apis/credentials"
+      )
+    }),
+    permissions: [
+      {
+        id: "drive.read",
+        label: "读取 Drive",
+        description: "允许搜索 Google Drive 文件和读取元数据",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listFiles",
+        label: "搜索文件",
+        description: "搜索 Google Drive 文件列表",
+        permission: "drive.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          query: { type: "string", description: "Drive 查询语句, 例如 name contains 'report'" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "getFileMetadata",
+        label: "读取文件元数据",
+        description: "读取指定 Google Drive 文件的基础元数据",
+        permission: "drive.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["fileId"],
+        properties: {
+          fileId: { type: "string", description: "Google Drive file ID" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listFiles: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Google Drive access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const query = readOptionalString(input.query, 500);
+      const result = await googleDriveRequest({
+        method: "GET",
+        path: "/files",
+        query: {
+          fields: "files(id,name,mimeType,modifiedTime,webViewLink),nextPageToken",
+          orderBy: "modifiedTime desc",
+          pageSize: String(limit),
+          ...(query ? { q: query } : {})
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Google Drive 返回 ${readArrayLength(readRecord(result).files)} 个文件`
+      };
+    },
+    getFileMetadata: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Google Drive access token");
+      const fileId = readRequiredString(input.fileId, "fileId", 200);
+      const result = await googleDriveRequest({
+        method: "GET",
+        path: `/files/${encodePathSegment(fileId)}`,
+        query: {
+          fields: "id,name,mimeType,modifiedTime,webViewLink,size,owners(displayName,emailAddress)"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `读取 Google Drive 文件: ${readObjectText(result, "name", fileId)}`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "getFileMetadata"
+        ? `drive file ${String(input.fileId ?? "")}`
+        : `drive ${String(input.query ?? "")}`
+  };
+}
+
+function createLinearExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "linear",
+    name: "Linear",
+    description: "读取 Linear 当前账号和 Issue 列表",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Linear API token 或 OAuth access token, 建议只授予 read scope",
+      accessTokenPlaceholder: "lin_api_...",
+      oauth: {
+        provider: "Linear",
+        authorizationUrl: "https://linear.app/oauth/authorize",
+        tokenUrl: "https://api.linear.app/oauth/token",
+        scopes: ["read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        clientIdFieldId: "oauthClientId",
+        docsUrl: "https://linear.app/developers/oauth-2-0-authentication",
+        setupUrl: "https://linear.app/settings/api/applications/new",
+        redirectUriMode: "loopback",
+        usePkce: true,
+        tokenRequestAuth: "none"
+      }
+    }),
+    permissions: [
+      {
+        id: "linear.read",
+        label: "读取 Linear",
+        description: "允许读取 Linear 当前账号和 Issue 摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getViewer",
+        label: "查看 Linear 账号",
+        description: "读取当前 Linear 用户摘要",
+        permission: "linear.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listIssues",
+        label: "列出 Issues",
+        description: "读取最近更新的 Linear Issue 列表",
+        permission: "linear.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getViewer: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Linear access token");
+      const result = await linearGraphqlRequest({
+        query: "query ForgeViewer { viewer { id name displayName email } }",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Linear 当前账号: ${readNestedObjectText(result, ["viewer", "displayName"], "unknown")}`
+      };
+    },
+    listIssues: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Linear access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await linearGraphqlRequest({
+        query:
+          "query ForgeIssues($first: Int!) { issues(first: $first, orderBy: updatedAt) { nodes { id identifier title url updatedAt state { name } assignee { displayName } team { key name } } } }",
+        token,
+        variables: {
+          first: limit
+        }
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Linear 返回 ${readArrayLength(readRecord(readRecord(result).issues).nodes)} 个 Issue`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: () => "linear"
+  };
+}
+
+function createJiraCloudExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "jira-cloud",
+    name: "Jira Cloud",
+    description: "读取 Atlassian Jira Cloud 站点和 Issue 搜索结果",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Atlassian OAuth access token, 需要 read:jira-work scope",
+      accessTokenPlaceholder: "atlassian_access_token",
+      clientSecret: true,
+      oauth: {
+        provider: "Atlassian",
+        authorizationUrl: "https://auth.atlassian.com/authorize",
+        tokenUrl: "https://auth.atlassian.com/oauth/token",
+        scopes: ["read:jira-work", "read:me", "offline_access"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        clientIdFieldId: "oauthClientId",
+        clientSecretFieldId: "oauthClientSecret",
+        docsUrl: "https://developer.atlassian.com/cloud/jira/software/oauth-2-3lo-apps/",
+        setupUrl: "https://developer.atlassian.com/console/myapps/",
+        redirectUriMode: "registered-https",
+        usePkce: false,
+        tokenRequestAuth: "body",
+        tokenRequestBody: "json",
+        extraAuthorizeParams: {
+          audience: "api.atlassian.com",
+          prompt: "consent"
+        }
+      }
+    }),
+    permissions: [
+      {
+        id: "jira.read",
+        label: "读取 Jira",
+        description: "允许读取 Jira Cloud 站点和 Issue 摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listAccessibleResources",
+        label: "列出 Jira 站点",
+        description: "读取当前 token 可访问的 Atlassian Cloud 资源",
+        permission: "jira.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "searchIssues",
+        label: "搜索 Jira Issues",
+        description: "在指定 Jira Cloud 站点按 JQL 搜索 Issue",
+        permission: "jira.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["cloudId", "jql"],
+        properties: {
+          cloudId: { type: "string", description: "Atlassian Cloud resource ID" },
+          jql: { type: "string", description: "Jira JQL, 例如 project = HSP ORDER BY updated DESC" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listAccessibleResources: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Atlassian access token");
+      const result = await jiraApiRequest({
+        method: "GET",
+        path: "/oauth/token/accessible-resources",
+        token
+      });
+
+      return {
+        output: Array.isArray(result) ? { resources: result } : toOutputRecord(result),
+        outputSummary: `Jira Cloud 返回 ${readArrayLength(result)} 个站点`
+      };
+    },
+    searchIssues: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Atlassian access token");
+      const cloudId = readRequiredString(input.cloudId, "cloudId", 200);
+      const jql = readRequiredString(input.jql, "jql", 1_000);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await jiraApiRequest({
+        method: "GET",
+        path: `/ex/jira/${encodePathSegment(cloudId)}/rest/api/3/search/jql`,
+        query: {
+          fields: "summary,status,assignee,updated",
+          jql,
+          maxResults: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Jira Cloud 返回 ${readArrayLength(readRecord(result).issues)} 个 Issue`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "searchIssues" ? `jira ${String(input.jql ?? "")}` : "jira resources"
+  };
+}
+
+function createDiscordExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "discord",
+    name: "Discord",
+    description: "读取 Discord 当前用户和服务器列表",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Discord OAuth access token, 需要 identify 和 guilds scope",
+      accessTokenPlaceholder: "discord_access_token",
+      clientSecret: true,
+      oauth: {
+        provider: "Discord",
+        authorizationUrl: "https://discord.com/oauth2/authorize",
+        tokenUrl: "https://discord.com/api/v10/oauth2/token",
+        scopes: ["identify", "guilds"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        clientIdFieldId: "oauthClientId",
+        clientSecretFieldId: "oauthClientSecret",
+        docsUrl: "https://discord.com/developers/docs/topics/oauth2",
+        setupUrl: "https://discord.com/developers/applications",
+        redirectUriMode: "registered-https",
+        usePkce: false,
+        tokenRequestAuth: "basic"
+      }
+    }),
+    permissions: [
+      {
+        id: "discord.read",
+        label: "读取 Discord",
+        description: "允许读取 Discord 当前用户和服务器摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 Discord 用户摘要",
+        permission: "discord.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listGuilds",
+        label: "列出服务器",
+        description: "读取当前用户加入的 Discord 服务器列表",
+        permission: "discord.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Discord access token");
+      const result = await discordRequest({
+        method: "GET",
+        path: "/users/@me",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Discord 当前用户: ${readObjectText(result, "username", "unknown")}`
+      };
+    },
+    listGuilds: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Discord access token");
+      const result = await discordRequest({
+        method: "GET",
+        path: "/users/@me/guilds",
+        token
+      });
+
+      return {
+        output: Array.isArray(result) ? { guilds: result } : toOutputRecord(result),
+        outputSummary: `Discord 返回 ${readArrayLength(result)} 个服务器`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: () => "discord"
   };
 }
 
@@ -817,6 +1449,119 @@ async function googleCalendarRequest({
     method,
     service: "Google Calendar",
     url: withQuery(`https://www.googleapis.com/calendar/v3${path}`, query)
+  });
+}
+
+async function gmailRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Gmail",
+    url: withQuery(`https://gmail.googleapis.com/gmail/v1${path}`, query)
+  });
+}
+
+async function googleDriveRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Google Drive",
+    url: withQuery(`https://www.googleapis.com/drive/v3${path}`, query)
+  });
+}
+
+async function linearGraphqlRequest({
+  query,
+  token,
+  variables
+}: {
+  query: string;
+  token: string;
+  variables?: Record<string, unknown>;
+}): Promise<unknown> {
+  const result = await requestJson({
+    body: {
+      query,
+      ...(variables ? { variables } : {})
+    },
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method: "POST",
+    service: "Linear",
+    url: "https://api.linear.app/graphql"
+  });
+  const record = readRecord(result);
+
+  if (Array.isArray(record.errors) && record.errors.length > 0) {
+    throw new Error(`Linear API request failed: ${formatErrorPayload(record.errors[0])}`);
+  }
+
+  return readRecord(record.data);
+}
+
+async function jiraApiRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Jira Cloud",
+    url: withQuery(`https://api.atlassian.com${path}`, query)
+  });
+}
+
+async function discordRequest({
+  method,
+  path,
+  token
+}: {
+  method: "GET";
+  path: string;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Discord",
+    url: `https://discord.com/api/v10${path}`
   });
 }
 
@@ -998,6 +1743,16 @@ function toOutputRecord(value: unknown): Record<string, unknown> {
 function readObjectText(value: unknown, field: string, fallback: string): string {
   const candidate = readRecord(value)[field];
   return typeof candidate === "string" && candidate.trim() ? candidate : fallback;
+}
+
+function readNestedObjectText(value: unknown, fields: string[], fallback: string): string {
+  let current: unknown = value;
+
+  for (const field of fields) {
+    current = readRecord(current)[field];
+  }
+
+  return typeof current === "string" && current.trim() ? current : fallback;
 }
 
 function readArrayLength(value: unknown): number {

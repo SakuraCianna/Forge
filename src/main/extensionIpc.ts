@@ -4,6 +4,7 @@ import type {
   ExtensionCreateRequest,
   ExtensionManifest,
   ExtensionInvocationRequest,
+  ExtensionOAuthStartRequest,
   ExtensionSecretSaveRequest,
   ExtensionSettingsPatch,
   ExtensionUpdateRequest
@@ -43,6 +44,9 @@ export function registerExtensionHandlers(
   );
   registerHandler(extensionChannels.confirmInvocation, async (_event, request) =>
     registry.confirmInvocation(assertConfirmInvocationRequest(request))
+  );
+  registerHandler(extensionChannels.startOAuth, async (_event, request) =>
+    registry.startOAuth(assertOAuthStartRequest(request))
   );
   registerHandler(extensionChannels.logs, async (_event, limit) =>
     registry.listLogs(readOptionalNumber(limit))
@@ -167,6 +171,14 @@ function assertConfirmInvocationRequest(value: unknown): ExtensionConfirmInvocat
   }
 
   return { token: value.token };
+}
+
+function assertOAuthStartRequest(value: unknown): ExtensionOAuthStartRequest {
+  if (!isRecord(value) || typeof value.extensionId !== "string") {
+    throw new Error("Invalid extension OAuth start request");
+  }
+
+  return { extensionId: value.extensionId };
 }
 
 function assertString(value: unknown): string {

@@ -215,6 +215,7 @@ void app.whenReady().then(() => {
   const extensionRegistry = createExtensionRegistry({
     customExtensionDirectory: join(extensionDirectory, "custom"),
     logStore: extensionLogStore,
+    openExternal: openTrustedExternalUrl,
     store: extensionStore,
     vault: keyVault
   });

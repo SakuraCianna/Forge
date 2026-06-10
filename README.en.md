@@ -61,7 +61,9 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - The sidebar includes a dedicated Extensions page separate from plugins and skills.
 - Extensions connect external services and can read, create, or modify real data outside Forge.
 - The built-in QQ Mail extension can list inbox messages, read email, search email, create drafts, and send email.
+- Built-in service extensions cover GitHub, Slack, Notion, Google Calendar, Figma, Gmail, Google Drive, Linear, Jira Cloud, and Discord.
 - Extension credentials are stored through secure storage on the Electron main-process side. The UI only shows configuration status and last-four hints.
+- OAuth metadata and a loopback browser-authorization foundation are supported. Services that allow local callbacks can save tokens after browser consent; services that require HTTPS callbacks are marked clearly in the Extensions page.
 - Extension permissions support allow, ask, and deny. Invocation logs store sanitized input and output summaries.
 - The agent can call enabled extensions as tool actions, but calls must pass agent-profile tool permissions and extension permissions.
 - `sendEmail` always requires explicit confirmation. Forge does not let the agent silently send email.

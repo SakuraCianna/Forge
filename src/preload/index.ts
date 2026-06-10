@@ -43,6 +43,8 @@ import type {
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
+  ExtensionOAuthStartRequest,
+  ExtensionOAuthStartResult,
   ExtensionRegistrySnapshot,
   ExtensionSecretSaveRequest,
   ExtensionSettingsPatch,
@@ -145,6 +147,8 @@ contextBridge.exposeInMainWorld("forge", {
       request: ExtensionConfirmInvocationRequest
     ): Promise<ExtensionInvocationResult> =>
       ipcRenderer.invoke(extensionChannels.confirmInvocation, request),
+    startOAuth: (request: ExtensionOAuthStartRequest): Promise<ExtensionOAuthStartResult> =>
+      ipcRenderer.invoke(extensionChannels.startOAuth, request),
     listLogs: (limit?: number): Promise<ExtensionInvocationLogRecord[]> =>
       ipcRenderer.invoke(extensionChannels.logs, limit)
   },

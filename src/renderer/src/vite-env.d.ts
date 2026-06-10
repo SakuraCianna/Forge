@@ -30,6 +30,8 @@ import type {
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
+  ExtensionOAuthStartRequest,
+  ExtensionOAuthStartResult,
   ExtensionRegistrySnapshot,
   ExtensionSecretSaveRequest,
   ExtensionSettingsPatch,
@@ -117,6 +119,7 @@ declare global {
         confirmInvocation: (
           request: ExtensionConfirmInvocationRequest
         ) => Promise<ExtensionInvocationResult>;
+        startOAuth: (request: ExtensionOAuthStartRequest) => Promise<ExtensionOAuthStartResult>;
         listLogs: (limit?: number) => Promise<ExtensionInvocationLogRecord[]>;
       };
       builtInTools: {
