@@ -117,6 +117,8 @@ const draftIconButtonClassName =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]";
 const extensionIconSources: Record<string, string> = {
   airtable: new URL("../assets/extension-icons/airtable.ico", import.meta.url).href,
+  asana: new URL("../assets/extension-icons/asana.ico", import.meta.url).href,
+  bitbucket: new URL("../assets/extension-icons/bitbucket.ico", import.meta.url).href,
   calendly: new URL("../assets/extension-icons/calendly.ico", import.meta.url).href,
   clickup: new URL("../assets/extension-icons/clickup.png", import.meta.url).href,
   discord: new URL("../assets/extension-icons/discord.ico", import.meta.url).href,
@@ -131,10 +133,14 @@ const extensionIconSources: Record<string, string> = {
   "jira-cloud": new URL("../assets/extension-icons/jira-cloud.ico", import.meta.url).href,
   linear: new URL("../assets/extension-icons/linear.svg", import.meta.url).href,
   "microsoft-365": new URL("../assets/extension-icons/microsoft-365.svg", import.meta.url).href,
+  miro: new URL("../assets/extension-icons/miro.png", import.meta.url).href,
+  monday: new URL("../assets/extension-icons/monday.ico", import.meta.url).href,
   notion: new URL("../assets/extension-icons/notion.png", import.meta.url).href,
   "qq-mail": new URL("../assets/extension-icons/qq-mail.ico", import.meta.url).href,
+  sentry: new URL("../assets/extension-icons/sentry.ico", import.meta.url).href,
   slack: new URL("../assets/extension-icons/slack.png", import.meta.url).href,
-  todoist: new URL("../assets/extension-icons/todoist.ico", import.meta.url).href
+  todoist: new URL("../assets/extension-icons/todoist.ico", import.meta.url).href,
+  zoom: new URL("../assets/extension-icons/zoom.ico", import.meta.url).href
 };
 
 export function ExtensionsPanel({

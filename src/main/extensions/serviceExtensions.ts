@@ -146,20 +146,26 @@ function createOAuthTokenAuth({
 export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createGitHubExtension(),
   createGitLabExtension(),
+  createBitbucketExtension(),
   createSlackExtension(),
   createNotionExtension(),
   createAirtableExtension(),
   createHubSpotExtension(),
   createTodoistExtension(),
+  createAsanaExtension(),
   createClickUpExtension(),
+  createMondayExtension(),
   createGoogleCalendarExtension(),
   createCalendlyExtension(),
+  createMiroExtension(),
+  createZoomExtension(),
   createFigmaExtension(),
   createGmailExtension(),
   createGoogleDriveExtension(),
   createDropboxExtension(),
   createMicrosoft365Extension(),
   createLinearExtension(),
+  createSentryExtension(),
   createJiraCloudExtension(),
   createDiscordExtension()
 ];
@@ -470,6 +476,146 @@ function createGitLabExtension(): BuiltInServiceExtension {
       actionId === "listProjectIssues"
         ? `gitlab ${String(input.projectId ?? "")}`
         : "gitlab"
+  };
+}
+
+function createBitbucketExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "bitbucket",
+    name: "Bitbucket",
+    description: "读取 Bitbucket Cloud 当前用户、仓库和 Issue 摘要",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Bitbucket OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "bitbucket_access_token",
+      oauth: {
+        provider: "Bitbucket",
+        authorizationUrl: "https://bitbucket.org/site/oauth2/authorize",
+        tokenUrl: "https://bitbucket.org/site/oauth2/access_token",
+        brokerAuthorizationUrl: createBrokerUrl("bitbucket", "authorize"),
+        brokerTokenUrl: createBrokerUrl("bitbucket", "token"),
+        scopes: ["account", "repository", "issue"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developer.atlassian.com/cloud/bitbucket/rest/intro/#oauth-2-0",
+        setupUrl: "https://support.atlassian.com/bitbucket-cloud/docs/use-oauth-on-bitbucket-cloud/",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "basic"
+      }
+    }),
+    permissions: [
+      {
+        id: "bitbucket.read",
+        label: "读取 Bitbucket",
+        description: "允许读取 Bitbucket Cloud 当前用户、仓库和 Issue 摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 Bitbucket 用户资料",
+        permission: "bitbucket.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listRepositories",
+        label: "列出仓库",
+        description: "读取指定 Bitbucket workspace 下的仓库",
+        permission: "bitbucket.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["workspace"],
+        properties: {
+          workspace: { type: "string", description: "Bitbucket workspace slug" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listRepositoryIssues",
+        label: "列出仓库 Issues",
+        description: "读取指定 Bitbucket 仓库的 Issue 列表",
+        permission: "bitbucket.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["workspace", "repoSlug"],
+        properties: {
+          repoSlug: { type: "string", description: "Bitbucket repository slug" },
+          workspace: { type: "string", description: "Bitbucket workspace slug" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Bitbucket access token");
+      const result = await bitbucketRequest({
+        method: "GET",
+        path: "/user",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Bitbucket 当前用户: ${readObjectText(result, "display_name", "unknown")}`
+      };
+    },
+    listRepositories: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Bitbucket access token");
+      const workspace = readRequiredString(input.workspace, "workspace", 120);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await bitbucketRequest({
+        method: "GET",
+        path: `/repositories/${encodePathSegment(workspace)}`,
+        query: {
+          pagelen: String(limit),
+          sort: "-updated_on"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Bitbucket ${workspace} 返回 ${readArrayLength(readRecord(result).values)} 个仓库`
+      };
+    },
+    listRepositoryIssues: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Bitbucket access token");
+      const workspace = readRequiredString(input.workspace, "workspace", 120);
+      const repoSlug = readRequiredString(input.repoSlug, "repoSlug", 160);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await bitbucketRequest({
+        method: "GET",
+        path: `/repositories/${encodePathSegment(workspace)}/${encodePathSegment(repoSlug)}/issues`,
+        query: {
+          pagelen: String(limit),
+          sort: "-updated_on"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Bitbucket ${workspace}/${repoSlug} 返回 ${readArrayLength(readRecord(result).values)} 个 Issue`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "getCurrentUser"
+        ? "bitbucket user"
+        : `bitbucket ${String(input.workspace ?? "")}/${String(input.repoSlug ?? "")}`
   };
 }
 
@@ -1165,6 +1311,176 @@ function createTodoistExtension(): BuiltInServiceExtension {
   };
 }
 
+function createAsanaExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "asana",
+    name: "Asana",
+    description: "读取 Asana 当前用户、工作区、项目和任务摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Asana OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "asana_access_token",
+      oauth: {
+        provider: "Asana",
+        authorizationUrl: "https://app.asana.com/-/oauth_authorize",
+        tokenUrl: "https://app.asana.com/-/oauth_token",
+        brokerAuthorizationUrl: createBrokerUrl("asana", "authorize"),
+        brokerTokenUrl: createBrokerUrl("asana", "token"),
+        scopes: ["users:read", "workspaces:read", "projects:read", "tasks:read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developers.asana.com/docs/oauth",
+        setupUrl: "https://app.asana.com/0/my-apps",
+        redirectUriMode: "brokered",
+        usePkce: true,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "asana.read",
+        label: "读取 Asana",
+        description: "允许读取 Asana 当前用户、工作区、项目和任务摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 Asana 用户资料",
+        permission: "asana.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listWorkspaces",
+        label: "列出工作区",
+        description: "读取当前授权账号可见的 Asana 工作区",
+        permission: "asana.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listProjects",
+        label: "列出项目",
+        description: "读取指定 Asana 工作区下的项目",
+        permission: "asana.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["workspaceGid"],
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" },
+          workspaceGid: { type: "string", description: "Asana workspace gid" }
+        }
+      }),
+      createAction({
+        id: "listTasks",
+        label: "列出任务",
+        description: "读取指定 Asana 项目下的任务",
+        permission: "asana.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["projectGid"],
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" },
+          projectGid: { type: "string", description: "Asana project gid" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Asana access token");
+      const result = await asanaRequest({
+        method: "GET",
+        path: "/users/me",
+        query: {
+          opt_fields: "gid,name,email"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Asana 当前用户: ${readNestedObjectText(result, ["data", "name"], "unknown")}`
+      };
+    },
+    listWorkspaces: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Asana access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await asanaRequest({
+        method: "GET",
+        path: "/workspaces",
+        query: {
+          limit: String(limit),
+          opt_fields: "gid,name"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Asana 返回 ${readArrayLength(readRecord(result).data)} 个工作区`
+      };
+    },
+    listProjects: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Asana access token");
+      const workspaceGid = readRequiredString(input.workspaceGid, "workspaceGid", 120);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await asanaRequest({
+        method: "GET",
+        path: `/workspaces/${encodePathSegment(workspaceGid)}/projects`,
+        query: {
+          limit: String(limit),
+          opt_fields: "gid,name,archived,modified_at,permalink_url"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Asana 返回 ${readArrayLength(readRecord(result).data)} 个项目`
+      };
+    },
+    listTasks: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Asana access token");
+      const projectGid = readRequiredString(input.projectGid, "projectGid", 120);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await asanaRequest({
+        method: "GET",
+        path: `/projects/${encodePathSegment(projectGid)}/tasks`,
+        query: {
+          limit: String(limit),
+          opt_fields: "gid,name,completed,assignee.name,due_on,permalink_url"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Asana 返回 ${readArrayLength(readRecord(result).data)} 个任务`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listTasks"
+        ? `asana tasks ${String(input.projectGid ?? "")}`
+        : `asana ${String(input.workspaceGid ?? actionId)}`
+  };
+}
+
 function createClickUpExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "clickup",
@@ -1320,6 +1636,156 @@ function createClickUpExtension(): BuiltInServiceExtension {
       actionId === "listTasks"
         ? `clickup list ${String(input.listId ?? "")}`
         : `clickup ${String(input.teamId ?? actionId)}`
+  };
+}
+
+function createMondayExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "monday",
+    name: "monday.com",
+    description: "读取 monday.com 当前用户、看板和工作区摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "monday.com OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "monday_access_token",
+      oauth: {
+        provider: "monday.com",
+        authorizationUrl: "https://auth.monday.com/oauth2/authorize",
+        tokenUrl: "https://auth.monday.com/oauth2/token",
+        brokerAuthorizationUrl: createBrokerUrl("monday", "authorize"),
+        brokerTokenUrl: createBrokerUrl("monday", "token"),
+        scopes: ["me:read", "boards:read", "workspaces:read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developer.monday.com/apps/docs/oauth",
+        setupUrl: "https://developer.monday.com/apps",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "monday.read",
+        label: "读取 monday.com",
+        description: "允许读取 monday.com 当前用户、看板和工作区摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 monday.com 用户资料",
+        permission: "monday.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listBoards",
+        label: "列出看板",
+        description: "读取当前授权账号可见的 monday.com boards",
+        permission: "monday.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listWorkspaces",
+        label: "列出工作区",
+        description: "读取当前授权账号可见的 monday.com workspaces",
+        permission: "monday.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "monday.com access token");
+      const result = await mondayGraphqlRequest({
+        query: `query ForgeCurrentUser {
+          me {
+            id
+            name
+            email
+            account {
+              id
+              name
+              slug
+            }
+          }
+        }`,
+        token
+      });
+
+      return {
+        output: result,
+        outputSummary: `monday.com 当前用户: ${readNestedObjectText(result, ["me", "name"], "unknown")}`
+      };
+    },
+    listBoards: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "monday.com access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await mondayGraphqlRequest({
+        query: `query ForgeBoards($limit: Int!) {
+          boards(limit: $limit) {
+            id
+            name
+            state
+            board_kind
+            updated_at
+          }
+        }`,
+        token,
+        variables: {
+          limit
+        }
+      });
+
+      return {
+        output: result,
+        outputSummary: `monday.com 返回 ${readArrayLength(readRecord(result).boards)} 个看板`
+      };
+    },
+    listWorkspaces: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "monday.com access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await mondayGraphqlRequest({
+        query: `query ForgeWorkspaces($limit: Int!) {
+          workspaces(limit: $limit) {
+            id
+            name
+            kind
+            description
+          }
+        }`,
+        token,
+        variables: {
+          limit
+        }
+      });
+
+      return {
+        output: result,
+        outputSummary: `monday.com 返回 ${readArrayLength(readRecord(result).workspaces)} 个工作区`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `monday ${actionId}`
   };
 }
 
@@ -1600,6 +2066,220 @@ function createCalendlyExtension(): BuiltInServiceExtension {
       actionId === "getCurrentUser"
         ? "calendly user"
         : `calendly ${String(input.userUri ?? actionId)}`
+  };
+}
+
+function createMiroExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "miro",
+    name: "Miro",
+    description: "读取 Miro boards 摘要和单个 board 元数据",
+    version: "0.2.1",
+    category: "design",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Miro OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "miro_access_token",
+      oauth: {
+        provider: "Miro",
+        authorizationUrl: "https://miro.com/oauth/authorize",
+        tokenUrl: "https://api.miro.com/v1/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("miro", "authorize"),
+        brokerTokenUrl: createBrokerUrl("miro", "token"),
+        scopes: ["boards:read", "identity:read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developers.miro.com/docs/getting-started-with-oauth",
+        setupUrl: "https://miro.com/app/settings/user-profile/apps",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "miro.read",
+        label: "读取 Miro",
+        description: "允许读取 Miro boards 摘要和单个 board 元数据",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listBoards",
+        label: "列出 Boards",
+        description: "读取当前授权账号可访问的 Miro boards",
+        permission: "miro.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "getBoard",
+        label: "查看 Board",
+        description: "读取指定 Miro board 元数据",
+        permission: "miro.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["boardId"],
+        properties: {
+          boardId: { type: "string", description: "Miro board ID" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listBoards: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Miro access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await miroRequest({
+        method: "GET",
+        path: "/boards",
+        query: {
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Miro 返回 ${readArrayLength(readRecord(result).data)} 个 board`
+      };
+    },
+    getBoard: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Miro access token");
+      const boardId = readRequiredString(input.boardId, "boardId", 200);
+      const result = await miroRequest({
+        method: "GET",
+        path: `/boards/${encodePathSegment(boardId)}`,
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Miro board: ${readObjectText(result, "name", boardId)}`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "getBoard" ? `miro ${String(input.boardId ?? "")}` : "miro boards"
+  };
+}
+
+function createZoomExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "zoom",
+    name: "Zoom",
+    description: "读取 Zoom 当前用户和会议列表摘要",
+    version: "0.2.1",
+    category: "calendar",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Zoom OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "zoom_access_token",
+      oauth: {
+        provider: "Zoom",
+        authorizationUrl: "https://zoom.us/oauth/authorize",
+        tokenUrl: "https://zoom.us/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("zoom", "authorize"),
+        brokerTokenUrl: createBrokerUrl("zoom", "token"),
+        scopes: ["user:read:user", "meeting:read:list_user_meetings"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developers.zoom.us/docs/integrations/oauth/",
+        setupUrl: "https://marketplace.zoom.us/develop/create",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "basic"
+      }
+    }),
+    permissions: [
+      {
+        id: "zoom.read",
+        label: "读取 Zoom",
+        description: "允许读取 Zoom 当前用户和会议列表摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 Zoom 用户资料",
+        permission: "zoom.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listMeetings",
+        label: "列出会议",
+        description: "读取当前 Zoom 用户的会议列表",
+        permission: "zoom.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" },
+          type: {
+            type: "string",
+            enum: ["scheduled", "live", "upcoming", "upcoming_meetings", "previous_meetings"],
+            description: "会议类型, 默认 scheduled"
+          }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Zoom access token");
+      const result = await zoomRequest({
+        method: "GET",
+        path: "/users/me",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Zoom 当前用户: ${readObjectText(result, "email", "unknown")}`
+      };
+    },
+    listMeetings: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Zoom access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const type = readEnum(
+        input.type,
+        ["scheduled", "live", "upcoming", "upcoming_meetings", "previous_meetings"],
+        "scheduled"
+      );
+      const result = await zoomRequest({
+        method: "GET",
+        path: "/users/me/meetings",
+        query: {
+          page_size: String(limit),
+          type
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Zoom 返回 ${readArrayLength(readRecord(result).meetings)} 个会议`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `zoom ${actionId}`
   };
 }
 
@@ -2277,6 +2957,140 @@ function createLinearExtension(): BuiltInServiceExtension {
   };
 }
 
+function createSentryExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "sentry",
+    name: "Sentry",
+    description: "读取 Sentry 组织、项目和 Issue 摘要",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Sentry OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "sentry_access_token",
+      oauth: {
+        provider: "Sentry",
+        authorizationUrl: "https://sentry.io/oauth/authorize/",
+        tokenUrl: "https://sentry.io/oauth/token/",
+        brokerAuthorizationUrl: createBrokerUrl("sentry", "authorize"),
+        brokerTokenUrl: createBrokerUrl("sentry", "token"),
+        scopes: ["org:read", "project:read", "event:read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://docs.sentry.io/api/auth/",
+        setupUrl: "https://sentry.io/settings/account/api/applications/",
+        redirectUriMode: "brokered",
+        usePkce: true,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "sentry.read",
+        label: "读取 Sentry",
+        description: "允许读取 Sentry 组织、项目和 Issue 摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listOrganizations",
+        label: "列出组织",
+        description: "读取当前授权账号可访问的 Sentry 组织",
+        permission: "sentry.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listProjects",
+        label: "列出项目",
+        description: "读取指定 Sentry 组织下的项目",
+        permission: "sentry.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["organizationSlug"],
+        properties: {
+          organizationSlug: { type: "string", description: "Sentry organization slug" }
+        }
+      }),
+      createAction({
+        id: "listIssues",
+        label: "列出 Issues",
+        description: "读取指定 Sentry 组织下的 Issue 列表",
+        permission: "sentry.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["organizationSlug"],
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" },
+          organizationSlug: { type: "string", description: "Sentry organization slug" },
+          query: { type: "string", description: "Sentry issue 查询, 默认 is:unresolved" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listOrganizations: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Sentry access token");
+      const result = await sentryRequest({
+        method: "GET",
+        path: "/organizations/",
+        token
+      });
+
+      return {
+        output: Array.isArray(result) ? { organizations: result } : toOutputRecord(result),
+        outputSummary: `Sentry 返回 ${readArrayLength(result)} 个组织`
+      };
+    },
+    listProjects: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Sentry access token");
+      const organizationSlug = readRequiredString(input.organizationSlug, "organizationSlug", 160);
+      const result = await sentryRequest({
+        method: "GET",
+        path: `/organizations/${encodePathSegment(organizationSlug)}/projects/`,
+        token
+      });
+
+      return {
+        output: Array.isArray(result) ? { projects: result } : toOutputRecord(result),
+        outputSummary: `Sentry ${organizationSlug} 返回 ${readArrayLength(result)} 个项目`
+      };
+    },
+    listIssues: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Sentry access token");
+      const organizationSlug = readRequiredString(input.organizationSlug, "organizationSlug", 160);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const query = readOptionalString(input.query, 500) || "is:unresolved";
+      const result = await sentryRequest({
+        method: "GET",
+        path: `/organizations/${encodePathSegment(organizationSlug)}/issues/`,
+        query: {
+          limit: String(limit),
+          query
+        },
+        token
+      });
+
+      return {
+        output: Array.isArray(result) ? { issues: result } : toOutputRecord(result),
+        outputSummary: `Sentry ${organizationSlug} 返回 ${readArrayLength(result)} 个 Issue`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listOrganizations"
+        ? "sentry organizations"
+        : `sentry ${String(input.organizationSlug ?? "")}`
+  };
+}
+
 function createJiraCloudExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "jira-cloud",
@@ -2565,6 +3379,27 @@ async function gitlabRequest({
   });
 }
 
+async function bitbucketRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Bitbucket",
+    url: withQuery(`https://api.bitbucket.org/2.0${path}`, query)
+  });
+}
+
 async function slackRequest({
   body,
   method,
@@ -2641,6 +3476,48 @@ async function googleCalendarRequest({
   });
 }
 
+async function miroRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Miro",
+    url: withQuery(`https://api.miro.com/v2${path}`, query)
+  });
+}
+
+async function zoomRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Zoom",
+    url: withQuery(`https://api.zoom.us/v2${path}`, query)
+  });
+}
+
 async function calendlyRequest({
   method,
   path,
@@ -2701,6 +3578,27 @@ async function googleDriveRequest({
     method,
     service: "Google Drive",
     url: withQuery(`https://www.googleapis.com/drive/v3${path}`, query)
+  });
+}
+
+async function asanaRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Asana",
+    url: withQuery(`https://app.asana.com/api/1.0${path}`, query)
   });
 }
 
@@ -2832,6 +3730,37 @@ async function microsoftGraphRequest({
   });
 }
 
+async function mondayGraphqlRequest({
+  query,
+  token,
+  variables
+}: {
+  query: string;
+  token: string;
+  variables?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const result = await requestJson({
+    body: {
+      query,
+      ...(variables ? { variables } : {})
+    },
+    headers: {
+      Authorization: token,
+      "API-Version": "2026-01"
+    },
+    method: "POST",
+    service: "monday.com",
+    url: "https://api.monday.com/v2"
+  });
+  const record = readRecord(result);
+
+  if (Array.isArray(record.errors) && record.errors.length > 0) {
+    throw new Error(`monday.com API request failed: ${formatErrorPayload(record.errors[0])}`);
+  }
+
+  return readRecord(record.data);
+}
+
 async function linearGraphqlRequest({
   query,
   token,
@@ -2881,6 +3810,27 @@ async function jiraApiRequest({
     method,
     service: "Jira Cloud",
     url: withQuery(`https://api.atlassian.com${path}`, query)
+  });
+}
+
+async function sentryRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Sentry",
+    url: withQuery(`https://sentry.io/api/0${path}`, query)
   });
 }
 

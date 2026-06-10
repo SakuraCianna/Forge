@@ -17,20 +17,26 @@ test("built-in service extensions expose production manifests for common service
   assert.deepEqual(ids, [
     "github",
     "gitlab",
+    "bitbucket",
     "slack",
     "notion",
     "airtable",
     "hubspot",
     "todoist",
+    "asana",
     "clickup",
+    "monday",
     "google-calendar",
     "calendly",
+    "miro",
+    "zoom",
     "figma",
     "gmail",
     "google-drive",
     "dropbox",
     "microsoft-365",
     "linear",
+    "sentry",
     "jira-cloud",
     "discord"
   ]);
@@ -64,20 +70,26 @@ test("OAuth-capable service extensions declare provider metadata and token field
     [
       "github",
       "gitlab",
+      "bitbucket",
       "slack",
       "notion",
       "airtable",
       "hubspot",
       "todoist",
+      "asana",
       "clickup",
+      "monday",
       "google-calendar",
       "calendly",
+      "miro",
+      "zoom",
       "figma",
       "gmail",
       "google-drive",
       "dropbox",
       "microsoft-365",
       "linear",
+      "sentry",
       "jira-cloud",
       "discord"
     ]
@@ -134,20 +146,26 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["qq-mail", "qq-mail.ico"],
     ["github", "github.png"],
     ["gitlab", "gitlab.ico"],
+    ["bitbucket", "bitbucket.ico"],
     ["slack", "slack.png"],
     ["notion", "notion.png"],
     ["airtable", "airtable.ico"],
     ["hubspot", "hubspot.png"],
     ["todoist", "todoist.ico"],
+    ["asana", "asana.ico"],
     ["clickup", "clickup.png"],
+    ["monday", "monday.ico"],
     ["google-calendar", "google-calendar.png"],
     ["calendly", "calendly.ico"],
+    ["miro", "miro.png"],
+    ["zoom", "zoom.ico"],
     ["figma", "figma.png"],
     ["gmail", "gmail.ico"],
     ["google-drive", "google-drive.png"],
     ["dropbox", "dropbox.ico"],
     ["microsoft-365", "microsoft-365.svg"],
     ["linear", "linear.svg"],
+    ["sentry", "sentry.ico"],
     ["jira-cloud", "jira-cloud.ico"],
     ["discord", "discord.ico"]
   ]);
@@ -442,6 +460,63 @@ test("gitlab service extension invokes the REST API with connector token auth", 
   }
 });
 
+test("bitbucket service extension lists repositories with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.bitbucket.org");
+    assert.equal(requestUrl.pathname, "/2.0/repositories/team");
+    assert.equal(requestUrl.searchParams.get("pagelen"), "2");
+    assert.equal(requestUrl.searchParams.get("sort"), "-updated_on");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer bitbucket-token");
+
+    return {
+      body: {
+        values: [
+          {
+            slug: "forge"
+          },
+          {
+            slug: "docs"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "bitbucket",
+      "bitbucket.read",
+      "accessToken",
+      "bitbucket-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "bitbucket",
+      actionId: "listRepositories",
+      input: {
+        limit: 2,
+        workspace: "team"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Bitbucket team 返回 2 个仓库");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("airtable service extension invokes the Web API with connector token auth", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -669,6 +744,65 @@ test("todoist write actions require confirmation before creating tasks", async (
   }
 });
 
+test("asana service extension lists project tasks with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://app.asana.com");
+    assert.equal(requestUrl.pathname, "/api/1.0/projects/120/tasks");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.match(requestUrl.searchParams.get("opt_fields") ?? "", /permalink_url/u);
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer asana-token");
+
+    return {
+      body: {
+        data: [
+          {
+            gid: "task-1",
+            name: "Review"
+          },
+          {
+            gid: "task-2",
+            name: "Ship"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "asana",
+      "asana.read",
+      "accessToken",
+      "asana-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "asana",
+      actionId: "listTasks",
+      input: {
+        limit: 2,
+        projectGid: "120"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Asana 返回 2 个任务");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("clickup service extension lists authorized workspaces with connector token auth", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -713,6 +847,72 @@ test("clickup service extension lists authorized workspaces with connector token
 
     if (result.ok) {
       assert.equal(result.outputSummary, "ClickUp 返回 2 个工作区");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("monday service extension invokes the GraphQL API with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://api.monday.com/v2");
+    assert.equal(init?.method, "POST");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "monday-token");
+    assert.equal((init?.headers as Record<string, string>)["API-Version"], "2026-01");
+
+    const body = JSON.parse(String(init?.body)) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
+
+    assert.match(body.query, /boards\(limit: \$limit\)/u);
+    assert.deepEqual(body.variables, {
+      limit: 2
+    });
+
+    return {
+      body: {
+        data: {
+          boards: [
+            {
+              id: "board-1",
+              name: "Roadmap"
+            },
+            {
+              id: "board-2",
+              name: "Launch"
+            }
+          ]
+        }
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "monday",
+      "monday.read",
+      "accessToken",
+      "monday-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "monday",
+      actionId: "listBoards",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "monday.com 返回 2 个看板");
     }
   } finally {
     fetchMock.restore();
@@ -772,6 +972,121 @@ test("calendly service extension lists event types with connector token auth", a
 
     if (result.ok) {
       assert.equal(result.outputSummary, "Calendly 返回 2 个事件类型");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("miro service extension lists boards with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.miro.com");
+    assert.equal(requestUrl.pathname, "/v2/boards");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer miro-token");
+
+    return {
+      body: {
+        data: [
+          {
+            id: "board-1",
+            name: "Workshop"
+          },
+          {
+            id: "board-2",
+            name: "Retro"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "miro",
+      "miro.read",
+      "accessToken",
+      "miro-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "miro",
+      actionId: "listBoards",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Miro 返回 2 个 board");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("zoom service extension lists meetings with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.zoom.us");
+    assert.equal(requestUrl.pathname, "/v2/users/me/meetings");
+    assert.equal(requestUrl.searchParams.get("page_size"), "2");
+    assert.equal(requestUrl.searchParams.get("type"), "scheduled");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer zoom-token");
+
+    return {
+      body: {
+        meetings: [
+          {
+            id: 1,
+            topic: "Planning"
+          },
+          {
+            id: 2,
+            topic: "Review"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "zoom",
+      "zoom.read",
+      "accessToken",
+      "zoom-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "zoom",
+      actionId: "listMeetings",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Zoom 返回 2 个会议");
     }
   } finally {
     fetchMock.restore();
@@ -893,6 +1208,63 @@ test("microsoft 365 service extension invokes Graph with connector token auth", 
 
     if (result.ok) {
       assert.equal(result.outputSummary, "Microsoft 365 返回 2 个 OneDrive 条目");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("sentry service extension lists organization issues with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://sentry.io");
+    assert.equal(requestUrl.pathname, "/api/0/organizations/acme/issues/");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.equal(requestUrl.searchParams.get("query"), "is:unresolved");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer sentry-token");
+
+    return {
+      body: [
+        {
+          id: "issue-1",
+          title: "TypeError"
+        },
+        {
+          id: "issue-2",
+          title: "Timeout"
+        }
+      ],
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "sentry",
+      "sentry.read",
+      "accessToken",
+      "sentry-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "sentry",
+      actionId: "listIssues",
+      input: {
+        limit: 2,
+        organizationSlug: "acme"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Sentry acme 返回 2 个 Issue");
     }
   } finally {
     fetchMock.restore();
