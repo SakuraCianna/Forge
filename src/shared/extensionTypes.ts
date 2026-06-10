@@ -17,6 +17,7 @@ export type ExtensionSecretField = {
   description: string;
   placeholder?: string;
   required?: boolean;
+  manualInput?: boolean;
 };
 
 export type ExtensionOAuthRedirectMode =

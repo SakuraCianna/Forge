@@ -18,10 +18,12 @@ test("built-in service extensions expose production manifests for common service
     "github",
     "slack",
     "notion",
+    "airtable",
     "google-calendar",
     "figma",
     "gmail",
     "google-drive",
+    "dropbox",
     "linear",
     "jira-cloud",
     "discord"
@@ -57,10 +59,12 @@ test("OAuth-capable service extensions declare provider metadata and token field
       "github",
       "slack",
       "notion",
+      "airtable",
       "google-calendar",
       "figma",
       "gmail",
       "google-drive",
+      "dropbox",
       "linear",
       "jira-cloud",
       "discord"
@@ -72,6 +76,16 @@ test("OAuth-capable service extensions declare provider metadata and token field
 
     assert.ok(oauth);
     assert.ok(manifest.auth.fields.some((field) => field.id === oauth.accessTokenFieldId));
+    assert.equal(
+      manifest.auth.fields.find((field) => field.id === oauth.accessTokenFieldId)?.manualInput,
+      false
+    );
+    if (oauth.refreshTokenFieldId) {
+      assert.equal(
+        manifest.auth.fields.find((field) => field.id === oauth.refreshTokenFieldId)?.manualInput,
+        false
+      );
+    }
     if (oauth.clientIdFieldId) {
       assert.ok(manifest.auth.fields.some((field) => field.id === oauth.clientIdFieldId));
     } else if (oauth.redirectUriMode === "brokered") {
@@ -109,10 +123,12 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["github", "github.png"],
     ["slack", "slack.png"],
     ["notion", "notion.png"],
+    ["airtable", "airtable.ico"],
     ["google-calendar", "google-calendar.png"],
     ["figma", "figma.png"],
     ["gmail", "gmail.ico"],
     ["google-drive", "google-drive.png"],
+    ["dropbox", "dropbox.ico"],
     ["linear", "linear.svg"],
     ["jira-cloud", "jira-cloud.ico"],
     ["discord", "discord.ico"]
@@ -140,6 +156,9 @@ test("extensions panel explains OAuth setup before browser authorization", async
   assert.match(source, /canStartSelectedOAuth/u);
   assert.match(source, /disabled=\{\s*busyOAuthExtensionId === selectedManifest\.id \|\|/u);
   assert.match(source, /Forge 授权服务/u);
+  assert.match(source, /getManualAuthFields/u);
+  assert.match(source, /oauthOnlyCredentials/u);
+  assert.match(source, /manualInput !== false/u);
   assert.doesNotMatch(source, /打开官方配置/u);
 });
 
@@ -348,6 +367,116 @@ test("brokered OAuth exchanges Forge broker code and saves tokens", async () => 
   }
 });
 
+test("airtable service extension invokes the Web API with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://api.airtable.com/v0/meta/bases");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer airtable-token");
+
+    return {
+      body: {
+        bases: [
+          {
+            id: "appExample",
+            name: "Operations"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "airtable",
+      "airtable.read",
+      "accessToken",
+      "airtable-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "airtable",
+      actionId: "listBases",
+      input: {}
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Airtable 返回 1 个 base");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("dropbox service extension lists folders through the API with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://api.dropboxapi.com/2/files/list_folder");
+    assert.equal(init?.method, "POST");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer dropbox-token");
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      include_deleted: false,
+      include_has_explicit_shared_members: false,
+      include_mounted_folders: true,
+      include_non_downloadable_files: true,
+      limit: 2,
+      path: ""
+    });
+
+    return {
+      body: {
+        entries: [
+          {
+            ".tag": "folder",
+            name: "Docs",
+            path_display: "/Docs"
+          },
+          {
+            ".tag": "file",
+            name: "notes.md",
+            path_display: "/notes.md"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "dropbox",
+      "dropbox.read",
+      "accessToken",
+      "dropbox-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "dropbox",
+      actionId: "listFolder",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Dropbox 返回 2 个条目");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("enabled service extensions appear in the agent prompt only after credentials are configured", async () => {
   const fixture = await createRegistryFixture();
 
@@ -506,6 +635,25 @@ async function configureGitHub(
     extensionId: "github",
     fieldId: "token",
     value: "ghp_test"
+  });
+}
+
+async function configureReadOnlyExtension(
+  fixture: Awaited<ReturnType<typeof createRegistryFixture>>,
+  extensionId: string,
+  permissionId: string,
+  fieldId: string,
+  value: string
+): Promise<void> {
+  await fixture.registry.updateSettings({
+    extensionId,
+    enabled: true,
+    permissions: [{ permissionId, mode: "allow" }]
+  });
+  await fixture.registry.saveSecret({
+    extensionId,
+    fieldId,
+    value
   });
 }
 

@@ -96,6 +96,7 @@ function createOAuthTokenAuth({
       oauth.tokenRequestAuth !== "none" &&
       !oauth.productClientSecretEnvVar
   );
+  const connectorManagedToken = Boolean(oauth);
 
   return {
     type: "secret",
@@ -104,13 +105,15 @@ function createOAuthTokenAuth({
         id: accessTokenFieldId,
         label: accessTokenLabel,
         description: accessTokenDescription,
-        placeholder: accessTokenPlaceholder
+        placeholder: accessTokenPlaceholder,
+        ...(connectorManagedToken ? { manualInput: false } : {})
       },
       {
         id: refreshTokenFieldId,
         label: "OAuth refresh token",
         description: "OAuth 刷新令牌, 由网页登录授权自动保存, 手动 token 可留空",
         placeholder: "refresh_token",
+        ...(connectorManagedToken ? { manualInput: false } : {}),
         required: false
       },
       ...(exposeOAuthClientIdField
@@ -144,10 +147,12 @@ export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createGitHubExtension(),
   createSlackExtension(),
   createNotionExtension(),
+  createAirtableExtension(),
   createGoogleCalendarExtension(),
   createFigmaExtension(),
   createGmailExtension(),
   createGoogleDriveExtension(),
+  createDropboxExtension(),
   createLinearExtension(),
   createJiraCloudExtension(),
   createDiscordExtension()
@@ -610,6 +615,113 @@ function createNotionExtension(): BuiltInServiceExtension {
   };
 }
 
+function createAirtableExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "airtable",
+    name: "Airtable",
+    description: "读取 Airtable bases 和表记录摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Airtable OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "airtable_access_token",
+      oauth: {
+        provider: "Airtable",
+        authorizationUrl: "https://airtable.com/oauth2/v1/authorize",
+        tokenUrl: "https://airtable.com/oauth2/v1/token",
+        brokerAuthorizationUrl: createBrokerUrl("airtable", "authorize"),
+        brokerTokenUrl: createBrokerUrl("airtable", "token"),
+        scopes: ["schema.bases:read", "data.records:read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://www.airtable.com/developers/web/api/oauth-reference",
+        setupUrl: "https://airtable.com/create/oauth",
+        redirectUriMode: "brokered",
+        usePkce: true,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "airtable.read",
+        label: "读取 Airtable",
+        description: "允许读取 Airtable bases 和指定表记录摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listBases",
+        label: "列出 Bases",
+        description: "读取当前授权账号可访问的 Airtable bases",
+        permission: "airtable.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listRecords",
+        label: "读取表记录",
+        description: "读取指定 Airtable base 和 table 的记录摘要",
+        permission: "airtable.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["baseId", "tableNameOrId"],
+        properties: {
+          baseId: { type: "string", description: "Airtable base ID, 例如 app..." },
+          tableNameOrId: { type: "string", description: "表名或 table ID" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listBases: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Airtable access token");
+      const result = await airtableRequest({
+        method: "GET",
+        path: "/meta/bases",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Airtable 返回 ${readArrayLength(readRecord(result).bases)} 个 base`
+      };
+    },
+    listRecords: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Airtable access token");
+      const baseId = readRequiredString(input.baseId, "baseId", 120);
+      const tableNameOrId = readRequiredString(input.tableNameOrId, "tableNameOrId", 200);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await airtableRequest({
+        method: "GET",
+        path: `/${encodePathSegment(baseId)}/${encodePathSegment(tableNameOrId)}`,
+        query: {
+          maxRecords: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Airtable 返回 ${readArrayLength(readRecord(result).records)} 条记录`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listRecords"
+        ? `airtable ${String(input.baseId ?? "")}/${String(input.tableNameOrId ?? "")}`
+        : "airtable bases"
+  };
+}
+
 function createGoogleCalendarExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "google-calendar",
@@ -1044,6 +1156,115 @@ function createGoogleDriveExtension(): BuiltInServiceExtension {
       actionId === "getFileMetadata"
         ? `drive file ${String(input.fileId ?? "")}`
         : `drive ${String(input.query ?? "")}`
+  };
+}
+
+function createDropboxExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "dropbox",
+    name: "Dropbox",
+    description: "读取 Dropbox 当前账号和文件夹条目摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Dropbox OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "dropbox_access_token",
+      oauth: {
+        provider: "Dropbox",
+        authorizationUrl: "https://www.dropbox.com/oauth2/authorize",
+        tokenUrl: "https://api.dropboxapi.com/oauth2/token",
+        brokerAuthorizationUrl: createBrokerUrl("dropbox", "authorize"),
+        brokerTokenUrl: createBrokerUrl("dropbox", "token"),
+        scopes: ["account_info.read", "files.metadata.read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developers.dropbox.com/oauth-guide",
+        setupUrl: "https://www.dropbox.com/developers/apps",
+        redirectUriMode: "brokered",
+        usePkce: true,
+        tokenRequestAuth: "body",
+        extraAuthorizeParams: {
+          token_access_type: "offline"
+        }
+      }
+    }),
+    permissions: [
+      {
+        id: "dropbox.read",
+        label: "读取 Dropbox",
+        description: "允许读取 Dropbox 当前账号和文件夹元数据",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentAccount",
+        label: "查看当前账号",
+        description: "读取当前 Dropbox 账号摘要",
+        permission: "dropbox.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listFolder",
+        label: "列出文件夹",
+        description: "读取指定 Dropbox 文件夹条目摘要",
+        permission: "dropbox.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          path: { type: "string", description: "Dropbox 路径, 留空表示根目录" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentAccount: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Dropbox access token");
+      const result = await dropboxRequest({
+        body: {},
+        path: "/users/get_current_account",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Dropbox 当前账号: ${readObjectText(result, "email", "unknown")}`
+      };
+    },
+    listFolder: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Dropbox access token");
+      const path = readOptionalString(input.path, 500);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await dropboxRequest({
+        body: {
+          include_deleted: false,
+          include_has_explicit_shared_members: false,
+          include_mounted_folders: true,
+          include_non_downloadable_files: true,
+          limit,
+          path
+        },
+        path: "/files/list_folder",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Dropbox 返回 ${readArrayLength(readRecord(result).entries)} 个条目`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listFolder" ? `dropbox ${String(input.path ?? "")}` : "dropbox account"
   };
 }
 
@@ -1527,6 +1748,47 @@ async function googleDriveRequest({
     method,
     service: "Google Drive",
     url: withQuery(`https://www.googleapis.com/drive/v3${path}`, query)
+  });
+}
+
+async function airtableRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Airtable",
+    url: withQuery(`https://api.airtable.com/v0${path}`, query)
+  });
+}
+
+async function dropboxRequest({
+  body,
+  path,
+  token
+}: {
+  body: Record<string, unknown>;
+  path: string;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    body,
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method: "POST",
+    service: "Dropbox",
+    url: `https://api.dropboxapi.com/2${path}`
   });
 }
 

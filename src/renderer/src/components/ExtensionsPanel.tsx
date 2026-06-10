@@ -116,7 +116,9 @@ const draftInputClassName =
 const draftIconButtonClassName =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]";
 const extensionIconSources: Record<string, string> = {
+  airtable: new URL("../assets/extension-icons/airtable.ico", import.meta.url).href,
   discord: new URL("../assets/extension-icons/discord.ico", import.meta.url).href,
+  dropbox: new URL("../assets/extension-icons/dropbox.ico", import.meta.url).href,
   figma: new URL("../assets/extension-icons/figma.png", import.meta.url).href,
   gmail: new URL("../assets/extension-icons/gmail.ico", import.meta.url).href,
   github: new URL("../assets/extension-icons/github.png", import.meta.url).href,
@@ -204,6 +206,9 @@ export function ExtensionsPanel({
     [copy.builtInExtensions, copy.myExtensions, registry.manifests]
   );
   const selectedOAuth = selectedManifest?.auth.oauth;
+  const selectedManualAuthFields = selectedManifest
+    ? getManualAuthFields(selectedManifest)
+    : [];
   const missingOAuthPrerequisiteLabels = selectedOAuth
     ? getMissingOAuthPrerequisiteLabels(selectedManifest, selectedSecretStatus)
     : [];
@@ -681,65 +686,71 @@ export function ExtensionsPanel({
                 <p className="rounded-[10px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-sm text-[#565869]">
                   {copy.noCredentialsRequired}
                 </p>
+              ) : selectedManualAuthFields.length === 0 ? (
+                <p className="rounded-[10px] border border-[#d9e7ff] bg-[#f8fbff] px-3 py-2 text-sm leading-6 text-[#565869]">
+                  {copy.oauthOnlyCredentials}
+                </p>
               ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {selectedManifest.auth.fields.map((field) => {
-                  const key = `${selectedManifest.id}:${field.id}`;
-                  const status = selectedSecretStatus?.fields[field.id];
+                <div className="grid gap-3 md:grid-cols-2">
+                  {selectedManualAuthFields.map((field) => {
+                    const key = `${selectedManifest.id}:${field.id}`;
+                    const status = selectedSecretStatus?.fields[field.id];
 
-                  return (
-                    <form
-                      key={field.id}
-                      onSubmit={(event) => void saveSecret(event, selectedManifest, field.id)}
-                      className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-[#fafafa] p-3"
-                    >
-                      <label className="text-[12px] font-semibold text-[#202123]">
-                        {field.label}
-                        {isOAuthPrerequisiteField(selectedManifest.auth.oauth, field.id) ? (
-                          <span className="ml-1 font-normal text-[#8e8ea0]">
-                            {copy.requiredForOAuth}
-                          </span>
-                        ) : field.required === false ? (
-                          <span className="ml-1 font-normal text-[#8e8ea0]">
-                            {copy.optional}
-                          </span>
-                        ) : null}
-                      </label>
-                      <input
-                        type="password"
-                        value={secretDrafts[key] ?? ""}
-                        onChange={(event) =>
-                          setSecretDrafts((current) => ({
-                            ...current,
-                            [key]: event.currentTarget.value
-                          }))
-                        }
-                        placeholder={status?.hasValue ? copy.savedSecret(status.last4) : field.placeholder}
-                        className="h-9 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none focus:border-[#202123]"
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="submit"
-                          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2.5 text-[12px] font-semibold text-white"
-                        >
-                          <KeyRound className="h-3.5 w-3.5" />
-                          {copy.save}
-                        </button>
-                        {status?.hasValue ? (
+                    return (
+                      <form
+                        key={field.id}
+                        onSubmit={(event) => void saveSecret(event, selectedManifest, field.id)}
+                        className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-[#fafafa] p-3"
+                      >
+                        <label className="text-[12px] font-semibold text-[#202123]">
+                          {field.label}
+                          {isOAuthPrerequisiteField(selectedManifest.auth.oauth, field.id) ? (
+                            <span className="ml-1 font-normal text-[#8e8ea0]">
+                              {copy.requiredForOAuth}
+                            </span>
+                          ) : field.required === false ? (
+                            <span className="ml-1 font-normal text-[#8e8ea0]">
+                              {copy.optional}
+                            </span>
+                          ) : null}
+                        </label>
+                        <input
+                          type="password"
+                          value={secretDrafts[key] ?? ""}
+                          onChange={(event) =>
+                            setSecretDrafts((current) => ({
+                              ...current,
+                              [key]: event.currentTarget.value
+                            }))
+                          }
+                          placeholder={
+                            status?.hasValue ? copy.savedSecret(status.last4) : field.placeholder
+                          }
+                          className="h-9 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none focus:border-[#202123]"
+                        />
+                        <div className="flex flex-wrap gap-2">
                           <button
-                            type="button"
-                            onClick={() => void onDeleteSecret(selectedManifest.id, field.id)}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[12px] font-semibold text-[#565869]"
+                            type="submit"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2.5 text-[12px] font-semibold text-white"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            {copy.delete}
+                            <KeyRound className="h-3.5 w-3.5" />
+                            {copy.save}
                           </button>
-                        ) : null}
-                      </div>
-                    </form>
-                  );
-                })}
-              </div>
+                          {status?.hasValue ? (
+                            <button
+                              type="button"
+                              onClick={() => void onDeleteSecret(selectedManifest.id, field.id)}
+                              className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[12px] font-semibold text-[#565869]"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {copy.delete}
+                            </button>
+                          ) : null}
+                        </div>
+                      </form>
+                    );
+                  })}
+                </div>
               )}
             </section>
 
@@ -1323,6 +1334,10 @@ function createComposeInput(state: ComposeState): Record<string, unknown> {
   };
 }
 
+function getManualAuthFields(manifest: ExtensionManifest): ExtensionManifest["auth"]["fields"] {
+  return manifest.auth.fields.filter((field) => field.manualInput !== false);
+}
+
 function getOAuthPrerequisiteFieldIds(oauth: ExtensionOAuthDefinition | undefined): string[] {
   if (!oauth) {
     return [];
@@ -1617,6 +1632,9 @@ function getExtensionsCopy(language: Language) {
     noCredentialsRequired: isChinese ? "暂无凭据要求" : "No credentials required",
     notConnected: isChinese ? "未连接" : "Not connected",
     oauthAuthorizing: isChinese ? "授权中" : "Authorizing",
+    oauthOnlyCredentials: isChinese
+      ? "此扩展通过网页登录授权连接, 不需要手动粘贴 token。授权完成后凭据会自动保存到本机安全存储。"
+      : "This extension connects through browser authorization. Tokens do not need to be pasted manually and are saved to local secure storage after authorization.",
     oauthDescription: (redirectMode: string, scopes: string[]) => {
       const scopeText = scopes.length > 0 ? scopes.join(", ") : (isChinese ? "由服务端决定" : "service default");
       const modeText =
