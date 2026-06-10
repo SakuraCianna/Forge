@@ -31,6 +31,9 @@ const notionVersion = "2022-06-28";
 const googleOAuthAuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth";
 const googleOAuthTokenUrl = "https://oauth2.googleapis.com/token";
 const googleOAuthDocsUrl = "https://developers.google.com/identity/protocols/oauth2/native-app";
+const forgeGoogleOAuthClientId =
+  process.env.FORGE_GOOGLE_OAUTH_CLIENT_ID?.trim() ||
+  "294153456393-3ce5vjc1bfu67kcblgte15be2qipts3q.apps.googleusercontent.com";
 
 function createGoogleOAuth(scopes: string[], setupUrl: string): ExtensionOAuthDefinition {
   return {
@@ -40,7 +43,7 @@ function createGoogleOAuth(scopes: string[], setupUrl: string): ExtensionOAuthDe
     scopes,
     accessTokenFieldId: "accessToken",
     refreshTokenFieldId: "refreshToken",
-    clientIdFieldId: "oauthClientId",
+    productClientId: forgeGoogleOAuthClientId,
     docsUrl: googleOAuthDocsUrl,
     setupUrl,
     redirectUriMode: "loopback",
@@ -70,6 +73,14 @@ function createOAuthTokenAuth({
   oauth?: ExtensionOAuthDefinition;
   refreshTokenFieldId?: string;
 }): ExtensionAuthDefinition {
+  const exposeOAuthClientIdField = Boolean(oauth?.clientIdFieldId && !oauth.productClientId);
+  const exposeOAuthClientSecretField = Boolean(
+    clientSecret &&
+      oauth?.clientSecretFieldId &&
+      oauth.tokenRequestAuth !== "none" &&
+      !oauth.productClientSecretEnvVar
+  );
+
   return {
     type: "secret",
     fields: [
@@ -86,19 +97,23 @@ function createOAuthTokenAuth({
         placeholder: "refresh_token",
         required: false
       },
-      {
-        id: "oauthClientId",
-        label: "OAuth client ID",
-        description: "网页登录授权使用的 OAuth app client ID, 手动 token 可留空",
-        placeholder: "client_id",
-        required: false
-      },
-      ...(clientSecret
+      ...(exposeOAuthClientIdField
+        ? [
+            {
+              id: "oauthClientId",
+              label: "OAuth client ID",
+              description: "开发者 OAuth app client ID, 仅自定义授权配置需要填写",
+              placeholder: "client_id",
+              required: false
+            }
+          ]
+        : []),
+      ...(exposeOAuthClientSecretField
         ? [
             {
               id: "oauthClientSecret",
               label: "OAuth client secret",
-              description: "网页登录授权使用的 OAuth app client secret, 手动 token 可留空",
+              description: "开发者 OAuth app client secret, 仅自定义授权配置需要填写",
               placeholder: "client_secret",
               required: false
             }

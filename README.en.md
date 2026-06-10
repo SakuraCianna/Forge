@@ -63,7 +63,8 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - The built-in QQ Mail extension can list inbox messages, read email, search email, create drafts, and send email.
 - Built-in service extensions cover GitHub, Slack, Notion, Google Calendar, Figma, Gmail, Google Drive, Linear, Jira Cloud, and Discord.
 - Extension credentials are stored through secure storage on the Electron main-process side. The UI only shows configuration status and last-four hints.
-- OAuth metadata and a loopback browser-authorization foundation are supported. Services that allow local callbacks can save tokens after browser consent; services that require HTTPS callbacks are marked clearly in the Extensions page.
+- OAuth metadata and a loopback browser-authorization foundation are supported. Google Calendar, Gmail, and Google Drive use Forge's built-in desktop OAuth app configuration, so users can click Authorize in browser from the Extensions page and let Forge save the returned tokens to secure storage.
+- OAuth Client IDs, Client Secrets, and consent-screen setup are product-maintainer configuration before release, not something normal users should create. Services that require HTTPS callbacks are marked clearly in the Extensions page.
 - Extension permissions support allow, ask, and deny. Invocation logs store sanitized input and output summaries.
 - The agent can call enabled extensions as tool actions, but calls must pass agent-profile tool permissions and extension permissions.
 - `sendEmail` always requires explicit confirmation. Forge does not let the agent silently send email.
@@ -225,6 +226,8 @@ npm run quality:v0.2:usable
 ## Environment Variables
 
 Local development does not require a project-level `.env` file. API keys are saved through the app settings and handled by secure storage on the Electron main-process side.
+
+`FORGE_GOOGLE_OAUTH_CLIENT_ID` is only for maintainers who need to override the built-in Google desktop OAuth client ID in a custom build. Normal users do not need to configure it.
 
 Do not write API keys, tokens, cookies, private keys, or certificates into README files, commit messages, or logs.
 

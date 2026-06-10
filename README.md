@@ -74,7 +74,8 @@ Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查,
 - 内置 QQ Mail 扩展支持列出收件箱、读取邮件、搜索邮件、创建草稿和发送邮件。
 - 内置服务扩展覆盖 GitHub、Slack、Notion、Google Calendar、Figma、Gmail、Google Drive、Linear、Jira Cloud 和 Discord。
 - 扩展凭据保存在 Electron 主进程侧的安全存储中, 页面只展示配置状态和尾号提示。
-- 支持 OAuth 元数据和 loopback 网页登录授权基座。允许本地回调的服务可以通过浏览器授权自动保存 token; 需要 HTTPS 回调的服务会在扩展页明确标注。
+- 支持 OAuth 元数据和 loopback 网页登录授权基座。Google Calendar、Gmail 和 Google Drive 使用 Forge 内置桌面 OAuth 应用配置, 用户只需在扩展页点击“网页登录授权”, 授权完成后 token 会自动保存到安全存储。
+- OAuth Client ID、Client Secret 和同意屏幕属于产品维护者发布前配置, 不应要求普通用户自行创建; 需要 HTTPS 回调的服务会在扩展页明确标注。
 - 扩展权限支持 allow、ask 和 deny, 调用日志只保存输入和输出摘要。
 - Agent 可以把已启用扩展作为工具动作调用, 但必须通过 Agent Profile 工具权限和扩展权限检查。
 - `sendEmail` 始终要求用户二次确认, Forge 不会让 Agent 静默发送邮件。
@@ -259,6 +260,8 @@ npm run qa:built-in-tools:browser
 ## 环境变量说明
 
 本地开发不需要项目级 `.env` 文件。API Key 通过应用设置保存, 并由 Electron 主进程侧的安全存储能力处理。
+
+`FORGE_GOOGLE_OAUTH_CLIENT_ID` 仅供维护者在自定义构建时覆盖内置 Google 桌面 OAuth client ID, 普通用户不需要配置。
 
 请不要把 API Key、token、cookie、私钥或证书写入 README、提交信息或日志。
 

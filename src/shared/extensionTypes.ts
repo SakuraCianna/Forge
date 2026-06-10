@@ -32,8 +32,10 @@ export type ExtensionOAuthDefinition = {
   scopes: string[];
   accessTokenFieldId: string;
   refreshTokenFieldId?: string;
-  clientIdFieldId: string;
+  clientIdFieldId?: string;
   clientSecretFieldId?: string;
+  productClientId?: string;
+  productClientSecretEnvVar?: string;
   docsUrl: string;
   setupUrl: string;
   redirectUriMode: ExtensionOAuthRedirectMode;

@@ -70,7 +70,11 @@ test("OAuth-capable service extensions declare provider metadata and token field
 
     assert.ok(oauth);
     assert.ok(manifest.auth.fields.some((field) => field.id === oauth.accessTokenFieldId));
-    assert.ok(manifest.auth.fields.some((field) => field.id === oauth.clientIdFieldId));
+    if (oauth.clientIdFieldId) {
+      assert.ok(manifest.auth.fields.some((field) => field.id === oauth.clientIdFieldId));
+    } else {
+      assert.ok(oauth.productClientId);
+    }
     assert.ok(oauth.authorizationUrl.startsWith("https://"));
     assert.ok(oauth.tokenUrl.startsWith("https://"));
     assert.ok(oauth.docsUrl.startsWith("https://"));
@@ -120,7 +124,8 @@ test("extensions panel explains OAuth setup before browser authorization", async
   const source = await readFile("src/renderer/src/components/ExtensionsPanel.tsx", "utf8");
 
   assert.match(source, /oauthMissingPrerequisites/u);
-  assert.match(source, /requiredForOAuth/u);
+  assert.match(source, /普通用户不需要自己创建 OAuth app/u);
+  assert.match(source, /selectedOAuthUsesProductClient/u);
   assert.match(source, /canStartSelectedOAuth/u);
   assert.match(source, /disabled=\{\s*busyOAuthExtensionId === selectedManifest\.id \|\|/u);
   assert.match(source, /打开 OAuth 配置页/u);
@@ -137,7 +142,7 @@ test("gmail OAuth loopback authorization saves access and refresh tokens", async
 
     assert.equal(body.get("grant_type"), "authorization_code");
     assert.equal(body.get("code"), "gmail-code");
-    assert.equal(body.get("client_id"), "google-client-id");
+    assert.match(body.get("client_id") ?? "", /\.apps\.googleusercontent\.com$/u);
     assert.ok(body.get("code_verifier"));
     assert.match(body.get("redirect_uri") ?? "", /^http:\/\/127\.0\.0\.1:\d+\/oauth\/callback$/u);
 
@@ -152,12 +157,6 @@ test("gmail OAuth loopback authorization saves access and refresh tokens", async
   });
 
   try {
-    await fixture.registry.saveSecret({
-      extensionId: "gmail",
-      fieldId: "oauthClientId",
-      value: "google-client-id"
-    });
-
     const result = await fixture.registry.startOAuth({
       extensionId: "gmail"
     });

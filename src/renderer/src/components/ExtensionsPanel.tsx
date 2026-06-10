@@ -209,6 +209,11 @@ export function ExtensionsPanel({
   const canStartSelectedOAuth =
     selectedManifest?.auth.oauth?.redirectUriMode === "loopback" &&
     missingOAuthPrerequisiteLabels.length === 0;
+  const selectedOAuthUsesProductClient = Boolean(selectedManifest?.auth.oauth?.productClientId);
+  const showSelectedOAuthSetup =
+    Boolean(selectedManifest?.auth.oauth) &&
+    (!selectedOAuthUsesProductClient ||
+      selectedManifest?.auth.oauth?.redirectUriMode !== "loopback");
 
   async function updateSelectedExtensionEnabled(enabled: boolean): Promise<void> {
     if (!selectedManifest) {
@@ -619,7 +624,10 @@ export function ExtensionsPanel({
                         )}
                       </div>
                       <div className="mt-1 text-[12px] leading-5 text-[#565869]">
-                        {copy.oauthSetupHint(selectedManifest.auth.oauth.provider)}
+                        {copy.oauthSetupHint(
+                          selectedManifest.auth.oauth.provider,
+                          selectedOAuthUsesProductClient
+                        )}
                       </div>
                     </div>
                   </div>
@@ -629,14 +637,16 @@ export function ExtensionsPanel({
                     </div>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onOpenExternal(selectedManifest.auth.oauth?.setupUrl ?? "")}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#c7d7fe] bg-white px-2.5 text-[12px] font-semibold text-[#1d4ed8] transition hover:bg-[#eef4ff]"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      {copy.oauthSetup}
-                    </button>
+                    {showSelectedOAuthSetup ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenExternal(selectedManifest.auth.oauth?.setupUrl ?? "")}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#c7d7fe] bg-white px-2.5 text-[12px] font-semibold text-[#1d4ed8] transition hover:bg-[#eef4ff]"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {copy.oauthSetup}
+                      </button>
+                    ) : null}
                     {selectedManifest.auth.oauth.redirectUriMode === "loopback" ? (
                       <button
                         type="button"
@@ -1313,11 +1323,15 @@ function getOAuthPrerequisiteFieldIds(oauth: ExtensionOAuthDefinition | undefine
     return [];
   }
 
+  const needsUserClientId = !oauth.productClientId ? oauth.clientIdFieldId : undefined;
+  const needsUserClientSecret =
+    oauth.tokenRequestAuth !== "none" && !oauth.productClientSecretEnvVar
+      ? oauth.clientSecretFieldId
+      : undefined;
+
   return [
-    oauth.clientIdFieldId,
-    ...(oauth.clientSecretFieldId && oauth.tokenRequestAuth !== "none"
-      ? [oauth.clientSecretFieldId]
-      : [])
+    ...(needsUserClientId ? [needsUserClientId] : []),
+    ...(needsUserClientSecret ? [needsUserClientSecret] : [])
   ];
 }
 
@@ -1587,26 +1601,30 @@ function getExtensionsCopy(language: Language) {
       const modeText =
         redirectMode === "loopback"
           ? isChinese
-            ? "支持本地回调网页登录授权"
-            : "Supports browser authorization with a local callback"
+            ? "点击网页登录授权后, Forge 会自动完成本地回调并保存 token"
+            : "Authorize in the browser, then Forge saves tokens through the local callback"
           : isChinese
-            ? "需要在服务后台配置 HTTPS 回调地址"
-            : "Requires an HTTPS callback registered in the service console";
+            ? "需要 Forge 官方 HTTPS 授权回调服务"
+            : "Requires Forge's official HTTPS OAuth callback service";
 
       return isChinese ? `${modeText}。Scope: ${scopeText}` : `${modeText}. Scope: ${scopeText}`;
     },
     oauthFailed: isChinese ? "网页登录授权失败" : "Browser authorization failed",
-    oauthMissingButton: isChinese ? "先保存 OAuth 配置" : "Save OAuth config first",
+    oauthMissingButton: isChinese ? "当前构建未配置网页登录" : "OAuth not configured in this build",
     oauthMissingPrerequisites: (fields: string[]) =>
       isChinese
-        ? `网页登录授权前请先保存: ${fields.join(", ")}。手动粘贴 access token 时可以不填这些字段。`
-        : `Save before browser authorization: ${fields.join(", ")}. You can leave these blank when pasting an access token manually.`,
-    oauthRegisteredCallback: isChinese ? "需配置 HTTPS 回调" : "HTTPS callback required",
+        ? `当前 Forge 构建缺少网页登录所需的产品方 OAuth 配置: ${fields.join(", ")}。普通用户不需要自己创建 OAuth app。`
+        : `This Forge build is missing product OAuth configuration: ${fields.join(", ")}. End users should not create OAuth apps themselves.`,
+    oauthRegisteredCallback: isChinese ? "等待 Forge 官方授权服务" : "Waiting for Forge OAuth service",
     oauthSetup: isChinese ? "打开 OAuth 配置页" : "Open OAuth setup",
-    oauthSetupHint: (provider: string) =>
-      isChinese
-        ? `这个入口会打开 ${provider} 的开发者控制台, 用来创建 OAuth client ID, 配置同意屏幕和授权范围。`
-        : `This opens the ${provider} developer console to create an OAuth client ID, consent screen, and scopes.`,
+    oauthSetupHint: (provider: string, usesProductClient: boolean) =>
+      usesProductClient
+        ? isChinese
+          ? `Forge 已内置 ${provider} 登录应用配置, 用户只需要点击网页登录授权。`
+          : `Forge includes the ${provider} OAuth app configuration; users only need to authorize in the browser.`
+        : isChinese
+          ? `当前构建还没有内置 ${provider} OAuth app, 需要维护者配置后再发布给用户。`
+          : `This build does not include a ${provider} OAuth app yet; the maintainer must configure it before release.`,
     oauthStart: isChinese ? "网页登录授权" : "Authorize in browser",
     oauthStarting: (provider: string) =>
       isChinese ? `正在打开 ${provider} 授权页` : `Opening ${provider} authorization`,

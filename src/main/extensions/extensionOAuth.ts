@@ -48,13 +48,11 @@ export async function startExtensionOAuthAuthorization({
   assertHttpsUrl(oauth.authorizationUrl, `${oauth.provider} authorization URL`);
   assertHttpsUrl(oauth.tokenUrl, `${oauth.provider} token URL`);
 
-  const clientId = await readRequiredSecret(readSecret, oauth.clientIdFieldId, "OAuth client ID");
-  const clientSecret = oauth.clientSecretFieldId
-    ? await readSecret(oauth.clientSecretFieldId)
-    : null;
+  const clientId = await resolveOAuthClientId(oauth, readSecret);
+  const clientSecret = await resolveOAuthClientSecret(oauth, readSecret);
 
   if (requiresClientSecret(oauth) && !clientSecret) {
-    throw new Error(`${oauth.provider} OAuth client secret is not configured`);
+    throw new Error(`${oauth.provider} OAuth client secret is not configured for this Forge build`);
   }
 
   const receiver = await createLoopbackReceiver(timeoutMs);
@@ -411,22 +409,57 @@ function base64Url(value: Buffer): string {
     .replace(/=+$/u, "");
 }
 
-async function readRequiredSecret(
+async function resolveOAuthClientId(
+  oauth: ExtensionOAuthDefinition,
   readSecret: (fieldId: string) => Promise<string | null>,
-  fieldId: string,
-  label: string
 ): Promise<string> {
-  const value = await readSecret(fieldId);
+  const productClientId = normalizeSecretValue(oauth.productClientId);
 
-  if (!value) {
-    throw new Error(`${label} is not configured`);
+  if (productClientId) {
+    return productClientId;
   }
 
-  return value;
+  const userClientId = oauth.clientIdFieldId
+    ? normalizeSecretValue(await readSecret(oauth.clientIdFieldId))
+    : null;
+
+  if (userClientId) {
+    return userClientId;
+  }
+
+  throw new Error(
+    `${oauth.provider} OAuth client is not configured for this Forge build. End users should not create OAuth apps; configure the product OAuth client before packaging.`
+  );
+}
+
+async function resolveOAuthClientSecret(
+  oauth: ExtensionOAuthDefinition,
+  readSecret: (fieldId: string) => Promise<string | null>
+): Promise<string | null> {
+  if (oauth.productClientSecretEnvVar) {
+    const productClientSecret = normalizeSecretValue(process.env[oauth.productClientSecretEnvVar]);
+
+    if (productClientSecret) {
+      return productClientSecret;
+    }
+  }
+
+  return oauth.clientSecretFieldId
+    ? normalizeSecretValue(await readSecret(oauth.clientSecretFieldId))
+    : null;
+}
+
+function normalizeSecretValue(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+
+  return normalized ? normalized : null;
 }
 
 function requiresClientSecret(oauth: ExtensionOAuthDefinition): boolean {
-  return Boolean(oauth.clientSecretFieldId && oauth.tokenRequestAuth !== "none");
+  return Boolean(
+    oauth.tokenRequestAuth !== "none" &&
+      (oauth.clientSecretFieldId || oauth.productClientSecretEnvVar)
+  );
 }
 
 function readTokenField(payload: Record<string, unknown>, fieldName: string): string {

@@ -165,15 +165,15 @@ QQ Mail 凭据:
 - 授权端点和 token 端点。
 - `scope` 列表。
 - access token 和 refresh token 写入的密钥字段。
-- client ID / client secret 字段。
+- 产品方 OAuth client 配置, 或维护者专用的 client ID / client secret 字段。
 - 是否支持 PKCE。
 - redirect 模式。
 
 Forge 当前实现了桌面端 loopback 授权基座:
 
-1. 用户先在扩展凭据中保存该服务 OAuth app 的 client ID, 如果服务要求 confidential client, 还需要保存 client secret。
-2. 如果还没有 OAuth app, 先点击“打开 OAuth 配置页”进入服务商开发者控制台, 创建 OAuth client ID, 配置同意屏幕和授权范围。
-3. 点击网页登录授权。
+1. 产品维护者在发布前为可本地回调的服务配置 OAuth app。Google Calendar、Gmail 和 Google Drive 默认使用 Forge 内置桌面 OAuth client ID。
+2. 普通用户进入扩展页, 直接点击“网页登录授权”, 不需要自己创建 OAuth app 或复制 client ID。
+3. 如果某个构建缺少产品方 OAuth 配置, UI 会明确标注“当前构建未配置网页登录”, 这是维护者需要处理的发布配置问题。
 4. 主进程在 `127.0.0.1` 随机端口启动短期 HTTP 回调监听。
 5. Forge 生成 `state`, 支持的服务同时生成 PKCE `code_verifier` 和 `code_challenge`。
 6. Forge 用系统浏览器打开官方授权页。
@@ -182,7 +182,9 @@ Forge 当前实现了桌面端 loopback 授权基座:
 9. access token 和 refresh token 写入 Electron 主进程密钥库。
 10. 扩展 Registry 刷新密钥状态, Agent 只看到动作 schema, 看不到 token。
 
-不是所有服务都允许桌面端 loopback redirect。Slack、Notion、Jira Cloud、Discord 等通常要求在服务后台预注册 HTTPS 回调地址或使用 confidential client。Forge 会在 UI 中标注这类服务为“需配置 HTTPS 回调”, 不会假装它们能直接用本地回调完成授权。
+不是所有服务都允许桌面端 loopback redirect。Slack、Notion、Jira Cloud、Discord 等通常要求在服务后台预注册 HTTPS 回调地址或使用 confidential client。Forge 会在 UI 中标注这类服务需要 Forge 官方授权服务, 不会假装它们能直接用本地回调完成授权。
+
+`FORGE_GOOGLE_OAUTH_CLIENT_ID` 可在自定义构建中覆盖内置 Google 桌面 OAuth client ID。不要把 client secret 写进桌面端代码或仓库; 需要 confidential client 的服务应接入 Forge 官方 HTTPS 授权代理后再开放给普通用户。
 
 参考官方做法:
 
