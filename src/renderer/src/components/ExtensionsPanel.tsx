@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   CheckCircle2,
   KeyRound,
-  Mail,
   Pencil,
   Play,
   Plus,
@@ -109,6 +108,14 @@ const draftInputClassName =
   "h-9 min-w-0 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]";
 const draftIconButtonClassName =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]";
+const extensionIconSources: Record<string, string> = {
+  figma: new URL("../assets/extension-icons/figma.png", import.meta.url).href,
+  github: new URL("../assets/extension-icons/github.png", import.meta.url).href,
+  "google-calendar": new URL("../assets/extension-icons/google-calendar.png", import.meta.url).href,
+  notion: new URL("../assets/extension-icons/notion.png", import.meta.url).href,
+  "qq-mail": new URL("../assets/extension-icons/qq-mail.ico", import.meta.url).href,
+  slack: new URL("../assets/extension-icons/slack.png", import.meta.url).href
+};
 
 export function ExtensionsPanel({
   language,
@@ -419,8 +426,18 @@ export function ExtensionsPanel({
                           : "hover:bg-white/85"
                       }`}
                     >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#202123] text-white">
-                        <Mail className="h-4 w-4" />
+                      <span className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#ececf1] bg-white shadow-[0_3px_12px_rgba(0,0,0,0.06)]">
+                        {extensionIconSources[manifest.id] ? (
+                          <img
+                            src={extensionIconSources[manifest.id]}
+                            alt=""
+                            aria-hidden="true"
+                            draggable={false}
+                            className="h-6 w-6 object-contain"
+                          />
+                        ) : (
+                          <span className="h-3 w-3 rounded-full bg-[#202123]" />
+                        )}
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-[14px] font-medium text-[#202123]">

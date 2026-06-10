@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createExtensionRegistry } from "../src/main/extensions/extensionRegistry.js";
@@ -33,6 +33,30 @@ test("built-in service extensions expose production manifests for common service
     manifests.flatMap((manifest) => manifest.actions).some((action) => action.confirmation === "always"),
     true
   );
+});
+
+test("extensions panel maps built-in services to product icon assets", async () => {
+  const source = await readFile("src/renderer/src/components/ExtensionsPanel.tsx", "utf8");
+  const expectedAssets = new Map([
+    ["qq-mail", "qq-mail.ico"],
+    ["github", "github.png"],
+    ["slack", "slack.png"],
+    ["notion", "notion.png"],
+    ["google-calendar", "google-calendar.png"],
+    ["figma", "figma.png"]
+  ]);
+
+  assert.match(source, /const extensionIconSources/u);
+  assert.match(source, /extensionIconSources\[manifest\.id\]/u);
+  assert.doesNotMatch(source, /<Mail className="h-4 w-4"/u);
+
+  for (const [extensionId, filename] of expectedAssets) {
+    assert.match(source, new RegExp(`${escapeRegExp(extensionId)}["']?: new URL\\("../assets/extension-icons/${escapeRegExp(filename)}`));
+
+    const asset = await stat(`src/renderer/src/assets/extension-icons/${filename}`);
+    assert.equal(asset.isFile(), true);
+    assert.ok(asset.size > 0);
+  }
 });
 
 test("enabled service extensions appear in the agent prompt only after credentials are configured", async () => {
@@ -283,4 +307,8 @@ function installMockFetch(
       globalThis.fetch = originalFetch;
     }
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
