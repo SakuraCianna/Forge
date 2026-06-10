@@ -1,10 +1,10 @@
 {
   "forgeVersion": "0.2.1",
   "installerPath": "release/Forge-0.2.1-x64-setup.exe",
-  "installerSha256": "68e9e039b1d97f515186f5ee4347e8c7cd58d5deca499e0d304782581045e014",
+  "installerSha256": "a4b8312f0d7569c25eb75828b64c4a59e54d617702f036da1443bfa9bbff2892",
   "testedAt": "2026-06-06T12:28:47.242+08:00",
   "platform": "Windows 11 Home Chinese (Microsoft Windows 11 家庭版 中文版)",
-  "method": "Recorded installed-app smoke checks were rebound to release/Forge-0.2.1-x64-setup.exe after package-version and SHA-256 verification during the v0.2.1 release closeout.",
+  "method": "Recorded v0.2.1 installed-app smoke checks are bound to release/Forge-0.2.1-x64-setup.exe; installerSha256 was refreshed after regenerating the current local installer with npm run dist:win on 2026-06-10.",
   "checks": {
     "appLaunches": true,
     "projectOpens": true,
