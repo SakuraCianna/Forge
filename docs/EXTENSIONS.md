@@ -172,14 +172,15 @@ QQ Mail 凭据:
 Forge 当前实现了桌面端 loopback 授权基座:
 
 1. 用户先在扩展凭据中保存该服务 OAuth app 的 client ID, 如果服务要求 confidential client, 还需要保存 client secret。
-2. 点击网页登录授权。
-3. 主进程在 `127.0.0.1` 随机端口启动短期 HTTP 回调监听。
-4. Forge 生成 `state`, 支持的服务同时生成 PKCE `code_verifier` 和 `code_challenge`。
-5. Forge 用系统浏览器打开官方授权页。
-6. 服务回跳到本地 callback 后, 主进程校验 `state`。
-7. 主进程向官方 token endpoint 换取 token。
-8. access token 和 refresh token 写入 Electron 主进程密钥库。
-9. 扩展 Registry 刷新密钥状态, Agent 只看到动作 schema, 看不到 token。
+2. 如果还没有 OAuth app, 先点击“打开 OAuth 配置页”进入服务商开发者控制台, 创建 OAuth client ID, 配置同意屏幕和授权范围。
+3. 点击网页登录授权。
+4. 主进程在 `127.0.0.1` 随机端口启动短期 HTTP 回调监听。
+5. Forge 生成 `state`, 支持的服务同时生成 PKCE `code_verifier` 和 `code_challenge`。
+6. Forge 用系统浏览器打开官方授权页。
+7. 服务回跳到本地 callback 后, 主进程校验 `state`。
+8. 主进程向官方 token endpoint 换取 token。
+9. access token 和 refresh token 写入 Electron 主进程密钥库。
+10. 扩展 Registry 刷新密钥状态, Agent 只看到动作 schema, 看不到 token。
 
 不是所有服务都允许桌面端 loopback redirect。Slack、Notion、Jira Cloud、Discord 等通常要求在服务后台预注册 HTTPS 回调地址或使用 confidential client。Forge 会在 UI 中标注这类服务为“需配置 HTTPS 回调”, 不会假装它们能直接用本地回调完成授权。
 

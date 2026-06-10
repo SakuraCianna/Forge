@@ -26,6 +26,7 @@ import type {
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
   ExtensionManifest,
+  ExtensionOAuthDefinition,
   ExtensionOAuthStartRequest,
   ExtensionOAuthStartResult,
   ExtensionPermissionDefinition,
@@ -202,6 +203,12 @@ export function ExtensionsPanel({
     ],
     [copy.builtInExtensions, copy.myExtensions, registry.manifests]
   );
+  const missingOAuthPrerequisiteLabels = selectedManifest?.auth.oauth
+    ? getMissingOAuthPrerequisiteLabels(selectedManifest, selectedSecretStatus)
+    : [];
+  const canStartSelectedOAuth =
+    selectedManifest?.auth.oauth?.redirectUriMode === "loopback" &&
+    missingOAuthPrerequisiteLabels.length === 0;
 
   async function updateSelectedExtensionEnabled(enabled: boolean): Promise<void> {
     if (!selectedManifest) {
@@ -333,6 +340,13 @@ export function ExtensionsPanel({
 
   async function startOAuthAuthorization(manifest: ExtensionManifest): Promise<void> {
     if (!manifest.auth.oauth) {
+      return;
+    }
+
+    const missingFields = getMissingOAuthPrerequisiteLabels(manifest, selectedSecretStatus);
+
+    if (missingFields.length > 0) {
+      setNotice(copy.oauthMissingPrerequisites(missingFields));
       return;
     }
 
@@ -604,8 +618,16 @@ export function ExtensionsPanel({
                           selectedManifest.auth.oauth.scopes
                         )}
                       </div>
+                      <div className="mt-1 text-[12px] leading-5 text-[#565869]">
+                        {copy.oauthSetupHint(selectedManifest.auth.oauth.provider)}
+                      </div>
                     </div>
                   </div>
+                  {missingOAuthPrerequisiteLabels.length > 0 ? (
+                    <div className="rounded-[10px] border border-[#fde68a] bg-[#fffbeb] px-3 py-2 text-[12px] leading-5 text-[#92400e]">
+                      {copy.oauthMissingPrerequisites(missingOAuthPrerequisiteLabels)}
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -618,14 +640,19 @@ export function ExtensionsPanel({
                     {selectedManifest.auth.oauth.redirectUriMode === "loopback" ? (
                       <button
                         type="button"
-                        disabled={busyOAuthExtensionId === selectedManifest.id}
+                        disabled={
+                          busyOAuthExtensionId === selectedManifest.id ||
+                          !canStartSelectedOAuth
+                        }
                         onClick={() => void startOAuthAuthorization(selectedManifest)}
                         className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#2563eb] px-2.5 text-[12px] font-semibold text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Globe2 className="h-3.5 w-3.5" />
                         {busyOAuthExtensionId === selectedManifest.id
                           ? copy.oauthAuthorizing
-                          : copy.oauthStart}
+                          : canStartSelectedOAuth
+                            ? copy.oauthStart
+                            : copy.oauthMissingButton}
                       </button>
                     ) : (
                       <span className="inline-flex min-h-8 items-center rounded-[10px] border border-[#d9e7ff] bg-white px-2.5 text-[12px] text-[#565869]">
@@ -653,8 +680,14 @@ export function ExtensionsPanel({
                     >
                       <label className="text-[12px] font-semibold text-[#202123]">
                         {field.label}
-                        {field.required === false ? (
-                          <span className="ml-1 font-normal text-[#8e8ea0]">{copy.optional}</span>
+                        {isOAuthPrerequisiteField(selectedManifest.auth.oauth, field.id) ? (
+                          <span className="ml-1 font-normal text-[#8e8ea0]">
+                            {copy.requiredForOAuth}
+                          </span>
+                        ) : field.required === false ? (
+                          <span className="ml-1 font-normal text-[#8e8ea0]">
+                            {copy.optional}
+                          </span>
                         ) : null}
                       </label>
                       <input
@@ -1275,6 +1308,39 @@ function createComposeInput(state: ComposeState): Record<string, unknown> {
   };
 }
 
+function getOAuthPrerequisiteFieldIds(oauth: ExtensionOAuthDefinition | undefined): string[] {
+  if (!oauth) {
+    return [];
+  }
+
+  return [
+    oauth.clientIdFieldId,
+    ...(oauth.clientSecretFieldId && oauth.tokenRequestAuth !== "none"
+      ? [oauth.clientSecretFieldId]
+      : [])
+  ];
+}
+
+function getMissingOAuthPrerequisiteLabels(
+  manifest: ExtensionManifest,
+  secretStatus: ExtensionRegistrySnapshot["secretStatuses"][number] | null
+): string[] {
+  return getOAuthPrerequisiteFieldIds(manifest.auth.oauth)
+    .filter((fieldId) => !secretStatus?.fields[fieldId]?.hasValue)
+    .map((fieldId) => {
+      const field = manifest.auth.fields.find((candidate) => candidate.id === fieldId);
+
+      return field?.label ?? fieldId;
+    });
+}
+
+function isOAuthPrerequisiteField(
+  oauth: ExtensionOAuthDefinition | undefined,
+  fieldId: string
+): boolean {
+  return getOAuthPrerequisiteFieldIds(oauth).includes(fieldId);
+}
+
 function createDefaultExtensionDraft(language: Language): ExtensionManifestDraft {
   const isChinese = language === "zh-CN";
 
@@ -1530,8 +1596,17 @@ function getExtensionsCopy(language: Language) {
       return isChinese ? `${modeText}。Scope: ${scopeText}` : `${modeText}. Scope: ${scopeText}`;
     },
     oauthFailed: isChinese ? "网页登录授权失败" : "Browser authorization failed",
+    oauthMissingButton: isChinese ? "先保存 OAuth 配置" : "Save OAuth config first",
+    oauthMissingPrerequisites: (fields: string[]) =>
+      isChinese
+        ? `网页登录授权前请先保存: ${fields.join(", ")}。手动粘贴 access token 时可以不填这些字段。`
+        : `Save before browser authorization: ${fields.join(", ")}. You can leave these blank when pasting an access token manually.`,
     oauthRegisteredCallback: isChinese ? "需配置 HTTPS 回调" : "HTTPS callback required",
-    oauthSetup: isChinese ? "打开官方配置" : "Open provider setup",
+    oauthSetup: isChinese ? "打开 OAuth 配置页" : "Open OAuth setup",
+    oauthSetupHint: (provider: string) =>
+      isChinese
+        ? `这个入口会打开 ${provider} 的开发者控制台, 用来创建 OAuth client ID, 配置同意屏幕和授权范围。`
+        : `This opens the ${provider} developer console to create an OAuth client ID, consent screen, and scopes.`,
     oauthStart: isChinese ? "网页登录授权" : "Authorize in browser",
     oauthStarting: (provider: string) =>
       isChinese ? `正在打开 ${provider} 授权页` : `Opening ${provider} authorization`,
@@ -1549,6 +1624,7 @@ function getExtensionsCopy(language: Language) {
     readAction: isChinese ? "读取数据" : "Read data",
     readPermission: isChinese ? "读取权限" : "Read permission",
     refresh: isChinese ? "刷新扩展" : "Refresh extensions",
+    requiredForOAuth: isChinese ? "网页登录必填" : "Required for browser auth",
     run: isChinese ? "执行" : "Run",
     save: isChinese ? "保存" : "Save",
     saveFailed: isChinese ? "保存失败" : "Save failed",

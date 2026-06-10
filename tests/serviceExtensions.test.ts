@@ -116,6 +116,17 @@ test("extensions panel maps built-in services to product icon assets", async () 
   }
 });
 
+test("extensions panel explains OAuth setup before browser authorization", async () => {
+  const source = await readFile("src/renderer/src/components/ExtensionsPanel.tsx", "utf8");
+
+  assert.match(source, /oauthMissingPrerequisites/u);
+  assert.match(source, /requiredForOAuth/u);
+  assert.match(source, /canStartSelectedOAuth/u);
+  assert.match(source, /disabled=\{\s*busyOAuthExtensionId === selectedManifest\.id \|\|/u);
+  assert.match(source, /打开 OAuth 配置页/u);
+  assert.doesNotMatch(source, /打开官方配置/u);
+});
+
 test("gmail OAuth loopback authorization saves access and refresh tokens", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
