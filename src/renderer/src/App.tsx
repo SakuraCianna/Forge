@@ -134,6 +134,7 @@ import {
 } from "@/agent/agentRuntimeQueue";
 import { createContinuationPlanTaskPrompt } from "@/agent/continuationPlanPrompt";
 import { createFileChangeTaskPrompt } from "@/agent/fileChangeTaskPrompt";
+import { forgeDefaultAgentsInstructions } from "@/agent/projectInstructionTemplate";
 import {
   collectInvalidTargetRecoveryCandidates,
   formatInvalidTargetRecoveryMessage
@@ -250,6 +251,11 @@ import {
   selectThreadById,
   selectVisibleWorkspaceThreads
 } from "@/state/threadSelectors";
+import {
+  compactThreadContext,
+  estimateThreadContextTokens,
+  shouldAutoCompactThreadContext
+} from "@/state/threadContextCompaction";
 import {
   appendUsageEvent,
   createUsageEvent,
@@ -2980,7 +2986,16 @@ export function App(): ReactElement {
     attachmentContexts?: AgentAttachmentContext[],
     options: SubmitTaskOptions = {}
   ): void {
-    const activeThread = options.forceNewThread ? null : selectThreadById(threads, selectedThreadId);
+    let activeThread = options.forceNewThread ? null : selectThreadById(threads, selectedThreadId);
+
+    if (activeThread) {
+      const compactedThread = maybeAutoCompactThreadContext(activeThread);
+
+      if (compactedThread !== activeThread) {
+        activeThread = compactedThread;
+      }
+    }
+
     const submittedAttachments = resolveVisionAttachments(
       settings.models.find((model) => model.id === settings.currentModelId) ?? null,
       attachments
@@ -3170,9 +3185,134 @@ export function App(): ReactElement {
     }
   }
 
+  function getContextBudgetForThread(thread: TaskThread): number {
+    return thread.agentProfile?.contextBudget ?? getThreadAgentProfileContext(thread.id).contextBudget;
+  }
+
+  function compactLiveThreadContext(
+    thread: TaskThread,
+    reason: "manual" | "auto"
+  ): TaskThread {
+    const result = compactThreadContext(thread, {
+      contextBudget: getContextBudgetForThread(thread),
+      language: settings.language,
+      reason
+    });
+
+    setThreads((current) =>
+      current.map((candidate) => (candidate.id === thread.id ? result.thread : candidate))
+    );
+
+    return result.thread;
+  }
+
+  function maybeAutoCompactThreadContext(thread: TaskThread): TaskThread {
+    const contextBudget = getContextBudgetForThread(thread);
+
+    if (!shouldAutoCompactThreadContext(thread, contextBudget)) {
+      return thread;
+    }
+
+    const compactedThread = compactLiveThreadContext(thread, "auto");
+    setTaskNotice(
+      settings.language === "zh-CN"
+        ? "当前对话接近上下文预算, 已自动压缩旧上下文"
+        : "This conversation is near the context budget, so Forge compacted older context."
+    );
+    return compactedThread;
+  }
+
+  async function initializeProjectInstructions(): Promise<void> {
+    if (!currentProject) {
+      setTaskNotice(t("projects.required"));
+      return;
+    }
+
+    const relativePath = "AGENTS.md";
+
+    try {
+      await window.forge.files.readText({
+        projectRoot: currentProject.path,
+        relativePath,
+        maxBytes: 16
+      });
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? "AGENTS.md 已存在, Forge 没有覆盖它"
+          : "AGENTS.md already exists, so Forge did not overwrite it."
+      );
+      setCommandDialog(createProjectInstructionsCommandDialog(settings.language, "exists", relativePath));
+      setActiveView("files");
+      void previewProjectFile(relativePath);
+      return;
+    } catch (error) {
+      if (!isMissingProjectFileError(error)) {
+        setTaskNotice(formatRuntimeError(settings.language, error));
+        return;
+      }
+    }
+
+    try {
+      const file = await window.forge.files.writeText({
+        projectRoot: currentProject.path,
+        relativePath,
+        nextContent: forgeDefaultAgentsInstructions
+      });
+
+      setPreviewFile(file);
+      setFilePreview(createTextFilePreview(file));
+      setFileFormatterMode(getDefaultCodeFormatterMode(file.relativePath));
+      setActiveView("files");
+      void refreshProjectGitStatus();
+      void refreshProjectFilesAfterMutation(currentProject.path, [file.relativePath], {
+        expandParents: true
+      });
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? "已创建 AGENTS.md 项目指令文件"
+          : "Created the AGENTS.md project instruction file."
+      );
+      setCommandDialog(createProjectInstructionsCommandDialog(settings.language, "created", relativePath));
+    } catch (error) {
+      setTaskNotice(formatRuntimeError(settings.language, error));
+    }
+  }
+
+  function compactSelectedThreadContext(): void {
+    const selectedThread = selectThreadById(threads, selectedThreadId);
+
+    if (!selectedThread) {
+      setTaskNotice(
+        settings.language === "zh-CN"
+          ? "当前没有可压缩的对话"
+          : "There is no conversation to compact."
+      );
+      return;
+    }
+
+    const compactedThread = compactLiveThreadContext(selectedThread, "manual");
+
+    setTaskNotice(
+      settings.language === "zh-CN"
+        ? "已压缩当前对话上下文"
+        : "Compacted the current conversation context."
+    );
+    setCommandDialog(createContextCompactionCommandDialog(settings.language, compactedThread));
+  }
+
   function runComposerCommand(commandId: ComposerSlashCommandId): void {
     if (commandId === "feedback") {
       setFeedbackDialogOpen(true);
+      return;
+    }
+
+    if (commandId === "init") {
+      void initializeProjectInstructions();
+      return;
+    }
+
+    if (commandId === "compact") {
+      compactSelectedThreadContext();
       return;
     }
 
@@ -3209,11 +3349,14 @@ export function App(): ReactElement {
       return;
     }
 
+    const statusThread = selectThreadById(threads, selectedThreadId) ?? threads[0] ?? null;
+
     setCommandDialog(
       createStatusCommandDialog(settings.language, {
         currentProjectName: currentProject?.name ?? null,
         currentProjectPath: currentProject?.path ?? null,
         currentModelId: settings.currentModelId,
+        estimatedContextTokens: statusThread ? estimateThreadContextTokens(statusThread) : 0,
         indexedFileCount: projectScanResult?.files.length ?? 0,
         localSkillCount: localSkillScan?.skills.length ?? 0,
         threadCount: threads.filter((thread) => !thread.archived).length
@@ -3436,7 +3579,7 @@ export function App(): ReactElement {
 
   // 基于当前线程真实状态生成后续计划, 用于完成或跳过一批动作后的长任务续跑
   async function generateContinuationPlan(threadId: string): Promise<void> {
-    const thread = getLiveThread(threadId);
+    let thread = getLiveThread(threadId);
 
     if (!thread) {
       return;
@@ -3466,6 +3609,8 @@ export function App(): ReactElement {
       );
       return;
     }
+
+    thread = maybeAutoCompactThreadContext(thread);
 
     const model = settings.models.find((candidate) => candidate.id === thread.modelId);
     const provider = model
@@ -6059,12 +6204,85 @@ function createMcpCommandDialog(
   };
 }
 
+function createProjectInstructionsCommandDialog(
+  language: Language,
+  status: "created" | "exists",
+  relativePath: string
+): CommandDialogState {
+  const isChinese = language === "zh-CN";
+
+  return {
+    title: isChinese ? "项目指令初始化" : "Project Instructions Init",
+    description:
+      status === "created"
+        ? isChinese
+          ? "Forge 已创建默认 AGENTS.md, 后续 Agent 会把它作为项目规则来源。"
+          : "Forge created the default AGENTS.md for future agent project rules."
+        : isChinese
+          ? "AGENTS.md 已存在, Forge 没有覆盖现有项目规则。"
+          : "AGENTS.md already exists, so Forge did not overwrite existing project rules.",
+    rows: [
+      {
+        label: isChinese ? "文件" : "File",
+        value: relativePath
+      },
+      {
+        label: isChinese ? "状态" : "Status",
+        value:
+          status === "created"
+            ? isChinese
+              ? "已创建"
+              : "Created"
+            : isChinese
+              ? "已存在"
+              : "Already exists"
+      }
+    ]
+  };
+}
+
+function createContextCompactionCommandDialog(
+  language: Language,
+  thread: TaskThread
+): CommandDialogState {
+  const isChinese = language === "zh-CN";
+  const compaction = thread.contextCompaction;
+
+  return {
+    title: isChinese ? "上下文已压缩" : "Context Compacted",
+    description: isChinese
+      ? "Forge 会保留旧对话的摘要, 后续模型请求只带摘要和压缩后的新消息。"
+      : "Forge keeps a summary of older messages and sends only that summary plus new messages afterward.",
+    rows: [
+      {
+        label: isChinese ? "线程" : "Thread",
+        value: thread.title
+      },
+      {
+        label: isChinese ? "触发方式" : "Reason",
+        value: compaction?.reason ?? "-"
+      },
+      {
+        label: isChinese ? "估算 tokens" : "Estimated tokens",
+        value: compaction
+          ? `${compaction.estimatedTokensBefore} -> ${compaction.estimatedTokensAfter}`
+          : "-"
+      },
+      {
+        label: isChinese ? "已压缩事件" : "Compacted events",
+        value: `${compaction?.sourceEventCount ?? 0}`
+      }
+    ]
+  };
+}
+
 function createStatusCommandDialog(
   language: Language,
   input: {
     currentModelId: string | null;
     currentProjectName: string | null;
     currentProjectPath: string | null;
+    estimatedContextTokens: number;
     indexedFileCount: number;
     localSkillCount: number;
     threadCount: number;
@@ -6091,6 +6309,10 @@ function createStatusCommandDialog(
       {
         label: isChinese ? "索引文件" : "Indexed files",
         value: `${input.indexedFileCount}`
+      },
+      {
+        label: isChinese ? "上下文估算" : "Context estimate",
+        value: `${input.estimatedContextTokens} tokens`
       },
       {
         label: isChinese ? "本机 Skills" : "Local skills",

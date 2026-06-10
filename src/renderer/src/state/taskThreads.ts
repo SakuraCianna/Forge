@@ -84,6 +84,16 @@ export type ThreadPromptRetryPlan = {
   retainedEvents: TaskThreadEvent[];
 };
 
+export type ThreadContextCompaction = {
+  content: string;
+  createdAt: string;
+  estimatedTokensAfter: number;
+  estimatedTokensBefore: number;
+  reason: "manual" | "auto";
+  retainedEventCount: number;
+  sourceEventCount: number;
+};
+
 export type TaskThreadEvent = {
   id: string;
   kind: TaskThreadEventKind;
@@ -111,6 +121,7 @@ export type TaskThread = {
   pinned?: boolean;
   archived?: boolean;
   projectPath?: string | null;
+  contextCompaction?: ThreadContextCompaction;
   contextMemories?: AgentMemoryContext[];
   agentProfile?: AgentProfileContext;
   attachments?: AgentImageAttachment[];

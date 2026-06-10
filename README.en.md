@@ -41,6 +41,8 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - DOCX, XLSX, CSV, and TSV files are parsed locally into bounded text summaries.
 - Sensitive attachments are skipped by default to avoid adding secrets or local data to model context.
 - Typing `/` opens Forge commands and skill candidates. Commands run UI operations instead of being sent as normal chat text.
+- `/init` creates the default `AGENTS.md` in the current project. If the file already exists, Forge opens it without overwriting it.
+- `/compact` compacts older context in the current conversation. Forge also auto-compacts old context when a thread approaches its context budget.
 - Typing `@` searches files, plugins, and skills.
 - Files, plugins, and skills added through the menu or candidate list are sent as context for the current task.
 

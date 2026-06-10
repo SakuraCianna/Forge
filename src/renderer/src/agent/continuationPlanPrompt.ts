@@ -1,17 +1,24 @@
 // 本文件说明: 根据当前 Agent 线程状态生成后续执行计划提示, 支持长任务续跑
 import type { AgentAction } from "@shared/agentExecutionPlan";
-import type { CommandRunResult, TaskThread, TaskThreadEvent } from "@/state/taskThreads";
+import type { CommandRunResult, TaskThread, TaskThreadEvent } from "../state/taskThreads.js";
+import {
+  formatThreadContextCompactionForPrompt,
+  getEventsAfterThreadContextCompaction
+} from "../state/threadContextCompaction.js";
 
 // 把当前线程的已完成动作, 工具观察和执行日志整理成续跑计划请求
 export function createContinuationPlanTaskPrompt(thread: TaskThread): string {
+  const eventsAfterCompaction = getEventsAfterThreadContextCompaction(thread);
+  const compactedContext = formatThreadContextCompactionForPrompt(thread);
   const actionQueueContext = formatActionQueueContext(thread.agentActions ?? []);
-  const controlledToolContext = formatControlledToolResultContext(thread.events);
-  const recentExecutionContext = formatRecentExecutionContext(thread.events);
+  const controlledToolContext = formatControlledToolResultContext(eventsAfterCompaction);
+  const recentExecutionContext = formatRecentExecutionContext(eventsAfterCompaction);
   const runtimePolicyContext = formatRuntimePolicyContext(thread);
 
   return [
     formatPromptSection("original_task", thread.prompt),
     formatPromptSection("thread_state", `Current thread status: ${thread.status}\n${runtimePolicyContext}`),
+    compactedContext ? formatPromptSection("compacted_thread_context", compactedContext) : null,
     actionQueueContext ? formatPromptSection("action_queue", actionQueueContext) : null,
     controlledToolContext ? formatPromptSection("prior_controlled_tool_results", controlledToolContext) : null,
     recentExecutionContext ? formatPromptSection("recent_execution_context", recentExecutionContext) : null,
