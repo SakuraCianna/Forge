@@ -36,6 +36,11 @@ Registry 负责:
 当前内置扩展:
 
 - `qq-mail`: QQ Mail 邮件扩展。
+- `github`: GitHub REST API 扩展。
+- `slack`: Slack Web API 扩展。
+- `notion`: Notion API 扩展。
+- `google-calendar`: Google Calendar API 扩展。
+- `figma`: Figma REST API 扩展。
 
 ## Manifest
 
@@ -143,11 +148,73 @@ QQ Mail 凭据:
 - 邮箱地址: QQ 邮箱地址
 - 授权码: QQ 邮箱设置中开启 IMAP/SMTP 服务后生成的授权码, 不是 QQ 登录密码
 
+## 常用服务扩展
+
+以下内置服务使用用户手动保存的 token 通过官方 REST API 调用。Forge 只保存密钥状态, 不会把 token 写入调用日志或线程上下文。写入、发送和创建类动作都设置为 `always` 确认, 即使权限被设为 `allow`, 主进程也会先返回确认 token。
+
+### GitHub
+
+`github` 使用 GitHub personal access token。
+
+支持动作:
+
+- `getAuthenticatedUser`: 读取当前 token 对应账号摘要。
+- `listIssues`: 读取指定仓库 Issue 列表。
+- `createIssue`: 在指定仓库创建 Issue, 始终要求确认。
+
+建议 token scope:
+
+- 读取仓库 Issue: 目标仓库只读 metadata / issues 权限。
+- 创建 Issue: 目标仓库 issues 写权限。
+
+### Slack
+
+`slack` 使用 Slack app bot token。
+
+支持动作:
+
+- `listChannels`: 读取频道列表。
+- `postMessage`: 向指定频道发送消息, 始终要求确认。
+
+建议 bot scope:
+
+- `channels:read`, `groups:read`
+- `chat:write`
+
+### Notion
+
+`notion` 使用 Notion internal integration token。目标页面或数据库需要在 Notion 中分享给该 integration。
+
+支持动作:
+
+- `searchPages`: 搜索已授权页面和数据库。
+- `createDatabasePage`: 在指定数据库中创建页面, 始终要求确认。
+
+### Google Calendar
+
+`google-calendar` 使用 Google Calendar API OAuth access token。
+
+支持动作:
+
+- `listEvents`: 读取指定日历事件列表。
+- `createEvent`: 创建日历事件, 始终要求确认。
+
+### Figma
+
+`figma` 使用 Figma personal access token 或 OAuth token。
+
+支持动作:
+
+- `getFile`: 读取 Figma 文件 JSON 摘要。
+- `listComments`: 读取 Figma 文件评论。
+
 ## 限制
 
-- 当前仅内置 QQ Mail, 还没有第三方 Extension 安装包格式。
+- 当前内置服务使用手动 token 配置, 还没有内置 OAuth 授权向导。
+- 当前还没有第三方 Extension 安装包格式。
 - 当前日志是本地摘要日志, 不是完整审计数据库。
 - 邮件附件只返回摘要, 不下载附件内容。
 - `searchEmails` 会扫描最近一批邮件摘要, 不是服务端全文搜索。
 - `createDraft` 会尝试常见草稿箱名称, 不同账号的文件夹命名可能仍需后续增强。
+- 非 QQ Mail 的内置服务目前主要供 Agent 调用和权限链路使用, 扩展页展示动作 schema 和策略, 还没有逐服务的手动输入表单。
 

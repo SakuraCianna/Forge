@@ -31,6 +31,10 @@ import {
   type ExtensionActionHandler
 } from "./qqMailExtension.js";
 import {
+  createServiceExtensionInputSummary,
+  serviceExtensionDefinitions
+} from "./serviceExtensions.js";
+import {
   createCustomExtensionScaffold,
   deleteCustomExtensionScaffold,
   updateCustomExtensionScaffold,
@@ -84,9 +88,16 @@ export function createExtensionRegistry({
   store: ExtensionStore;
   vault: ExtensionSecretVault;
 }): ExtensionRegistry {
-  const builtInManifests = [qqMailManifest];
+  const builtInManifests = [
+    qqMailManifest,
+    ...serviceExtensionDefinitions.map((definition) => definition.manifest)
+  ];
   const handlers = new Map<string, Record<string, ExtensionActionHandler>>([
-    [qqMailManifest.id, qqMailHandlers]
+    [qqMailManifest.id, qqMailHandlers],
+    ...serviceExtensionDefinitions.map((definition) => [
+      definition.manifest.id,
+      definition.handlers
+    ] as const)
   ]);
   const pendingInvocations = new Map<string, PendingInvocation>();
 
@@ -200,7 +211,7 @@ export function createExtensionRegistry({
 
   async function invoke(request: ExtensionInvocationRequest): Promise<ExtensionInvocationResult> {
     const context = await resolveInvocationContext(request);
-    const inputSummary = createInputSummary(context.action, request.input);
+    const inputSummary = createInputSummary(context.manifest, context.action, request.input);
     const confirmation = shouldRequireConfirmation(context)
       ? createConfirmation(context.action, context.manifest, inputSummary)
       : null;
@@ -496,11 +507,18 @@ function getAction(
 }
 
 function createInputSummary(
+  manifest: ExtensionManifest,
   action: ExtensionActionDefinition,
   input: Record<string, unknown>
 ): string {
-  if (qqMailManifest.actions.some((candidate) => candidate.id === action.id)) {
+  if (manifest.id === qqMailManifest.id) {
     return createQQMailInputSummary(action.id, input);
+  }
+
+  const serviceSummary = createServiceExtensionInputSummary(manifest.id, action.id, input);
+
+  if (serviceSummary) {
+    return serviceSummary;
   }
 
   return `${action.id}: ${Object.keys(input).join(", ")}`;

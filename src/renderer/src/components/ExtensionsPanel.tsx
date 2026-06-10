@@ -777,7 +777,7 @@ function renderDraftExtensionActions(
   return (
     <div className="grid gap-3">
       <p className="rounded-[10px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-sm leading-6 text-[#565869]">
-        {copy.draftExtensionNotice}
+        {manifest.builtIn ? copy.builtInServiceActionNotice : copy.draftExtensionNotice}
       </p>
       {manifest.actions.map((action) => (
         <article
@@ -1358,6 +1358,9 @@ function getExtensionsCopy(language: Language) {
     autoAllowed: isChinese ? "可自动执行" : "Auto allowed",
     body: isChinese ? "正文" : "Body",
     builtInExtensions: isChinese ? "内置扩展" : "Built-in extensions",
+    builtInServiceActionNotice: isChinese
+      ? "这些是内置服务动作。启用扩展并保存凭据后, Agent 可以在权限和确认策略约束下调用。"
+      : "These are built-in service actions. After enabling the extension and saving credentials, the agent can call them under the configured permission and confirmation policy.",
     cancel: isChinese ? "取消" : "Cancel",
     confirmation: isChinese ? "确认策略" : "Confirmation",
     confirmationRequired: isChinese ? "需要确认" : "Confirmation required",
