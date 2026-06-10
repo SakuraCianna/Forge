@@ -169,34 +169,44 @@ QQ Mail 凭据:
 - 是否支持 PKCE。
 - redirect 模式。
 
-Forge 当前实现了桌面端 loopback 授权基座:
+Forge 当前实现了三类产品化授权路径:
 
 1. 产品维护者在发布前为可本地回调的服务配置 OAuth app。Google Calendar、Gmail 和 Google Drive 默认使用 Forge 内置桌面 OAuth client ID。
-2. 普通用户进入扩展页, 直接点击“网页登录授权”, 不需要自己创建 OAuth app 或复制 client ID。
-3. 如果某个构建缺少产品方 OAuth 配置, UI 会明确标注“当前构建未配置网页登录”, 这是维护者需要处理的发布配置问题。
-4. 主进程在 `127.0.0.1` 随机端口启动短期 HTTP 回调监听。
-5. Forge 生成 `state`, 支持的服务同时生成 PKCE `code_verifier` 和 `code_challenge`。
-6. Forge 用系统浏览器打开官方授权页。
-7. 服务回跳到本地 callback 后, 主进程校验 `state`。
-8. 主进程向官方 token endpoint 换取 token。
-9. access token 和 refresh token 写入 Electron 主进程密钥库。
-10. 扩展 Registry 刷新密钥状态, Agent 只看到动作 schema, 看不到 token。
+2. GitHub 使用 device flow。Forge 打开本地说明页显示一次性验证码, 用户在 GitHub 官方页面输入验证码后, 主进程轮询 token endpoint 并保存 token。
+3. Slack、Notion、Figma、Jira Cloud 和 Discord 使用 brokered 模式。桌面端只打开 Forge 官方 OAuth 服务, 由服务端持有 client secret 并处理 HTTPS callback, 再把短期 broker code 回跳给本机 Forge。
+4. 普通用户进入扩展页, 直接点击“网页登录授权”, 不需要自己创建 OAuth app、复制 client ID 或保存 client secret。
+5. 如果某个构建缺少产品方 OAuth 配置或 Forge OAuth broker, UI 会明确标注“当前构建未配置网页登录”, 这是维护者需要处理的发布配置问题。
+6. loopback 和 brokered 模式下, 主进程在 `127.0.0.1` 随机端口启动短期 HTTP 回调监听。
+7. Forge 生成 `state`, 支持的服务同时生成 PKCE `code_verifier` 和 `code_challenge`。
+8. Forge 用系统浏览器打开官方授权页或 Forge OAuth 服务。
+9. 服务或 broker 回跳到本地 callback 后, 主进程校验 `state`。
+10. 主进程向官方 token endpoint 或 broker token endpoint 换取 token。
+11. access token 和 refresh token 写入 Electron 主进程密钥库。
+12. 扩展 Registry 刷新密钥状态, Agent 只看到动作 schema, 看不到 token。
 
 不是所有服务都允许桌面端 loopback redirect。Slack、Notion、Jira Cloud、Discord 等通常要求在服务后台预注册 HTTPS 回调地址或使用 confidential client。Forge 会在 UI 中标注这类服务需要 Forge 官方授权服务, 不会假装它们能直接用本地回调完成授权。
 
-`FORGE_GOOGLE_OAUTH_CLIENT_ID` 可在自定义构建中覆盖内置 Google 桌面 OAuth client ID。不要把 client secret 写进桌面端代码或仓库; 需要 confidential client 的服务应接入 Forge 官方 HTTPS 授权代理后再开放给普通用户。
+维护者配置项:
+
+- `FORGE_GOOGLE_OAUTH_CLIENT_ID`: 覆盖内置 Google 桌面 OAuth client ID。
+- `FORGE_GITHUB_OAUTH_CLIENT_ID`: 启用 GitHub device flow。
+- `FORGE_LINEAR_OAUTH_CLIENT_ID`: 启用 Linear loopback + PKCE 授权。
+- `FORGE_OAUTH_BROKER_BASE_URL`: 启用 Slack、Notion、Figma、Jira Cloud 和 Discord 的 Forge brokered 授权入口。
+
+不要把 client secret 写进桌面端代码或仓库; 需要 confidential client 的服务必须接入 Forge 官方 HTTPS 授权代理后再开放给普通用户。
 
 参考官方做法:
 
 - Google installed apps 使用系统浏览器、本地 redirect URI、PKCE、`state` 和 token exchange。
-- GitHub OAuth Apps 支持 `state` 和 PKCE, 桌面应用可使用 loopback redirect。
+- GitHub OAuth Apps 支持 device flow, 适合 CLI 和桌面应用这类不应保存 client secret 的场景。
 - Linear OAuth 支持 PKCE, refresh token 需要安全保存并用于后续刷新。
+- Figma REST OAuth 需要配置 redirect URL; 对文件读取和评论读取分别使用 `file_content:read` 和 `file_comments:read` 等细粒度 scope。
 - Notion token exchange 使用 HTTP Basic Authentication。
 - Slack OAuth 要求 redirect URI 与 App Management 中的配置匹配, 且通常必须是 HTTPS。
 
 ### GitHub
 
-`github` 使用 GitHub personal access token。
+`github` 使用 GitHub personal access token 或 OAuth access token。网页登录授权使用 GitHub device flow, 需要维护者配置 `FORGE_GITHUB_OAUTH_CLIENT_ID`。
 
 支持动作:
 
@@ -211,7 +221,7 @@ Forge 当前实现了桌面端 loopback 授权基座:
 
 ### Slack
 
-`slack` 使用 Slack app bot token。
+`slack` 使用 Slack app bot token。网页登录授权依赖 Forge brokered 授权服务。
 
 支持动作:
 
@@ -225,7 +235,7 @@ Forge 当前实现了桌面端 loopback 授权基座:
 
 ### Notion
 
-`notion` 使用 Notion internal integration token。目标页面或数据库需要在 Notion 中分享给该 integration。
+`notion` 使用 Notion internal integration token 或 OAuth access token。目标页面或数据库需要在 Notion 中分享给该 integration。网页登录授权依赖 Forge brokered 授权服务。
 
 支持动作:
 
@@ -243,7 +253,7 @@ Forge 当前实现了桌面端 loopback 授权基座:
 
 ### Figma
 
-`figma` 使用 Figma personal access token。
+`figma` 使用 Figma personal access token 或 OAuth access token。OAuth 模式通过 Forge brokered 授权接入。
 
 支持动作:
 
@@ -270,7 +280,7 @@ Forge 当前实现了桌面端 loopback 授权基座:
 
 ### Linear
 
-`linear` 使用 Linear API token 或 OAuth access token。OAuth 模式支持 PKCE。
+`linear` 使用 Linear API token 或 OAuth access token。OAuth 模式支持 loopback + PKCE, 需要维护者配置 `FORGE_LINEAR_OAUTH_CLIENT_ID`。
 
 支持动作:
 
@@ -279,7 +289,7 @@ Forge 当前实现了桌面端 loopback 授权基座:
 
 ### Jira Cloud
 
-`jira-cloud` 使用 Atlassian OAuth access token。
+`jira-cloud` 使用 Atlassian OAuth access token。网页登录授权依赖 Forge brokered 授权服务。
 
 支持动作:
 
@@ -288,7 +298,7 @@ Forge 当前实现了桌面端 loopback 授权基座:
 
 ### Discord
 
-`discord` 使用 Discord OAuth access token。
+`discord` 使用 Discord OAuth access token。网页登录授权依赖 Forge brokered 授权服务。
 
 支持动作:
 
@@ -297,7 +307,7 @@ Forge 当前实现了桌面端 loopback 授权基座:
 
 ## 限制
 
-- OAuth 基座当前只自动处理 `loopback` redirect 的授权码流程, 需要服务本身允许本地回调。
+- OAuth 基座当前支持 `loopback`, `device-code` 和 `brokered` 三种模式。brokered 模式需要外部 Forge OAuth 服务真实部署后才可用。
 - 当前保存 refresh token, 但还没有后台自动刷新 access token。
 - 当前还没有第三方 Extension 安装包格式。
 - 当前日志是本地摘要日志, 不是完整审计数据库。

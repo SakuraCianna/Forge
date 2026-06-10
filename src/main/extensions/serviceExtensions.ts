@@ -34,6 +34,21 @@ const googleOAuthDocsUrl = "https://developers.google.com/identity/protocols/oau
 const forgeGoogleOAuthClientId =
   process.env.FORGE_GOOGLE_OAUTH_CLIENT_ID?.trim() ||
   "294153456393-3ce5vjc1bfu67kcblgte15be2qipts3q.apps.googleusercontent.com";
+const forgeOAuthBrokerBaseUrl = trimTrailingSlash(process.env.FORGE_OAUTH_BROKER_BASE_URL?.trim());
+
+function readProductClientId(envVar: string): string | undefined {
+  return process.env[envVar]?.trim() || undefined;
+}
+
+function createBrokerUrl(extensionId: string, action: "authorize" | "token"): string | undefined {
+  return forgeOAuthBrokerBaseUrl
+    ? `${forgeOAuthBrokerBaseUrl}/oauth/${extensionId}/${action}`
+    : undefined;
+}
+
+function trimTrailingSlash(value: string | undefined): string | undefined {
+  return value ? value.replace(/\/+$/u, "") : undefined;
+}
 
 function createGoogleOAuth(scopes: string[], setupUrl: string): ExtensionOAuthDefinition {
   return {
@@ -44,6 +59,7 @@ function createGoogleOAuth(scopes: string[], setupUrl: string): ExtensionOAuthDe
     accessTokenFieldId: "accessToken",
     refreshTokenFieldId: "refreshToken",
     productClientId: forgeGoogleOAuthClientId,
+    productClientIdEnvVar: "FORGE_GOOGLE_OAUTH_CLIENT_ID",
     docsUrl: googleOAuthDocsUrl,
     setupUrl,
     redirectUriMode: "loopback",
@@ -163,25 +179,22 @@ function createGitHubExtension(): BuiltInServiceExtension {
       accessTokenFieldId: "token",
       accessTokenLabel: "Personal access token",
       accessTokenPlaceholder: "github_pat_...",
-      clientSecret: true,
       oauth: {
         provider: "GitHub",
-        authorizationUrl: "https://github.com/login/oauth/authorize",
+        authorizationUrl: "https://github.com/login/device",
         tokenUrl: "https://github.com/login/oauth/access_token",
+        deviceAuthorizationUrl: "https://github.com/login/device/code",
         scopes: ["repo", "read:user"],
         accessTokenFieldId: "token",
         refreshTokenFieldId: "refreshToken",
-        clientIdFieldId: "oauthClientId",
-        clientSecretFieldId: "oauthClientSecret",
+        productClientId: readProductClientId("FORGE_GITHUB_OAUTH_CLIENT_ID"),
+        productClientIdEnvVar: "FORGE_GITHUB_OAUTH_CLIENT_ID",
         docsUrl:
           "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps",
         setupUrl: "https://github.com/settings/developers",
-        redirectUriMode: "loopback",
-        usePkce: true,
-        tokenRequestAuth: "body",
-        extraAuthorizeParams: {
-          allow_signup: "false"
-        }
+        redirectUriMode: "device-code",
+        usePkce: false,
+        tokenRequestAuth: "none"
       }
     }),
     permissions: [
@@ -323,19 +336,18 @@ function createSlackExtension(): BuiltInServiceExtension {
       accessTokenFieldId: "botToken",
       accessTokenLabel: "Bot token",
       accessTokenPlaceholder: "xoxb-...",
-      clientSecret: true,
       oauth: {
         provider: "Slack",
         authorizationUrl: "https://slack.com/oauth/v2/authorize",
         tokenUrl: "https://slack.com/api/oauth.v2.access",
+        brokerAuthorizationUrl: createBrokerUrl("slack", "authorize"),
+        brokerTokenUrl: createBrokerUrl("slack", "token"),
         scopes: ["channels:read", "groups:read", "chat:write"],
         accessTokenFieldId: "botToken",
         refreshTokenFieldId: "refreshToken",
-        clientIdFieldId: "oauthClientId",
-        clientSecretFieldId: "oauthClientSecret",
         docsUrl: "https://docs.slack.dev/authentication/installing-with-oauth/",
         setupUrl: "https://api.slack.com/apps",
-        redirectUriMode: "registered-https",
+        redirectUriMode: "brokered",
         usePkce: false,
         tokenRequestAuth: "body",
         scopeSeparator: "comma"
@@ -450,19 +462,18 @@ function createNotionExtension(): BuiltInServiceExtension {
       accessTokenFieldId: "integrationToken",
       accessTokenLabel: "Integration token",
       accessTokenPlaceholder: "secret_...",
-      clientSecret: true,
       oauth: {
         provider: "Notion",
         authorizationUrl: "https://api.notion.com/v1/oauth/authorize",
         tokenUrl: "https://api.notion.com/v1/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("notion", "authorize"),
+        brokerTokenUrl: createBrokerUrl("notion", "token"),
         scopes: [],
         accessTokenFieldId: "integrationToken",
         refreshTokenFieldId: "refreshToken",
-        clientIdFieldId: "oauthClientId",
-        clientSecretFieldId: "oauthClientSecret",
         docsUrl: "https://developers.notion.com/guides/get-started/authorization",
         setupUrl: "https://www.notion.so/profile/integrations",
-        redirectUriMode: "registered-https",
+        redirectUriMode: "brokered",
         usePkce: false,
         tokenRequestAuth: "basic",
         tokenRequestBody: "json",
@@ -740,17 +751,28 @@ function createFigmaExtension(): BuiltInServiceExtension {
     version: "0.2.1",
     category: "design",
     builtIn: true,
-    auth: {
-      type: "secret",
-      fields: [
-        {
-          id: "personalAccessToken",
-          label: "Personal access token",
-          description: "Figma personal access token, 需要文件读取权限",
-          placeholder: "figd_..."
-        }
-      ]
-    },
+    auth: createOAuthTokenAuth({
+      accessTokenDescription:
+        "Figma personal access token 或 OAuth access token, 需要 file_content:read 和 file_comments:read scope",
+      accessTokenFieldId: "personalAccessToken",
+      accessTokenLabel: "Figma access token",
+      accessTokenPlaceholder: "figd_...",
+      oauth: {
+        provider: "Figma",
+        authorizationUrl: "https://www.figma.com/oauth",
+        tokenUrl: "https://api.figma.com/v1/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("figma", "authorize"),
+        brokerTokenUrl: createBrokerUrl("figma", "token"),
+        scopes: ["file_content:read", "file_comments:read"],
+        accessTokenFieldId: "personalAccessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developers.figma.com/docs/rest-api/oauth-apps/",
+        setupUrl: "https://www.figma.com/developers/apps",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "body"
+      }
+    }),
     permissions: [
       {
         id: "figma.read",
@@ -1043,7 +1065,8 @@ function createLinearExtension(): BuiltInServiceExtension {
         scopes: ["read"],
         accessTokenFieldId: "accessToken",
         refreshTokenFieldId: "refreshToken",
-        clientIdFieldId: "oauthClientId",
+        productClientId: readProductClientId("FORGE_LINEAR_OAUTH_CLIENT_ID"),
+        productClientIdEnvVar: "FORGE_LINEAR_OAUTH_CLIENT_ID",
         docsUrl: "https://linear.app/developers/oauth-2-0-authentication",
         setupUrl: "https://linear.app/settings/api/applications/new",
         redirectUriMode: "loopback",
@@ -1133,19 +1156,18 @@ function createJiraCloudExtension(): BuiltInServiceExtension {
     auth: createOAuthTokenAuth({
       accessTokenDescription: "Atlassian OAuth access token, 需要 read:jira-work scope",
       accessTokenPlaceholder: "atlassian_access_token",
-      clientSecret: true,
       oauth: {
         provider: "Atlassian",
         authorizationUrl: "https://auth.atlassian.com/authorize",
         tokenUrl: "https://auth.atlassian.com/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("jira-cloud", "authorize"),
+        brokerTokenUrl: createBrokerUrl("jira-cloud", "token"),
         scopes: ["read:jira-work", "read:me", "offline_access"],
         accessTokenFieldId: "accessToken",
         refreshTokenFieldId: "refreshToken",
-        clientIdFieldId: "oauthClientId",
-        clientSecretFieldId: "oauthClientSecret",
         docsUrl: "https://developer.atlassian.com/cloud/jira/software/oauth-2-3lo-apps/",
         setupUrl: "https://developer.atlassian.com/console/myapps/",
-        redirectUriMode: "registered-https",
+        redirectUriMode: "brokered",
         usePkce: false,
         tokenRequestAuth: "body",
         tokenRequestBody: "json",
@@ -1246,19 +1268,18 @@ function createDiscordExtension(): BuiltInServiceExtension {
     auth: createOAuthTokenAuth({
       accessTokenDescription: "Discord OAuth access token, 需要 identify 和 guilds scope",
       accessTokenPlaceholder: "discord_access_token",
-      clientSecret: true,
       oauth: {
         provider: "Discord",
         authorizationUrl: "https://discord.com/oauth2/authorize",
         tokenUrl: "https://discord.com/api/v10/oauth2/token",
+        brokerAuthorizationUrl: createBrokerUrl("discord", "authorize"),
+        brokerTokenUrl: createBrokerUrl("discord", "token"),
         scopes: ["identify", "guilds"],
         accessTokenFieldId: "accessToken",
         refreshTokenFieldId: "refreshToken",
-        clientIdFieldId: "oauthClientId",
-        clientSecretFieldId: "oauthClientSecret",
         docsUrl: "https://discord.com/developers/docs/topics/oauth2",
         setupUrl: "https://discord.com/developers/applications",
-        redirectUriMode: "registered-https",
+        redirectUriMode: "brokered",
         usePkce: false,
         tokenRequestAuth: "basic"
       }
@@ -1592,13 +1613,17 @@ async function figmaRequest({
   token: string;
 }): Promise<unknown> {
   return requestJson({
-    headers: {
-      "X-Figma-Token": token
-    },
+    headers: createFigmaAuthHeaders(token),
     method,
     service: "Figma",
     url: withQuery(`https://api.figma.com/v1${path}`, query)
   });
+}
+
+function createFigmaAuthHeaders(token: string): Record<string, string> {
+  return token.startsWith("figd_")
+    ? { "X-Figma-Token": token }
+    : { Authorization: `Bearer ${token}` };
 }
 
 async function requestJson<T = unknown>({

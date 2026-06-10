@@ -41,6 +41,25 @@ export async function startExtensionOAuthAuthorization({
   saveSecret,
   timeoutMs = defaultTimeoutMs
 }: StartExtensionOAuthOptions): Promise<ExtensionOAuthTokenResult> {
+  if (oauth.redirectUriMode === "device-code") {
+    return startDeviceCodeOAuthAuthorization({
+      oauth,
+      openExternal,
+      readSecret,
+      saveSecret,
+      timeoutMs
+    });
+  }
+
+  if (oauth.redirectUriMode === "brokered") {
+    return startBrokeredOAuthAuthorization({
+      oauth,
+      openExternal,
+      saveSecret,
+      timeoutMs
+    });
+  }
+
   if (oauth.redirectUriMode !== "loopback") {
     throw new Error(`${oauth.provider} OAuth requires a pre-registered HTTPS callback`);
   }
@@ -115,6 +134,119 @@ export async function startExtensionOAuthAuthorization({
   }
 }
 
+async function startDeviceCodeOAuthAuthorization({
+  oauth,
+  openExternal,
+  readSecret,
+  saveSecret,
+  timeoutMs
+}: {
+  oauth: ExtensionOAuthDefinition;
+  openExternal: (url: string) => Promise<unknown> | unknown;
+  readSecret: (fieldId: string) => Promise<string | null>;
+  saveSecret: (fieldId: string, value: string) => Promise<void>;
+  timeoutMs: number;
+}): Promise<ExtensionOAuthTokenResult> {
+  if (!oauth.deviceAuthorizationUrl) {
+    throw new Error(`${oauth.provider} OAuth device authorization endpoint is not configured`);
+  }
+
+  assertHttpsUrl(oauth.deviceAuthorizationUrl, `${oauth.provider} device authorization URL`);
+  assertHttpsUrl(oauth.tokenUrl, `${oauth.provider} token URL`);
+
+  const clientId = await resolveOAuthClientId(oauth, readSecret);
+  const deviceCode = await requestDeviceCode({
+    clientId,
+    oauth
+  });
+  const page = await createDeviceCodePage({
+    oauth,
+    userCode: deviceCode.userCode,
+    verificationUri: deviceCode.verificationUri,
+    verificationUriComplete: deviceCode.verificationUriComplete
+  });
+
+  try {
+    const openResult = await openExternal(page.url);
+
+    if (openResult === false) {
+      throw new Error(`${oauth.provider} OAuth device authorization URL was blocked`);
+    }
+
+    const tokenPayload = await pollDeviceToken({
+      clientId,
+      deviceCode: deviceCode.deviceCode,
+      expiresInSeconds: deviceCode.expiresInSeconds,
+      intervalSeconds: deviceCode.intervalSeconds,
+      oauth,
+      timeoutMs
+    });
+
+    return saveOAuthTokenPayload({
+      oauth,
+      payload: tokenPayload,
+      saveSecret
+    });
+  } finally {
+    await page.close();
+  }
+}
+
+async function startBrokeredOAuthAuthorization({
+  oauth,
+  openExternal,
+  saveSecret,
+  timeoutMs
+}: {
+  oauth: ExtensionOAuthDefinition;
+  openExternal: (url: string) => Promise<unknown> | unknown;
+  saveSecret: (fieldId: string, value: string) => Promise<void>;
+  timeoutMs: number;
+}): Promise<ExtensionOAuthTokenResult> {
+  if (!oauth.brokerAuthorizationUrl || !oauth.brokerTokenUrl) {
+    throw new Error(`${oauth.provider} OAuth requires the Forge OAuth service for this build`);
+  }
+
+  assertHttpsUrl(oauth.brokerAuthorizationUrl, `${oauth.provider} broker authorization URL`);
+  assertHttpsUrl(oauth.brokerTokenUrl, `${oauth.provider} broker token URL`);
+
+  const receiver = await createLoopbackReceiver(timeoutMs);
+  const state = createRandomToken();
+
+  try {
+    const authorizationUrl = createBrokerAuthorizationUrl({
+      oauth,
+      redirectUri: receiver.redirectUri,
+      state
+    });
+    const openResult = await openExternal(authorizationUrl.toString());
+
+    if (openResult === false) {
+      throw new Error(`${oauth.provider} OAuth broker authorization URL was blocked`);
+    }
+
+    const callback = await receiver.waitForCallback;
+
+    if (callback.state !== state) {
+      throw new Error("OAuth state mismatch");
+    }
+
+    const tokenPayload = await exchangeBrokerAuthorizationCode({
+      code: callback.code,
+      oauth,
+      redirectUri: receiver.redirectUri
+    });
+
+    return saveOAuthTokenPayload({
+      oauth,
+      payload: tokenPayload,
+      saveSecret
+    });
+  } finally {
+    await receiver.close();
+  }
+}
+
 async function createLoopbackReceiver(timeoutMs: number): Promise<{
   close: () => Promise<void>;
   redirectUri: string;
@@ -185,6 +317,60 @@ async function createLoopbackReceiver(timeoutMs: number): Promise<{
     resolved = true;
     rejectCallback(error);
   }
+}
+
+async function createDeviceCodePage({
+  oauth,
+  userCode,
+  verificationUri,
+  verificationUriComplete
+}: {
+  oauth: ExtensionOAuthDefinition;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete?: string;
+}): Promise<{
+  close: () => Promise<void>;
+  url: string;
+}> {
+  const verificationUrl = new URL(verificationUriComplete ?? verificationUri);
+
+  if (verificationUrl.protocol !== "https:" || !verificationUrl.hostname) {
+    throw new Error(`${oauth.provider} OAuth device verification URL is invalid`);
+  }
+
+  const server = createServer((_request, response) => {
+    response.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8"
+    });
+    response.end(createDeviceCodeHtml({
+      provider: oauth.provider,
+      userCode,
+      verificationUrl: verificationUrl.toString()
+    }));
+  });
+
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+
+  const address = server.address() as AddressInfo;
+
+  return {
+    close: () => closeServer(server, null),
+    url: `http://127.0.0.1:${address.port}/`
+  };
+}
+
+function createDeviceCodeHtml({
+  provider,
+  userCode,
+  verificationUrl
+}: {
+  provider: string;
+  userCode: string;
+  verificationUrl: string;
+}): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Forge ${escapeHtml(provider)} OAuth</title><style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:48px;color:#202123}main{max-width:560px}code{display:inline-block;margin:12px 0;padding:12px 16px;border-radius:10px;background:#f4f4f5;font-size:28px;font-weight:700;letter-spacing:.12em}a{display:inline-flex;margin-top:12px;padding:10px 14px;border-radius:10px;background:#202123;color:white;text-decoration:none}</style></head><body><main><h1>Authorize ${escapeHtml(provider)} for Forge</h1><p>Use this one-time code on the official authorization page:</p><code>${escapeHtml(userCode)}</code><p>After approval, you can close this page. Forge will finish saving the token automatically.</p><a href="${escapeHtml(verificationUrl)}" target="_blank" rel="noreferrer">Open authorization page</a></main></body></html>`;
 }
 
 function readCallbackRequest(
@@ -276,6 +462,25 @@ function createAuthorizationUrl({
   return authorizationUrl;
 }
 
+function createBrokerAuthorizationUrl({
+  oauth,
+  redirectUri,
+  state
+}: {
+  oauth: ExtensionOAuthDefinition;
+  redirectUri: string;
+  state: string;
+}): URL {
+  const authorizationUrl = new URL(oauth.brokerAuthorizationUrl ?? "");
+
+  authorizationUrl.searchParams.set("redirect_uri", redirectUri);
+  authorizationUrl.searchParams.set("state", state);
+  authorizationUrl.searchParams.set("provider", oauth.provider);
+  authorizationUrl.searchParams.set("scope", joinScopes(oauth));
+
+  return authorizationUrl;
+}
+
 async function exchangeAuthorizationCode({
   clientId,
   clientSecret,
@@ -329,6 +534,155 @@ async function exchangeAuthorizationCode({
 
   if (!isRecord(payload)) {
     throw new Error(`${oauth.provider} OAuth token response is invalid`);
+  }
+
+  return payload;
+}
+
+async function requestDeviceCode({
+  clientId,
+  oauth
+}: {
+  clientId: string;
+  oauth: ExtensionOAuthDefinition;
+}): Promise<{
+  deviceCode: string;
+  expiresInSeconds: number;
+  intervalSeconds: number;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete?: string;
+}> {
+  const response = await fetch(oauth.deviceAuthorizationUrl ?? "", {
+    body: new URLSearchParams({
+      client_id: clientId,
+      scope: joinScopes(oauth)
+    }),
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    method: "POST"
+  });
+  const rawText = await response.text();
+  const payload = parseTokenResponse(rawText);
+
+  if (!response.ok || !isRecord(payload)) {
+    throw new Error(
+      `${oauth.provider} OAuth device code request failed (${response.status}): ${formatOAuthError(payload)}`
+    );
+  }
+
+  return {
+    deviceCode: readTokenField(payload, "device_code"),
+    expiresInSeconds: readRequiredNumber(payload.expires_in, "expires_in"),
+    intervalSeconds: readOptionalPositiveNumber(payload.interval, 5),
+    userCode: readTokenField(payload, "user_code"),
+    verificationUri: readTokenField(payload, "verification_uri"),
+    verificationUriComplete: readOptionalTokenField(payload, "verification_uri_complete") ?? undefined
+  };
+}
+
+async function pollDeviceToken({
+  clientId,
+  deviceCode,
+  expiresInSeconds,
+  intervalSeconds,
+  oauth,
+  timeoutMs
+}: {
+  clientId: string;
+  deviceCode: string;
+  expiresInSeconds: number;
+  intervalSeconds: number;
+  oauth: ExtensionOAuthDefinition;
+  timeoutMs: number;
+}): Promise<Record<string, unknown>> {
+  let nextIntervalMs = Math.max(1, intervalSeconds) * 1_000;
+  const expiresAt = Date.now() + Math.min(timeoutMs, Math.max(1, expiresInSeconds) * 1_000);
+  let firstAttempt = true;
+
+  while (Date.now() < expiresAt) {
+    if (firstAttempt) {
+      firstAttempt = false;
+    } else {
+      await delay(nextIntervalMs);
+    }
+
+    const response = await fetch(oauth.tokenUrl, {
+      body: new URLSearchParams({
+        client_id: clientId,
+        device_code: deviceCode,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code"
+      }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      method: "POST"
+    });
+    const rawText = await response.text();
+    const payload = parseTokenResponse(rawText);
+
+    if (response.ok && isRecord(payload) && typeof payload.access_token === "string") {
+      return payload;
+    }
+
+    const errorCode = isRecord(payload) && typeof payload.error === "string" ? payload.error : "";
+
+    if (errorCode === "authorization_pending") {
+      continue;
+    }
+
+    if (errorCode === "slow_down") {
+      nextIntervalMs += 5_000;
+      continue;
+    }
+
+    if (errorCode === "expired_token") {
+      throw new Error(`${oauth.provider} OAuth device code expired`);
+    }
+
+    if (errorCode === "access_denied") {
+      throw new Error(`${oauth.provider} OAuth authorization was denied`);
+    }
+
+    throw new Error(
+      `${oauth.provider} OAuth token request failed (${response.status}): ${formatOAuthError(payload)}`
+    );
+  }
+
+  throw new Error(`${oauth.provider} OAuth authorization timed out`);
+}
+
+async function exchangeBrokerAuthorizationCode({
+  code,
+  oauth,
+  redirectUri
+}: {
+  code: string;
+  oauth: ExtensionOAuthDefinition;
+  redirectUri: string;
+}): Promise<Record<string, unknown>> {
+  const response = await fetch(oauth.brokerTokenUrl ?? "", {
+    body: new URLSearchParams({
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: redirectUri
+    }),
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    method: "POST"
+  });
+  const rawText = await response.text();
+  const payload = parseTokenResponse(rawText);
+
+  if (!response.ok || !isRecord(payload)) {
+    throw new Error(
+      `${oauth.provider} OAuth broker token request failed (${response.status}): ${formatOAuthError(payload)}`
+    );
   }
 
   return payload;
@@ -419,6 +773,14 @@ async function resolveOAuthClientId(
     return productClientId;
   }
 
+  if (oauth.productClientIdEnvVar) {
+    const envClientId = normalizeSecretValue(process.env[oauth.productClientIdEnvVar]);
+
+    if (envClientId) {
+      return envClientId;
+    }
+  }
+
   const userClientId = oauth.clientIdFieldId
     ? normalizeSecretValue(await readSecret(oauth.clientIdFieldId))
     : null;
@@ -462,6 +824,37 @@ function requiresClientSecret(oauth: ExtensionOAuthDefinition): boolean {
   );
 }
 
+async function saveOAuthTokenPayload({
+  oauth,
+  payload,
+  saveSecret
+}: {
+  oauth: ExtensionOAuthDefinition;
+  payload: Record<string, unknown>;
+  saveSecret: (fieldId: string, value: string) => Promise<void>;
+}): Promise<ExtensionOAuthTokenResult> {
+  const accessToken = readTokenField(payload, "access_token");
+  const savedFields: string[] = [];
+
+  await saveSecret(oauth.accessTokenFieldId, accessToken);
+  savedFields.push(oauth.accessTokenFieldId);
+
+  if (oauth.refreshTokenFieldId) {
+    const refreshToken = readOptionalTokenField(payload, "refresh_token");
+
+    if (refreshToken) {
+      await saveSecret(oauth.refreshTokenFieldId, refreshToken);
+      savedFields.push(oauth.refreshTokenFieldId);
+    }
+  }
+
+  return {
+    expiresInSeconds: readOptionalNumber(payload.expires_in),
+    provider: oauth.provider,
+    savedFields
+  };
+}
+
 function readTokenField(payload: Record<string, unknown>, fieldName: string): string {
   const value = payload[fieldName];
 
@@ -479,6 +872,30 @@ function readOptionalTokenField(payload: Record<string, unknown>, fieldName: str
 
 function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readRequiredNumber(value: unknown, fieldName: string): number {
+  const numberValue = typeof value === "string" ? Number(value) : value;
+
+  if (typeof numberValue !== "number" || !Number.isFinite(numberValue)) {
+    throw new Error(`OAuth response is missing ${fieldName}`);
+  }
+
+  return numberValue;
+}
+
+function readOptionalPositiveNumber(value: unknown, fallback: number): number {
+  const numberValue = typeof value === "string" ? Number(value) : value;
+
+  return typeof numberValue === "number" && Number.isFinite(numberValue) && numberValue > 0
+    ? numberValue
+    : fallback;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function formatOAuthError(value: unknown): string {

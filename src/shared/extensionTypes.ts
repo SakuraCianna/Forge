@@ -19,7 +19,11 @@ export type ExtensionSecretField = {
   required?: boolean;
 };
 
-export type ExtensionOAuthRedirectMode = "loopback" | "registered-https";
+export type ExtensionOAuthRedirectMode =
+  | "loopback"
+  | "registered-https"
+  | "device-code"
+  | "brokered";
 
 export type ExtensionOAuthTokenRequestAuth = "basic" | "body" | "none";
 
@@ -29,12 +33,16 @@ export type ExtensionOAuthDefinition = {
   provider: string;
   authorizationUrl: string;
   tokenUrl: string;
+  deviceAuthorizationUrl?: string;
+  brokerAuthorizationUrl?: string;
+  brokerTokenUrl?: string;
   scopes: string[];
   accessTokenFieldId: string;
   refreshTokenFieldId?: string;
   clientIdFieldId?: string;
   clientSecretFieldId?: string;
   productClientId?: string;
+  productClientIdEnvVar?: string;
   productClientSecretEnvVar?: string;
   docsUrl: string;
   setupUrl: string;

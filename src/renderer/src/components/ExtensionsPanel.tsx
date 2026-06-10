@@ -203,17 +203,22 @@ export function ExtensionsPanel({
     ],
     [copy.builtInExtensions, copy.myExtensions, registry.manifests]
   );
-  const missingOAuthPrerequisiteLabels = selectedManifest?.auth.oauth
+  const selectedOAuth = selectedManifest?.auth.oauth;
+  const missingOAuthPrerequisiteLabels = selectedOAuth
     ? getMissingOAuthPrerequisiteLabels(selectedManifest, selectedSecretStatus)
     : [];
   const canStartSelectedOAuth =
-    selectedManifest?.auth.oauth?.redirectUriMode === "loopback" &&
+    Boolean(selectedOAuth) &&
+    selectedOAuth?.redirectUriMode !== "registered-https" &&
     missingOAuthPrerequisiteLabels.length === 0;
-  const selectedOAuthUsesProductClient = Boolean(selectedManifest?.auth.oauth?.productClientId);
+  const selectedOAuthUsesProductClient = selectedOAuth
+    ? hasProductOAuthRuntime(selectedOAuth)
+    : false;
   const showSelectedOAuthSetup =
-    Boolean(selectedManifest?.auth.oauth) &&
+    Boolean(selectedOAuth) &&
+    !selectedManifest?.builtIn &&
     (!selectedOAuthUsesProductClient ||
-      selectedManifest?.auth.oauth?.redirectUriMode !== "loopback");
+      selectedOAuth?.redirectUriMode !== "loopback");
 
   async function updateSelectedExtensionEnabled(enabled: boolean): Promise<void> {
     if (!selectedManifest) {
@@ -647,7 +652,7 @@ export function ExtensionsPanel({
                         {copy.oauthSetup}
                       </button>
                     ) : null}
-                    {selectedManifest.auth.oauth.redirectUriMode === "loopback" ? (
+                    {selectedManifest.auth.oauth.redirectUriMode !== "registered-https" ? (
                       <button
                         type="button"
                         disabled={
@@ -1323,16 +1328,32 @@ function getOAuthPrerequisiteFieldIds(oauth: ExtensionOAuthDefinition | undefine
     return [];
   }
 
-  const needsUserClientId = !oauth.productClientId ? oauth.clientIdFieldId : undefined;
+  if (oauth.redirectUriMode === "brokered") {
+    return oauth.brokerAuthorizationUrl && oauth.brokerTokenUrl ? [] : ["Forge OAuth broker"];
+  }
+
+  const hasProductClientId = Boolean(oauth.productClientId);
+  const needsProductClientId =
+    !hasProductClientId && oauth.productClientIdEnvVar ? oauth.productClientIdEnvVar : undefined;
+  const needsUserClientId =
+    !hasProductClientId && !needsProductClientId ? oauth.clientIdFieldId : undefined;
   const needsUserClientSecret =
     oauth.tokenRequestAuth !== "none" && !oauth.productClientSecretEnvVar
       ? oauth.clientSecretFieldId
       : undefined;
 
   return [
+    ...(needsProductClientId ? [needsProductClientId] : []),
     ...(needsUserClientId ? [needsUserClientId] : []),
     ...(needsUserClientSecret ? [needsUserClientSecret] : [])
   ];
+}
+
+function hasProductOAuthRuntime(oauth: ExtensionOAuthDefinition): boolean {
+  return Boolean(
+    oauth.productClientId ||
+      (oauth.redirectUriMode === "brokered" && oauth.brokerAuthorizationUrl && oauth.brokerTokenUrl)
+  );
 }
 
 function getMissingOAuthPrerequisiteLabels(
@@ -1603,6 +1624,14 @@ function getExtensionsCopy(language: Language) {
           ? isChinese
             ? "点击网页登录授权后, Forge 会自动完成本地回调并保存 token"
             : "Authorize in the browser, then Forge saves tokens through the local callback"
+          : redirectMode === "device-code"
+            ? isChinese
+              ? "点击网页登录授权后, 按浏览器中的一次性验证码完成连接"
+              : "Authorize in the browser with the one-time code shown by Forge"
+            : redirectMode === "brokered"
+              ? isChinese
+                ? "通过 Forge 官方授权服务完成登录, token 自动回写到本机安全存储"
+                : "Uses the Forge OAuth service, then saves tokens back to local secure storage"
           : isChinese
             ? "需要 Forge 官方 HTTPS 授权回调服务"
             : "Requires Forge's official HTTPS OAuth callback service";
@@ -1623,8 +1652,8 @@ function getExtensionsCopy(language: Language) {
           ? `Forge 已内置 ${provider} 登录应用配置, 用户只需要点击网页登录授权。`
           : `Forge includes the ${provider} OAuth app configuration; users only need to authorize in the browser.`
         : isChinese
-          ? `当前构建还没有内置 ${provider} OAuth app, 需要维护者配置后再发布给用户。`
-          : `This build does not include a ${provider} OAuth app yet; the maintainer must configure it before release.`,
+          ? `当前构建还没有内置 ${provider} OAuth app 或 Forge 授权服务, 需要维护者配置后再发布给用户。`
+          : `This build does not include a ${provider} OAuth app or Forge OAuth service yet; the maintainer must configure it before release.`,
     oauthStart: isChinese ? "网页登录授权" : "Authorize in browser",
     oauthStarting: (provider: string) =>
       isChinese ? `正在打开 ${provider} 授权页` : `Opening ${provider} authorization`,

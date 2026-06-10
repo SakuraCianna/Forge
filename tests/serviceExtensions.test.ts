@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createExtensionRegistry } from "../src/main/extensions/extensionRegistry.js";
 import { createExtensionInvocationLogStore } from "../src/main/extensions/extensionInvocationLog.js";
+import { startExtensionOAuthAuthorization } from "../src/main/extensions/extensionOAuth.js";
 import { createExtensionStore } from "../src/main/extensions/extensionStore.js";
 import { serviceExtensionDefinitions } from "../src/main/extensions/serviceExtensions.js";
 import { formatExtensionActionSchemaForPrompt } from "../src/renderer/src/state/extensions.js";
@@ -57,6 +58,7 @@ test("OAuth-capable service extensions declare provider metadata and token field
       "slack",
       "notion",
       "google-calendar",
+      "figma",
       "gmail",
       "google-drive",
       "linear",
@@ -72,8 +74,13 @@ test("OAuth-capable service extensions declare provider metadata and token field
     assert.ok(manifest.auth.fields.some((field) => field.id === oauth.accessTokenFieldId));
     if (oauth.clientIdFieldId) {
       assert.ok(manifest.auth.fields.some((field) => field.id === oauth.clientIdFieldId));
+    } else if (oauth.redirectUriMode === "brokered") {
+      assert.equal(
+        Boolean(oauth.brokerAuthorizationUrl),
+        Boolean(process.env.FORGE_OAUTH_BROKER_BASE_URL)
+      );
     } else {
-      assert.ok(oauth.productClientId);
+      assert.ok(oauth.productClientId || oauth.productClientIdEnvVar);
     }
     assert.ok(oauth.authorizationUrl.startsWith("https://"));
     assert.ok(oauth.tokenUrl.startsWith("https://"));
@@ -87,7 +94,11 @@ test("OAuth-capable service extensions declare provider metadata and token field
   );
   assert.equal(
     manifests.find((manifest) => manifest.id === "slack")?.auth.oauth?.redirectUriMode,
-    "registered-https"
+    "brokered"
+  );
+  assert.equal(
+    manifests.find((manifest) => manifest.id === "github")?.auth.oauth?.redirectUriMode,
+    "device-code"
   );
 });
 
@@ -128,7 +139,7 @@ test("extensions panel explains OAuth setup before browser authorization", async
   assert.match(source, /selectedOAuthUsesProductClient/u);
   assert.match(source, /canStartSelectedOAuth/u);
   assert.match(source, /disabled=\{\s*busyOAuthExtensionId === selectedManifest\.id \|\|/u);
-  assert.match(source, /打开 OAuth 配置页/u);
+  assert.match(source, /Forge 授权服务/u);
   assert.doesNotMatch(source, /打开官方配置/u);
 });
 
@@ -175,6 +186,165 @@ test("gmail OAuth loopback authorization saves access and refresh tokens", async
   } finally {
     fetchMock.restore();
     await fixture.cleanup();
+  }
+});
+
+test("github OAuth device flow opens a local code page and saves token", async () => {
+  const savedSecrets = new Map<string, string>();
+  const fetchMock = installMockFetch(async (url, init) => {
+    if (url === "https://github.com/login/device/code") {
+      assert.equal(init?.method, "POST");
+      const body = new URLSearchParams(String(init?.body));
+
+      assert.equal(body.get("client_id"), "github-client-id");
+      assert.equal(body.get("scope"), "repo read:user");
+
+      return {
+        body: {
+          device_code: "device-code",
+          expires_in: 600,
+          interval: 1,
+          user_code: "ABCD-1234",
+          verification_uri: "https://github.com/login/device"
+        },
+        status: 200
+      };
+    }
+
+    assert.equal(url, "https://github.com/login/oauth/access_token");
+    assert.equal(init?.method, "POST");
+
+    const body = new URLSearchParams(String(init?.body));
+
+    assert.equal(body.get("client_id"), "github-client-id");
+    assert.equal(body.get("device_code"), "device-code");
+    assert.equal(body.get("grant_type"), "urn:ietf:params:oauth:grant-type:device_code");
+
+    return {
+      body: {
+        access_token: "gho-test-token",
+        token_type: "bearer"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    const result = await startExtensionOAuthAuthorization({
+      manifest: serviceExtensionDefinitions.find(
+        (definition) => definition.manifest.id === "github"
+      )?.manifest ?? serviceExtensionDefinitions[0].manifest,
+      oauth: {
+        provider: "GitHub",
+        authorizationUrl: "https://github.com/login/device",
+        tokenUrl: "https://github.com/login/oauth/access_token",
+        deviceAuthorizationUrl: "https://github.com/login/device/code",
+        scopes: ["repo", "read:user"],
+        accessTokenFieldId: "token",
+        docsUrl:
+          "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps",
+        setupUrl: "https://github.com/settings/developers",
+        redirectUriMode: "device-code",
+        usePkce: false,
+        tokenRequestAuth: "none",
+        productClientId: "github-client-id"
+      },
+      openExternal: async (url) => {
+        assert.match(url, /^http:\/\/127\.0\.0\.1:\d+\/$/u);
+        const page = await fetch(url);
+        const html = await page.text();
+
+        assert.match(html, /ABCD-1234/u);
+        assert.match(html, /github\.com\/login\/device/u);
+        return true;
+      },
+      readSecret: async () => null,
+      saveSecret: async (fieldId, value) => {
+        savedSecrets.set(fieldId, value);
+      },
+      timeoutMs: 10_000
+    });
+
+    assert.deepEqual(result.savedFields, ["token"]);
+    assert.equal(savedSecrets.get("token"), "gho-test-token");
+    assert.equal(fetchMock.calls.length, 2);
+  } finally {
+    fetchMock.restore();
+  }
+});
+
+test("brokered OAuth exchanges Forge broker code and saves tokens", async () => {
+  const savedSecrets = new Map<string, string>();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://forge.example.com/oauth/slack/token");
+    assert.equal(init?.method, "POST");
+
+    const body = new URLSearchParams(String(init?.body));
+
+    assert.equal(body.get("grant_type"), "authorization_code");
+    assert.equal(body.get("code"), "broker-code");
+    assert.match(body.get("redirect_uri") ?? "", /^http:\/\/127\.0\.0\.1:\d+\/oauth\/callback$/u);
+
+    return {
+      body: {
+        access_token: "xoxb-test-token",
+        refresh_token: "refresh-test-token"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    const result = await startExtensionOAuthAuthorization({
+      manifest: serviceExtensionDefinitions.find(
+        (definition) => definition.manifest.id === "slack"
+      )?.manifest ?? serviceExtensionDefinitions[0].manifest,
+      oauth: {
+        provider: "Slack",
+        authorizationUrl: "https://slack.com/oauth/v2/authorize",
+        tokenUrl: "https://slack.com/api/oauth.v2.access",
+        brokerAuthorizationUrl: "https://forge.example.com/oauth/slack/authorize",
+        brokerTokenUrl: "https://forge.example.com/oauth/slack/token",
+        scopes: ["channels:read", "chat:write"],
+        accessTokenFieldId: "botToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://docs.slack.dev/authentication/installing-with-oauth/",
+        setupUrl: "https://api.slack.com/apps",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "body"
+      },
+      openExternal: async (url) => {
+        const authorizationUrl = new URL(url);
+        const redirectUri = authorizationUrl.searchParams.get("redirect_uri");
+        const state = authorizationUrl.searchParams.get("state");
+
+        assert.equal(authorizationUrl.origin, "https://forge.example.com");
+        assert.equal(authorizationUrl.pathname, "/oauth/slack/authorize");
+        assert.equal(authorizationUrl.searchParams.get("provider"), "Slack");
+        assert.equal(authorizationUrl.searchParams.get("scope"), "channels:read chat:write");
+
+        if (redirectUri && state) {
+          setTimeout(() => {
+            void fetch(`${redirectUri}?code=broker-code&state=${encodeURIComponent(state)}`);
+          }, 0);
+        }
+
+        return true;
+      },
+      readSecret: async () => null,
+      saveSecret: async (fieldId, value) => {
+        savedSecrets.set(fieldId, value);
+      },
+      timeoutMs: 10_000
+    });
+
+    assert.deepEqual(result.savedFields, ["botToken", "refreshToken"]);
+    assert.equal(savedSecrets.get("botToken"), "xoxb-test-token");
+    assert.equal(savedSecrets.get("refreshToken"), "refresh-test-token");
+    assert.equal(fetchMock.calls.length, 1);
+  } finally {
+    fetchMock.restore();
   }
 });
 
