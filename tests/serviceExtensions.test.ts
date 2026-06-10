@@ -16,14 +16,17 @@ test("built-in service extensions expose production manifests for common service
 
   assert.deepEqual(ids, [
     "github",
+    "gitlab",
     "slack",
     "notion",
     "airtable",
+    "todoist",
     "google-calendar",
     "figma",
     "gmail",
     "google-drive",
     "dropbox",
+    "microsoft-365",
     "linear",
     "jira-cloud",
     "discord"
@@ -57,14 +60,17 @@ test("OAuth-capable service extensions declare provider metadata and token field
     oauthManifests.map((manifest) => manifest.id),
     [
       "github",
+      "gitlab",
       "slack",
       "notion",
       "airtable",
+      "todoist",
       "google-calendar",
       "figma",
       "gmail",
       "google-drive",
       "dropbox",
+      "microsoft-365",
       "linear",
       "jira-cloud",
       "discord"
@@ -121,14 +127,17 @@ test("extensions panel maps built-in services to product icon assets", async () 
   const expectedAssets = new Map([
     ["qq-mail", "qq-mail.ico"],
     ["github", "github.png"],
+    ["gitlab", "gitlab.ico"],
     ["slack", "slack.png"],
     ["notion", "notion.png"],
     ["airtable", "airtable.ico"],
+    ["todoist", "todoist.ico"],
     ["google-calendar", "google-calendar.png"],
     ["figma", "figma.png"],
     ["gmail", "gmail.ico"],
     ["google-drive", "google-drive.png"],
     ["dropbox", "dropbox.ico"],
+    ["microsoft-365", "microsoft-365.svg"],
     ["linear", "linear.svg"],
     ["jira-cloud", "jira-cloud.ico"],
     ["discord", "discord.ico"]
@@ -367,6 +376,63 @@ test("brokered OAuth exchanges Forge broker code and saves tokens", async () => 
   }
 });
 
+test("gitlab service extension invokes the REST API with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://gitlab.com");
+    assert.equal(requestUrl.pathname, "/api/v4/projects/group%2Fproject/issues");
+    assert.equal(requestUrl.searchParams.get("state"), "opened");
+    assert.equal(requestUrl.searchParams.get("per_page"), "3");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer gitlab-token");
+
+    return {
+      body: [
+        {
+          iid: 1,
+          title: "Bug"
+        },
+        {
+          iid: 2,
+          title: "Follow up"
+        }
+      ],
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "gitlab",
+      "gitlab.read",
+      "accessToken",
+      "gitlab-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "gitlab",
+      actionId: "listProjectIssues",
+      input: {
+        limit: 3,
+        projectId: "group/project"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "GitLab group/project 返回 2 个 Issue");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("airtable service extension invokes the Web API with connector token auth", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -407,6 +473,130 @@ test("airtable service extension invokes the Web API with connector token auth",
 
     if (result.ok) {
       assert.equal(result.outputSummary, "Airtable 返回 1 个 base");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("todoist service extension reads tasks through the API with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.todoist.com");
+    assert.equal(requestUrl.pathname, "/api/v1/tasks");
+    assert.equal(requestUrl.searchParams.get("project_id"), "12345");
+    assert.equal(requestUrl.searchParams.get("limit"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer todoist-token");
+
+    return {
+      body: {
+        results: [
+          {
+            id: "task-1",
+            content: "Review plan"
+          },
+          {
+            id: "task-2",
+            content: "Ship change"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "todoist",
+      "todoist.read",
+      "accessToken",
+      "todoist-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "todoist",
+      actionId: "listTasks",
+      input: {
+        limit: 2,
+        projectId: "12345"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Todoist 返回 2 个任务");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("todoist write actions require confirmation before creating tasks", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://api.todoist.com/api/v1/tasks");
+    assert.equal(init?.method, "POST");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer todoist-token");
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      content: "Write release notes",
+      due_string: "tomorrow",
+      project_id: "12345"
+    });
+
+    return {
+      body: {
+        content: "Write release notes",
+        id: "task-3"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await fixture.registry.updateSettings({
+      extensionId: "todoist",
+      enabled: true,
+      permissions: [
+        { permissionId: "todoist.read", mode: "allow" },
+        { permissionId: "todoist.write", mode: "allow" }
+      ]
+    });
+    await fixture.registry.saveSecret({
+      extensionId: "todoist",
+      fieldId: "accessToken",
+      value: "todoist-token"
+    });
+
+    const pending = await fixture.registry.invoke({
+      extensionId: "todoist",
+      actionId: "createTask",
+      input: {
+        content: "Write release notes",
+        dueString: "tomorrow",
+        projectId: "12345"
+      }
+    });
+
+    assert.equal(pending.ok, false);
+    assert.equal(fetchMock.calls.length, 0);
+
+    if (!pending.ok && "requiresConfirmation" in pending) {
+      const confirmed = await fixture.registry.confirmInvocation({
+        token: pending.confirmation.token
+      });
+
+      assert.equal(confirmed.ok, true);
+      assert.equal(fetchMock.calls.length, 1);
+    } else {
+      assert.fail("createTask should require confirmation");
     }
   } finally {
     fetchMock.restore();
@@ -470,6 +660,64 @@ test("dropbox service extension lists folders through the API with connector tok
 
     if (result.ok) {
       assert.equal(result.outputSummary, "Dropbox 返回 2 个条目");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("microsoft 365 service extension invokes Graph with connector token auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://graph.microsoft.com");
+    assert.equal(requestUrl.pathname, "/v1.0/me/drive/root/children");
+    assert.equal(requestUrl.searchParams.get("$top"), "2");
+    assert.match(requestUrl.searchParams.get("$select") ?? "", /webUrl/u);
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer graph-token");
+
+    return {
+      body: {
+        value: [
+          {
+            id: "drive-1",
+            name: "Docs"
+          },
+          {
+            id: "drive-2",
+            name: "Notes.md"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "microsoft-365",
+      "microsoft365.read",
+      "accessToken",
+      "graph-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "microsoft-365",
+      actionId: "listDriveRoot",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Microsoft 365 返回 2 个 OneDrive 条目");
     }
   } finally {
     fetchMock.restore();

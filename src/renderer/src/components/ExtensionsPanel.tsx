@@ -122,13 +122,16 @@ const extensionIconSources: Record<string, string> = {
   figma: new URL("../assets/extension-icons/figma.png", import.meta.url).href,
   gmail: new URL("../assets/extension-icons/gmail.ico", import.meta.url).href,
   github: new URL("../assets/extension-icons/github.png", import.meta.url).href,
+  gitlab: new URL("../assets/extension-icons/gitlab.ico", import.meta.url).href,
   "google-calendar": new URL("../assets/extension-icons/google-calendar.png", import.meta.url).href,
   "google-drive": new URL("../assets/extension-icons/google-drive.png", import.meta.url).href,
   "jira-cloud": new URL("../assets/extension-icons/jira-cloud.ico", import.meta.url).href,
   linear: new URL("../assets/extension-icons/linear.svg", import.meta.url).href,
+  "microsoft-365": new URL("../assets/extension-icons/microsoft-365.svg", import.meta.url).href,
   notion: new URL("../assets/extension-icons/notion.png", import.meta.url).href,
   "qq-mail": new URL("../assets/extension-icons/qq-mail.ico", import.meta.url).href,
-  slack: new URL("../assets/extension-icons/slack.png", import.meta.url).href
+  slack: new URL("../assets/extension-icons/slack.png", import.meta.url).href,
+  todoist: new URL("../assets/extension-icons/todoist.ico", import.meta.url).href
 };
 
 export function ExtensionsPanel({

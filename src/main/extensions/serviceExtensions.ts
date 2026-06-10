@@ -145,14 +145,17 @@ function createOAuthTokenAuth({
 
 export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   createGitHubExtension(),
+  createGitLabExtension(),
   createSlackExtension(),
   createNotionExtension(),
   createAirtableExtension(),
+  createTodoistExtension(),
   createGoogleCalendarExtension(),
   createFigmaExtension(),
   createGmailExtension(),
   createGoogleDriveExtension(),
   createDropboxExtension(),
+  createMicrosoft365Extension(),
   createLinearExtension(),
   createJiraCloudExtension(),
   createDiscordExtension()
@@ -324,6 +327,146 @@ function createGitHubExtension(): BuiltInServiceExtension {
 
       return owner && repo ? `github ${owner}/${repo}` : "github";
     }
+  };
+}
+
+function createGitLabExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "gitlab",
+    name: "GitLab",
+    description: "读取 GitLab 当前用户、项目和 Issue 摘要",
+    version: "0.2.1",
+    category: "developer",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "GitLab OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "gitlab_access_token",
+      oauth: {
+        provider: "GitLab",
+        authorizationUrl: "https://gitlab.com/oauth/authorize",
+        tokenUrl: "https://gitlab.com/oauth/token",
+        brokerAuthorizationUrl: createBrokerUrl("gitlab", "authorize"),
+        brokerTokenUrl: createBrokerUrl("gitlab", "token"),
+        scopes: ["read_user", "read_api"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://docs.gitlab.com/integration/oauth_provider/",
+        setupUrl: "https://gitlab.com/-/user_settings/applications",
+        redirectUriMode: "brokered",
+        usePkce: true,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "gitlab.read",
+        label: "读取 GitLab",
+        description: "允许读取 GitLab 当前用户、项目和 Issue 摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getCurrentUser",
+        label: "查看当前用户",
+        description: "读取当前 GitLab 用户摘要",
+        permission: "gitlab.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listProjects",
+        label: "列出项目",
+        description: "读取当前用户参与的 GitLab 项目列表",
+        permission: "gitlab.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listProjectIssues",
+        label: "列出项目 Issues",
+        description: "读取指定 GitLab 项目的 Issue 列表",
+        permission: "gitlab.read",
+        risk: "read",
+        confirmation: "ask",
+        required: ["projectId"],
+        properties: {
+          projectId: { type: "string", description: "项目数字 ID 或 namespace/project 路径" },
+          state: { type: "string", enum: ["opened", "closed", "all"], description: "Issue 状态" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getCurrentUser: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "GitLab access token");
+      const user = await gitlabRequest({
+        method: "GET",
+        path: "/user",
+        token
+      });
+
+      return {
+        output: toOutputRecord(user),
+        outputSummary: `GitLab 当前用户: ${readObjectText(user, "username", "unknown")}`
+      };
+    },
+    listProjects: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "GitLab access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const projects = await gitlabRequest({
+        method: "GET",
+        path: "/projects",
+        query: {
+          membership: "true",
+          order_by: "last_activity_at",
+          per_page: String(limit),
+          simple: "true",
+          sort: "desc"
+        },
+        token
+      });
+
+      return {
+        output: Array.isArray(projects) ? { projects } : toOutputRecord(projects),
+        outputSummary: `GitLab 返回 ${readArrayLength(projects)} 个项目`
+      };
+    },
+    listProjectIssues: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "GitLab access token");
+      const projectId = readRequiredString(input.projectId, "projectId", 240);
+      const state = readEnum(input.state, ["opened", "closed", "all"], "opened");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const issues = await gitlabRequest({
+        method: "GET",
+        path: `/projects/${encodePathSegment(projectId)}/issues`,
+        query: {
+          per_page: String(limit),
+          state
+        },
+        token
+      });
+
+      return {
+        output: Array.isArray(issues) ? { issues } : toOutputRecord(issues),
+        outputSummary: `GitLab ${projectId} 返回 ${readArrayLength(issues)} 个 Issue`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "listProjectIssues"
+        ? `gitlab ${String(input.projectId ?? "")}`
+        : "gitlab"
   };
 }
 
@@ -719,6 +862,161 @@ function createAirtableExtension(): BuiltInServiceExtension {
       actionId === "listRecords"
         ? `airtable ${String(input.baseId ?? "")}/${String(input.tableNameOrId ?? "")}`
         : "airtable bases"
+  };
+}
+
+function createTodoistExtension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "todoist",
+    name: "Todoist",
+    description: "读取 Todoist 项目和任务, 并在确认后创建任务",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Todoist OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "todoist_access_token",
+      oauth: {
+        provider: "Todoist",
+        authorizationUrl: "https://todoist.com/oauth/authorize",
+        tokenUrl: "https://todoist.com/oauth/access_token",
+        brokerAuthorizationUrl: createBrokerUrl("todoist", "authorize"),
+        brokerTokenUrl: createBrokerUrl("todoist", "token"),
+        scopes: ["data:read_write"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://developer.todoist.com/api/v1/",
+        setupUrl: "https://developer.todoist.com/appconsole.html",
+        redirectUriMode: "brokered",
+        usePkce: false,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "todoist.read",
+        label: "读取 Todoist",
+        description: "允许读取 Todoist 项目和任务摘要",
+        defaultMode: "ask"
+      },
+      {
+        id: "todoist.write",
+        label: "写入 Todoist",
+        description: "允许创建 Todoist 任务",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "listProjects",
+        label: "列出项目",
+        description: "读取 Todoist 项目列表",
+        permission: "todoist.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listTasks",
+        label: "列出任务",
+        description: "读取 Todoist 任务列表",
+        permission: "todoist.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          projectId: { type: "string", description: "可选项目 ID" },
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "createTask",
+        label: "创建任务",
+        description: "在 Todoist 中创建任务",
+        permission: "todoist.write",
+        risk: "write",
+        confirmation: "always",
+        required: ["content"],
+        properties: {
+          content: { type: "string", description: "任务标题" },
+          description: { type: "string", description: "任务说明" },
+          projectId: { type: "string", description: "可选项目 ID" },
+          dueString: { type: "string", description: "可选自然语言截止时间, 例如 tomorrow" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    listProjects: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Todoist access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await todoistRequest({
+        method: "GET",
+        path: "/projects",
+        query: {
+          limit: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Todoist 返回 ${readCollectionLength(result)} 个项目`
+      };
+    },
+    listTasks: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Todoist access token");
+      const projectId = readOptionalString(input.projectId, 120);
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await todoistRequest({
+        method: "GET",
+        path: "/tasks",
+        query: {
+          limit: String(limit),
+          ...(projectId ? { project_id: projectId } : {})
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Todoist 返回 ${readCollectionLength(result)} 个任务`
+      };
+    },
+    createTask: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Todoist access token");
+      const content = readRequiredString(input.content, "content", 500);
+      const description = readOptionalString(input.description, 4_000);
+      const projectId = readOptionalString(input.projectId, 120);
+      const dueString = readOptionalString(input.dueString, 240);
+      const result = await todoistRequest({
+        body: {
+          content,
+          ...(description ? { description } : {}),
+          ...(projectId ? { project_id: projectId } : {}),
+          ...(dueString ? { due_string: dueString } : {})
+        },
+        method: "POST",
+        path: "/tasks",
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `已创建 Todoist 任务: ${readObjectText(result, "content", content)}`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId, input) =>
+      actionId === "createTask"
+        ? `todoist create ${String(input.content ?? "")}`
+        : `todoist ${String(input.projectId ?? "")}`
   };
 }
 
@@ -1268,6 +1566,169 @@ function createDropboxExtension(): BuiltInServiceExtension {
   };
 }
 
+function createMicrosoft365Extension(): BuiltInServiceExtension {
+  const manifest: ExtensionManifest = {
+    id: "microsoft-365",
+    name: "Microsoft 365",
+    description: "通过 Microsoft Graph 读取个人资料、邮件、日历和 OneDrive 文件摘要",
+    version: "0.2.1",
+    category: "other",
+    builtIn: true,
+    auth: createOAuthTokenAuth({
+      accessTokenDescription: "Microsoft Graph OAuth access token, 通过 Forge OAuth broker 自动保存",
+      accessTokenPlaceholder: "microsoft_graph_access_token",
+      oauth: {
+        provider: "Microsoft",
+        authorizationUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        brokerAuthorizationUrl: createBrokerUrl("microsoft-365", "authorize"),
+        brokerTokenUrl: createBrokerUrl("microsoft-365", "token"),
+        scopes: ["offline_access", "User.Read", "Mail.Read", "Calendars.Read", "Files.Read"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        docsUrl: "https://learn.microsoft.com/en-us/graph/use-the-api",
+        setupUrl: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+        redirectUriMode: "brokered",
+        usePkce: true,
+        tokenRequestAuth: "body"
+      }
+    }),
+    permissions: [
+      {
+        id: "microsoft365.read",
+        label: "读取 Microsoft 365",
+        description: "允许通过 Microsoft Graph 读取账号、邮件、日历和 OneDrive 摘要",
+        defaultMode: "ask"
+      }
+    ],
+    actions: [
+      createAction({
+        id: "getProfile",
+        label: "查看账号资料",
+        description: "读取当前 Microsoft 365 账号资料",
+        permission: "microsoft365.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {}
+      }),
+      createAction({
+        id: "listMessages",
+        label: "列出邮件",
+        description: "读取当前邮箱最近邮件摘要",
+        permission: "microsoft365.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listEvents",
+        label: "列出日历事件",
+        description: "读取当前日历事件摘要",
+        permission: "microsoft365.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      }),
+      createAction({
+        id: "listDriveRoot",
+        label: "列出 OneDrive 根目录",
+        description: "读取 OneDrive 根目录文件和文件夹摘要",
+        permission: "microsoft365.read",
+        risk: "read",
+        confirmation: "ask",
+        properties: {
+          limit: { type: "number", description: "最多返回数量, 默认 20, 最大 100" }
+        }
+      })
+    ]
+  };
+
+  const handlers: Record<string, ExtensionActionHandler> = {
+    getProfile: async (_input, context) => {
+      const token = await readSecret(context, "accessToken", "Microsoft Graph access token");
+      const result = await microsoftGraphRequest({
+        method: "GET",
+        path: "/me",
+        query: {
+          $select: "id,displayName,userPrincipalName,mail"
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Microsoft 365 当前账号: ${readObjectText(result, "displayName", "unknown")}`
+      };
+    },
+    listMessages: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Microsoft Graph access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await microsoftGraphRequest({
+        method: "GET",
+        path: "/me/messages",
+        query: {
+          $orderby: "receivedDateTime desc",
+          $select: "id,subject,from,receivedDateTime,webLink",
+          $top: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Microsoft 365 返回 ${readArrayLength(readRecord(result).value)} 封邮件`
+      };
+    },
+    listEvents: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Microsoft Graph access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await microsoftGraphRequest({
+        method: "GET",
+        path: "/me/events",
+        query: {
+          $orderby: "start/dateTime",
+          $select: "id,subject,start,end,webLink",
+          $top: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Microsoft 365 返回 ${readArrayLength(readRecord(result).value)} 个日历事件`
+      };
+    },
+    listDriveRoot: async (input, context) => {
+      const token = await readSecret(context, "accessToken", "Microsoft Graph access token");
+      const limit = readLimit(input.limit, defaultListLimit);
+      const result = await microsoftGraphRequest({
+        method: "GET",
+        path: "/me/drive/root/children",
+        query: {
+          $select: "id,name,folder,file,webUrl,lastModifiedDateTime,size",
+          $top: String(limit)
+        },
+        token
+      });
+
+      return {
+        output: toOutputRecord(result),
+        outputSummary: `Microsoft 365 返回 ${readArrayLength(readRecord(result).value)} 个 OneDrive 条目`
+      };
+    }
+  };
+
+  return {
+    handlers,
+    manifest,
+    summarizeInput: (actionId) => `microsoft365 ${actionId}`
+  };
+}
+
 function createLinearExtension(): BuiltInServiceExtension {
   const manifest: ExtensionManifest = {
     id: "linear",
@@ -1633,6 +2094,27 @@ async function githubRequest({
   });
 }
 
+async function gitlabRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "GitLab",
+    url: withQuery(`https://gitlab.com/api/v4${path}`, query)
+  });
+}
+
 async function slackRequest({
   body,
   method,
@@ -1772,6 +2254,30 @@ async function airtableRequest({
   });
 }
 
+async function todoistRequest({
+  body,
+  method,
+  path,
+  query,
+  token
+}: {
+  body?: Record<string, unknown>;
+  method: "GET" | "POST";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    body,
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Todoist",
+    url: withQuery(`https://api.todoist.com/api/v1${path}`, query)
+  });
+}
+
 async function dropboxRequest({
   body,
   path,
@@ -1789,6 +2295,27 @@ async function dropboxRequest({
     method: "POST",
     service: "Dropbox",
     url: `https://api.dropboxapi.com/2${path}`
+  });
+}
+
+async function microsoftGraphRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Microsoft Graph",
+    url: withQuery(`https://graph.microsoft.com/v1.0${path}`, query)
   });
 }
 
@@ -2059,6 +2586,14 @@ function readNestedObjectText(value: unknown, fields: string[], fallback: string
 
 function readArrayLength(value: unknown): number {
   return Array.isArray(value) ? value.length : 0;
+}
+
+function readCollectionLength(value: unknown): number {
+  if (Array.isArray(value)) {
+    return value.length;
+  }
+
+  return readArrayLength(readRecord(value).results);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
