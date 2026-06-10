@@ -183,6 +183,14 @@ npm run quality:v0.2:status
 npm run release:check
 ```
 
+## CI/CD 工作流
+
+GitHub Actions 工作流位于 `.github\workflows\ci-cd.yml`。
+
+- PR 和任意分支 push 会在 `windows-latest` 上运行 `npm ci`、`npm test`、`npm run typecheck`、`npm run lint` 和 `npm run build`。
+- 推送 `v*` tag 或手动运行 workflow 时, 会在 CI 通过后执行 `npm run dist:win`, 并上传 `forge-windows-installer` artifact。
+- 当前工作流只生成和上传安装包 artifact, 不会自动创建 GitHub Release, 不会自动发布, 也不会跳过发布前人工检查和安装包烟测。
+
 `npm test` 会先编译轻量回归测试, 再运行 Node.js 测试, 用于覆盖 Agent 上下文隔离等关键逻辑。
 
 `npm run quality:metrics` 会读取本机 Forge 的 `agent-quality-metrics.json` 并输出各项指标的 numerator、denominator、value 和可用级状态。没有找到指标文件时会显示 missing, 这表示真实任务指标仍未证明, 不能按达标处理。也可以通过环境变量指定指标文件:

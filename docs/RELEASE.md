@@ -35,6 +35,12 @@ npm run dist:win
 
 该命令会生成 x64 NSIS 安装包, 并通过 `--publish never` 禁止 electron-builder 自动发布。安装包输出到 `release` 目录, 文件名类似 `Forge-0.2.1-x64-setup.exe`。
 
+## CI/CD 打包产物
+
+`.github\workflows\ci-cd.yml` 会在 PR 和任意分支 push 时运行 `npm ci`, `npm test`, `npm run typecheck`, `npm run lint` 和 `npm run build`。
+
+推送 `v*` tag 或手动运行 workflow 时, CI 通过后会执行 `npm run dist:win`, 并把 `release\*setup.exe` 上传为 `forge-windows-installer` artifact。该 workflow 只生成和保存安装包 artifact, 不会自动创建 GitHub Release, 也不会自动发布安装包。正式发布仍按下方 GitHub Release 步骤人工确认、上传和记录烟测证据。
+
 ## GitHub Release 发布
 
 1. 确认安装包已经生成
@@ -117,4 +123,4 @@ npm run quality:v0.2:usable
 
 - 当前 Windows 安装包未接入代码签名, 因此用户首次安装可能看到系统安全提示
 - 不要在未检查产物前上传安装包
-- 如果未来要接入自动发布, 先新增独立 CI 流程并把 `--publish never` 调整为明确的发布策略
+- 如果未来要接入自动发布, 先把当前 artifact-only CI/CD 流程扩展为明确的发布策略, 并同步调整 `--publish never`
