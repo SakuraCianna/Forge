@@ -570,7 +570,7 @@ async function getProjectMetadata(projectRoot: string): Promise<Record<string, u
   ];
   const files = await Promise.all(
     metadataFiles.map(async (relativePath) => {
-      const content = await readFile(resolve(projectRoot, relativePath), "utf8").catch(() => null);
+      const content = await readCachedProjectTextContent(projectRoot, relativePath, 200_000);
 
       return content === null
         ? null
@@ -1093,7 +1093,27 @@ async function readJsonProjectFile(
   relativePath: string
 ): Promise<Record<string, unknown> | null> {
   try {
-    return JSON.parse(await readFile(resolve(projectRoot, relativePath), "utf8")) as Record<string, unknown>;
+    const content = await readCachedProjectTextContent(projectRoot, relativePath, 256_000);
+
+    return content === null ? null : JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function readCachedProjectTextContent(
+  projectRoot: string,
+  relativePath: string,
+  maxBytes: number
+): Promise<string | null> {
+  try {
+    const file = await readProjectTextFile({
+      projectRoot,
+      relativePath,
+      maxBytes
+    });
+
+    return file.content;
   } catch {
     return null;
   }
@@ -1260,9 +1280,7 @@ async function getDependencyGraph(
   const edges = [];
 
   for (const file of sourceFiles) {
-    const content = await readFile(resolveProjectRelativePath(projectRoot, file.relativePath), "utf8").catch(
-      () => null
-    );
+    const content = await readCachedProjectTextContent(projectRoot, file.relativePath, 512_000);
 
     if (!content || content.includes("\u0000")) {
       continue;
@@ -1449,7 +1467,7 @@ async function searchRegexInProject(
       continue;
     }
 
-    const content = await readFile(resolveProjectRelativePath(projectRoot, file.relativePath), "utf8").catch(() => null);
+    const content = await readCachedProjectTextContent(projectRoot, file.relativePath, 256_000);
 
     if (!content || content.includes("\u0000")) {
       continue;
@@ -1505,8 +1523,7 @@ async function searchSemanticInProject(
       continue;
     }
 
-    const content = await readFile(resolveProjectRelativePath(projectRoot, file.relativePath), "utf8")
-      .catch(() => null);
+    const content = await readCachedProjectTextContent(projectRoot, file.relativePath, maxFileBytes);
 
     if (!content || content.includes("\u0000")) {
       continue;

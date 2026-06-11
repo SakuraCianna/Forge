@@ -228,6 +228,35 @@ test("default built-in tool executors provide dependency, diagnostic and validat
   }
 });
 
+test("dependency graph reads source files up to its analysis budget", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-dependency-graph-budget-"));
+
+  try {
+    await writeFile(join(projectRoot, "lib.ts"), "export const answer = 42;\n", "utf8");
+    await writeFile(
+      join(projectRoot, "index.ts"),
+      `import { answer } from "./lib";\n${"// filler line\n".repeat(20_000)}console.log(answer);\n`,
+      "utf8"
+    );
+
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const dependencyGraph = await getBuiltInToolFromRegistry(registry, "getDependencyGraph").execute(
+      { limit: 20 },
+      { projectRoot }
+    );
+
+    assert.ok(
+      (dependencyGraph as { edges: Array<{ from: string; to?: string }> }).edges.some(
+        (edge) => edge.from === "index.ts" && edge.to === "lib.ts"
+      )
+    );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("git branch executors quote branch names before building shell commands", async () => {
   const commands: string[] = [];
   const runCommand = async (options: RunProjectCommandOptions) => {
