@@ -4,9 +4,11 @@ import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promi
 import { join } from "node:path";
 
 export type ProjectTextSearchIndexCacheEntry = {
+  changedAtNs?: string;
   relativePath: string;
   size: number;
   modifiedAtMs: number;
+  modifiedAtNs?: string;
   lines: string[];
 };
 
@@ -178,6 +180,8 @@ function isProjectTextSearchIndexCacheEntry(value: unknown): value is ProjectTex
     Number.isFinite(value.size) &&
     typeof value.modifiedAtMs === "number" &&
     Number.isFinite(value.modifiedAtMs) &&
+    (value.changedAtNs === undefined || typeof value.changedAtNs === "string") &&
+    (value.modifiedAtNs === undefined || typeof value.modifiedAtNs === "string") &&
     Array.isArray(value.lines) &&
     value.lines.every((line) => typeof line === "string")
   );
