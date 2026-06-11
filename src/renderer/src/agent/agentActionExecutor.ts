@@ -646,6 +646,8 @@ function isAllowedCommand(command: string): boolean {
     /^pnpm\s+(?:(?:--dir|--cwd|-c)(?:=|\s+)\S+\s+)*(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
     /^yarn\s+(?:(?:--cwd|-c)(?:=|\s+)\S+\s+)*(?:test|run\s+(?:test|lint|typecheck|build)|(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
     /^bun\s+(?:(?:--cwd|-c)(?:=|\s+)\S+\s+)*(?:test|run\s+(?:test|lint|typecheck|build))(?:\s|$)/u.test(command) ||
+    /^cargo\s+test(?:\s+--manifest-path\s+\S+)?(?:\s|$)/u.test(command) ||
+    /^go\s+(?:-c\s+\S+\s+)?test\s+\.\/\.\.\.(?:\s|$)/u.test(command) ||
     /^(npx\s+)?(?:vitest|tsc|eslint)(?:\s|$)/u.test(command) ||
     /^(rg|git\s+grep|get-childitem|dir|ls)(?:\s|$)/u.test(command) ||
     isAllowedPowerShellPipelineHelperCommand(command)

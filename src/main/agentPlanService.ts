@@ -1525,6 +1525,8 @@ function inferVerificationCommand(steps: AgentPlanStep[]): string {
   return (
     inferMavenVerificationCommand(targets) ??
     inferGradleVerificationCommand(targets) ??
+    inferCargoVerificationCommand(targets) ??
+    inferGoVerificationCommand(targets) ??
     inferWebVerificationCommand(targets) ??
     "git status --short"
   );
@@ -1590,7 +1592,7 @@ function normalizeVerificationPath(value: string | undefined): string | null {
     !normalized ||
     normalized === "." ||
     normalized.includes("\n") ||
-    /^(?:git|npm|pnpm|yarn|mvn|gradle|node|npx)\s/iu.test(normalized)
+    /^(?:git|npm|pnpm|yarn|bun|mvn|gradle|cargo|go|node|npx)\s/iu.test(normalized)
   ) {
     return null;
   }
@@ -1640,7 +1642,55 @@ function inferGradleVerificationCommand(targets: string[]): string | null {
   return null;
 }
 
+function inferCargoVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const manifestRoot = readCargoManifestRoot(target);
+
+    if (manifestRoot !== null) {
+      return manifestRoot
+        ? `cargo test --manifest-path ${formatCommandPath(`${manifestRoot}/Cargo.toml`)}`
+        : "cargo test";
+    }
+  }
+
+  for (const target of targets) {
+    const rustRoot = readRustProjectRoot(target);
+
+    if (rustRoot !== null) {
+      return rustRoot
+        ? `cargo test --manifest-path ${formatCommandPath(`${rustRoot}/Cargo.toml`)}`
+        : "cargo test";
+    }
+  }
+
+  return null;
+}
+
+function inferGoVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const moduleRoot = readGoModuleRoot(target);
+
+    if (moduleRoot !== null) {
+      return moduleRoot ? `go -C ${formatCommandPath(moduleRoot)} test ./...` : "go test ./...";
+    }
+  }
+
+  if (targets.some((target) => target.toLocaleLowerCase().endsWith(".go"))) {
+    return "go test ./...";
+  }
+
+  return null;
+}
+
 function inferWebVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const packageManagerProject = readPackageManagerProject(target);
+
+    if (packageManagerProject) {
+      return formatPackageManagerBuildCommand(packageManagerProject);
+    }
+  }
+
   for (const target of targets) {
     const packageRoot = readPackageJsonRoot(target);
 
@@ -1658,6 +1708,92 @@ function inferWebVerificationCommand(targets: string[]): string | null {
   }
 
   return null;
+}
+
+function readCargoManifestRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+
+  if (!/(^|\/)(cargo\.toml|cargo\.lock)$/u.test(normalizedTarget)) {
+    return null;
+  }
+
+  return trimTrailingSlash(target.replace(/(?:Cargo\.toml|Cargo\.lock)$/iu, ""));
+}
+
+function readRustProjectRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+  const srcIndex = normalizedTarget.indexOf("/src/");
+
+  if (!normalizedTarget.endsWith(".rs")) {
+    return null;
+  }
+
+  if (normalizedTarget.startsWith("src/")) {
+    return "";
+  }
+
+  return srcIndex > 0 ? target.slice(0, srcIndex) : null;
+}
+
+function readGoModuleRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+
+  if (!/(^|\/)go\.(?:mod|sum)$/u.test(normalizedTarget)) {
+    return null;
+  }
+
+  return trimTrailingSlash(target.replace(/go\.(?:mod|sum)$/iu, ""));
+}
+
+function readPackageManagerProject(
+  target: string
+): { manager: "bun" | "npm" | "pnpm" | "yarn"; root: string } | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+  const match = /(?:^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|bun\.lock)$/u.exec(
+    normalizedTarget
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const root = trimTrailingSlash(target.slice(0, match.index));
+  const lockFile = match[1];
+
+  if (lockFile === "pnpm-lock.yaml") {
+    return { manager: "pnpm", root };
+  }
+
+  if (lockFile === "yarn.lock") {
+    return { manager: "yarn", root };
+  }
+
+  if (lockFile.startsWith("bun.")) {
+    return { manager: "bun", root };
+  }
+
+  return { manager: "npm", root };
+}
+
+function formatPackageManagerBuildCommand(project: {
+  manager: "bun" | "npm" | "pnpm" | "yarn";
+  root: string;
+}): string {
+  const root = project.root ? formatCommandPath(project.root) : "";
+
+  if (project.manager === "pnpm") {
+    return root ? `pnpm --dir ${root} run build` : "pnpm run build";
+  }
+
+  if (project.manager === "yarn") {
+    return root ? `yarn --cwd ${root} build` : "yarn build";
+  }
+
+  if (project.manager === "bun") {
+    return root ? `bun --cwd ${root} run build` : "bun run build";
+  }
+
+  return root ? `npm --prefix ${root} run build` : "npm run build";
 }
 
 function readPackageJsonRoot(target: string): string | null {

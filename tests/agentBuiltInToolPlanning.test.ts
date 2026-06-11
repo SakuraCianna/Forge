@@ -229,6 +229,63 @@ test("required verification policy infers nested frontend builds", () => {
   assert.equal(steps.at(-1)?.target, "npm --prefix Frontend run build");
 });
 
+test("required verification policy infers package-manager lockfile builds", () => {
+  const steps = parseAgentPlanSteps(
+    JSON.stringify({
+      steps: [
+        {
+          kind: "edit",
+          description: "Update the frontend lockfile",
+          target: "Frontend/pnpm-lock.yaml"
+        }
+      ]
+    }),
+    4,
+    "require"
+  );
+
+  assert.equal(steps.at(-1)?.kind, "verify");
+  assert.equal(steps.at(-1)?.target, "pnpm --dir Frontend run build");
+});
+
+test("required verification policy infers Rust verification", () => {
+  const steps = parseAgentPlanSteps(
+    JSON.stringify({
+      steps: [
+        {
+          kind: "edit",
+          description: "Update the Rust crate",
+          target: "Backend/src/lib.rs"
+        }
+      ]
+    }),
+    4,
+    "require"
+  );
+
+  assert.equal(steps.at(-1)?.kind, "verify");
+  assert.equal(steps.at(-1)?.target, "cargo test --manifest-path Backend/Cargo.toml");
+});
+
+test("required verification policy infers Go module verification", () => {
+  const steps = parseAgentPlanSteps(
+    JSON.stringify({
+      steps: [
+        {
+          kind: "edit",
+          description: "Update the Go backend module",
+          target: "Backend/go.mod"
+        }
+      ]
+    }),
+    4,
+    "require"
+  );
+
+  assert.equal(steps.at(-1)?.kind, "verify");
+  assert.equal(steps.at(-1)?.target, "go -C Backend test ./...");
+});
+
 test("required verification policy falls back to git status for documentation edits", () => {
   const steps = parseAgentPlanSteps(
     JSON.stringify({
