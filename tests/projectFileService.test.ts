@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { listProjectDirectory, previewProjectFile } from "../src/main/projectFileService.js";
 
 test("listProjectDirectory pages visible entries and keeps sensitive paths hidden", async () => {
@@ -79,6 +80,101 @@ test("previewProjectFile treats package.json as text even when the new file is e
       assert.equal(preview.content, "");
       assert.match(preview.mediaType, /json/u);
     }
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("previewProjectFile reuses unchanged text preview snapshots", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-preview-cache-"));
+
+  try {
+    await writeFile(join(projectRoot, "README.md"), "# Forge\n", "utf8");
+
+    const firstPreview = await previewProjectFile({
+      projectRoot,
+      relativePath: "README.md"
+    });
+    const secondPreview = await previewProjectFile({
+      projectRoot,
+      relativePath: "README.md"
+    });
+
+    assert.strictEqual(secondPreview, firstPreview);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("previewProjectFile invalidates cached text previews after file changes", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-preview-cache-update-"));
+  const filePath = join(projectRoot, "README.md");
+
+  try {
+    await writeFile(filePath, "# Forge\n", "utf8");
+    const firstPreview = await previewProjectFile({
+      projectRoot,
+      relativePath: "README.md"
+    });
+
+    await delay(5);
+    await writeFile(filePath, "# Forth\n", "utf8");
+    const secondPreview = await previewProjectFile({
+      projectRoot,
+      relativePath: "README.md"
+    });
+
+    assert.notStrictEqual(secondPreview, firstPreview);
+    assert.equal(secondPreview.kind, "text");
+
+    if (secondPreview.kind === "text") {
+      assert.equal(secondPreview.content, "# Forth\n");
+    }
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("previewProjectFile keeps cached previews scoped to the maxBytes budget", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-preview-cache-budget-"));
+
+  try {
+    await writeFile(join(projectRoot, "README.md"), "# Forge\n", "utf8");
+    const fullPreview = await previewProjectFile({
+      projectRoot,
+      relativePath: "README.md"
+    });
+    const smallBudgetPreview = await previewProjectFile({
+      projectRoot,
+      relativePath: "README.md",
+      maxBytes: 4
+    });
+
+    assert.equal(fullPreview.kind, "text");
+    assert.equal(smallBudgetPreview.kind, "unsupported");
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("previewProjectFile coalesces concurrent unchanged preview reads", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-preview-cache-inflight-"));
+
+  try {
+    await writeFile(join(projectRoot, "README.md"), "# Forge\n", "utf8");
+
+    const [firstPreview, secondPreview] = await Promise.all([
+      previewProjectFile({
+        projectRoot,
+        relativePath: "README.md"
+      }),
+      previewProjectFile({
+        projectRoot,
+        relativePath: "README.md"
+      })
+    ]);
+
+    assert.strictEqual(secondPreview, firstPreview);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }

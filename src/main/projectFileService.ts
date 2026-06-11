@@ -1,5 +1,5 @@
 // 本文件说明: 在项目根目录内安全读取, 预览和写入文本文件
-import type { Stats } from "node:fs";
+import type { BigIntStats, Stats } from "node:fs";
 import { lstat, mkdir, readFile, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import type {
@@ -38,7 +38,22 @@ type PendingDirectoryFileEntry = {
   index: number;
 };
 
+type ProjectFilePreviewCacheSignature = {
+  changedAtNs: bigint;
+  modifiedAtNs: bigint;
+  size: number;
+};
+
+type ProjectFilePreviewCacheRecord = {
+  preview: ProjectFilePreview;
+  signature: ProjectFilePreviewCacheSignature;
+};
+
 const maxInlinePreviewBytes = 40 * 1024 * 1024;
+const maxCachedProjectFilePreviews = 80;
+const maxCachedProjectFilePreviewPayloadChars = 512_000;
+const projectFilePreviewCache = new Map<string, ProjectFilePreviewCacheRecord>();
+const inFlightProjectFilePreviewReads = new Map<string, Promise<ProjectFilePreview>>();
 
 // 读取文本文件前检查路径边界和大小, 防止大文件拖慢预览
 export async function readProjectTextFile({
@@ -46,19 +61,19 @@ export async function readProjectTextFile({
   relativePath,
   maxBytes = 256000
 }: ReadProjectTextFileOptions): Promise<ProjectTextFile> {
-  const { fileStat, normalizedRelativePath, resolvedFilePath } = await resolveProjectFileForRead(
+  const { fileSize, normalizedRelativePath, resolvedFilePath } = await resolveProjectFileForRead(
     projectRoot,
     relativePath
   );
 
-  if (fileStat.size > maxBytes) {
+  if (fileSize > maxBytes) {
     throw new Error("File is too large to preview");
   }
 
   return {
     relativePath: normalizedRelativePath,
     content: await readFile(resolvedFilePath, "utf8"),
-    size: fileStat.size
+    size: fileSize
   };
 }
 
@@ -88,14 +103,49 @@ export async function previewProjectFile({
     );
   }
 
-  const { fileStat, normalizedRelativePath, resolvedFilePath } = resolvedFile;
+  const { fileSignature, normalizedRelativePath, resolvedFilePath } = resolvedFile;
   const media = resolvePreviewMedia(normalizedRelativePath);
+  const cacheKey = createProjectFilePreviewCacheKey(resolvedFilePath, normalizedRelativePath, maxBytes);
+  const cachedPreview = readCachedProjectFilePreview(cacheKey, fileSignature);
+
+  if (cachedPreview) {
+    return cachedPreview;
+  }
+
+  const inFlightKey = `${cacheKey}\u0000${createProjectFilePreviewSignatureKey(fileSignature)}`;
+  const inFlightPreview = inFlightProjectFilePreviewReads.get(inFlightKey);
+
+  if (inFlightPreview) {
+    return inFlightPreview;
+  }
+
+  const previewPromise = readProjectFilePreviewFromDisk(resolvedFile, media, maxBytes)
+    .then(async (preview) => {
+      await rememberProjectFilePreviewIfCurrent(cacheKey, resolvedFilePath, fileSignature, preview);
+      return preview;
+    })
+    .finally(() => {
+      if (inFlightProjectFilePreviewReads.get(inFlightKey) === previewPromise) {
+        inFlightProjectFilePreviewReads.delete(inFlightKey);
+      }
+    });
+
+  inFlightProjectFilePreviewReads.set(inFlightKey, previewPromise);
+  return previewPromise;
+}
+
+async function readProjectFilePreviewFromDisk(
+  resolvedFile: ResolvedProjectFileForRead,
+  media: ProjectPreviewMedia,
+  maxBytes: number
+): Promise<ProjectFilePreview> {
+  const { fileSize, normalizedRelativePath, resolvedFilePath } = resolvedFile;
 
   if (media.kind === "text") {
-    if (fileStat.size > maxBytes) {
+    if (fileSize > maxBytes) {
       return createUnavailablePreview(
         normalizedRelativePath,
-        fileStat.size,
+        fileSize,
         media.mediaType,
         "unsupported",
         "Text file is too large to preview"
@@ -107,11 +157,11 @@ export async function previewProjectFile({
       content: await readFile(resolvedFilePath, "utf8"),
       kind: "text",
       mediaType: media.mediaType,
-      size: fileStat.size
+      size: fileSize
     };
   }
 
-  if (media.kind === "unknown" && fileStat.size <= maxBytes) {
+  if (media.kind === "unknown" && fileSize <= maxBytes) {
     const content = await readFile(resolvedFilePath, "utf8");
 
     if (!content.includes("\u0000")) {
@@ -120,7 +170,7 @@ export async function previewProjectFile({
         content,
         kind: "text",
         mediaType: "text/plain; charset=utf-8",
-        size: fileStat.size
+        size: fileSize
       };
     }
   }
@@ -128,7 +178,7 @@ export async function previewProjectFile({
   if (media.kind === "office") {
     return createUnavailablePreview(
       normalizedRelativePath,
-      fileStat.size,
+      fileSize,
       media.mediaType,
       "office",
       "Office document preview requires document conversion"
@@ -138,17 +188,17 @@ export async function previewProjectFile({
   if (media.kind === "unknown") {
     return createUnavailablePreview(
       normalizedRelativePath,
-      fileStat.size,
+      fileSize,
       media.mediaType,
       "unsupported",
       "File type is not supported for inline preview"
     );
   }
 
-  if (fileStat.size > maxInlinePreviewBytes) {
+  if (fileSize > maxInlinePreviewBytes) {
     return createUnavailablePreview(
       normalizedRelativePath,
-      fileStat.size,
+      fileSize,
       media.mediaType,
       "unsupported",
       "File is too large for inline preview"
@@ -162,7 +212,7 @@ export async function previewProjectFile({
     dataUrl: `data:${media.mediaType};base64,${buffer.toString("base64")}`,
     kind: media.kind,
     mediaType: media.mediaType,
-    size: fileStat.size
+    size: fileSize
   };
 }
 
@@ -551,7 +601,8 @@ function classifyProjectTextFileChange(
 
 // 文件预览辅助: 统一路径校验和轻量 MIME 分类
 type ResolvedProjectFileForRead = {
-  fileStat: Stats;
+  fileSignature: ProjectFilePreviewCacheSignature;
+  fileSize: number;
   normalizedRelativePath: string;
   resolvedFilePath: string;
 };
@@ -583,17 +634,143 @@ async function resolveProjectFileForRead(
     throw new Error("File path must stay inside the selected project");
   }
 
-  const fileStat = await stat(resolvedFilePath);
+  const fileStat = await stat(resolvedFilePath, { bigint: true });
 
   if (!fileStat.isFile()) {
     throw new Error("File path must point to a file");
   }
 
   return {
-    fileStat,
+    fileSignature: createProjectFilePreviewCacheSignature(fileStat),
+    fileSize: normalizeBigIntFileSize(fileStat.size),
     normalizedRelativePath,
     resolvedFilePath
   };
+}
+
+function readCachedProjectFilePreview(
+  cacheKey: string,
+  signature: ProjectFilePreviewCacheSignature
+): ProjectFilePreview | null {
+  const cachedPreview = projectFilePreviewCache.get(cacheKey);
+
+  if (!cachedPreview || !areProjectFilePreviewCacheSignaturesEqual(cachedPreview.signature, signature)) {
+    return null;
+  }
+
+  rememberProjectFilePreview(cacheKey, cachedPreview);
+  return cachedPreview.preview;
+}
+
+async function rememberProjectFilePreviewIfCurrent(
+  cacheKey: string,
+  resolvedFilePath: string,
+  signature: ProjectFilePreviewCacheSignature,
+  preview: ProjectFilePreview
+): Promise<void> {
+  if (!isCacheableProjectFilePreview(preview)) {
+    projectFilePreviewCache.delete(cacheKey);
+    return;
+  }
+
+  let currentSignature: ProjectFilePreviewCacheSignature;
+
+  try {
+    currentSignature = await readProjectFilePreviewCacheSignature(resolvedFilePath);
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      projectFilePreviewCache.delete(cacheKey);
+      return;
+    }
+
+    throw error;
+  }
+
+  if (!areProjectFilePreviewCacheSignaturesEqual(signature, currentSignature)) {
+    projectFilePreviewCache.delete(cacheKey);
+    return;
+  }
+
+  rememberProjectFilePreview(cacheKey, {
+    preview,
+    signature
+  });
+}
+
+function rememberProjectFilePreview(cacheKey: string, cacheRecord: ProjectFilePreviewCacheRecord): void {
+  projectFilePreviewCache.delete(cacheKey);
+  projectFilePreviewCache.set(cacheKey, cacheRecord);
+
+  while (projectFilePreviewCache.size > maxCachedProjectFilePreviews) {
+    const oldestCacheKey = projectFilePreviewCache.keys().next().value;
+
+    if (typeof oldestCacheKey !== "string") {
+      return;
+    }
+
+    projectFilePreviewCache.delete(oldestCacheKey);
+  }
+}
+
+async function readProjectFilePreviewCacheSignature(
+  resolvedFilePath: string
+): Promise<ProjectFilePreviewCacheSignature> {
+  return createProjectFilePreviewCacheSignature(await stat(resolvedFilePath, { bigint: true }));
+}
+
+function createProjectFilePreviewCacheSignature(fileStat: BigIntStats): ProjectFilePreviewCacheSignature {
+  return {
+    changedAtNs: fileStat.ctimeNs,
+    modifiedAtNs: fileStat.mtimeNs,
+    size: normalizeBigIntFileSize(fileStat.size)
+  };
+}
+
+function areProjectFilePreviewCacheSignaturesEqual(
+  left: ProjectFilePreviewCacheSignature,
+  right: ProjectFilePreviewCacheSignature
+): boolean {
+  return (
+    left.changedAtNs === right.changedAtNs &&
+    left.modifiedAtNs === right.modifiedAtNs &&
+    left.size === right.size
+  );
+}
+
+function isCacheableProjectFilePreview(preview: ProjectFilePreview): boolean {
+  return getProjectFilePreviewPayloadChars(preview) <= maxCachedProjectFilePreviewPayloadChars;
+}
+
+function getProjectFilePreviewPayloadChars(preview: ProjectFilePreview): number {
+  if (preview.kind === "text") {
+    return preview.content.length;
+  }
+
+  if ("dataUrl" in preview) {
+    return preview.dataUrl.length;
+  }
+
+  return 0;
+}
+
+function createProjectFilePreviewCacheKey(
+  resolvedFilePath: string,
+  normalizedRelativePath: string,
+  maxBytes: number
+): string {
+  return `${resolvedFilePath}\u0000${normalizedRelativePath}\u0000${maxBytes}`;
+}
+
+function createProjectFilePreviewSignatureKey(signature: ProjectFilePreviewCacheSignature): string {
+  return `${signature.size}\u0000${signature.changedAtNs}\u0000${signature.modifiedAtNs}`;
+}
+
+function normalizeBigIntFileSize(size: bigint): number {
+  if (size > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return Number(size);
 }
 
 function createUnavailablePreview(
