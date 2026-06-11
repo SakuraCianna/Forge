@@ -137,6 +137,14 @@ const projectEngineeringPresetInstructions = [
   "Project scaffolding requests are not tiny edits: if the project is empty or bare, plan a coherent skeleton with build config, source entrypoints, runtime config, and verification.",
   'For scaffold edit steps, prefer a "files" string array so Forge can expand one architectural step into several controlled file edits without wasting the plan budget.'
 ] as const;
+const softwareEngineeringWorkflowInstructions = [
+  "Follow a durable software engineering workflow: clarify intent from the task, inspect the current project, design the smallest coherent change, implement in scoped files, verify with concrete checks, and leave delivery evidence.",
+  "For code generation, prefer production-shaped modules over demos: explicit entrypoints, typed contracts when the stack supports them, configuration that matches commands, and user-facing error or empty states where relevant.",
+  "Plan repository reconnaissance before mutation when the target project state is unknown: read README/config/entrypoints or search for the owning module before editing.",
+  "When touching multiple layers, align the contract first: names, routes, schema fields, DTOs, API clients, UI columns, tests, and seed data must agree.",
+  "Treat verification as part of implementation, not an optional afterthought. Use the narrowest command that can prove the changed behavior, then broaden only when the change affects shared paths.",
+  "Finish with auditable evidence: changed file scope, verification command, result, known risk, and whether Git work remains."
+] as const;
 const planQualityChecklistInstructions = [
   "Before returning the plan, ensure every mutating step has a concrete target or files array, every verification command points at the chosen project root, and the plan has an observable acceptance signal.",
   "When the user gives an error, log, screenshot, or failing command, inspect the named files and nearby configuration before broad rewrites.",
@@ -510,6 +518,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
     ...projectEngineeringPresetInstructions,
+    ...softwareEngineeringWorkflowInstructions,
     "Keep the plan small and respect the Agent profile plan step limit from the request context.",
     "Follow the Agent profile verification policy from the request context.",
     "Separate discovery, mutation, and verification. Put read/search/git status steps before risky edits when the current state is unknown, and put validation after edits.",
@@ -552,6 +561,7 @@ function createAgentFileChangeInstructions(personalization?: string): string {
     "Begin with the natural first token for that file type, such as package, import, <script>, or JSON object syntax; do not omit required boilerplate.",
     "Preserve existing style and imports unless the task requires changes.",
     "Use the current file content as the source of truth. Do not remove existing behavior, exports, validation, accessibility, error handling, or tests unless the user explicitly requested it.",
+    ...softwareEngineeringWorkflowInstructions,
     "For multi-file scaffolds, make this file compatible with the queued and existing companion files: build dependencies, imports, entity fields, database seed data, API paths, frontend types, and UI columns must line up.",
     "For separated Spring Boot + frontend scaffolds, keep backend files under Backend/, frontend files under Frontend/, and ensure generated commands target Backend/pom.xml and Frontend/package.json unless the current project already uses different roots.",
     "For Spring Boot + H2/JPA data.sql files, table names and columns must exactly match the entity mapping, and runtime config must defer data.sql until JPA has created the schema unless schema.sql is supplied.",
@@ -1284,7 +1294,11 @@ export function parseAgentPlanSteps(
       };
     });
 
-  return applyVerificationPolicy(steps, normalizedStepLimit, verificationPolicy);
+  return applyVerificationPolicy(
+    applyEngineeringWorkflowPolicy(steps, normalizedStepLimit),
+    normalizedStepLimit,
+    verificationPolicy
+  );
 }
 
 function getPlanStepLimit(request: GenerateAgentPlanRequest): number {
@@ -1337,6 +1351,61 @@ function applyVerificationPolicy(
   const nextSteps = steps.filter((_, index) => index !== removableIndex);
 
   return renumberPlanSteps([...nextSteps, verificationStep]);
+}
+
+function applyEngineeringWorkflowPolicy(
+  steps: AgentPlanStep[],
+  stepLimit: number
+): AgentPlanStep[] {
+  if (
+    steps.length >= stepLimit ||
+    !steps.some(isProjectMutationPlanStep) ||
+    hasDiscoveryBeforeFirstMutation(steps)
+  ) {
+    return steps;
+  }
+
+  return renumberPlanSteps([
+    {
+      id: "step-1",
+      title: "Inspect project context",
+      description: "Inspect the current project structure and relevant target files before editing.",
+      kind: "inspect",
+      status: "pending",
+      target: "."
+    },
+    ...steps
+  ]);
+}
+
+function hasDiscoveryBeforeFirstMutation(steps: AgentPlanStep[]): boolean {
+  for (const step of steps) {
+    if (isProjectMutationPlanStep(step)) {
+      return false;
+    }
+
+    if (isProjectDiscoveryPlanStep(step)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isProjectDiscoveryPlanStep(step: AgentPlanStep): boolean {
+  if (step.kind === "inspect") {
+    return true;
+  }
+
+  if (step.kind === "verify" && step.target && /^git\s+(?:status|diff)(?:\s|$)/iu.test(step.target)) {
+    return true;
+  }
+
+  if (!step.builtInToolName) {
+    return false;
+  }
+
+  return deriveAgentToolSideEffect(step.builtInToolName) === "none";
 }
 
 function findVerificationInsertionRemovalIndex(steps: AgentPlanStep[]): number {

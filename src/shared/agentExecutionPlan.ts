@@ -238,11 +238,16 @@ function createAgentActionDraft(step: AgentPlanStep): AgentActionDraft {
 
 // 清理动作目标文本, 空字符串统一变成 undefined
 function normalizeActionTarget(target: string | undefined): string | undefined {
-  const normalized = target
+  const quotedTarget = target
     ?.trim()
     .replace(/^`|`$/g, "")
-    .replace(/^["']|["']$/g, "")
-    .replace(/[.,;:，。；：]+$/u, "");
+    .replace(/^["']|["']$/g, "");
+
+  if (!quotedTarget || quotedTarget === ".") {
+    return quotedTarget || undefined;
+  }
+
+  const normalized = quotedTarget.replace(/[.,;:，。；：]+$/u, "");
 
   return normalized || undefined;
 }

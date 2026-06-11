@@ -13,6 +13,10 @@ test("agent system instructions preserve evidence, scope and verification guardr
   assert.match(source, /TypeScript project config required by the queued build command/u);
   assert.match(source, /observable acceptance signal/u);
   assert.match(source, /minimal but production-shaped code/u);
+  assert.match(source, /Follow a durable software engineering workflow/u);
+  assert.match(source, /inspect the current project, design the smallest coherent change/u);
+  assert.match(source, /Treat verification as part of implementation/u);
+  assert.match(source, /Finish with auditable evidence/u);
   assert.match(source, /Separate discovery, mutation, and verification/u);
   assert.match(source, /plan web_search, fetchDocs, or another reliable documentation lookup/u);
   assert.match(source, /Do not include commit, branch switch, revert, dependency install, push, delete/u);
