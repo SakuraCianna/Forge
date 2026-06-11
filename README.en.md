@@ -20,7 +20,7 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - Agent directory listing, text search, and glob tools still respect `.gitignore` to keep automated search scoped and responsive on large projects.
 - Sensitive paths such as `.env`, private keys, certificates, credential folders, and database files are excluded from agent file tools and previews by default.
 - File browsing uses lazy directory loading and paged large directories to avoid rendering a whole large repository at once.
-- Project scan metadata and text-search snapshots are cached in the local app data directory for later reuse.
+- Project scanning reuses in-flight same-path indexing and recent in-memory indexes, while project scan metadata and text-search snapshots are also cached in the local app data directory for later reuse.
 - AI-generated file changes enter a review queue by default and are written to disk only after user confirmation; in Full Access mode, agent-planned file changes and local commands run automatically without extra command approval or built-in tool confirmation prompts.
 
 ### Agent Task Threads
