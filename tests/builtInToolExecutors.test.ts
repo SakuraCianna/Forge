@@ -13,6 +13,7 @@ import type {
   RunningProjectCommand,
   RunProjectCommandOptions
 } from "../src/main/commandRunner.js";
+import type { ProjectScanResult } from "../src/shared/projectTypes.js";
 import { builtInToolDefinitions } from "../src/shared/builtInToolCatalog.js";
 
 test("every available built-in tool has a default executor", () => {
@@ -75,6 +76,86 @@ test("readManyFiles passes maxBytesPerFile through as the per-file size limit", 
     assert.match(
       (result as { error: { message: string } }).error.message,
       /File is too large to preview/u
+    );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("project-wide built-in tool executors use the injected project scanner", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-scan-injection-"));
+
+  try {
+    await writeFile(join(projectRoot, "package.json"), JSON.stringify({ name: "scan-fixture" }), "utf8");
+
+    const scanCalls: Array<{ limit?: number; rootPath: string }> = [];
+    const scanResult: ProjectScanResult = {
+      rootPath: projectRoot,
+      files: [
+        {
+          modifiedAtMs: 100,
+          relativePath: "src/main.ts",
+          size: 20
+        },
+        {
+          modifiedAtMs: 101,
+          relativePath: "src/main.test.ts",
+          size: 30
+        }
+      ],
+      truncated: false,
+      instructionFiles: [
+        {
+          relativePath: "AGENTS.md",
+          content: "Use project evidence.",
+          truncated: false
+        }
+      ]
+    };
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors({
+        scanProjectFiles: async (rootPath, options = {}) => {
+          scanCalls.push({
+            limit: options.limit,
+            rootPath
+          });
+
+          return scanResult;
+        }
+      })
+    });
+
+    const projectTree = await getBuiltInToolFromRegistry(registry, "getProjectTree").execute(
+      { limit: 123 },
+      { projectRoot }
+    );
+    const entrypoints = await getBuiltInToolFromRegistry(registry, "getEntrypoints").execute(
+      {},
+      { projectRoot }
+    );
+    const summary = await getBuiltInToolFromRegistry(registry, "getProjectSummary").execute(
+      {},
+      { projectRoot }
+    );
+    const instructions = await getBuiltInToolFromRegistry(registry, "readProjectInstructions").execute(
+      {},
+      { projectRoot }
+    );
+
+    assert.deepEqual(scanCalls, [
+      { rootPath: projectRoot, limit: 123 },
+      { rootPath: projectRoot, limit: undefined },
+      { rootPath: projectRoot, limit: 2_000 },
+      { rootPath: projectRoot, limit: undefined }
+    ]);
+    assert.equal((projectTree as ProjectScanResult).files.length, 2);
+    assert.deepEqual((entrypoints as { entrypoints: string[] }).entrypoints, ["src/main.ts"]);
+    assert.equal((summary as { fileCount: number }).fileCount, 2);
+    assert.deepEqual(
+      (instructions as { instructionFiles: Array<{ relativePath: string }> }).instructionFiles.map(
+        (file) => file.relativePath
+      ),
+      ["AGENTS.md"]
     );
   } finally {
     await rm(projectRoot, { recursive: true, force: true });

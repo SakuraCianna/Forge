@@ -213,7 +213,8 @@ void app.whenReady().then(() => {
       }),
       cancelCommand: cancelProjectCommand,
       openExternal: (url) => shell.openExternal(url),
-      runCommand: runProjectCommand
+      runCommand: runProjectCommand,
+      scanProjectFiles: cachedProjectScanner.scan
     }),
     metricsLogStore: agentQualityMetricsLogStore
   });

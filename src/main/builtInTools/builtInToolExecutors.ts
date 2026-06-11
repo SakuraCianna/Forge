@@ -30,7 +30,7 @@ import {
   searchProjectTextFiles,
   writeProjectTextFile
 } from "../projectFileService.js";
-import { scanProjectFiles } from "../projectScanner.js";
+import { scanProjectFiles as scanProjectFilesDefault } from "../projectScanner.js";
 import { searchWeb } from "../webSearchService.js";
 import { assertProjectPathNotSensitive } from "../../shared/sensitiveProjectFiles.js";
 import type { BuiltInToolExecutionContext } from "../../shared/builtInToolTypes.js";
@@ -38,6 +38,7 @@ import type { BuiltInToolExecutorMap } from "./builtInToolRegistry.js";
 
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 type OpenExternal = (url: string) => Promise<unknown> | unknown;
+type ScanProjectFiles = typeof scanProjectFilesDefault;
 
 export type BuiltInToolExecutorFactoryOptions = {
   browserTools?: BrowserPreviewTools;
@@ -46,6 +47,7 @@ export type BuiltInToolExecutorFactoryOptions = {
   listRunningCommands?: typeof listRunningProjectCommands;
   openExternal?: OpenExternal;
   runCommand?: typeof runProjectCommand;
+  scanProjectFiles?: ScanProjectFiles;
 };
 
 export function createDefaultBuiltInToolExecutors({
@@ -54,7 +56,8 @@ export function createDefaultBuiltInToolExecutors({
   fetcher = fetch,
   listRunningCommands = listRunningProjectCommands,
   openExternal,
-  runCommand = runProjectCommand
+  runCommand = runProjectCommand,
+  scanProjectFiles = scanProjectFilesDefault
 }: BuiltInToolExecutorFactoryOptions = {}): BuiltInToolExecutorMap {
   return {
     applyEdit: (input, context) =>
@@ -186,10 +189,14 @@ export function createDefaultBuiltInToolExecutors({
       };
     },
     getDependencyGraph: (input, context) =>
-      getDependencyGraph(requireProjectRoot(input, context), {
-        includeExternal: readOptionalBoolean(input, "includeExternal") ?? false,
-        limit: readOptionalNumber(input, "limit")
-      }),
+      getDependencyGraph(
+        requireProjectRoot(input, context),
+        {
+          includeExternal: readOptionalBoolean(input, "includeExternal") ?? false,
+          limit: readOptionalNumber(input, "limit")
+        },
+        scanProjectFiles
+      ),
     getFileSymbols: async (input, context) => {
       const file = await readProjectTextFile({
         projectRoot: requireProjectRoot(input, context),
@@ -238,13 +245,18 @@ export function createDefaultBuiltInToolExecutors({
     getGitStatus: (input, context) =>
       getProjectGitStatus({ projectRoot: requireProjectRoot(input, context) }),
     getProjectMetadata: (input, context) => getProjectMetadata(requireProjectRoot(input, context)),
-    getProjectSummary: (input, context) => getProjectSummary(requireProjectRoot(input, context)),
+    getProjectSummary: (input, context) =>
+      getProjectSummary(requireProjectRoot(input, context), scanProjectFiles),
     getProjectTree: (input, context) =>
       scanProjectFiles(requireProjectRoot(input, context), {
         limit: readOptionalNumber(input, "limit")
       }),
     getRelatedFiles: (input, context) =>
-      getRelatedFiles(requireProjectRoot(input, context), readRequiredString(input, "relativePath")),
+      getRelatedFiles(
+        requireProjectRoot(input, context),
+        readRequiredString(input, "relativePath"),
+        scanProjectFiles
+      ),
     globFiles: (input, context) =>
       globProjectFiles({
         projectRoot: requireProjectRoot(input, context),
@@ -442,9 +454,13 @@ export function createDefaultBuiltInToolExecutors({
     searchDiagnostics: (input, context) =>
       searchDiagnosticsInProject(requireProjectRoot(input, context), input),
     searchRegex: (input, context) =>
-      searchRegexInProject(requireProjectRoot(input, context), readRequiredString(input, "pattern")),
+      searchRegexInProject(
+        requireProjectRoot(input, context),
+        readRequiredString(input, "pattern"),
+        scanProjectFiles
+      ),
     searchSemantic: (input, context) =>
-      searchSemanticInProject(requireProjectRoot(input, context), input),
+      searchSemanticInProject(requireProjectRoot(input, context), input, scanProjectFiles),
     searchMemory: (input, context) =>
       searchProjectMemoryFile(requireProjectRoot(input, context), readRequiredString(input, "query")),
     searchText: (input, context) =>
@@ -519,7 +535,10 @@ export function createDefaultBuiltInToolExecutors({
   };
 }
 
-async function getProjectSummary(projectRoot: string): Promise<Record<string, unknown>> {
+async function getProjectSummary(
+  projectRoot: string,
+  scanProjectFiles: ScanProjectFiles
+): Promise<Record<string, unknown>> {
   const project = await scanProjectFiles(projectRoot, { limit: 2_000 });
   const packageJson = await readJsonProjectFile(projectRoot, "package.json");
   const topLevelDirectories = Array.from(
@@ -571,7 +590,8 @@ async function getProjectMetadata(projectRoot: string): Promise<Record<string, u
 
 async function getRelatedFiles(
   projectRoot: string,
-  relativePath: string
+  relativePath: string,
+  scanProjectFiles: ScanProjectFiles
 ): Promise<Record<string, unknown>> {
   const project = await scanProjectFiles(projectRoot, { limit: 5_000 });
   const normalizedPath = relativePath.replace(/\\/g, "/");
@@ -1229,7 +1249,8 @@ async function getDependencyGraph(
   }: {
     includeExternal: boolean;
     limit?: number;
-  }
+  },
+  scanProjectFiles: ScanProjectFiles
 ): Promise<Record<string, unknown>> {
   const project = await scanProjectFiles(projectRoot, { limit: 5_000 });
   const allRelativePaths = project.files.map((file) => file.relativePath);
@@ -1416,7 +1437,8 @@ function decodeHtmlEntities(value: string): string {
 
 async function searchRegexInProject(
   projectRoot: string,
-  pattern: string
+  pattern: string,
+  scanProjectFiles: ScanProjectFiles
 ): Promise<Record<string, unknown>> {
   const regex = new RegExp(pattern, "u");
   const project = await scanProjectFiles(projectRoot, { limit: 5_000 });
@@ -1459,7 +1481,8 @@ async function searchRegexInProject(
 
 async function searchSemanticInProject(
   projectRoot: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  scanProjectFiles: ScanProjectFiles
 ): Promise<Record<string, unknown>> {
   const query = readRequiredString(input, "query");
   const limit = clampSemanticSearchLimit(readOptionalNumber(input, "limit"));
