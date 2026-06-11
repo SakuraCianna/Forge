@@ -1,5 +1,5 @@
 // 本文件说明: 扫描项目文件和规则说明, 为 Agent 提供轻量上下文
-import type { Stats } from "node:fs";
+import type { BigIntStats, Stats } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type {
@@ -103,7 +103,7 @@ export async function scanProjectFiles(
         continue;
       }
 
-      const fileStat = await stat(filePath);
+      const fileStat = await stat(filePath, { bigint: true });
       files.push(createProjectFileEntry(relativePath, fileStat, previousFilesByPath));
     }
   }
@@ -132,25 +132,39 @@ function createPreviousFileMap(
 
 function createProjectFileEntry(
   relativePath: string,
-  fileStat: Stats,
+  fileStat: BigIntStats,
   previousFilesByPath: ReadonlyMap<string, ProjectFile>
 ): ProjectFile {
-  const modifiedAtMs = fileStat.mtimeMs;
+  const changedAtNs = fileStat.ctimeNs.toString();
+  const modifiedAtMs = Number(fileStat.mtimeMs);
+  const modifiedAtNs = fileStat.mtimeNs.toString();
+  const size = normalizeBigIntFileSize(fileStat.size);
   const previousFile = previousFilesByPath.get(relativePath);
 
   if (
     previousFile &&
-    previousFile.size === fileStat.size &&
-    previousFile.modifiedAtMs === modifiedAtMs
+    previousFile.size === size &&
+    previousFile.changedAtNs === changedAtNs &&
+    previousFile.modifiedAtNs === modifiedAtNs
   ) {
     return previousFile;
   }
 
   return {
+    changedAtNs,
     modifiedAtMs,
+    modifiedAtNs,
     relativePath,
-    size: fileStat.size
+    size
   };
+}
+
+function normalizeBigIntFileSize(size: bigint): number {
+  if (size > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return Number(size);
 }
 
 async function readProjectInstructionFiles(rootPath: string): Promise<ProjectInstructionFile[]> {
