@@ -1334,14 +1334,7 @@ function applyVerificationPolicy(
     return steps;
   }
 
-  const verificationStep: AgentPlanStep = {
-    id: `step-${Math.max(1, Math.min(stepLimit, steps.length + 1))}`,
-    title: "Verify changes",
-    description: "Check the resulting project state before finishing.",
-    kind: "verify",
-    status: "pending",
-    target: "git status"
-  };
+  const verificationStep = createInferredVerificationStep(steps, stepLimit);
 
   if (steps.length < stepLimit) {
     return renumberPlanSteps([...steps, verificationStep]);
@@ -1416,6 +1409,233 @@ function findVerificationInsertionRemovalIndex(steps: AgentPlanStep[]): number {
   }
 
   return Math.max(0, steps.length - 1);
+}
+
+function createInferredVerificationStep(steps: AgentPlanStep[], stepLimit: number): AgentPlanStep {
+  const target = inferVerificationCommand(steps);
+  const isStatusOnly = target === "git status --short";
+
+  return {
+    id: `step-${Math.max(1, Math.min(stepLimit, steps.length + 1))}`,
+    title: "Verify changes",
+    description: isStatusOnly
+      ? "Review the changed-file set before finishing."
+      : "Run the focused project verification command before finishing.",
+    kind: "verify",
+    status: "pending",
+    target
+  };
+}
+
+function inferVerificationCommand(steps: AgentPlanStep[]): string {
+  const targets = collectMutationVerificationTargets(steps);
+
+  return (
+    inferMavenVerificationCommand(targets) ??
+    inferGradleVerificationCommand(targets) ??
+    inferWebVerificationCommand(targets) ??
+    "git status --short"
+  );
+}
+
+function collectMutationVerificationTargets(steps: AgentPlanStep[]): string[] {
+  const targets = new Set<string>();
+
+  for (const step of steps) {
+    if (!isProjectMutationPlanStep(step)) {
+      continue;
+    }
+
+    addVerificationTarget(targets, step.target);
+
+    if (step.builtInToolInput) {
+      addVerificationTargetsFromInput(targets, step.builtInToolInput);
+    }
+  }
+
+  return [...targets];
+}
+
+function addVerificationTargetsFromInput(
+  targets: Set<string>,
+  input: Record<string, unknown>
+): void {
+  for (const key of ["relativePath", "relative_path", "path", "file", "target"]) {
+    const value = input[key];
+
+    if (typeof value === "string") {
+      addVerificationTarget(targets, value);
+    }
+  }
+
+  for (const key of ["relativePaths", "relative_paths", "paths", "files", "targets"]) {
+    const value = input[key];
+
+    if (!Array.isArray(value)) {
+      continue;
+    }
+
+    for (const item of value) {
+      if (typeof item === "string") {
+        addVerificationTarget(targets, item);
+      }
+    }
+  }
+}
+
+function addVerificationTarget(targets: Set<string>, value: string | undefined): void {
+  const target = normalizeVerificationPath(value);
+
+  if (target) {
+    targets.add(target);
+  }
+}
+
+function normalizeVerificationPath(value: string | undefined): string | null {
+  const normalized = value?.trim().replace(/^`|`$/gu, "").replace(/\\/gu, "/");
+
+  if (
+    !normalized ||
+    normalized === "." ||
+    normalized.includes("\n") ||
+    /^(?:git|npm|pnpm|yarn|mvn|gradle|node|npx)\s/iu.test(normalized)
+  ) {
+    return null;
+  }
+
+  return normalized.replace(/^\.\//u, "");
+}
+
+function inferMavenVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const normalizedTarget = target.toLocaleLowerCase();
+    const pomMatch = /(^|\/)pom\.xml$/u.exec(normalizedTarget);
+
+    if (!pomMatch) {
+      continue;
+    }
+
+    const pomPath = target.slice(0, target.length - "pom.xml".length) + "pom.xml";
+    const rootPath = trimTrailingSlash(pomPath.slice(0, -"pom.xml".length));
+
+    return rootPath ? `mvn -f ${formatCommandPath(`${rootPath}/pom.xml`)} test` : "mvn test";
+  }
+
+  for (const target of targets) {
+    const projectRoot = readJvmProjectRoot(target);
+
+    if (projectRoot !== null) {
+      return projectRoot ? `mvn -f ${formatCommandPath(`${projectRoot}/pom.xml`)} test` : "mvn test";
+    }
+  }
+
+  return null;
+}
+
+function inferGradleVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const normalizedTarget = target.toLocaleLowerCase();
+
+    if (!/(^|\/)(build|settings)\.gradle(?:\.kts)?$/u.test(normalizedTarget)) {
+      continue;
+    }
+
+    const rootPath = trimTrailingSlash(target.replace(/(?:build|settings)\.gradle(?:\.kts)?$/iu, ""));
+
+    return rootPath ? `gradle -p ${formatCommandPath(rootPath)} test` : "gradle test";
+  }
+
+  return null;
+}
+
+function inferWebVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const packageRoot = readPackageJsonRoot(target);
+
+    if (packageRoot !== null) {
+      return packageRoot ? `npm --prefix ${formatCommandPath(packageRoot)} run build` : "npm run build";
+    }
+  }
+
+  for (const target of targets) {
+    const webRoot = readWebProjectRoot(target);
+
+    if (webRoot !== null) {
+      return webRoot ? `npm --prefix ${formatCommandPath(webRoot)} run build` : "npm run build";
+    }
+  }
+
+  return null;
+}
+
+function readPackageJsonRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+
+  if (!/(^|\/)package\.json$/u.test(normalizedTarget)) {
+    return null;
+  }
+
+  return trimTrailingSlash(target.slice(0, target.length - "package.json".length));
+}
+
+function readJvmProjectRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+  const match = /(?:^|\/)src\/(?:main|test)\/(?:java|kotlin|resources)\//u.exec(
+    normalizedTarget
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const rootPath = target.slice(0, match.index).replace(/\/$/u, "");
+
+  return rootPath;
+}
+
+function readWebProjectRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+
+  if (!isWebProjectFile(normalizedTarget)) {
+    return null;
+  }
+
+  const srcIndex = normalizedTarget.indexOf("/src/");
+
+  if (srcIndex > 0) {
+    return target.slice(0, srcIndex);
+  }
+
+  if (normalizedTarget.startsWith("src/")) {
+    return "";
+  }
+
+  const firstSlashIndex = normalizedTarget.indexOf("/");
+  const firstSegment = firstSlashIndex > 0 ? normalizedTarget.slice(0, firstSlashIndex) : "";
+
+  if (["frontend", "client", "web", "app"].includes(firstSegment)) {
+    return target.slice(0, firstSlashIndex);
+  }
+
+  return /^(.+\/)?(?:vite\.config|tsconfig|index\.html|src\/)/u.test(normalizedTarget) ? "" : null;
+}
+
+function isWebProjectFile(normalizedTarget: string): boolean {
+  return (
+    /\.(?:c|m)?(?:js|ts)x?$/u.test(normalizedTarget) ||
+    /\.(?:vue|svelte|astro|css|scss|sass|less|html)$/u.test(normalizedTarget) ||
+    /(^|\/)(vite\.config|webpack\.config|rollup\.config|tsconfig(?:\..*)?\.json|index\.html)$/u.test(
+      normalizedTarget
+    )
+  );
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/$/u, "");
+}
+
+function formatCommandPath(path: string): string {
+  return /\s/u.test(path) ? `"${path.replace(/"/gu, '\\"')}"` : path;
 }
 
 function isProjectMutationPlanStep(step: AgentPlanStep): boolean {

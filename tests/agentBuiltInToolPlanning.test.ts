@@ -106,7 +106,64 @@ test("required verification policy treats mutating built-in tools as project cha
   assert.equal(steps[0]?.target, ".");
   assert.equal(steps[1]?.builtInToolName, "applyEdit");
   assert.equal(steps[2]?.kind, "verify");
-  assert.equal(steps[2]?.target, "git status");
+  assert.equal(steps[2]?.target, "npm run build");
+});
+
+test("required verification policy infers Backend Maven verification", () => {
+  const steps = parseAgentPlanSteps(
+    JSON.stringify({
+      steps: [
+        {
+          kind: "edit",
+          description: "Update the backend controller",
+          target: "Backend/src/main/java/com/example/student/StudentController.java"
+        }
+      ]
+    }),
+    4,
+    "require"
+  );
+
+  assert.equal(steps.at(-1)?.kind, "verify");
+  assert.equal(steps.at(-1)?.target, "mvn -f Backend/pom.xml test");
+});
+
+test("required verification policy infers nested frontend builds", () => {
+  const steps = parseAgentPlanSteps(
+    JSON.stringify({
+      steps: [
+        {
+          kind: "edit",
+          description: "Update the Vue page",
+          target: "Frontend/src/App.vue"
+        }
+      ]
+    }),
+    4,
+    "require"
+  );
+
+  assert.equal(steps.at(-1)?.kind, "verify");
+  assert.equal(steps.at(-1)?.target, "npm --prefix Frontend run build");
+});
+
+test("required verification policy falls back to git status for documentation edits", () => {
+  const steps = parseAgentPlanSteps(
+    JSON.stringify({
+      steps: [
+        {
+          kind: "edit",
+          description: "Document the runtime policy",
+          target: "docs/AGENT_RUNTIME.md"
+        }
+      ]
+    }),
+    4,
+    "require"
+  );
+
+  assert.equal(steps.at(-1)?.kind, "verify");
+  assert.equal(steps.at(-1)?.target, "git status --short");
 });
 
 test("mutating file plans gain a project inspection step before edits", () => {
