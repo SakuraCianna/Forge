@@ -375,7 +375,7 @@ export function createExtensionRegistry({
     const secretStatus = await getSecretStatus(manifest);
 
     if (!secretStatus.configured) {
-      throw new Error(`Extension credentials are not configured: ${manifest.name}`);
+      throw new Error(createMissingCredentialMessage(manifest, secretStatus));
     }
 
     const handler = handlers.get(manifest.id)?.[action.id];
@@ -459,6 +459,19 @@ export function createExtensionRegistry({
       configured: requiredFieldIds.every((fieldId) => fields[fieldId]?.hasValue),
       fields
     };
+  }
+
+  function createMissingCredentialMessage(
+    manifest: ExtensionManifest,
+    secretStatus: ExtensionSecretStatus
+  ): string {
+    const missingFields = manifest.auth.fields
+      .filter((field) => field.required !== false && !secretStatus.fields[field.id]?.hasValue)
+      .map((field) => field.label || field.id);
+
+    return missingFields.length > 0
+      ? `Extension credentials are not configured: ${manifest.name}. Missing: ${missingFields.join(", ")}`
+      : `Extension credentials are not configured: ${manifest.name}`;
   }
 
   function shouldRequireConfirmation({

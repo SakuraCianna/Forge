@@ -22,6 +22,8 @@ src/renderer/src/components/ExtensionsPanel.tsx
 
 扩展注册、凭据读取和网络调用都在 Electron 主进程执行。渲染层只负责展示 Registry、配置权限、输入密钥、发起调用和处理确认。
 
+外部服务请求默认带 30 秒超时保护。读类 `GET` 请求遇到 408、429、425、5xx 或短暂网络错误时会自动重试最多 3 次; 写入、发送和创建类动作默认不自动重试, 避免重复产生外部副作用。
+
 ## Extension Registry
 
 Registry 负责:

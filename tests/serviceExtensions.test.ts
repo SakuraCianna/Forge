@@ -436,6 +436,35 @@ test("brokered OAuth exchanges Forge broker code and saves tokens", async () => 
   }
 });
 
+test("service extensions report missing required credential fields", async () => {
+  const fixture = await createRegistryFixture();
+
+  try {
+    await fixture.registry.updateSettings({
+      extensionId: "freshdesk",
+      enabled: true,
+      permissions: [{ permissionId: "freshdesk.read", mode: "allow" }]
+    });
+    await fixture.registry.saveSecret({
+      extensionId: "freshdesk",
+      fieldId: "domain",
+      value: "example"
+    });
+
+    await assert.rejects(
+      () =>
+        fixture.registry.invoke({
+          extensionId: "freshdesk",
+          actionId: "listTickets",
+          input: {}
+        }),
+      /Extension credentials are not configured: Freshdesk\. Missing: Freshdesk API key/u
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("gitlab service extension invokes the REST API with connector token auth", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -2303,6 +2332,100 @@ test("github service extension invokes the official REST API with token auth", a
   }
 });
 
+test("service extensions retry transient HTTP failures for read actions", async () => {
+  const fixture = await createRegistryFixture();
+  let attempts = 0;
+  const fetchMock = installMockFetch(async (url, init) => {
+    attempts += 1;
+
+    assert.equal(url, "https://api.github.com/user");
+    assert.equal(init?.method, "GET");
+
+    if (attempts === 1) {
+      return {
+        body: {
+          message: "secondary rate limit"
+        },
+        headers: {
+          "Retry-After": "0"
+        },
+        status: 429
+      };
+    }
+
+    return {
+      body: {
+        id: 42,
+        login: "octocat"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureGitHub(fixture, "allow");
+
+    const result = await fixture.registry.invoke({
+      extensionId: "github",
+      actionId: "getAuthenticatedUser",
+      input: {}
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 2);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "GitHub 当前账号: octocat");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("service extensions retry transient network failures for read actions", async () => {
+  const fixture = await createRegistryFixture();
+  let attempts = 0;
+  const fetchMock = installMockFetch(async (url, init) => {
+    attempts += 1;
+
+    assert.equal(url, "https://api.github.com/user");
+    assert.equal(init?.method, "GET");
+
+    if (attempts === 1) {
+      throw new TypeError("fetch failed");
+    }
+
+    return {
+      body: {
+        id: 42,
+        login: "octocat"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureGitHub(fixture, "allow");
+
+    const result = await fixture.registry.invoke({
+      extensionId: "github",
+      actionId: "getAuthenticatedUser",
+      input: {}
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 2);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "GitHub 当前账号: octocat");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
 test("github write actions require confirmation before creating external issues", async () => {
   const fixture = await createRegistryFixture();
   const fetchMock = installMockFetch(async (url, init) => {
@@ -2490,7 +2613,7 @@ function installMockFetch(
   handler: (
     url: string,
     init: RequestInit | undefined
-  ) => Promise<{ body: unknown; status: number }>
+  ) => Promise<{ body: unknown; headers?: Record<string, string>; status: number }>
 ): {
   calls: Array<{ init: RequestInit | undefined; url: string }>;
   restore: () => void;
@@ -2510,7 +2633,8 @@ function installMockFetch(
 
     return new Response(JSON.stringify(response.body), {
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        ...response.headers
       },
       status: response.status
     });
