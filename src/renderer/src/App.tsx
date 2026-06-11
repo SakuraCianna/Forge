@@ -85,6 +85,7 @@ import {
   createCommandRunId,
   createCommandStartedEvent
 } from "@/agent/commandEvents";
+import { resolveGoCVerificationFallback } from "@/agent/goVerificationFallback";
 import {
   createAutoFailureRecoverySkipEvent
 } from "@/agent/autoFailureRecovery";
@@ -5159,7 +5160,7 @@ export function App(): ReactElement {
     );
 
     try {
-      const result = await window.forge.commands.run({
+      let result = await window.forge.commands.run({
         runId,
         projectRoot: currentProject.path,
         cwd: currentProject.path,
@@ -5168,6 +5169,48 @@ export function App(): ReactElement {
         runtime: generalPreferences.agentRuntime,
         shell: generalPreferences.terminalShell
       });
+      const fallback = resolveGoCVerificationFallback(command, result, currentProject.path);
+
+      if (fallback) {
+        const fallbackRunId = createCommandRunId(threadId);
+        const fallbackNotice =
+          settings.language === "zh-CN"
+            ? `当前 Go 工具链不支持 go -C 参数, 已切换到 ${fallback.moduleRoot} 目录运行 ${fallback.command}。`
+            : `The current Go toolchain does not support go -C, so Forge reran ${fallback.command} inside ${fallback.moduleRoot}.`;
+
+        setThreads((current) =>
+          appendThreadEvents(
+            current,
+            threadId,
+            [
+              createCommandFinishedEvent({ threadId, result, actionId }),
+              {
+                id: `${threadId}-go-verification-fallback-${Date.now()}`,
+                kind: "plan",
+                message: fallbackNotice,
+                createdAt: new Date().toISOString()
+              },
+              createCommandStartedEvent({
+                threadId,
+                command: fallback.command,
+                runId: fallbackRunId,
+                actionId
+              })
+            ],
+            "running"
+          )
+        );
+
+        result = await window.forge.commands.run({
+          runId: fallbackRunId,
+          projectRoot: currentProject.path,
+          cwd: fallback.cwd,
+          command: fallback.command,
+          timeoutMs: generalPreferences.commandTimeoutSeconds * 1000,
+          runtime: generalPreferences.agentRuntime,
+          shell: generalPreferences.terminalShell
+        });
+      }
 
       const status =
         result.exitCode === 0 && !result.timedOut && !result.cancelled ? "completed" : "failed";
