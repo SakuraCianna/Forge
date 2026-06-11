@@ -14,8 +14,16 @@ type ScanOptions = {
   previousIndex?: ProjectScanResult | null;
 };
 
+type CachedInstructionFile = {
+  file: ProjectInstructionFile;
+  modifiedAtMs: number;
+  size: number;
+};
+
 const maxInstructionFileChars = 12_000;
 const maxInstructionFiles = 12;
+const maxCachedInstructionFiles = 160;
+const instructionFileCache = new Map<string, CachedInstructionFile>();
 // 只读取轻量项目指令, 避免把完整仓库塞进模型上下文
 const rootInstructionFilePaths = [
   "AGENTS.md",
@@ -161,19 +169,21 @@ async function readProjectInstructionFiles(rootPath: string): Promise<ProjectIns
         continue;
       }
 
-      const normalizedContent = normalizeInstructionContent(await readFile(filePath, "utf8"));
+      const instructionFile = await readCachedProjectInstructionFile(
+        rootPath,
+        relativePath,
+        filePath,
+        fileStat
+      );
 
-      if (!normalizedContent) {
+      if (!instructionFile) {
         continue;
       }
 
-      instructionFiles.push({
-        relativePath,
-        content: normalizedContent.slice(0, maxInstructionFileChars),
-        truncated: normalizedContent.length > maxInstructionFileChars
-      });
+      instructionFiles.push(instructionFile);
     } catch (error) {
       if (isMissingPathError(error)) {
+        instructionFileCache.delete(createInstructionFileCacheKey(rootPath, relativePath));
         continue;
       }
 
@@ -182,6 +192,62 @@ async function readProjectInstructionFiles(rootPath: string): Promise<ProjectIns
   }
 
   return instructionFiles;
+}
+
+async function readCachedProjectInstructionFile(
+  rootPath: string,
+  relativePath: string,
+  filePath: string,
+  fileStat: Stats
+): Promise<ProjectInstructionFile | null> {
+  const cacheKey = createInstructionFileCacheKey(rootPath, relativePath);
+  const cachedFile = instructionFileCache.get(cacheKey);
+  const modifiedAtMs = fileStat.mtimeMs;
+
+  if (
+    cachedFile &&
+    cachedFile.size === fileStat.size &&
+    cachedFile.modifiedAtMs === modifiedAtMs
+  ) {
+    rememberInstructionFile(cacheKey, cachedFile);
+    return cachedFile.file;
+  }
+
+  const normalizedContent = normalizeInstructionContent(await readFile(filePath, "utf8"));
+
+  if (!normalizedContent) {
+    instructionFileCache.delete(cacheKey);
+    return null;
+  }
+
+  const file = {
+    relativePath,
+    content: normalizedContent.slice(0, maxInstructionFileChars),
+    truncated: normalizedContent.length > maxInstructionFileChars
+  };
+
+  rememberInstructionFile(cacheKey, {
+    file,
+    modifiedAtMs,
+    size: fileStat.size
+  });
+
+  return file;
+}
+
+function rememberInstructionFile(cacheKey: string, cachedFile: CachedInstructionFile): void {
+  instructionFileCache.delete(cacheKey);
+  instructionFileCache.set(cacheKey, cachedFile);
+
+  while (instructionFileCache.size > maxCachedInstructionFiles) {
+    const oldestCacheKey = instructionFileCache.keys().next().value;
+
+    if (typeof oldestCacheKey !== "string") {
+      return;
+    }
+
+    instructionFileCache.delete(oldestCacheKey);
+  }
 }
 
 // 收集常见项目说明文件路径, 不存在的文件交给读取阶段忽略
@@ -243,6 +309,10 @@ function hasReachedLimit(count: number, limit: number | null): boolean {
 // 将绝对路径转成统一的项目相对路径
 function toProjectFilePath(rootPath: string, relativePath: string): string {
   return join(rootPath, ...relativePath.split("/"));
+}
+
+function createInstructionFileCacheKey(rootPath: string, relativePath: string): string {
+  return `${rootPath}\u0000${relativePath}`;
 }
 
 // 识别路径不存在错误, 扫描时把缺失目录当作空目录处理
