@@ -1295,7 +1295,10 @@ export function parseAgentPlanSteps(
     });
 
   return applyVerificationPolicy(
-    applyEngineeringWorkflowPolicy(steps, normalizedStepLimit),
+    applyWritePreviewPolicy(
+      applyEngineeringWorkflowPolicy(steps, normalizedStepLimit),
+      normalizedStepLimit
+    ),
     normalizedStepLimit,
     verificationPolicy
   );
@@ -1409,6 +1412,95 @@ function findVerificationInsertionRemovalIndex(steps: AgentPlanStep[]): number {
   }
 
   return Math.max(0, steps.length - 1);
+}
+
+function applyWritePreviewPolicy(steps: AgentPlanStep[], stepLimit: number): AgentPlanStep[] {
+  if (steps.length >= stepLimit || !steps.some(isPreviewableBuiltInEditStep)) {
+    return steps;
+  }
+
+  const nextSteps: AgentPlanStep[] = [];
+  let previewSlots = stepLimit - steps.length;
+
+  for (const step of steps) {
+    if (
+      previewSlots > 0 &&
+      isPreviewableBuiltInEditStep(step) &&
+      !hasPriorBuiltInEditPreview(nextSteps, step)
+    ) {
+      nextSteps.push(createBuiltInEditPreviewStep(step));
+      previewSlots -= 1;
+    }
+
+    nextSteps.push(step);
+  }
+
+  return nextSteps.length === steps.length ? steps : renumberPlanSteps(nextSteps);
+}
+
+function isPreviewableBuiltInEditStep(step: AgentPlanStep): boolean {
+  return (
+    step.builtInToolName === "applyEdit" &&
+    typeof step.builtInToolInput?.relativePath === "string" &&
+    typeof step.builtInToolInput.nextContent === "string"
+  );
+}
+
+function hasPriorBuiltInEditPreview(
+  previousSteps: AgentPlanStep[],
+  editStep: AgentPlanStep
+): boolean {
+  const relativePath = readBuiltInInputString(editStep, "relativePath");
+
+  if (!relativePath) {
+    return false;
+  }
+
+  for (let index = previousSteps.length - 1; index >= 0; index -= 1) {
+    const step = previousSteps[index];
+
+    if (isProjectMutationPlanStep(step)) {
+      return false;
+    }
+
+    if (
+      ["previewDiff", "proposeEdit"].includes(step.builtInToolName ?? "") &&
+      readBuiltInInputString(step, "relativePath") === relativePath
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function createBuiltInEditPreviewStep(editStep: AgentPlanStep): AgentPlanStep {
+  const definition = getBuiltInToolDefinition("previewDiff");
+  const relativePath = readBuiltInInputString(editStep, "relativePath") ?? "";
+  const nextContent = readBuiltInInputString(editStep, "nextContent") ?? "";
+
+  return {
+    id: `${editStep.id}-preview`,
+    title: "Preview edit diff",
+    description: `Preview the diff for ${relativePath} before applying the edit.`,
+    kind: "other",
+    status: "pending",
+    tool: "built-in-tool",
+    builtInToolName: definition.name,
+    builtInToolInput: {
+      relativePath,
+      nextContent
+    },
+    builtInToolRequiresConfirmation: definition.requiresConfirmation,
+    builtInToolRiskLevel: definition.riskLevel,
+    requiresConfirmation: definition.requiresConfirmation
+  };
+}
+
+function readBuiltInInputString(step: AgentPlanStep, key: string): string | null {
+  const value = step.builtInToolInput?.[key];
+
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function createInferredVerificationStep(steps: AgentPlanStep[], stepLimit: number): AgentPlanStep {
