@@ -49,11 +49,20 @@ type ProjectFilePreviewCacheRecord = {
   signature: ProjectFilePreviewCacheSignature;
 };
 
+type ProjectTextFileCacheRecord = {
+  file: ProjectTextFile;
+  signature: ProjectFilePreviewCacheSignature;
+};
+
 const maxInlinePreviewBytes = 40 * 1024 * 1024;
 const maxCachedProjectFilePreviews = 80;
 const maxCachedProjectFilePreviewPayloadChars = 512_000;
+const maxCachedProjectTextFiles = 160;
+const maxCachedProjectTextFileChars = 512_000;
 const projectFilePreviewCache = new Map<string, ProjectFilePreviewCacheRecord>();
 const inFlightProjectFilePreviewReads = new Map<string, Promise<ProjectFilePreview>>();
+const projectTextFileCache = new Map<string, ProjectTextFileCacheRecord>();
+const inFlightProjectTextFileReads = new Map<string, Promise<ProjectTextFile>>();
 
 // 读取文本文件前检查路径边界和大小, 防止大文件拖慢预览
 export async function readProjectTextFile({
@@ -61,15 +70,50 @@ export async function readProjectTextFile({
   relativePath,
   maxBytes = 256000
 }: ReadProjectTextFileOptions): Promise<ProjectTextFile> {
-  const { fileSize, normalizedRelativePath, resolvedFilePath } = await resolveProjectFileForRead(
+  const resolvedFile = await resolveProjectFileForRead(
     projectRoot,
     relativePath
   );
+  const { fileSignature, fileSize, normalizedRelativePath, resolvedFilePath } = resolvedFile;
 
   if (fileSize > maxBytes) {
     throw new Error("File is too large to preview");
   }
 
+  const cacheKey = createProjectTextFileCacheKey(resolvedFilePath, normalizedRelativePath, maxBytes);
+  const cachedFile = readCachedProjectTextFile(cacheKey, fileSignature);
+
+  if (cachedFile) {
+    return cachedFile;
+  }
+
+  const inFlightKey = `${cacheKey}\u0000${createProjectFilePreviewSignatureKey(fileSignature)}`;
+  const inFlightFile = inFlightProjectTextFileReads.get(inFlightKey);
+
+  if (inFlightFile) {
+    return inFlightFile;
+  }
+
+  const readPromise = readProjectTextFileFromDisk(resolvedFile)
+    .then(async (file) => {
+      await rememberProjectTextFileIfCurrent(cacheKey, resolvedFilePath, fileSignature, file);
+      return file;
+    })
+    .finally(() => {
+      if (inFlightProjectTextFileReads.get(inFlightKey) === readPromise) {
+        inFlightProjectTextFileReads.delete(inFlightKey);
+      }
+    });
+
+  inFlightProjectTextFileReads.set(inFlightKey, readPromise);
+  return readPromise;
+}
+
+async function readProjectTextFileFromDisk({
+  fileSize,
+  normalizedRelativePath,
+  resolvedFilePath
+}: ResolvedProjectFileForRead): Promise<ProjectTextFile> {
   return {
     relativePath: normalizedRelativePath,
     content: await readFile(resolvedFilePath, "utf8"),
@@ -662,6 +706,70 @@ function readCachedProjectFilePreview(
   return cachedPreview.preview;
 }
 
+function readCachedProjectTextFile(
+  cacheKey: string,
+  signature: ProjectFilePreviewCacheSignature
+): ProjectTextFile | null {
+  const cachedFile = projectTextFileCache.get(cacheKey);
+
+  if (!cachedFile || !areProjectFilePreviewCacheSignaturesEqual(cachedFile.signature, signature)) {
+    return null;
+  }
+
+  rememberProjectTextFile(cacheKey, cachedFile);
+  return cachedFile.file;
+}
+
+async function rememberProjectTextFileIfCurrent(
+  cacheKey: string,
+  resolvedFilePath: string,
+  signature: ProjectFilePreviewCacheSignature,
+  file: ProjectTextFile
+): Promise<void> {
+  if (!isCacheableProjectTextFile(file)) {
+    projectTextFileCache.delete(cacheKey);
+    return;
+  }
+
+  let currentSignature: ProjectFilePreviewCacheSignature;
+
+  try {
+    currentSignature = await readProjectFilePreviewCacheSignature(resolvedFilePath);
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      projectTextFileCache.delete(cacheKey);
+      return;
+    }
+
+    throw error;
+  }
+
+  if (!areProjectFilePreviewCacheSignaturesEqual(signature, currentSignature)) {
+    projectTextFileCache.delete(cacheKey);
+    return;
+  }
+
+  rememberProjectTextFile(cacheKey, {
+    file,
+    signature
+  });
+}
+
+function rememberProjectTextFile(cacheKey: string, cacheRecord: ProjectTextFileCacheRecord): void {
+  projectTextFileCache.delete(cacheKey);
+  projectTextFileCache.set(cacheKey, cacheRecord);
+
+  while (projectTextFileCache.size > maxCachedProjectTextFiles) {
+    const oldestCacheKey = projectTextFileCache.keys().next().value;
+
+    if (typeof oldestCacheKey !== "string") {
+      return;
+    }
+
+    projectTextFileCache.delete(oldestCacheKey);
+  }
+}
+
 async function rememberProjectFilePreviewIfCurrent(
   cacheKey: string,
   resolvedFilePath: string,
@@ -741,6 +849,10 @@ function isCacheableProjectFilePreview(preview: ProjectFilePreview): boolean {
   return getProjectFilePreviewPayloadChars(preview) <= maxCachedProjectFilePreviewPayloadChars;
 }
 
+function isCacheableProjectTextFile(file: ProjectTextFile): boolean {
+  return file.content.length <= maxCachedProjectTextFileChars;
+}
+
 function getProjectFilePreviewPayloadChars(preview: ProjectFilePreview): number {
   if (preview.kind === "text") {
     return preview.content.length;
@@ -754,6 +866,14 @@ function getProjectFilePreviewPayloadChars(preview: ProjectFilePreview): number 
 }
 
 function createProjectFilePreviewCacheKey(
+  resolvedFilePath: string,
+  normalizedRelativePath: string,
+  maxBytes: number
+): string {
+  return `${resolvedFilePath}\u0000${normalizedRelativePath}\u0000${maxBytes}`;
+}
+
+function createProjectTextFileCacheKey(
   resolvedFilePath: string,
   normalizedRelativePath: string,
   maxBytes: number
