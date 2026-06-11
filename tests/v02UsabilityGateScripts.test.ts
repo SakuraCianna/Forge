@@ -41,8 +41,7 @@ test("v0.2 usability gate is wired and exposes a safe dry run", async () => {
   ]);
 });
 
-test("v0.2 formal usability evidence metadata follows the package version", async () => {
-  const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { version?: string };
+test("v0.2 formal usability evidence metadata stays tied to its recorded v0.2 release", async () => {
   const regressionReport = JSON.parse(await readFile("docs/V0_2_REGRESSION_RESULTS.json", "utf8")) as {
     forgeVersion?: string;
   };
@@ -52,13 +51,12 @@ test("v0.2 formal usability evidence metadata follows the package version", asyn
     installerSha256?: string;
   };
 
-  assert.equal(typeof packageJson.version, "string");
+  assert.match(regressionReport.forgeVersion ?? "", /^0\.2\.\d+$/u);
+  assert.equal(smokeReport.forgeVersion, regressionReport.forgeVersion);
 
-  const expectedInstallerPath = `release/Forge-${packageJson.version}-x64-setup.exe`;
+  const expectedInstallerPath = `release/Forge-${regressionReport.forgeVersion}-x64-setup.exe`;
   const installerSha256 = smokeReport.installerSha256;
 
-  assert.equal(regressionReport.forgeVersion, packageJson.version);
-  assert.equal(smokeReport.forgeVersion, packageJson.version);
   assert.equal(smokeReport.installerPath?.replace(/\\/gu, "/"), expectedInstallerPath);
 
   if (typeof installerSha256 !== "string") {

@@ -673,6 +673,9 @@ export function ExtensionsPanel({
                           selectedOAuthUsesProductClient
                         )}
                       </div>
+                      <p className="mt-2 rounded-[10px] border border-[#d9e7ff] bg-white px-3 py-2 text-[12px] leading-5 text-[#565869]">
+                        {copy.oauthOnlyCredentials}
+                      </p>
                     </div>
                   </div>
                   {missingOAuthPrerequisiteLabels.length > 0 ? (
@@ -720,7 +723,7 @@ export function ExtensionsPanel({
                 <p className="rounded-[10px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-sm text-[#565869]">
                   {copy.noCredentialsRequired}
                 </p>
-              ) : selectedManualAuthFields.length === 0 ? (
+              ) : selectedManualAuthFields.length === 0 && !selectedManifest.auth.oauth ? (
                 <p className="rounded-[10px] border border-[#d9e7ff] bg-[#f8fbff] px-3 py-2 text-sm leading-6 text-[#565869]">
                   {copy.oauthOnlyCredentials}
                 </p>
@@ -1378,7 +1381,7 @@ function getOAuthPrerequisiteFieldIds(oauth: ExtensionOAuthDefinition | undefine
   }
 
   if (oauth.redirectUriMode === "brokered") {
-    return oauth.brokerAuthorizationUrl && oauth.brokerTokenUrl ? [] : ["Forge OAuth 授权服务地址"];
+    return oauth.brokerAuthorizationUrl && oauth.brokerTokenUrl ? [] : ["FORGE_OAUTH_BROKER_BASE_URL"];
   }
 
   const hasProductClientId = Boolean(oauth.productClientId);

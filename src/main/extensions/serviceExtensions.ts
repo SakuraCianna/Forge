@@ -41,6 +41,7 @@ const forgeGoogleOAuthClientId =
   process.env.FORGE_GOOGLE_OAUTH_CLIENT_ID?.trim() ||
   "294153456393-3ce5vjc1bfu67kcblgte15be2qipts3q.apps.googleusercontent.com";
 const forgeOAuthBrokerBaseUrl = trimTrailingSlash(process.env.FORGE_OAUTH_BROKER_BASE_URL?.trim());
+const browserOAuthEnabled = isTruthyEnvironmentValue(process.env.FORGE_ENABLE_BROWSER_OAUTH);
 
 function readProductClientId(envVar: string): string | undefined {
   return process.env[envVar]?.trim() || undefined;
@@ -54,6 +55,10 @@ function createBrokerUrl(extensionId: string, action: "authorize" | "token"): st
 
 function trimTrailingSlash(value: string | undefined): string | undefined {
   return value ? value.replace(/\/+$/u, "") : undefined;
+}
+
+function isTruthyEnvironmentValue(value: string | undefined): boolean {
+  return ["1", "true", "yes", "on"].includes(value?.trim().toLowerCase() ?? "");
 }
 
 function createGoogleOAuth(scopes: string[], setupUrl: string): ExtensionOAuthDefinition {
@@ -95,29 +100,34 @@ function createOAuthTokenAuth({
   oauth?: ExtensionOAuthDefinition;
   refreshTokenFieldId?: string;
 }): ExtensionAuthDefinition {
-  const exposeOAuthClientIdField = Boolean(oauth?.clientIdFieldId && !oauth.productClientId);
+  const exposedOAuth = browserOAuthEnabled ? oauth : undefined;
+  const exposeOAuthClientIdField = Boolean(
+    exposedOAuth?.clientIdFieldId && !exposedOAuth.productClientId
+  );
   const exposeOAuthClientSecretField = Boolean(
     clientSecret &&
-      oauth?.clientSecretFieldId &&
-      oauth.tokenRequestAuth !== "none" &&
-      !oauth.productClientSecretEnvVar
+      exposedOAuth?.clientSecretFieldId &&
+      exposedOAuth.tokenRequestAuth !== "none" &&
+      !exposedOAuth.productClientSecretEnvVar
   );
-  const connectorManagedToken = Boolean(oauth);
+  const connectorManagedToken = Boolean(exposedOAuth);
 
   return {
     type: "secret",
     fields: [
       {
         id: accessTokenFieldId,
-        label: accessTokenLabel,
-        description: accessTokenDescription,
+        label: createCredentialFieldLabel(accessTokenLabel, connectorManagedToken),
+        description: createCredentialFieldDescription(accessTokenDescription, connectorManagedToken),
         placeholder: accessTokenPlaceholder,
         ...(connectorManagedToken ? { manualInput: false } : {})
       },
       {
         id: refreshTokenFieldId,
         label: "OAuth refresh token",
-        description: "OAuth 刷新令牌, 由网页登录授权自动保存, 手动 token 可留空",
+        description: connectorManagedToken
+          ? "OAuth 刷新令牌, 由网页登录授权自动保存, 手动 token 可留空"
+          : "OAuth 刷新令牌, 手动凭据模式通常可留空",
         placeholder: "refresh_token",
         ...(connectorManagedToken ? { manualInput: false } : {}),
         required: false
@@ -145,8 +155,30 @@ function createOAuthTokenAuth({
           ]
         : [])
     ],
-    ...(oauth ? { oauth } : {})
+    ...(exposedOAuth ? { oauth: exposedOAuth } : {})
   };
+}
+
+function createCredentialFieldLabel(label: string, connectorManagedToken: boolean): string {
+  if (connectorManagedToken || !/^OAuth access token$/iu.test(label)) {
+    return label;
+  }
+
+  return "Access token / API key";
+}
+
+function createCredentialFieldDescription(
+  description: string,
+  connectorManagedToken: boolean
+): string {
+  if (connectorManagedToken) {
+    return description;
+  }
+
+  return description
+    .replace(/,?\s*通过 Forge OAuth broker 自动保存/gu, "")
+    .replace(/,?\s*由网页登录授权自动保存/gu, "")
+    .trim();
 }
 
 export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [

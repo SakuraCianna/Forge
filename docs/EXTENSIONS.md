@@ -190,9 +190,11 @@ QQ Mail 凭据:
 
 以下内置服务使用用户保存的 token 或 API key 通过官方 API 调用。Forge 只保存密钥状态, 不会把 token 写入调用日志或线程上下文。写入、发送和创建类动作都设置为 `always` 确认, 即使权限被设为 `allow`, 主进程也会先返回确认 token。
 
-### 网页登录授权
+### 手动凭据和可选网页登录授权
 
-支持 OAuth 的内置扩展会在 manifest 中声明:
+默认构建中, 内置扩展采用手动凭据模式: 用户在扩展页保存对应服务的 access token, API key 或授权码后, Forge 通过官方 API 调用服务。这样不依赖 Forge OAuth broker, 也不要求维护者提前准备各服务的 OAuth app。
+
+如果维护者后续确实部署了 Forge OAuth broker 或产品 OAuth app, 可以设置 `FORGE_ENABLE_BROWSER_OAUTH=1` 后再暴露网页登录授权。启用后, 支持 OAuth 的内置扩展会在 manifest 中声明:
 
 - 授权端点和 token 端点。
 - `scope` 列表。
@@ -201,14 +203,14 @@ QQ Mail 凭据:
 - 是否支持 PKCE。
 - redirect 模式。
 
-Forge 当前实现了三类产品化授权路径:
+Forge 保留了三类可选的产品化授权路径:
 
 1. 产品维护者在发布前为可本地回调的服务配置 OAuth app。Google Calendar、Gmail 和 Google Drive 默认使用 Forge 内置桌面 OAuth client ID。
 2. GitHub 使用 device flow。Forge 打开本地说明页显示一次性验证码, 用户在 GitHub 官方页面输入验证码后, 主进程轮询 token endpoint 并保存 token。
 3. GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 使用 brokered 模式。桌面端只打开 Forge 官方 OAuth 服务, 由服务端持有 client secret 并处理 HTTPS callback, 再把短期 broker code 回跳给本机 Forge。
-4. 普通用户进入扩展页, 直接点击“网页登录授权”, 不需要自己创建 OAuth app、复制 client ID 或保存 client secret。
-5. 对已声明 OAuth 的内置扩展, access token 和 refresh token 由网页登录授权自动写入本机安全存储, 扩展页不会再展示手动粘贴 token 的输入框。
-6. 如果某个构建缺少产品方 OAuth 配置或 Forge OAuth broker, UI 会明确标注“当前构建未配置网页登录”, 这是维护者需要处理的发布配置问题。
+4. 对已声明 OAuth 的内置扩展, access token 和 refresh token 由网页登录授权自动写入本机安全存储, 扩展页可以隐藏手动粘贴 token 的输入框。
+5. 如果维护者未启用 `FORGE_ENABLE_BROWSER_OAUTH`, UI 不展示网页登录卡片, 普通用户只需要填写服务 token/API key。
+6. 如果启用网页登录但某个构建缺少产品方 OAuth 配置或 Forge OAuth broker, UI 会明确标注“当前构建未配置网页登录”, 这是维护者需要处理的发布配置问题。brokered 扩展出现该状态时, 通常缺少 `FORGE_OAUTH_BROKER_BASE_URL` 或对应 Forge OAuth broker 尚未部署。
 7. loopback 和 brokered 模式下, 主进程在 `127.0.0.1` 随机端口启动短期 HTTP 回调监听。
 8. Forge 生成 `state`, 支持的服务同时生成 PKCE `code_verifier` 和 `code_challenge`。
 9. Forge 用系统浏览器打开官方授权页或 Forge OAuth 服务。
@@ -223,6 +225,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 维护者配置项:
 
+- `FORGE_ENABLE_BROWSER_OAUTH`: 设置为 `1`, `true`, `yes` 或 `on` 时启用内置扩展的网页登录授权 UI。未设置时默认使用手动凭据模式。
 - `FORGE_GOOGLE_OAUTH_CLIENT_ID`: 覆盖内置 Google 桌面 OAuth client ID。
 - `FORGE_GITHUB_OAUTH_CLIENT_ID`: 启用 GitHub device flow。
 - `FORGE_LINEAR_OAUTH_CLIENT_ID`: 启用 Linear loopback + PKCE 授权。
@@ -289,7 +292,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### GitLab
 
-`gitlab` 使用 GitLab OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`gitlab` 使用 GitLab OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -304,7 +307,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Bitbucket
 
-`bitbucket` 使用 Bitbucket Cloud OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`bitbucket` 使用 Bitbucket Cloud OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -320,7 +323,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Slack
 
-`slack` 使用 Slack app bot token。网页登录授权依赖 Forge brokered 授权服务。
+`slack` 使用 Slack app bot token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -334,7 +337,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Notion
 
-`notion` 使用 Notion internal integration token 或 OAuth access token。目标页面或数据库需要在 Notion 中分享给该 integration。网页登录授权依赖 Forge brokered 授权服务。
+`notion` 使用 Notion internal integration token 或 OAuth access token。目标页面或数据库需要在 Notion 中分享给该 integration。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -343,7 +346,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Airtable
 
-`airtable` 使用 Airtable OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`airtable` 使用 Airtable OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -352,7 +355,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### HubSpot
 
-`hubspot` 使用 HubSpot OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`hubspot` 使用 HubSpot OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -399,7 +402,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Todoist
 
-`todoist` 使用 Todoist OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`todoist` 使用 Todoist OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -413,7 +416,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Asana
 
-`asana` 使用 Asana OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`asana` 使用 Asana OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -431,7 +434,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### ClickUp
 
-`clickup` 使用 ClickUp OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`clickup` 使用 ClickUp OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -442,7 +445,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### monday.com
 
-`monday` 使用 monday.com OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`monday` 使用 monday.com OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -502,7 +505,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Calendly
 
-`calendly` 使用 Calendly OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`calendly` 使用 Calendly OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -518,7 +521,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Miro
 
-`miro` 使用 Miro OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`miro` 使用 Miro OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -532,7 +535,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Zoom
 
-`zoom` 使用 Zoom OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`zoom` 使用 Zoom OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -555,7 +558,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Gmail
 
-`gmail` 使用 Gmail API OAuth access token, 也可以通过支持 loopback + PKCE 的网页登录授权保存 token。
+`gmail` 使用 Gmail API OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 loopback + PKCE 自动保存。
 
 支持动作:
 
@@ -564,7 +567,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Google Drive
 
-`google-drive` 使用 Google Drive API OAuth access token, 也可以通过支持 loopback + PKCE 的网页登录授权保存 token。
+`google-drive` 使用 Google Drive API OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 loopback + PKCE 自动保存。
 
 支持动作:
 
@@ -573,7 +576,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Dropbox
 
-`dropbox` 使用 Dropbox OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`dropbox` 使用 Dropbox OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -582,7 +585,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Microsoft 365
 
-`microsoft-365` 使用 Microsoft Graph OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`microsoft-365` 使用 Microsoft Graph OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -610,7 +613,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Sentry
 
-`sentry` 使用 Sentry OAuth access token。网页登录授权依赖 Forge brokered 授权服务, 普通用户不需要在扩展页手动粘贴 token。
+`sentry` 使用 Sentry OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -646,7 +649,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Jira Cloud
 
-`jira-cloud` 使用 Atlassian OAuth access token。网页登录授权依赖 Forge brokered 授权服务。
+`jira-cloud` 使用 Atlassian OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
@@ -655,7 +658,7 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 
 ### Discord
 
-`discord` 使用 Discord OAuth access token。网页登录授权依赖 Forge brokered 授权服务。
+`discord` 使用 Discord OAuth access token。默认在扩展页手动保存 token; 维护者启用网页登录后, 可通过 Forge brokered 授权服务自动保存。
 
 支持动作:
 
