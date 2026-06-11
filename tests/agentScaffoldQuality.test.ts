@@ -18,16 +18,17 @@ test("bare Spring Boot Vue H2 student scaffold gains contract and verification a
   });
   const actionTargets = result.actions.map((action) => action.target ?? action.command);
 
-  assert.ok(actionTargets.includes("backend/pom.xml"));
-  assert.ok(actionTargets.includes("backend/src/main/resources/data.sql"));
+  assert.ok(actionTargets.includes("Backend/pom.xml"));
+  assert.ok(actionTargets.includes("Backend/src/main/resources/data.sql"));
   assert.ok(
     actionTargets.includes(
-      "backend/src/test/java/com/example/studentmanager/controller/StudentControllerTest.java"
+      "Backend/src/test/java/com/example/studentmanager/controller/StudentControllerTest.java"
     )
   );
-  assert.ok(actionTargets.includes("frontend/src/api/students.ts"));
-  assert.ok(actionTargets.includes("mvn -f backend/pom.xml test"));
-  assert.ok(actionTargets.includes("npm --prefix frontend run build"));
+  assert.ok(actionTargets.includes("Frontend/src/api/students.ts"));
+  assert.ok(actionTargets.includes("Frontend/tsconfig.json"));
+  assert.ok(actionTargets.includes("mvn -f Backend/pom.xml test"));
+  assert.ok(actionTargets.includes("npm --prefix Frontend run build"));
   assert.ok(result.missingLayers.includes("dataSeed"));
   assert.ok(result.missingLayers.includes("backendContractTest"));
   assert.ok(result.missingLayers.includes("frontendApiClient"));
@@ -35,25 +36,67 @@ test("bare Spring Boot Vue H2 student scaffold gains contract and verification a
 
 test("bare scaffold supplements run before existing verification commands", () => {
   const result = supplementBareProjectScaffoldActions({
-    actions: [createRunAction("action-1", "mvn -f backend/pom.xml test")],
+    actions: [createRunAction("action-1", "mvn -f Backend/pom.xml test")],
     bareProject: true,
     isCreationTask: true,
     prompt: studentManagerPrompt
   });
   const actionTargets = result.actions.map((action) => action.target ?? action.command);
-  const dataSeedIndex = actionTargets.indexOf("backend/src/main/resources/data.sql");
-  const verificationIndex = actionTargets.indexOf("mvn -f backend/pom.xml test");
+  const dataSeedIndex = actionTargets.indexOf("Backend/src/main/resources/data.sql");
+  const verificationIndex = actionTargets.indexOf("mvn -f Backend/pom.xml test");
 
   assert.ok(dataSeedIndex >= 0);
   assert.ok(verificationIndex >= 0);
   assert.ok(dataSeedIndex < verificationIndex);
 });
 
+test("bare separated scaffold normalizes lowercase frontend and backend roots", () => {
+  const result = supplementBareProjectScaffoldActions({
+    actions: [
+      createEditAction("action-1", "pom.xml"),
+      createEditAction("action-2", "backend/src/main/resources/data.sql"),
+      createEditAction("action-3", "frontend/src/App.vue"),
+      createRunAction("action-4", "mvn -f backend/pom.xml test"),
+      createRunAction("action-5", "npm --prefix frontend run build")
+    ],
+    bareProject: true,
+    isCreationTask: true,
+    prompt: studentManagerPrompt
+  });
+  const actionTargets = result.actions.map((action) => action.target ?? action.command);
+
+  assert.ok(actionTargets.includes("Backend/pom.xml"));
+  assert.ok(actionTargets.includes("Backend/src/main/resources/data.sql"));
+  assert.ok(actionTargets.includes("Frontend/src/App.vue"));
+  assert.ok(actionTargets.includes("mvn -f Backend/pom.xml test"));
+  assert.ok(actionTargets.includes("npm --prefix Frontend run build"));
+  assert.ok(!actionTargets.includes("backend/src/main/resources/data.sql"));
+  assert.ok(!actionTargets.includes("frontend/src/App.vue"));
+});
+
+test("bare Vue TypeScript scaffold supplements missing frontend config files", () => {
+  const result = supplementBareProjectScaffoldActions({
+    actions: [
+      createEditAction("action-1", "Frontend/package.json"),
+      createEditAction("action-2", "Frontend/vite.config.ts")
+    ],
+    bareProject: true,
+    isCreationTask: true,
+    prompt: studentManagerPrompt
+  });
+  const actionTargets = result.actions.map((action) => action.target ?? action.command);
+
+  assert.ok(actionTargets.includes("Frontend/package.json"));
+  assert.ok(actionTargets.includes("Frontend/vite.config.ts"));
+  assert.ok(actionTargets.includes("Frontend/index.html"));
+  assert.ok(actionTargets.includes("Frontend/tsconfig.json"));
+});
+
 test("file change prompt repeats full-stack scaffold consistency guardrails", () => {
   const actions: AgentAction[] = [
-    createEditAction("action-1", "backend/src/main/java/com/example/studentmanager/entity/Student.java"),
-    createEditAction("action-2", "backend/src/main/resources/data.sql"),
-    createEditAction("action-3", "frontend/src/App.vue")
+    createEditAction("action-1", "Backend/src/main/java/com/example/studentmanager/entity/Student.java"),
+    createEditAction("action-2", "Backend/src/main/resources/data.sql"),
+    createEditAction("action-3", "Frontend/src/App.vue")
   ];
   const thread = {
     id: "thread-1",
@@ -68,14 +111,19 @@ test("file change prompt repeats full-stack scaffold consistency guardrails", ()
     events: []
   } satisfies TaskThread;
 
-  const prompt = createFileChangeTaskPrompt(thread, "frontend/src/App.vue", actions[2]);
+  const prompt = createFileChangeTaskPrompt(thread, "Frontend/src/App.vue", actions[2]);
 
-  assert.match(prompt, /Scaffold consistency guardrails/u);
+  assert.match(prompt, /<scaffold_consistency_guardrails>/u);
+  assert.match(prompt, /<file_change_instructions>/u);
+  assert.match(prompt, /Backend\/.+Frontend\//u);
   assert.match(prompt, /id, name, age, gender/u);
+  assert.match(prompt, /fetchStudents/u);
   assert.match(prompt, /GET \/api\/students/u);
   assert.match(prompt, /Do not import Lombok/u);
   assert.match(prompt, /H2 schema or seed files/u);
+  assert.match(prompt, /@Table\(name = "students"\)/u);
   assert.match(prompt, /relative \/api request/u);
+  assert.match(prompt, /tsconfig\.json/u);
 });
 
 function createEditAction(id: string, target: string): AgentAction {

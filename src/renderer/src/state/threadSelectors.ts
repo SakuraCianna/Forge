@@ -2,7 +2,11 @@
 import type { AgentImageAttachment } from "@shared/agentTypes";
 import type { AgentAction } from "@shared/agentExecutionPlan";
 import type { ForgeModel } from "@shared/modelTypes";
-import type { TaskThread } from "./taskThreads";
+import type { TaskThread } from "./taskThreads.js";
+import {
+  formatThreadContextCompactionForPrompt,
+  getEventsAfterThreadContextCompaction
+} from "./threadContextCompaction.js";
 
 export type ThreadConversationTurn = {
   role: "user" | "assistant";
@@ -30,8 +34,13 @@ export function selectVisibleWorkspaceThreads(
 // 把当前线程历史压成模型对话, 用户和输出事件按顺序保留
 export function createThreadConversation(thread: TaskThread): ThreadConversationTurn[] {
   const turns: ThreadConversationTurn[] = [{ role: "user", content: thread.prompt }];
+  const compactedContext = formatThreadContextCompactionForPrompt(thread);
 
-  for (const event of thread.events) {
+  if (compactedContext) {
+    turns.push({ role: "assistant", content: compactedContext });
+  }
+
+  for (const event of getEventsAfterThreadContextCompaction(thread)) {
     if (event.kind === "user") {
       turns.push({ role: "user", content: event.message });
     } else if (event.kind === "result") {

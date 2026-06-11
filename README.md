@@ -20,7 +20,7 @@ Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查,
 - Agent 的目录列表、文本搜索和 glob 工具仍遵循 `.gitignore`, 用于控制自动化搜索范围和大项目性能。
 - `.env`、私钥、证书、凭据目录、数据库文件等敏感路径默认不会进入 Agent 文件工具或预览流程。
 - 文件页支持按目录懒加载和大目录分页, 避免一次性渲染完整大项目文件树。
-- 项目扫描元数据和全文搜索快照会缓存在本地应用数据目录, 用于后续加速。
+- 项目扫描会复用进行中的同路径索引和最近内存索引, 扫描元数据和全文搜索快照也会缓存在本地应用数据目录, 用于后续加速。
 - AI 生成的文件修改默认先进入待审查区, 用户确认后才写入磁盘; 完全访问权限下, Agent 计划生成的文件修改和本地命令会自动执行, 不再额外弹出命令批准或内置工具确认。
 
 ### Agent 任务线程
@@ -52,6 +52,8 @@ Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查,
 - DOCX、XLSX、CSV 和 TSV 会在本地解析为可控大小的文本摘要。
 - 敏感附件会默认跳过, 避免误把密钥或本地数据加入模型上下文。
 - 输入 `/` 可以打开 Forge 命令和技能候选, 命令会执行界面操作而不是作为普通对话文本发送。
+- `/init` 会在当前项目创建默认 `AGENTS.md`, 如果文件已存在则只打开预览, 不覆盖原内容。
+- `/compact` 会压缩当前对话的旧上下文; 当线程接近上下文预算时, Forge 也会自动压缩旧上下文并保留摘要。
 - 输入 `@` 可以搜索文件、插件和技能。
 - 通过加号菜单或候选列表引入的文件、插件和技能会作为当前任务上下文发送。
 
@@ -70,7 +72,11 @@ Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查,
 - 侧边栏提供独立的扩展页面, 与插件和技能区分开。
 - 扩展用于连接外部服务, 能读取、创建或修改外部系统中的真实数据。
 - 内置 QQ Mail 扩展支持列出收件箱、读取邮件、搜索邮件、创建草稿和发送邮件。
+- 内置服务扩展覆盖 GitHub、GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Todoist、Asana、ClickUp、monday.com、Trello、Stripe、Shopify、Mailchimp、Postmark、Twilio、Google Calendar、Calendly、Miro、Zoom、Figma、Gmail、Google Drive、Dropbox、Microsoft 365、Linear、Sentry、PagerDuty、Datadog、Cloudflare、Okta、Jira Cloud 和 Discord。
 - 扩展凭据保存在 Electron 主进程侧的安全存储中, 页面只展示配置状态和尾号提示。
+- 支持 OAuth 元数据和网页登录授权基座。Google Calendar、Gmail 和 Google Drive 使用 Forge 内置桌面 OAuth 应用配置, GitHub 支持 device flow, Linear 支持 loopback + PKCE, 需要 HTTPS 回调或 client secret 的服务通过 Forge OAuth broker 接入。
+- 用户只需在扩展页点击“网页登录授权”, 授权完成后 token 会自动保存到安全存储。走连接器/OAuth 的内置扩展不再展示手动 token 输入框。OAuth Client ID、Client Secret、同意屏幕和 broker 部署属于产品维护者发布前配置, 不应要求普通用户自行创建。
+- Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shopify、Mailchimp、Postmark、Twilio、PagerDuty、Datadog、Cloudflare 和 Okta 当前使用手动保存的服务 token 或 API key, 适合先开放稳定的只读动作。
 - 扩展权限支持 allow、ask 和 deny, 调用日志只保存输入和输出摘要。
 - Agent 可以把已启用扩展作为工具动作调用, 但必须通过 Agent Profile 工具权限和扩展权限检查。
 - `sendEmail` 始终要求用户二次确认, Forge 不会让 Agent 静默发送邮件。
@@ -183,6 +189,14 @@ npm run quality:v0.2:status
 npm run release:check
 ```
 
+## CI/CD 工作流
+
+GitHub Actions 工作流位于 `.github\workflows\ci-cd.yml`。
+
+- PR 和任意分支 push 会在 `windows-latest` 上运行 `npm ci`、`npm test`、`npm run typecheck`、`npm run lint` 和 `npm run build`。
+- 推送 `v*` tag 或手动运行 workflow 时, 会在 CI 通过后执行 `npm run dist:win`, 并上传 `forge-windows-installer` artifact。
+- 当前工作流只生成和上传安装包 artifact, 不会自动创建 GitHub Release, 不会自动发布, 也不会跳过发布前人工检查和安装包烟测。
+
 `npm test` 会先编译轻量回归测试, 再运行 Node.js 测试, 用于覆盖 Agent 上下文隔离等关键逻辑。
 
 `npm run quality:metrics` 会读取本机 Forge 的 `agent-quality-metrics.json` 并输出各项指标的 numerator、denominator、value 和可用级状态。没有找到指标文件时会显示 missing, 这表示真实任务指标仍未证明, 不能按达标处理。也可以通过环境变量指定指标文件:
@@ -247,6 +261,13 @@ npm run qa:built-in-tools:browser
 ## 环境变量说明
 
 本地开发不需要项目级 `.env` 文件。API Key 通过应用设置保存, 并由 Electron 主进程侧的安全存储能力处理。
+
+OAuth 相关变量仅供维护者在自定义构建或部署 Forge OAuth broker 时使用, 普通用户不需要配置:
+
+- `FORGE_GOOGLE_OAUTH_CLIENT_ID`: 覆盖内置 Google 桌面 OAuth client ID
+- `FORGE_GITHUB_OAUTH_CLIENT_ID`: 启用 GitHub device flow
+- `FORGE_LINEAR_OAUTH_CLIENT_ID`: 启用 Linear loopback + PKCE 授权
+- `FORGE_OAUTH_BROKER_BASE_URL`: 启用 GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 的 brokered 授权入口
 
 请不要把 API Key、token、cookie、私钥或证书写入 README、提交信息或日志。
 

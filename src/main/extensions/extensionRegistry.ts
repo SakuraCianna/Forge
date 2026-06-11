@@ -11,6 +11,8 @@ import type {
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
   ExtensionManifest,
+  ExtensionOAuthStartRequest,
+  ExtensionOAuthStartResult,
   ExtensionRegistrySnapshot,
   ExtensionSecretSaveRequest,
   ExtensionSecretStatus,
@@ -30,6 +32,11 @@ import {
   qqMailManifest,
   type ExtensionActionHandler
 } from "./qqMailExtension.js";
+import {
+  createServiceExtensionInputSummary,
+  serviceExtensionDefinitions
+} from "./serviceExtensions.js";
+import { startExtensionOAuthAuthorization } from "./extensionOAuth.js";
 import {
   createCustomExtensionScaffold,
   deleteCustomExtensionScaffold,
@@ -66,6 +73,7 @@ export type ExtensionRegistry = {
   confirmInvocation: (
     request: ExtensionConfirmInvocationRequest
   ) => Promise<ExtensionInvocationResult>;
+  startOAuth: (request: ExtensionOAuthStartRequest) => Promise<ExtensionOAuthStartResult>;
   listLogs: (limit?: number) => Promise<ExtensionInvocationLogRecord[]>;
 };
 
@@ -75,18 +83,27 @@ export function createExtensionRegistry({
   logStore,
   customExtensionDirectory,
   now = () => new Date().toISOString(),
+  openExternal,
   store,
   vault
 }: {
   customExtensionDirectory: string;
   logStore: ExtensionInvocationLogStore;
   now?: () => string;
+  openExternal?: (url: string) => Promise<unknown> | unknown;
   store: ExtensionStore;
   vault: ExtensionSecretVault;
 }): ExtensionRegistry {
-  const builtInManifests = [qqMailManifest];
+  const builtInManifests = [
+    qqMailManifest,
+    ...serviceExtensionDefinitions.map((definition) => definition.manifest)
+  ];
   const handlers = new Map<string, Record<string, ExtensionActionHandler>>([
-    [qqMailManifest.id, qqMailHandlers]
+    [qqMailManifest.id, qqMailHandlers],
+    ...serviceExtensionDefinitions.map((definition) => [
+      definition.manifest.id,
+      definition.handlers
+    ] as const)
   ]);
   const pendingInvocations = new Map<string, PendingInvocation>();
 
@@ -200,7 +217,7 @@ export function createExtensionRegistry({
 
   async function invoke(request: ExtensionInvocationRequest): Promise<ExtensionInvocationResult> {
     const context = await resolveInvocationContext(request);
-    const inputSummary = createInputSummary(context.action, request.input);
+    const inputSummary = createInputSummary(context.manifest, context.action, request.input);
     const confirmation = shouldRequireConfirmation(context)
       ? createConfirmation(context.action, context.manifest, inputSummary)
       : null;
@@ -302,6 +319,37 @@ export function createExtensionRegistry({
     return logStore.list(limit);
   }
 
+  async function startOAuth({
+    extensionId
+  }: ExtensionOAuthStartRequest): Promise<ExtensionOAuthStartResult> {
+    if (!openExternal) {
+      throw new Error("OAuth browser authorization is not available");
+    }
+
+    const manifest = await getManifest(extensionId);
+    const oauth = manifest.auth.oauth;
+
+    if (!oauth) {
+      throw new Error(`Extension does not support OAuth authorization: ${manifest.name}`);
+    }
+
+    const result = await startExtensionOAuthAuthorization({
+      manifest,
+      oauth,
+      openExternal,
+      readSecret: (fieldId) => vault.readExtensionSecret(manifest.id, fieldId),
+      saveSecret: (fieldId, value) => vault.saveExtensionSecret(manifest.id, fieldId, value)
+    });
+
+    return {
+      extensionId: manifest.id,
+      provider: result.provider,
+      savedFields: result.savedFields,
+      expiresInSeconds: result.expiresInSeconds,
+      registry: await getSnapshot()
+    };
+  }
+
   async function resolveInvocationContext(request: ExtensionInvocationRequest): Promise<{
     action: ExtensionActionDefinition;
     handler: ExtensionActionHandler;
@@ -327,7 +375,7 @@ export function createExtensionRegistry({
     const secretStatus = await getSecretStatus(manifest);
 
     if (!secretStatus.configured) {
-      throw new Error(`Extension credentials are not configured: ${manifest.name}`);
+      throw new Error(createMissingCredentialMessage(manifest, secretStatus));
     }
 
     const handler = handlers.get(manifest.id)?.[action.id];
@@ -392,6 +440,9 @@ export function createExtensionRegistry({
 
   async function getSecretStatus(manifest: ExtensionManifest): Promise<ExtensionSecretStatus> {
     const fieldIds = manifest.auth.fields.map((field) => field.id);
+    const requiredFieldIds = manifest.auth.fields
+      .filter((field) => field.required !== false)
+      .map((field) => field.id);
     const fieldStatuses = await vault.getExtensionSecretStatus(manifest.id, fieldIds);
     const fields = Object.fromEntries(
       Object.entries(fieldStatuses).map(([fieldId, status]) => [
@@ -405,9 +456,22 @@ export function createExtensionRegistry({
 
     return {
       extensionId: manifest.id,
-      configured: fieldIds.every((fieldId) => fields[fieldId]?.hasValue),
+      configured: requiredFieldIds.every((fieldId) => fields[fieldId]?.hasValue),
       fields
     };
+  }
+
+  function createMissingCredentialMessage(
+    manifest: ExtensionManifest,
+    secretStatus: ExtensionSecretStatus
+  ): string {
+    const missingFields = manifest.auth.fields
+      .filter((field) => field.required !== false && !secretStatus.fields[field.id]?.hasValue)
+      .map((field) => field.label || field.id);
+
+    return missingFields.length > 0
+      ? `Extension credentials are not configured: ${manifest.name}. Missing: ${missingFields.join(", ")}`
+      : `Extension credentials are not configured: ${manifest.name}`;
   }
 
   function shouldRequireConfirmation({
@@ -465,6 +529,7 @@ export function createExtensionRegistry({
     deleteSecret,
     invoke,
     confirmInvocation,
+    startOAuth,
     listLogs
   };
 }
@@ -496,11 +561,18 @@ function getAction(
 }
 
 function createInputSummary(
+  manifest: ExtensionManifest,
   action: ExtensionActionDefinition,
   input: Record<string, unknown>
 ): string {
-  if (qqMailManifest.actions.some((candidate) => candidate.id === action.id)) {
+  if (manifest.id === qqMailManifest.id) {
     return createQQMailInputSummary(action.id, input);
+  }
+
+  const serviceSummary = createServiceExtensionInputSummary(manifest.id, action.id, input);
+
+  if (serviceSummary) {
+    return serviceSummary;
   }
 
   return `${action.id}: ${Object.keys(input).join(", ")}`;

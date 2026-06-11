@@ -41,6 +41,7 @@ import {
 import { registerProjectHandlers } from "./projectIpc.js";
 import { registerProjectFileHandlers } from "./projectFileIpc.js";
 import { createProjectIndexCache } from "./projectIndexCache.js";
+import { createCachedProjectScanner } from "./projectScanService.js";
 import {
   deleteProjectFile,
   globProjectFiles,
@@ -186,6 +187,10 @@ void app.whenReady().then(() => {
   const projectIndexCache = createProjectIndexCache({
     directory: join(app.getPath("userData"), "project-indexes")
   });
+  const cachedProjectScanner = createCachedProjectScanner({
+    cache: projectIndexCache,
+    scanProjectFiles
+  });
   const extensionDirectory = join(app.getPath("userData"), "extensions");
   const extensionStore = createExtensionStore({
     directory: extensionDirectory
@@ -208,13 +213,15 @@ void app.whenReady().then(() => {
       }),
       cancelCommand: cancelProjectCommand,
       openExternal: (url) => shell.openExternal(url),
-      runCommand: runProjectCommand
+      runCommand: runProjectCommand,
+      scanProjectFiles: cachedProjectScanner.scan
     }),
     metricsLogStore: agentQualityMetricsLogStore
   });
   const extensionRegistry = createExtensionRegistry({
     customExtensionDirectory: join(extensionDirectory, "custom"),
     logStore: extensionLogStore,
+    openExternal: openTrustedExternalUrl,
     store: extensionStore,
     vault: keyVault
   });
@@ -276,14 +283,7 @@ void app.whenReady().then(() => {
 
   registerProjectHandlers(
     () => pickProjectDirectory(() => dialog.showOpenDialog({ properties: ["openDirectory"] })),
-    async (rootPath) => {
-      const previousIndex = await projectIndexCache.read(rootPath).catch(() => null);
-      const scanResult = await scanProjectFiles(rootPath, { previousIndex });
-
-      void projectIndexCache.write(scanResult).catch(() => undefined);
-
-      return scanResult;
-    },
+    (rootPath) => cachedProjectScanner.scan(rootPath),
     (channel, handler) => {
       ipcMain.handle(channel, handler);
     }

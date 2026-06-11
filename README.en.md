@@ -20,7 +20,7 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - Agent directory listing, text search, and glob tools still respect `.gitignore` to keep automated search scoped and responsive on large projects.
 - Sensitive paths such as `.env`, private keys, certificates, credential folders, and database files are excluded from agent file tools and previews by default.
 - File browsing uses lazy directory loading and paged large directories to avoid rendering a whole large repository at once.
-- Project scan metadata and text-search snapshots are cached in the local app data directory for later reuse.
+- Project scanning reuses in-flight same-path indexing and recent in-memory indexes, while project scan metadata and text-search snapshots are also cached in the local app data directory for later reuse.
 - AI-generated file changes enter a review queue by default and are written to disk only after user confirmation; in Full Access mode, agent-planned file changes and local commands run automatically without extra command approval or built-in tool confirmation prompts.
 
 ### Agent Task Threads
@@ -41,6 +41,8 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - DOCX, XLSX, CSV, and TSV files are parsed locally into bounded text summaries.
 - Sensitive attachments are skipped by default to avoid adding secrets or local data to model context.
 - Typing `/` opens Forge commands and skill candidates. Commands run UI operations instead of being sent as normal chat text.
+- `/init` creates the default `AGENTS.md` in the current project. If the file already exists, Forge opens it without overwriting it.
+- `/compact` compacts older context in the current conversation. Forge also auto-compacts old context when a thread approaches its context budget.
 - Typing `@` searches files, plugins, and skills.
 - Files, plugins, and skills added through the menu or candidate list are sent as context for the current task.
 
@@ -59,7 +61,11 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - The sidebar includes a dedicated Extensions page separate from plugins and skills.
 - Extensions connect external services and can read, create, or modify real data outside Forge.
 - The built-in QQ Mail extension can list inbox messages, read email, search email, create drafts, and send email.
+- Built-in service extensions cover GitHub, GitLab, Bitbucket, Confluence Cloud, Slack, Notion, Airtable, HubSpot, Salesforce, Zendesk, Intercom, Freshdesk, Pipedrive, Todoist, Asana, ClickUp, monday.com, Trello, Stripe, Shopify, Mailchimp, Postmark, Twilio, Google Calendar, Calendly, Miro, Zoom, Figma, Gmail, Google Drive, Dropbox, Microsoft 365, Linear, Sentry, PagerDuty, Datadog, Cloudflare, Okta, Jira Cloud, and Discord.
 - Extension credentials are stored through secure storage on the Electron main-process side. The UI only shows configuration status and last-four hints.
+- OAuth metadata and browser authorization are supported. Google Calendar, Gmail, and Google Drive use Forge's built-in desktop OAuth app configuration, GitHub supports device flow, Linear supports loopback + PKCE, and services that require HTTPS callbacks or client secrets can be wired through the Forge OAuth broker.
+- Users only click Authorize in browser from the Extensions page, then Forge saves returned tokens to secure storage. Built-in connector/OAuth extensions no longer show manual token inputs. OAuth Client IDs, Client Secrets, consent-screen setup, and broker deployment are product-maintainer configuration before release, not something normal users should create.
+- Salesforce, Zendesk, Intercom, Freshdesk, Pipedrive, Trello, Stripe, Shopify, Mailchimp, Postmark, Twilio, PagerDuty, Datadog, Cloudflare, and Okta currently use manually saved service tokens or API keys and expose stable read-only actions first.
 - Extension permissions support allow, ask, and deny. Invocation logs store sanitized input and output summaries.
 - The agent can call enabled extensions as tool actions, but calls must pass agent-profile tool permissions and extension permissions.
 - `sendEmail` always requires explicit confirmation. Forge does not let the agent silently send email.
@@ -172,6 +178,14 @@ For release checks:
 npm run release:check
 ```
 
+## CI/CD Workflow
+
+The GitHub Actions workflow lives at `.github\workflows\ci-cd.yml`.
+
+- Pull requests and pushes to any branch run `npm ci`, `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` on `windows-latest`.
+- Pushing a `v*` tag or manually running the workflow runs `npm run dist:win` after CI passes and uploads the `forge-windows-installer` artifact.
+- The workflow only builds and uploads installer artifacts. It does not create GitHub Releases, publish installers, or replace manual release checks and installer smoke testing.
+
 `npm test` compiles lightweight regression tests first and then runs Node.js tests for core logic such as Agent context isolation.
 
 `npm run quality:metrics` reads the local Forge `agent-quality-metrics.json` file and prints numerator, denominator, value, and usable-tier status for each metric. If the metrics file is missing, the command reports `missing`; that means real task metrics remain unproven and must not be treated as passing. You can also point it at a metrics file with an environment variable:
@@ -213,6 +227,13 @@ npm run quality:v0.2:usable
 ## Environment Variables
 
 Local development does not require a project-level `.env` file. API keys are saved through the app settings and handled by secure storage on the Electron main-process side.
+
+OAuth-related variables are only for maintainers who build custom releases or deploy the Forge OAuth broker. Normal users do not need to configure them:
+
+- `FORGE_GOOGLE_OAUTH_CLIENT_ID`: overrides the built-in Google desktop OAuth client ID
+- `FORGE_GITHUB_OAUTH_CLIENT_ID`: enables GitHub device flow
+- `FORGE_LINEAR_OAUTH_CLIENT_ID`: enables Linear loopback + PKCE authorization
+- `FORGE_OAUTH_BROKER_BASE_URL`: enables brokered authorization for GitLab, Bitbucket, Confluence Cloud, Slack, Notion, Airtable, HubSpot, Todoist, Asana, ClickUp, monday.com, Calendly, Miro, Zoom, Figma, Dropbox, Microsoft 365, Sentry, Jira Cloud, and Discord
 
 Do not write API keys, tokens, cookies, private keys, or certificates into README files, commit messages, or logs.
 

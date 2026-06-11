@@ -17,6 +17,7 @@ import {
   Globe,
   Layers,
   ListChecks,
+  PencilLine,
   Play,
   RotateCcw,
   Search,
@@ -101,7 +102,7 @@ type ThreadWorkspaceProps = {
   onConfirmAgentExtension?: (threadId: string, action: AgentAction) => void;
   onGenerateCommandFix?: (threadId: string, result: CommandRunResult) => void;
   onGenerateContinuationPlan?: (threadId: string) => void;
-  onRetryThreadPrompt?: (threadId: string) => void;
+  onRetryThreadPrompt?: (threadId: string, userEventId?: string) => void;
   onCompleteAgentAction?: (threadId: string, action: AgentAction) => void;
   onSkipAgentAction?: (threadId: string, action: AgentAction) => void;
   onResumeAgent?: (threadId: string) => void;
@@ -259,12 +260,16 @@ export function ThreadWorkspace({
   const retryPromptCopy =
     language === "zh-CN"
       ? {
-          label: "重发并撤销",
-          aria: "撤销本轮文件操作并重新发送提示词"
+          copy: "复制消息",
+          edit: "编辑并重发",
+          editInitialAria: "撤销本轮文件操作并重新发送提示词",
+          editEventAria: "撤销此消息后的文件操作并重新发送提示词"
         }
       : {
-          label: "Retry and revert",
-          aria: "Revert this turn's file operations and resend the prompt"
+          copy: "Copy message",
+          edit: "Edit and resend",
+          editInitialAria: "Revert this turn's file operations and resend the prompt",
+          editEventAria: "Revert file operations after this message and resend the prompt"
         };
   const threadActivitySummary = useMemo(
     () =>
@@ -424,22 +429,13 @@ export function ThreadWorkspace({
       <section className="h-full min-h-0 overflow-auto px-4 py-7 md:px-5">
         <div className="grid min-h-full w-full grid-cols-1 gap-5 xl:grid-cols-[minmax(0,760px)_minmax(280px,340px)] xl:items-start xl:justify-between xl:gap-7 xl:pl-[clamp(16px,3vw,56px)]">
           <div className="order-2 flex min-h-full w-full max-w-[760px] flex-col gap-7 xl:order-1">
-            <article className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-sm leading-5 text-[#202123]">
-              <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
-              {onRetryThreadPrompt ? (
-                <div className="mt-2 flex justify-end">
-                  <button
-                    type="button"
-                    aria-label={retryPromptCopy.aria}
-                    onClick={() => onRetryThreadPrompt(selectedThread.id)}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#565869] transition hover:border-[#c7c7d1] hover:text-[#202123] active:scale-[0.99]"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                    {retryPromptCopy.label}
-                  </button>
-                </div>
-              ) : null}
-            </article>
+            {renderUserMessageBubble({
+              message: selectedThread.prompt,
+              onEdit: onRetryThreadPrompt
+                ? () => onRetryThreadPrompt(selectedThread.id)
+                : undefined,
+              editAriaLabel: retryPromptCopy.editInitialAria
+            })}
 
             {renderCompactMemoryContext(selectedThread.contextMemories ?? [])}
 
@@ -660,14 +656,14 @@ export function ThreadWorkspace({
   // 把线程事件压成对话区可读条目, 事件源头不再生成旧模板流水账
   function renderCompactEvent(event: TaskThreadEvent): ReactElement {
     if (event.kind === "user") {
-      return (
-        <article
-          key={event.id}
-          className="ml-auto max-w-[68%] rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-[14px] leading-6 text-[#202123]"
-        >
-          <p className="whitespace-pre-wrap">{event.message}</p>
-        </article>
-      );
+      return renderUserMessageBubble({
+        key: event.id,
+        message: event.message,
+        onEdit: onRetryThreadPrompt
+          ? () => onRetryThreadPrompt(selectedThread.id, event.id)
+          : undefined,
+        editAriaLabel: retryPromptCopy.editEventAria
+      });
     }
 
     const result = event.commandResult;
@@ -778,6 +774,52 @@ export function ThreadWorkspace({
                 </pre>
               ) : null}
             </div>
+          ) : null}
+        </div>
+      </article>
+    );
+  }
+
+  function renderUserMessageBubble({
+    editAriaLabel,
+    className = "group ml-auto max-w-[68%]",
+    key,
+    message,
+    onEdit
+  }: {
+    className?: string;
+    editAriaLabel: string;
+    key?: string;
+    message: string;
+    onEdit?: () => void;
+  }): ReactElement {
+    return (
+      <article key={key} className={className}>
+        <div className="rounded-[16px] bg-[#f3f3f3] px-3 py-1.5 text-[14px] leading-6 text-[#202123]">
+          <p className="whitespace-pre-wrap">{message}</p>
+        </div>
+        <div className="mt-1 flex justify-end gap-1 text-[#8e8ea0] opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+          <Tooltip label={retryPromptCopy.copy}>
+            <button
+              type="button"
+              aria-label={retryPromptCopy.copy}
+              onClick={() => void navigator.clipboard?.writeText(message)}
+              className="flex h-7 w-7 items-center justify-center rounded-[8px] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+          </Tooltip>
+          {onEdit ? (
+            <Tooltip label={retryPromptCopy.edit}>
+              <button
+                type="button"
+                aria-label={editAriaLabel}
+                onClick={onEdit}
+                className="flex h-7 w-7 items-center justify-center rounded-[8px] outline-none transition hover:bg-[#f7f7f8] hover:text-[#202123] active:scale-[0.97] focus:outline-none focus-visible:outline-none"
+              >
+                <PencilLine className="h-4 w-4" />
+              </button>
+            </Tooltip>
           ) : null}
         </div>
       </article>
@@ -2327,24 +2369,18 @@ export function ThreadWorkspace({
             </h2>
             <div className="space-y-1">
               <article className="flex justify-end">
-                <div className="max-w-[78%] rounded-[18px] bg-[#f2f2f2] px-4 py-3 text-sm leading-6 text-[#202123]">
-                  <div className="mb-1 text-[11px] font-medium text-[#8e8ea0]">
+                <div className="max-w-[78%]">
+                  <div className="mb-1 text-right text-[11px] font-medium text-[#8e8ea0]">
                     {planCopy.userRequest}
                   </div>
-                  <p className="whitespace-pre-wrap">{selectedThread.prompt}</p>
-                  {onRetryThreadPrompt ? (
-                    <div className="mt-2 flex justify-end">
-                      <button
-                        type="button"
-                        aria-label={retryPromptCopy.aria}
-                        onClick={() => onRetryThreadPrompt(selectedThread.id)}
-                        className="inline-flex h-7 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2 text-[11px] font-medium text-[#565869] transition hover:border-[#c7c7d1] hover:text-[#202123] active:scale-[0.99]"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        {retryPromptCopy.label}
-                      </button>
-                    </div>
-                  ) : null}
+                  {renderUserMessageBubble({
+                    className: "group ml-auto max-w-full",
+                    message: selectedThread.prompt,
+                    onEdit: onRetryThreadPrompt
+                      ? () => onRetryThreadPrompt(selectedThread.id)
+                      : undefined,
+                    editAriaLabel: retryPromptCopy.editInitialAria
+                  })}
                 </div>
               </article>
               <div className="pt-4">

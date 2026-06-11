@@ -1,5 +1,5 @@
 // 本文件说明: 解析项目根目录 .gitignore, 为文件索引和受控文件工具提供统一忽略规则
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 type IgnoreRule = {
@@ -10,10 +10,64 @@ type IgnoreRule = {
 
 export type ProjectIgnoreMatcher = (relativePath: string, isDirectory?: boolean) => boolean;
 
-// 读取根目录 .gitignore 并生成路径匹配器, .git 目录始终隐藏以避免索引仓库内部数据
-export async function createProjectIgnoreMatcher(rootPath: string): Promise<ProjectIgnoreMatcher> {
-  const rules = await readProjectIgnoreRules(rootPath);
+type ProjectIgnoreFileSignature =
+  | {
+      exists: false;
+    }
+  | {
+      exists: true;
+      modifiedAtMs: number;
+      size: number;
+    };
 
+type ProjectIgnoreMatcherCacheEntry = {
+  matcher: ProjectIgnoreMatcher;
+  signature: ProjectIgnoreFileSignature;
+};
+
+const maxCachedProjectIgnoreMatchers = 20;
+const projectIgnoreMatcherCache = new Map<string, ProjectIgnoreMatcherCacheEntry>();
+const inFlightProjectIgnoreMatchers = new Map<string, Promise<ProjectIgnoreMatcher>>();
+
+// 读取根目录 .gitignore 并生成路径匹配器, .git 目录始终隐藏以避免索引仓库内部数据
+export function createProjectIgnoreMatcher(rootPath: string): Promise<ProjectIgnoreMatcher> {
+  const inFlightMatcher = inFlightProjectIgnoreMatchers.get(rootPath);
+
+  if (inFlightMatcher) {
+    return inFlightMatcher;
+  }
+
+  const matcherPromise = createCachedProjectIgnoreMatcher(rootPath).finally(() => {
+    if (inFlightProjectIgnoreMatchers.get(rootPath) === matcherPromise) {
+      inFlightProjectIgnoreMatchers.delete(rootPath);
+    }
+  });
+
+  inFlightProjectIgnoreMatchers.set(rootPath, matcherPromise);
+  return matcherPromise;
+}
+
+async function createCachedProjectIgnoreMatcher(rootPath: string): Promise<ProjectIgnoreMatcher> {
+  const signature = await readProjectIgnoreFileSignature(rootPath);
+  const cachedMatcher = projectIgnoreMatcherCache.get(rootPath);
+
+  if (cachedMatcher && areProjectIgnoreFileSignaturesEqual(cachedMatcher.signature, signature)) {
+    rememberProjectIgnoreMatcher(rootPath, cachedMatcher);
+    return cachedMatcher.matcher;
+  }
+
+  const rules = await readProjectIgnoreRules(rootPath);
+  const matcher = createProjectIgnoreMatcherFromRules(rules);
+
+  rememberProjectIgnoreMatcher(rootPath, {
+    matcher,
+    signature
+  });
+
+  return matcher;
+}
+
+function createProjectIgnoreMatcherFromRules(rules: IgnoreRule[]): ProjectIgnoreMatcher {
   return (relativePath, isDirectory = false) => {
     const normalizedPath = normalizeRelativePath(relativePath)
       .replace(/^\.\//u, "")
@@ -37,6 +91,61 @@ export async function createProjectIgnoreMatcher(rootPath: string): Promise<Proj
 
     return ignored;
   };
+}
+
+async function readProjectIgnoreFileSignature(rootPath: string): Promise<ProjectIgnoreFileSignature> {
+  try {
+    const fileStat = await stat(join(rootPath, ".gitignore"));
+
+    if (!fileStat.isFile()) {
+      return {
+        exists: false
+      };
+    }
+
+    return {
+      exists: true,
+      modifiedAtMs: fileStat.mtimeMs,
+      size: fileStat.size
+    };
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return {
+        exists: false
+      };
+    }
+
+    throw error;
+  }
+}
+
+function rememberProjectIgnoreMatcher(
+  rootPath: string,
+  cacheEntry: ProjectIgnoreMatcherCacheEntry
+): void {
+  projectIgnoreMatcherCache.delete(rootPath);
+  projectIgnoreMatcherCache.set(rootPath, cacheEntry);
+
+  while (projectIgnoreMatcherCache.size > maxCachedProjectIgnoreMatchers) {
+    const oldestRootPath = projectIgnoreMatcherCache.keys().next().value;
+
+    if (typeof oldestRootPath !== "string") {
+      return;
+    }
+
+    projectIgnoreMatcherCache.delete(oldestRootPath);
+  }
+}
+
+function areProjectIgnoreFileSignaturesEqual(
+  left: ProjectIgnoreFileSignature,
+  right: ProjectIgnoreFileSignature
+): boolean {
+  if (!left.exists || !right.exists) {
+    return left.exists === right.exists;
+  }
+
+  return left.modifiedAtMs === right.modifiedAtMs && left.size === right.size;
 }
 
 // 将 .gitignore 的有效行转换为按顺序生效的匹配规则

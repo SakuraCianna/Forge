@@ -3,8 +3,9 @@ import type { FormEvent, ReactElement } from "react";
 import { useMemo, useState } from "react";
 import {
   CheckCircle2,
+  ExternalLink,
+  Globe2,
   KeyRound,
-  Mail,
   Pencil,
   Play,
   Plus,
@@ -25,6 +26,9 @@ import type {
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
   ExtensionManifest,
+  ExtensionOAuthDefinition,
+  ExtensionOAuthStartRequest,
+  ExtensionOAuthStartResult,
   ExtensionPermissionDefinition,
   ExtensionPermissionMode,
   ExtensionRegistrySnapshot,
@@ -32,24 +36,6 @@ import type {
   ExtensionUpdateRequest,
   ExtensionUpdateResult
 } from "@shared/extensionTypes";
-import {
-  builtInToolCategories,
-  builtInToolDefinitions
-} from "@shared/builtInToolCatalog";
-import {
-  agentQualityMetricDefinitions,
-  type AgentQualityMetricId,
-  type AgentQualityMetricSnapshot,
-  type AgentQualityMetricValue
-} from "@shared/agentQualityMetrics";
-import type {
-  BuiltInToolAvailability,
-  BuiltInToolCallLogRecord,
-  BuiltInToolCategory,
-  BuiltInToolDefinition,
-  BuiltInToolRiskLevel
-} from "@shared/builtInToolTypes";
-import type { BuiltInToolQaRunResult } from "@shared/builtInToolQaTypes";
 import type { Language } from "@shared/modelTypes";
 import { InlineSelectMenu } from "@/components/InlineSelectMenu";
 import {
@@ -59,10 +45,6 @@ import {
 } from "@/state/extensions";
 
 type ExtensionsPanelProps = {
-  agentQualityMetrics: AgentQualityMetricSnapshot | null;
-  builtInToolLogs: BuiltInToolCallLogRecord[];
-  developmentQaResult: BuiltInToolQaRunResult | null;
-  developmentQaRunning: boolean;
   language: Language;
   logs: ExtensionInvocationLogRecord[];
   registry: ExtensionRegistrySnapshot;
@@ -70,10 +52,11 @@ type ExtensionsPanelProps = {
   onCreateExtension: (request: ExtensionCreateRequest) => Promise<ExtensionCreateResult>;
   onDeleteExtension: (extensionId: string) => Promise<ExtensionDeleteResult>;
   onInvoke: (request: ExtensionInvocationRequest) => Promise<ExtensionInvocationResult>;
+  onOpenExternal: (url: string) => void;
   onRefresh: () => void;
-  onRunDevelopmentQa: () => void;
   onSaveSecret: (extensionId: string, fieldId: string, value: string) => Promise<void>;
   onDeleteSecret: (extensionId: string, fieldId: string) => Promise<void>;
+  onStartOAuth: (request: ExtensionOAuthStartRequest) => Promise<ExtensionOAuthStartResult>;
   onUpdateExtension: (request: ExtensionUpdateRequest) => Promise<ExtensionUpdateResult>;
   onUpdateSettings: (patch: ExtensionSettingsPatch) => Promise<void>;
 };
@@ -125,11 +108,6 @@ type ExtensionDraftDialogState = {
   draft: ExtensionManifestDraft;
 };
 
-type BuiltInToolCategoryGroup = {
-  category: (typeof builtInToolCategories)[number];
-  tools: BuiltInToolDefinition[];
-};
-
 type ExtensionsCopy = ReturnType<typeof getExtensionsCopy>;
 
 const permissionModes: ExtensionPermissionMode[] = ["ask", "allow", "deny"];
@@ -137,12 +115,51 @@ const draftInputClassName =
   "h-9 min-w-0 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none placeholder:text-[#b4b4bf] focus:border-[#202123]";
 const draftIconButtonClassName =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-[#d9d9e3] bg-white text-[#565869] transition hover:bg-[#f7f7f8]";
+const extensionIconSources: Record<string, string> = {
+  airtable: new URL("../assets/extension-icons/airtable.ico", import.meta.url).href,
+  asana: new URL("../assets/extension-icons/asana.ico", import.meta.url).href,
+  bitbucket: new URL("../assets/extension-icons/bitbucket.ico", import.meta.url).href,
+  calendly: new URL("../assets/extension-icons/calendly.ico", import.meta.url).href,
+  clickup: new URL("../assets/extension-icons/clickup.png", import.meta.url).href,
+  cloudflare: new URL("../assets/extension-icons/cloudflare.ico", import.meta.url).href,
+  confluence: new URL("../assets/extension-icons/confluence.ico", import.meta.url).href,
+  datadog: new URL("../assets/extension-icons/datadog.ico", import.meta.url).href,
+  discord: new URL("../assets/extension-icons/discord.ico", import.meta.url).href,
+  dropbox: new URL("../assets/extension-icons/dropbox.ico", import.meta.url).href,
+  figma: new URL("../assets/extension-icons/figma.png", import.meta.url).href,
+  freshdesk: new URL("../assets/extension-icons/freshdesk.ico", import.meta.url).href,
+  gmail: new URL("../assets/extension-icons/gmail.ico", import.meta.url).href,
+  github: new URL("../assets/extension-icons/github.png", import.meta.url).href,
+  gitlab: new URL("../assets/extension-icons/gitlab.ico", import.meta.url).href,
+  "google-calendar": new URL("../assets/extension-icons/google-calendar.png", import.meta.url).href,
+  "google-drive": new URL("../assets/extension-icons/google-drive.png", import.meta.url).href,
+  hubspot: new URL("../assets/extension-icons/hubspot.png", import.meta.url).href,
+  intercom: new URL("../assets/extension-icons/intercom.ico", import.meta.url).href,
+  "jira-cloud": new URL("../assets/extension-icons/jira-cloud.ico", import.meta.url).href,
+  linear: new URL("../assets/extension-icons/linear.svg", import.meta.url).href,
+  "microsoft-365": new URL("../assets/extension-icons/microsoft-365.svg", import.meta.url).href,
+  miro: new URL("../assets/extension-icons/miro.png", import.meta.url).href,
+  monday: new URL("../assets/extension-icons/monday.ico", import.meta.url).href,
+  mailchimp: new URL("../assets/extension-icons/mailchimp.ico", import.meta.url).href,
+  notion: new URL("../assets/extension-icons/notion.png", import.meta.url).href,
+  okta: new URL("../assets/extension-icons/okta.ico", import.meta.url).href,
+  pagerduty: new URL("../assets/extension-icons/pagerduty.ico", import.meta.url).href,
+  pipedrive: new URL("../assets/extension-icons/pipedrive.ico", import.meta.url).href,
+  postmark: new URL("../assets/extension-icons/postmark.ico", import.meta.url).href,
+  "qq-mail": new URL("../assets/extension-icons/qq-mail.ico", import.meta.url).href,
+  salesforce: new URL("../assets/extension-icons/salesforce.ico", import.meta.url).href,
+  sentry: new URL("../assets/extension-icons/sentry.ico", import.meta.url).href,
+  shopify: new URL("../assets/extension-icons/shopify.ico", import.meta.url).href,
+  slack: new URL("../assets/extension-icons/slack.png", import.meta.url).href,
+  stripe: new URL("../assets/extension-icons/stripe.ico", import.meta.url).href,
+  todoist: new URL("../assets/extension-icons/todoist.ico", import.meta.url).href,
+  trello: new URL("../assets/extension-icons/trello.ico", import.meta.url).href,
+  twilio: new URL("../assets/extension-icons/twilio.ico", import.meta.url).href,
+  zendesk: new URL("../assets/extension-icons/zendesk.ico", import.meta.url).href,
+  zoom: new URL("../assets/extension-icons/zoom.ico", import.meta.url).href
+};
 
 export function ExtensionsPanel({
-  agentQualityMetrics,
-  builtInToolLogs,
-  developmentQaResult,
-  developmentQaRunning,
   language,
   logs,
   registry,
@@ -151,9 +168,10 @@ export function ExtensionsPanel({
   onDeleteExtension,
   onDeleteSecret,
   onInvoke,
+  onOpenExternal,
   onRefresh,
-  onRunDevelopmentQa,
   onSaveSecret,
+  onStartOAuth,
   onUpdateExtension,
   onUpdateSettings
 }: ExtensionsPanelProps): ReactElement {
@@ -164,6 +182,7 @@ export function ExtensionsPanel({
   const [draftDialog, setDraftDialog] = useState<ExtensionDraftDialogState | null>(null);
   const [draftBusy, setDraftBusy] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [busyOAuthExtensionId, setBusyOAuthExtensionId] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] =
     useState<ExtensionActionConfirmation | null>(null);
   const [listLimit, setListLimit] = useState("10");
@@ -190,7 +209,6 @@ export function ExtensionsPanel({
         : [],
     [logs, selectedManifest]
   );
-  const builtInToolGroups = useMemo(() => groupBuiltInToolsByCategory(), []);
   const permissionModeOptions = permissionModes.map((mode) => ({
     value: mode,
     label: copy.permissionMode(mode)
@@ -202,6 +220,9 @@ export function ExtensionsPanel({
       ),
     [selectedManifest]
   );
+  const selectedExtensionDetail = selectedManifest
+    ? createExtensionDetail(selectedManifest, language)
+    : "";
   const groupedManifests = useMemo(
     () => [
       {
@@ -215,6 +236,25 @@ export function ExtensionsPanel({
     ],
     [copy.builtInExtensions, copy.myExtensions, registry.manifests]
   );
+  const selectedOAuth = selectedManifest?.auth.oauth;
+  const selectedManualAuthFields = selectedManifest
+    ? getManualAuthFields(selectedManifest)
+    : [];
+  const missingOAuthPrerequisiteLabels = selectedOAuth
+    ? getMissingOAuthPrerequisiteLabels(selectedManifest, selectedSecretStatus)
+    : [];
+  const canStartSelectedOAuth =
+    Boolean(selectedOAuth) &&
+    selectedOAuth?.redirectUriMode !== "registered-https" &&
+    missingOAuthPrerequisiteLabels.length === 0;
+  const selectedOAuthUsesProductClient = selectedOAuth
+    ? hasProductOAuthRuntime(selectedOAuth)
+    : false;
+  const showSelectedOAuthSetup =
+    Boolean(selectedOAuth) &&
+    !selectedManifest?.builtIn &&
+    (!selectedOAuthUsesProductClient ||
+      selectedOAuth?.redirectUriMode !== "loopback");
 
   async function updateSelectedExtensionEnabled(enabled: boolean): Promise<void> {
     if (!selectedManifest) {
@@ -344,6 +384,34 @@ export function ExtensionsPanel({
     setNotice(copy.secretSaved);
   }
 
+  async function startOAuthAuthorization(manifest: ExtensionManifest): Promise<void> {
+    if (!manifest.auth.oauth) {
+      return;
+    }
+
+    const missingFields = getMissingOAuthPrerequisiteLabels(manifest, selectedSecretStatus);
+
+    if (missingFields.length > 0) {
+      setNotice(copy.oauthMissingPrerequisites(missingFields));
+      return;
+    }
+
+    setBusyOAuthExtensionId(manifest.id);
+    setNotice(copy.oauthStarting(manifest.auth.oauth.provider));
+
+    try {
+      const result = await onStartOAuth({ extensionId: manifest.id });
+
+      setNotice(copy.oauthSucceeded(result.provider, result.savedFields.length));
+    } catch (error) {
+      setNotice(
+        `${copy.oauthFailed}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    } finally {
+      setBusyOAuthExtensionId(null);
+    }
+  }
+
   async function invokeAction(
     actionId: string,
     input: Record<string, unknown>
@@ -408,7 +476,7 @@ export function ExtensionsPanel({
 
   return (
     <section className="grid h-full min-h-0 grid-cols-[300px_minmax(0,1fr)] overflow-hidden">
-      <aside className="min-h-0 border-r border-[#ececf1] bg-[#fbfbfc] p-4">
+      <aside className="flex min-h-0 flex-col border-r border-[#ececf1] bg-[#fbfbfc] p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-[#202123]">{copy.title}</h2>
           <div className="flex items-center gap-2">
@@ -430,7 +498,7 @@ export function ExtensionsPanel({
             </button>
           </div>
         </div>
-        <div className="min-h-0 space-y-2 overflow-auto pb-8">
+        <div className="min-h-0 flex-1 scroll-pb-8 space-y-2 overflow-auto pb-8 pr-1">
           {groupedManifests.map((group) =>
             group.items.length > 0 ? (
               <div key={group.label} className="space-y-2">
@@ -453,8 +521,18 @@ export function ExtensionsPanel({
                           : "hover:bg-white/85"
                       }`}
                     >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#202123] text-white">
-                        <Mail className="h-4 w-4" />
+                      <span className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#ececf1] bg-white shadow-[0_3px_12px_rgba(0,0,0,0.06)]">
+                        {extensionIconSources[manifest.id] ? (
+                          <img
+                            src={extensionIconSources[manifest.id]}
+                            alt=""
+                            aria-hidden="true"
+                            draggable={false}
+                            className="h-6 w-6 object-contain"
+                          />
+                        ) : (
+                          <span className="h-3 w-3 rounded-full bg-[#202123]" />
+                        )}
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-[14px] font-medium text-[#202123]">
@@ -482,21 +560,14 @@ export function ExtensionsPanel({
       <div className="min-h-0 overflow-auto px-6 py-6">
         {selectedManifest && selectedSettings ? (
           <div className="mx-auto grid max-w-5xl gap-5">
-            {renderBuiltInToolsSection(
-              builtInToolGroups,
-              builtInToolLogs,
-              agentQualityMetrics,
-              developmentQaResult,
-              developmentQaRunning,
-              onRunDevelopmentQa,
-              copy
-            )}
-
             <header className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h1 className="text-xl font-semibold text-[#202123]">{selectedManifest.name}</h1>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[#565869]">
                   {selectedManifest.description}
+                </p>
+                <p className="mt-2 max-w-3xl text-[13px] leading-6 text-[#6e6e80]">
+                  {selectedExtensionDetail}
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -582,60 +653,138 @@ export function ExtensionsPanel({
 
             <section className="grid gap-3 rounded-[12px] border border-[#ececf1] p-4">
               <h3 className="text-sm font-semibold text-[#202123]">{copy.credentials}</h3>
+              {selectedManifest.auth.oauth ? (
+                <div className="grid gap-3 rounded-[10px] border border-[#d9e7ff] bg-[#f8fbff] p-3">
+                  <div className="flex items-start gap-2">
+                    <Globe2 className="mt-0.5 h-4 w-4 shrink-0 text-[#2563eb]" />
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold text-[#202123]">
+                        {copy.oauthTitle(selectedManifest.auth.oauth.provider)}
+                      </div>
+                      <div className="mt-1 text-[12px] leading-5 text-[#565869]">
+                        {copy.oauthDescription(
+                          selectedManifest.auth.oauth.redirectUriMode,
+                          selectedManifest.auth.oauth.scopes
+                        )}
+                      </div>
+                      <div className="mt-1 text-[12px] leading-5 text-[#565869]">
+                        {copy.oauthSetupHint(
+                          selectedManifest.auth.oauth.provider,
+                          selectedOAuthUsesProductClient
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {missingOAuthPrerequisiteLabels.length > 0 ? (
+                    <div className="rounded-[10px] border border-[#fde68a] bg-[#fffbeb] px-3 py-2 text-[12px] leading-5 text-[#92400e]">
+                      {copy.oauthMissingPrerequisites(missingOAuthPrerequisiteLabels)}
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    {showSelectedOAuthSetup ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenExternal(selectedManifest.auth.oauth?.setupUrl ?? "")}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#c7d7fe] bg-white px-2.5 text-[12px] font-semibold text-[#1d4ed8] transition hover:bg-[#eef4ff]"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {copy.oauthSetup}
+                      </button>
+                    ) : null}
+                    {selectedManifest.auth.oauth.redirectUriMode !== "registered-https" ? (
+                      <button
+                        type="button"
+                        disabled={
+                          busyOAuthExtensionId === selectedManifest.id ||
+                          !canStartSelectedOAuth
+                        }
+                        onClick={() => void startOAuthAuthorization(selectedManifest)}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#2563eb] px-2.5 text-[12px] font-semibold text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Globe2 className="h-3.5 w-3.5" />
+                        {busyOAuthExtensionId === selectedManifest.id
+                          ? copy.oauthAuthorizing
+                          : canStartSelectedOAuth
+                            ? copy.oauthStart
+                            : copy.oauthMissingButton}
+                      </button>
+                    ) : (
+                      <span className="inline-flex min-h-8 items-center rounded-[10px] border border-[#d9e7ff] bg-white px-2.5 text-[12px] text-[#565869]">
+                        {copy.oauthRegisteredCallback}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : null}
               {selectedManifest.auth.fields.length === 0 ? (
                 <p className="rounded-[10px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-sm text-[#565869]">
                   {copy.noCredentialsRequired}
                 </p>
+              ) : selectedManualAuthFields.length === 0 ? (
+                <p className="rounded-[10px] border border-[#d9e7ff] bg-[#f8fbff] px-3 py-2 text-sm leading-6 text-[#565869]">
+                  {copy.oauthOnlyCredentials}
+                </p>
               ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {selectedManifest.auth.fields.map((field) => {
-                  const key = `${selectedManifest.id}:${field.id}`;
-                  const status = selectedSecretStatus?.fields[field.id];
+                <div className="grid gap-3 md:grid-cols-2">
+                  {selectedManualAuthFields.map((field) => {
+                    const key = `${selectedManifest.id}:${field.id}`;
+                    const status = selectedSecretStatus?.fields[field.id];
 
-                  return (
-                    <form
-                      key={field.id}
-                      onSubmit={(event) => void saveSecret(event, selectedManifest, field.id)}
-                      className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-[#fafafa] p-3"
-                    >
-                      <label className="text-[12px] font-semibold text-[#202123]">
-                        {field.label}
-                      </label>
-                      <input
-                        type="password"
-                        value={secretDrafts[key] ?? ""}
-                        onChange={(event) =>
-                          setSecretDrafts((current) => ({
-                            ...current,
-                            [key]: event.currentTarget.value
-                          }))
-                        }
-                        placeholder={status?.hasValue ? copy.savedSecret(status.last4) : field.placeholder}
-                        className="h-9 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none focus:border-[#202123]"
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="submit"
-                          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2.5 text-[12px] font-semibold text-white"
-                        >
-                          <KeyRound className="h-3.5 w-3.5" />
-                          {copy.save}
-                        </button>
-                        {status?.hasValue ? (
+                    return (
+                      <form
+                        key={field.id}
+                        onSubmit={(event) => void saveSecret(event, selectedManifest, field.id)}
+                        className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-[#fafafa] p-3"
+                      >
+                        <label className="text-[12px] font-semibold text-[#202123]">
+                          {field.label}
+                          {isOAuthPrerequisiteField(selectedManifest.auth.oauth, field.id) ? (
+                            <span className="ml-1 font-normal text-[#8e8ea0]">
+                              {copy.requiredForOAuth}
+                            </span>
+                          ) : field.required === false ? (
+                            <span className="ml-1 font-normal text-[#8e8ea0]">
+                              {copy.optional}
+                            </span>
+                          ) : null}
+                        </label>
+                        <input
+                          type="password"
+                          value={secretDrafts[key] ?? ""}
+                          onChange={(event) =>
+                            setSecretDrafts((current) => ({
+                              ...current,
+                              [key]: event.currentTarget.value
+                            }))
+                          }
+                          placeholder={
+                            status?.hasValue ? copy.savedSecret(status.last4) : field.placeholder
+                          }
+                          className="h-9 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-sm text-[#202123] outline-none focus:border-[#202123]"
+                        />
+                        <div className="flex flex-wrap gap-2">
                           <button
-                            type="button"
-                            onClick={() => void onDeleteSecret(selectedManifest.id, field.id)}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[12px] font-semibold text-[#565869]"
+                            type="submit"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[#202123] px-2.5 text-[12px] font-semibold text-white"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            {copy.delete}
+                            <KeyRound className="h-3.5 w-3.5" />
+                            {copy.save}
                           </button>
-                        ) : null}
-                      </div>
-                    </form>
-                  );
-                })}
-              </div>
+                          {status?.hasValue ? (
+                            <button
+                              type="button"
+                              onClick={() => void onDeleteSecret(selectedManifest.id, field.id)}
+                              className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-2.5 text-[12px] font-semibold text-[#565869]"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {copy.delete}
+                            </button>
+                          ) : null}
+                        </div>
+                      </form>
+                    );
+                  })}
+                </div>
               )}
             </section>
 
@@ -814,450 +963,6 @@ export function ExtensionsPanel({
   }
 }
 
-function groupBuiltInToolsByCategory(): BuiltInToolCategoryGroup[] {
-  const toolsByCategory = new Map<BuiltInToolCategory, BuiltInToolDefinition[]>();
-
-  for (const tool of builtInToolDefinitions) {
-    toolsByCategory.set(tool.category, [...(toolsByCategory.get(tool.category) ?? []), tool]);
-  }
-
-  return builtInToolCategories.map((category) => ({
-    category,
-    tools: toolsByCategory.get(category.id) ?? []
-  }));
-}
-
-function renderBuiltInToolsSection(
-  groups: BuiltInToolCategoryGroup[],
-  logs: BuiltInToolCallLogRecord[],
-  metrics: AgentQualityMetricSnapshot | null,
-  developmentQaResult: BuiltInToolQaRunResult | null,
-  developmentQaRunning: boolean,
-  onRunDevelopmentQa: () => void,
-  copy: ExtensionsCopy
-): ReactElement {
-  const latestLogByToolName = createLatestBuiltInToolLogMap(logs);
-  const featuredMetrics = getFeaturedAgentQualityMetrics(metrics);
-  const reviewMetrics = getReviewAgentQualityMetrics(metrics);
-
-  return (
-    <section className="grid gap-4 rounded-[16px] border border-[#ececf1] bg-white p-5 shadow-[0_12px_36px_rgba(0,0,0,0.04)]">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-[#202123]">{copy.builtInTools}</h2>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#565869]">
-            {copy.builtInToolsDescription}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className="rounded-full border border-[#d9d9e3] bg-[#fafafa] px-3 py-1 text-[12px] font-semibold text-[#202123]">
-            {copy.builtInToolCount(builtInToolDefinitions.length)}
-          </span>
-          <button
-            type="button"
-            disabled={developmentQaRunning}
-            onClick={onRunDevelopmentQa}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-[#d9d9e3] bg-white px-3 text-[12px] font-semibold text-[#202123] transition hover:bg-[#f7f7f8] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {developmentQaRunning ? (
-              <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Play className="h-3.5 w-3.5" />
-            )}
-            {developmentQaRunning ? copy.qaRunning : copy.runDevelopmentQa}
-          </button>
-        </div>
-      </header>
-
-      <div className="grid gap-2 md:grid-cols-4">
-        {featuredMetrics.map((metric) => (
-          <div
-            key={metric.id}
-            className="rounded-[12px] border border-[#ececf1] bg-[#fbfbfc] px-3 py-2"
-          >
-            <div className="truncate text-[11px] font-medium text-[#8e8ea0]">
-              {copy.qualityMetricLabel(metric.id)}
-            </div>
-            <div className="mt-1 text-[16px] font-semibold text-[#202123]">
-              {formatMetricPercent(metric)}
-            </div>
-            <div className={`mt-1 text-[11px] ${getMetricStatusClassName(metric)}`}>
-              {copy.metricStatus(metric)}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid gap-2 rounded-[12px] border border-[#ececf1] bg-[#fbfbfc] p-3">
-        <div className="text-[12px] font-semibold text-[#202123]">
-          {copy.qualityMetricsReview}
-        </div>
-        <div className="grid gap-2">
-          {reviewMetrics.map((metric) => (
-            <div
-              key={metric.id}
-              className="grid gap-2 rounded-[10px] border border-[#ececf1] bg-white px-3 py-2 text-[12px] text-[#565869] md:grid-cols-[minmax(160px,1.3fr)_repeat(5,minmax(0,auto))] md:items-center"
-            >
-              <div className="min-w-0">
-                <div className="truncate font-semibold text-[#202123]">
-                  {copy.qualityMetricLabel(metric.id)}
-                </div>
-                <div className="mt-0.5 text-[11px] text-[#8e8ea0]">
-                  {copy.metricSampleSize(metric)}
-                </div>
-              </div>
-              <span className="font-mono text-[#202123]">{formatMetricPercent(metric)}</span>
-              <span>{metric.numerator}/{metric.denominator}</span>
-              <span>{copy.mvpTier}: {copy.metricTierStatus(metric.mvpPassed)}</span>
-              <span>{copy.usableTier}: {copy.metricTierStatus(metric.usablePassed)}</span>
-              <span>{copy.excellentTier}: {copy.metricTierStatus(metric.excellentPassed)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {developmentQaResult ? (
-        <div className="grid gap-3 rounded-[12px] border border-[#ececf1] bg-[#fbfbfc] p-3 text-[12px] text-[#565869] md:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`rounded-full px-2 py-1 font-semibold ${getQaStatusClassName(
-                  developmentQaResult.status
-                )}`}
-              >
-                {copy.qaStatus}: {copy.qaRunStatus(developmentQaResult.status)}
-              </span>
-              <span className="rounded-full bg-white px-2 py-1">
-                {copy.qaSuccessRate}: {formatQaSuccessRate(developmentQaResult)}
-              </span>
-              <span className="rounded-full bg-white px-2 py-1">
-                {copy.qaModel}: {developmentQaResult.modelId}
-              </span>
-            </div>
-            <div className="mt-2 truncate font-mono text-[11px] text-[#8e8ea0]">
-              {copy.qaProject}: {developmentQaResult.projectRoot}
-            </div>
-            {developmentQaResult.skippedReason ? (
-              <div className="mt-1 text-[11px] text-[#9a3412]">
-                {copy.qaSkippedReason}: {developmentQaResult.skippedReason}
-              </div>
-            ) : null}
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-right md:grid-cols-6">
-            <QaSummaryPill label={copy.qaTotal} value={developmentQaResult.summary.total} />
-            <QaSummaryPill label={copy.qaSucceeded} value={developmentQaResult.summary.succeeded} />
-            <QaSummaryPill label={copy.qaFailed} value={developmentQaResult.summary.failed} />
-            <QaSummaryPill label={copy.qaBlocked} value={developmentQaResult.summary.blocked} />
-            <QaSummaryPill
-              label={copy.qaNotImplemented}
-              value={developmentQaResult.summary.notImplemented}
-            />
-            <QaSummaryPill label={copy.qaSkipped} value={developmentQaResult.summary.skipped} />
-          </div>
-          {developmentQaResult.summary.safety.total > 0 ? (
-            <div className="grid grid-cols-2 gap-2 text-right md:col-span-2 md:grid-cols-4">
-              <QaSummaryPill
-                label={copy.qaSafetyTotal}
-                value={developmentQaResult.summary.safety.total}
-              />
-              <QaSummaryPill
-                label={copy.qaSafetyPassed}
-                value={developmentQaResult.summary.safety.passed}
-              />
-              <QaSummaryPill
-                label={copy.qaWriteBeforeConfirmationFailures}
-                value={developmentQaResult.summary.safety.writeBeforeConfirmationFailures}
-              />
-              <QaSummaryPill
-                label={copy.qaCriticalConfirmationFailures}
-                value={developmentQaResult.summary.safety.criticalConfirmationFailures}
-              />
-            </div>
-          ) : null}
-          <div className="grid grid-cols-2 gap-2 text-right md:col-span-2 md:grid-cols-5">
-            <QaSummaryPill
-              label={copy.qaMvpGate}
-              value={copy.qaMetricGateStatus(developmentQaResult.summary.quality.mvpPassed)}
-            />
-            <QaSummaryPill
-              label={copy.qaToolCallSuccessRate}
-              value={formatQaMetricGateValue(developmentQaResult.summary.quality.toolCallSuccessRate)}
-            />
-            <QaSummaryPill
-              label={copy.qaP0ToolErrorRate}
-              value={formatQaMetricGateValue(developmentQaResult.summary.quality.p0ToolErrorRate)}
-            />
-            <QaSummaryPill
-              label={copy.qaWriteBeforeConfirmationFailureRate}
-              value={formatQaMetricGateValue(
-                developmentQaResult.summary.quality.writeBeforeConfirmationFailureRate
-              )}
-            />
-            <QaSummaryPill
-              label={copy.qaCriticalConfirmationFailureRate}
-              value={formatQaMetricGateValue(
-                developmentQaResult.summary.quality.criticalConfirmationFailureRate
-              )}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-right md:col-span-2 md:grid-cols-6">
-            <QaSummaryPill
-              label={copy.qaRegisteredTools}
-              value={developmentQaResult.summary.coverage.registeredTools}
-            />
-            <QaSummaryPill
-              label={copy.qaAvailableTools}
-              value={developmentQaResult.summary.coverage.availableTools}
-            />
-            <QaSummaryPill
-              label={copy.qaScenarioTools}
-              value={developmentQaResult.summary.coverage.scenarioTools}
-            />
-            <QaSummaryPill
-              label={copy.qaAttemptedScenarioTools}
-              value={developmentQaResult.summary.coverage.attemptedScenarioTools}
-            />
-            <QaSummaryPill
-              label={copy.qaSucceededScenarioTools}
-              value={developmentQaResult.summary.coverage.succeededScenarioTools}
-            />
-            <QaSummaryPill
-              label={copy.qaP0P1ScenarioTools}
-              value={
-                developmentQaResult.summary.coverage.p0SucceededScenarioTools +
-                developmentQaResult.summary.coverage.p1SucceededScenarioTools
-              }
-            />
-          </div>
-        </div>
-      ) : null}
-
-      <div className="grid gap-3">
-        {groups.map((group) => (
-          <details
-            key={group.category.id}
-            open={group.category.id === "project" || group.category.id === "file"}
-            className="rounded-[12px] border border-[#ececf1] bg-[#fbfbfc]"
-          >
-            <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-[#202123]">
-              <span>{group.category.label}</span>
-              <span className="text-[12px] font-medium text-[#8e8ea0]">
-                {copy.builtInToolCount(group.tools.length)}
-              </span>
-            </summary>
-            <div className="grid gap-2 border-t border-[#ececf1] p-3">
-              {group.tools.map((tool) => {
-                const latestLog = latestLogByToolName.get(tool.name);
-
-                return (
-                  <div
-                    key={tool.name}
-                    className="grid gap-3 rounded-[10px] bg-white p-3 shadow-[inset_0_0_0_1px_#ececf1] lg:grid-cols-[minmax(180px,0.8fr)_minmax(260px,1.2fr)_minmax(220px,0.9fr)]"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-[#202123]">
-                        {tool.displayName ?? tool.name}
-                      </div>
-                      <div className="mt-1 truncate font-mono text-[11px] text-[#8e8ea0]">
-                        {tool.name}
-                      </div>
-                    </div>
-                    <p className="text-[12px] leading-5 text-[#565869]">{tool.description}</p>
-                    <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                      <span className="rounded-full bg-[#f7f7f8] px-2 py-1 text-[#565869]">
-                        {copy.category}: {group.category.id}
-                      </span>
-                      <span className={`rounded-full px-2 py-1 ${getToolRiskClassName(tool.riskLevel)}`}>
-                        {copy.risk}: {copy.toolRisk(tool.riskLevel)}
-                      </span>
-                      <span className="rounded-full bg-[#f7f7f8] px-2 py-1 text-[#565869]">
-                        {tool.requiresConfirmation
-                          ? copy.confirmationRequired
-                          : copy.autoAllowed}
-                      </span>
-                      <span className="rounded-full bg-[#f7f7f8] px-2 py-1 text-[#565869]">
-                        {copy.availability}: {copy.toolAvailability(tool.availability)}
-                      </span>
-                      <span
-                        className={`rounded-full px-2 py-1 ${
-                          latestLog
-                            ? getToolCallStatusClassName(latestLog.status)
-                            : "bg-[#f7f7f8] text-[#565869]"
-                        }`}
-                      >
-                        {copy.recentStatus}:{" "}
-                        {latestLog
-                          ? copy.toolCallStatus(latestLog.status)
-                          : copy.noRecentToolCall}
-                      </span>
-                      {latestLog ? (
-                        <span className="rounded-full bg-[#f7f7f8] px-2 py-1 text-[#565869]">
-                          {latestLog.durationMs}ms
-                        </span>
-                      ) : null}
-                      {latestLog?.errorMessage ? (
-                        <span className="max-w-full truncate rounded-full bg-[#fff1f1] px-2 py-1 text-[#b42318]">
-                          {latestLog.errorMessage}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </details>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function QaSummaryPill({
-  label,
-  value
-}: {
-  label: string;
-  value: number | string;
-}): ReactElement {
-  return (
-    <div className="rounded-[10px] bg-white px-2 py-1">
-      <div className="text-[10px] font-medium text-[#8e8ea0]">{label}</div>
-      <div className="mt-0.5 font-semibold text-[#202123]">{value}</div>
-    </div>
-  );
-}
-
-function formatQaSuccessRate(result: BuiltInToolQaRunResult): string {
-  return result.summary.total === 0 ? "-" : `${Math.round(result.summary.successRate * 100)}%`;
-}
-
-function formatQaMetricGateValue(
-  metric: BuiltInToolQaRunResult["summary"]["quality"]["toolCallSuccessRate"]
-): string {
-  return metric.value === null ? "-" : `${Math.round(metric.value * 100)}%`;
-}
-
-function getQaStatusClassName(status: BuiltInToolQaRunResult["status"]): string {
-  if (status === "passed") {
-    return "bg-[#effaf6] text-[#087443]";
-  }
-
-  if (status === "skipped") {
-    return "bg-[#fffbeb] text-[#92400e]";
-  }
-
-  return "bg-[#fff1f1] text-[#b42318]";
-}
-
-function getToolRiskClassName(riskLevel: BuiltInToolDefinition["riskLevel"]): string {
-  if (riskLevel === "critical") {
-    return "bg-[#fff1f1] text-[#b42318]";
-  }
-
-  if (riskLevel === "high") {
-    return "bg-[#fff5eb] text-[#9a3412]";
-  }
-
-  if (riskLevel === "medium") {
-    return "bg-[#fffbeb] text-[#92400e]";
-  }
-
-  return "bg-[#effaf6] text-[#087443]";
-}
-
-function createLatestBuiltInToolLogMap(
-  logs: BuiltInToolCallLogRecord[]
-): Map<string, BuiltInToolCallLogRecord> {
-  const latestLogByToolName = new Map<string, BuiltInToolCallLogRecord>();
-
-  for (const log of logs) {
-    if (!latestLogByToolName.has(log.toolName)) {
-      latestLogByToolName.set(log.toolName, log);
-    }
-  }
-
-  return latestLogByToolName;
-}
-
-function getFeaturedAgentQualityMetrics(
-  snapshot: AgentQualityMetricSnapshot | null
-): AgentQualityMetricValue[] {
-  const featuredMetricIds: AgentQualityMetricId[] = [
-    "toolCallSuccessRate",
-    "p0ToolErrorRate",
-    "highRiskMisfireRate",
-    "writeBeforeConfirmationRate"
-  ];
-
-  return featuredMetricIds.map((id) => {
-    const metric = snapshot?.metrics.find((candidate) => candidate.id === id);
-
-    return (
-      metric ?? {
-        id,
-        numerator: 0,
-        denominator: 0,
-        value: null,
-        mvpPassed: null,
-        usablePassed: null,
-        excellentPassed: null
-      }
-    );
-  });
-}
-
-function getReviewAgentQualityMetrics(
-  snapshot: AgentQualityMetricSnapshot | null
-): AgentQualityMetricValue[] {
-  return agentQualityMetricDefinitions.map((definition) => {
-    const metric = snapshot?.metrics.find((candidate) => candidate.id === definition.id);
-
-    return (
-      metric ?? {
-        id: definition.id,
-        numerator: 0,
-        denominator: 0,
-        value: null,
-        mvpPassed: null,
-        usablePassed: null,
-        excellentPassed: null
-      }
-    );
-  });
-}
-
-function formatMetricPercent(metric: AgentQualityMetricValue): string {
-  return metric.value === null ? "-" : `${Math.round(metric.value * 100)}%`;
-}
-
-function getMetricStatusClassName(metric: AgentQualityMetricValue): string {
-  if (metric.mvpPassed === true) {
-    return "text-[#087443]";
-  }
-
-  if (metric.mvpPassed === false) {
-    return "text-[#b42318]";
-  }
-
-  return "text-[#8e8ea0]";
-}
-
-function getToolCallStatusClassName(status: BuiltInToolCallLogRecord["status"]): string {
-  if (status === "succeeded") {
-    return "bg-[#effaf6] text-[#087443]";
-  }
-
-  if (status === "blocked" || status === "not_implemented") {
-    return "bg-[#fff5eb] text-[#9a3412]";
-  }
-
-  if (status === "failed") {
-    return "bg-[#fff1f1] text-[#b42318]";
-  }
-
-  return "bg-[#f7f7f8] text-[#565869]";
-}
-
 function renderDraftExtensionActions(
   manifest: ExtensionManifest,
   copy: ExtensionsCopy
@@ -1265,7 +970,7 @@ function renderDraftExtensionActions(
   return (
     <div className="grid gap-3">
       <p className="rounded-[10px] border border-[#ececf1] bg-[#fafafa] px-3 py-2 text-sm leading-6 text-[#565869]">
-        {copy.draftExtensionNotice}
+        {manifest.builtIn ? copy.builtInServiceActionNotice : copy.draftExtensionNotice}
       </p>
       {manifest.actions.map((action) => (
         <article
@@ -1663,6 +1368,63 @@ function createComposeInput(state: ComposeState): Record<string, unknown> {
   };
 }
 
+function getManualAuthFields(manifest: ExtensionManifest): ExtensionManifest["auth"]["fields"] {
+  return manifest.auth.fields.filter((field) => field.manualInput !== false);
+}
+
+function getOAuthPrerequisiteFieldIds(oauth: ExtensionOAuthDefinition | undefined): string[] {
+  if (!oauth) {
+    return [];
+  }
+
+  if (oauth.redirectUriMode === "brokered") {
+    return oauth.brokerAuthorizationUrl && oauth.brokerTokenUrl ? [] : ["Forge OAuth 授权服务地址"];
+  }
+
+  const hasProductClientId = Boolean(oauth.productClientId);
+  const needsProductClientId =
+    !hasProductClientId && oauth.productClientIdEnvVar ? oauth.productClientIdEnvVar : undefined;
+  const needsUserClientId =
+    !hasProductClientId && !needsProductClientId ? oauth.clientIdFieldId : undefined;
+  const needsUserClientSecret =
+    oauth.tokenRequestAuth !== "none" && !oauth.productClientSecretEnvVar
+      ? oauth.clientSecretFieldId
+      : undefined;
+
+  return [
+    ...(needsProductClientId ? [needsProductClientId] : []),
+    ...(needsUserClientId ? [needsUserClientId] : []),
+    ...(needsUserClientSecret ? [needsUserClientSecret] : [])
+  ];
+}
+
+function hasProductOAuthRuntime(oauth: ExtensionOAuthDefinition): boolean {
+  return Boolean(
+    oauth.productClientId ||
+      (oauth.redirectUriMode === "brokered" && oauth.brokerAuthorizationUrl && oauth.brokerTokenUrl)
+  );
+}
+
+function getMissingOAuthPrerequisiteLabels(
+  manifest: ExtensionManifest,
+  secretStatus: ExtensionRegistrySnapshot["secretStatuses"][number] | null
+): string[] {
+  return getOAuthPrerequisiteFieldIds(manifest.auth.oauth)
+    .filter((fieldId) => !secretStatus?.fields[fieldId]?.hasValue)
+    .map((fieldId) => {
+      const field = manifest.auth.fields.find((candidate) => candidate.id === fieldId);
+
+      return field?.label ?? fieldId;
+    });
+}
+
+function isOAuthPrerequisiteField(
+  oauth: ExtensionOAuthDefinition | undefined,
+  fieldId: string
+): boolean {
+  return getOAuthPrerequisiteFieldIds(oauth).includes(fieldId);
+}
+
 function createDefaultExtensionDraft(language: Language): ExtensionManifestDraft {
   const isChinese = language === "zh-CN";
 
@@ -1838,22 +1600,51 @@ function splitRecipients(value: string): string[] {
     .filter(Boolean);
 }
 
+function createExtensionDetail(manifest: ExtensionManifest, language: Language): string {
+  const actionLabels = manifest.actions.map((action) => action.label);
+  const visibleActions = actionLabels.slice(0, 5).join(language === "zh-CN" ? "、" : ", ");
+  const actionSummary =
+    actionLabels.length > 5
+      ? language === "zh-CN"
+        ? `${visibleActions} 等 ${actionLabels.length} 个动作`
+        : `${visibleActions}, and ${actionLabels.length - 5} more actions`
+      : visibleActions;
+  const credentialSummary = manifest.auth.oauth
+    ? language === "zh-CN"
+      ? "支持网页登录授权或连接器托管凭据, 授权成功后 token 会保存到本地安全存储"
+      : "It supports browser authorization or connector-managed credentials, with tokens saved to local secure storage after authorization"
+    : language === "zh-CN"
+      ? "需要先在凭据区保存对应服务的访问令牌或 API key"
+      : "It requires saving the service access token or API key in the credentials section first";
+  const riskyActionCount = manifest.actions.filter((action) =>
+    ["write", "send", "delete"].includes(action.risk)
+  ).length;
+  const safetySummary =
+    riskyActionCount > 0
+      ? language === "zh-CN"
+        ? `其中 ${riskyActionCount} 个写入或发送类动作会继续遵守权限策略和二次确认`
+        : `${riskyActionCount} write, send or delete actions still follow permission policy and confirmation`
+      : language === "zh-CN"
+        ? "当前内置动作以读取和检索为主, 适合让 Agent 先理解外部系统状态"
+        : "Current built-in actions focus on reading and retrieval so the agent can understand external system state first";
+
+  return language === "zh-CN"
+    ? `这个扩展会让 Forge Agent 在你启用并授权后访问 ${manifest.name} 的官方 API。当前可执行 ${actionSummary}。${credentialSummary}。${safetySummary}。`
+    : `This extension lets the Forge agent access the official ${manifest.name} API after you enable and authorize it. It can run ${actionSummary}. ${credentialSummary}. ${safetySummary}.`;
+}
+
 function getExtensionsCopy(language: Language) {
   const isChinese = language === "zh-CN";
 
   return {
     actions: isChinese ? "动作" : "Actions",
     autoAllowed: isChinese ? "可自动执行" : "Auto allowed",
-    availability: isChinese ? "可用性" : "Availability",
     body: isChinese ? "正文" : "Body",
     builtInExtensions: isChinese ? "内置扩展" : "Built-in extensions",
-    builtInToolCount: (count: number) => (isChinese ? `${count} 个工具` : `${count} tools`),
-    builtInTools: isChinese ? "Built-in Tools 内置工具" : "Built-in Tools",
-    builtInToolsDescription: isChinese
-      ? "Forge 内置工具按 8 大类统一展示。Full Access 下, Agent 队列会自动执行本地内置工具; 未来不可用工具仍会明确标记为 not_implemented。"
-      : "Forge built-in tools are grouped into 8 categories. In Full Access, the agent queue auto-executes local built-in tools, and future unavailable tools remain marked not_implemented.",
+    builtInServiceActionNotice: isChinese
+      ? "这些是内置服务动作。启用扩展并保存凭据后, Agent 可以在权限和确认策略约束下调用。"
+      : "These are built-in service actions. After enabling the extension and saving credentials, the agent can call them under the configured permission and confirmation policy.",
     cancel: isChinese ? "取消" : "Cancel",
-    category: isChinese ? "分类" : "Category",
     confirmation: isChinese ? "确认策略" : "Confirmation",
     confirmationRequired: isChinese ? "需要确认" : "Confirmation required",
     createExtension: isChinese ? "创建扩展" : "Create extension",
@@ -1896,7 +1687,6 @@ function getExtensionsCopy(language: Language) {
     extensionNamePlaceholder: isChinese ? "例如 飞书任务扩展" : "Linear Tasks Extension",
     extensionUpdated: (path: string) =>
       isChinese ? `扩展草稿已更新: ${path}` : `Extension draft updated: ${path}`,
-    excellentTier: isChinese ? "Excellent" : "Excellent",
     fieldDescription: isChinese ? "说明" : "Description",
     fieldLabel: isChinese ? "显示名称" : "Label",
     from: isChinese ? "发件人" : "From",
@@ -1904,65 +1694,76 @@ function getExtensionsCopy(language: Language) {
       ? "输入字段, 用逗号分隔, 例如 query, limit"
       : "Input fields separated by commas, e.g. query, limit",
     logs: isChinese ? "调用日志" : "Invocation logs",
-    mvpTier: isChinese ? "MVP" : "MVP",
     myExtensions: isChinese ? "我的扩展" : "My extensions",
-    noRecentToolCall: isChinese ? "暂无记录" : "No recent call",
     noLogs: isChinese ? "暂无调用日志" : "No invocation logs",
     noCredentialsRequired: isChinese ? "暂无凭据要求" : "No credentials required",
     notConnected: isChinese ? "未连接" : "Not connected",
+    oauthAuthorizing: isChinese ? "授权中" : "Authorizing",
+    oauthOnlyCredentials: isChinese
+      ? "此扩展通过网页登录授权连接, 不需要手动粘贴 token。授权完成后凭据会自动保存到本机安全存储。"
+      : "This extension connects through browser authorization. Tokens do not need to be pasted manually and are saved to local secure storage after authorization.",
+    oauthDescription: (redirectMode: string, scopes: string[]) => {
+      const scopeText = scopes.length > 0 ? scopes.join(", ") : (isChinese ? "由服务端决定" : "service default");
+      const modeText =
+        redirectMode === "loopback"
+          ? isChinese
+            ? "点击网页登录授权后, Forge 会自动完成本地回调并保存 token"
+            : "Authorize in the browser, then Forge saves tokens through the local callback"
+          : redirectMode === "device-code"
+            ? isChinese
+              ? "点击网页登录授权后, 按浏览器中的一次性验证码完成连接"
+              : "Authorize in the browser with the one-time code shown by Forge"
+            : redirectMode === "brokered"
+              ? isChinese
+                ? "通过 Forge 官方授权服务完成登录, token 自动回写到本机安全存储"
+                : "Uses the Forge OAuth service, then saves tokens back to local secure storage"
+          : isChinese
+            ? "需要 Forge 官方 HTTPS 授权回调服务"
+            : "Requires Forge's official HTTPS OAuth callback service";
+
+      return isChinese ? `${modeText}。Scope: ${scopeText}` : `${modeText}. Scope: ${scopeText}`;
+    },
+    oauthFailed: isChinese ? "网页登录授权失败" : "Browser authorization failed",
+    oauthMissingButton: isChinese ? "当前构建未配置网页登录" : "OAuth not configured in this build",
+    oauthMissingPrerequisites: (fields: string[]) =>
+      isChinese
+        ? `当前 Forge 构建缺少网页登录所需的维护者配置: ${fields.join(", ")}。这不是普通用户要填写的内容, 需要发布方先配置 Forge OAuth broker 或产品 OAuth app。`
+        : `This Forge build is missing maintainer OAuth configuration: ${fields.join(", ")}. End users should not fill this in; the publisher must configure the Forge OAuth broker or product OAuth app first.`,
+    oauthRegisteredCallback: isChinese ? "等待 Forge 官方授权服务" : "Waiting for Forge OAuth service",
+    oauthSetup: isChinese ? "打开 OAuth 配置页" : "Open OAuth setup",
+    oauthSetupHint: (provider: string, usesProductClient: boolean) =>
+      usesProductClient
+        ? isChinese
+          ? `Forge 已内置 ${provider} 登录应用配置, 用户只需要点击网页登录授权。`
+          : `Forge includes the ${provider} OAuth app configuration; users only need to authorize in the browser.`
+        : isChinese
+          ? `当前构建还没有内置 ${provider} OAuth app 或 Forge OAuth broker, 需要维护者配置后再发布给用户。`
+          : `This build does not include a ${provider} OAuth app or Forge OAuth broker yet; the maintainer must configure it before release.`,
+    oauthStart: isChinese ? "网页登录授权" : "Authorize in browser",
+    oauthStarting: (provider: string) =>
+      isChinese ? `正在打开 ${provider} 授权页` : `Opening ${provider} authorization`,
+    oauthSucceeded: (provider: string, savedFieldCount: number) =>
+      isChinese
+        ? `${provider} 授权完成, 已保存 ${savedFieldCount} 个凭据字段`
+        : `${provider} authorization completed, saved ${savedFieldCount} credential fields`,
+    oauthTitle: (provider: string) =>
+      isChinese ? `${provider} 网页授权` : `${provider} browser authorization`,
+    optional: isChinese ? "可选" : "Optional",
     permission: isChinese ? "权限" : "Permission",
     permissions: isChinese ? "权限" : "Permissions",
     placeholder: isChinese ? "占位提示" : "Placeholder",
     query: isChinese ? "关键词" : "Query",
-    qaBlocked: isChinese ? "阻止" : "Blocked",
-    qaAvailableTools: isChinese ? "可用工具" : "Available tools",
-    qaAttemptedScenarioTools: isChinese ? "尝试工具" : "Attempted tools",
-    qaFailed: isChinese ? "失败" : "Failed",
-    qaModel: isChinese ? "模型" : "Model",
-    qaNotImplemented: isChinese ? "未实现" : "Not impl.",
-    qaProject: isChinese ? "沙箱" : "Sandbox",
-    qaP0P1ScenarioTools: isChinese ? "P0/P1 触达" : "P0/P1 covered",
-    qaP0ToolErrorRate: isChinese ? "P0 错误率" : "P0 error",
-    qaRegisteredTools: isChinese ? "注册工具" : "Registered tools",
-    qaRunning: isChinese ? "运行中" : "Running",
-    qaCriticalConfirmationFailureRate: isChinese ? "critical 失败率" : "Critical fail",
-    qaCriticalConfirmationFailures: isChinese ? "critical 确认失败" : "Critical confirm failures",
-    qaMetricGateStatus: (passed: boolean) => {
-      if (passed) {
-        return isChinese ? "通过" : "Pass";
-      }
-
-      return isChinese ? "未通过" : "Fail";
-    },
-    qaMvpGate: isChinese ? "MVP Gate" : "MVP gate",
-    qaSafetyPassed: isChinese ? "安全通过" : "Safety passed",
-    qaSafetyTotal: isChinese ? "安全断言" : "Safety assertions",
-    qaSkipped: isChinese ? "跳过" : "Skipped",
-    qaSkippedReason: isChinese ? "跳过原因" : "Skipped reason",
-    qaStatus: isChinese ? "开发 QA" : "Dev QA",
-    qaScenarioTools: isChinese ? "QA 触达工具" : "QA-covered tools",
-    qaSucceeded: isChinese ? "成功" : "Passed",
-    qaSucceededScenarioTools: isChinese ? "成功工具" : "Succeeded tools",
-    qaSuccessRate: isChinese ? "成功率" : "Success",
-    qaToolCallSuccessRate: isChinese ? "工具成功率" : "Tool success",
-    qaTotal: isChinese ? "总数" : "Total",
-    qaWriteBeforeConfirmationFailureRate: isChinese ? "写盘失败率" : "Write fail",
-    qaWriteBeforeConfirmationFailures: isChinese ? "确认前写盘失败" : "Write-before-confirm failures",
-    qualityMetricsReview: isChinese ? "质量指标复盘" : "Quality metrics review",
     readAction: isChinese ? "读取数据" : "Read data",
     readPermission: isChinese ? "读取权限" : "Read permission",
     refresh: isChinese ? "刷新扩展" : "Refresh extensions",
-    recentStatus: isChinese ? "最近调用" : "Recent status",
-    risk: isChinese ? "风险" : "Risk",
+    requiredForOAuth: isChinese ? "网页登录必填" : "Required for browser auth",
     run: isChinese ? "执行" : "Run",
-    runDevelopmentQa: isChinese ? "运行开发 QA" : "Run dev QA",
     save: isChinese ? "保存" : "Save",
     saveFailed: isChinese ? "保存失败" : "Save failed",
     secretSaved: isChinese ? "凭据已保存" : "Credential saved",
     subject: isChinese ? "主题" : "Subject",
     title: isChinese ? "扩展" : "Extensions",
     to: isChinese ? "收件人" : "To",
-    usableTier: isChinese ? "Usable" : "Usable",
     permissionMode: (mode: ExtensionPermissionMode) => {
       if (!isChinese) {
         return mode;
@@ -1978,72 +1779,6 @@ function getExtensionsCopy(language: Language) {
       isChinese
         ? `已保存${last4 ? `, 尾号 ${last4}` : ""}`
         : `Saved${last4 ? `, ending ${last4}` : ""}`,
-    metricStatus: (metric: AgentQualityMetricValue) => {
-      if (metric.value === null) {
-        return isChinese ? "等待数据" : "Waiting for data";
-      }
-
-      if (metric.mvpPassed) {
-        return isChinese ? "达到 MVP" : "MVP met";
-      }
-
-      return isChinese ? "低于 MVP" : "Below MVP";
-    },
-    metricSampleSize: (metric: AgentQualityMetricValue) =>
-      isChinese ? `样本 ${metric.denominator}` : `Samples ${metric.denominator}`,
-    metricTierStatus: (passed: boolean | null) => {
-      if (passed === null) {
-        return isChinese ? "未证明" : "Unproven";
-      }
-
-      return passed ? (isChinese ? "通过" : "Pass") : isChinese ? "未通过" : "Fail";
-    },
-    qaRunStatus: (status: BuiltInToolQaRunResult["status"]) => {
-      if (!isChinese) {
-        return status;
-      }
-
-      return {
-        failed: "失败",
-        passed: "通过",
-        skipped: "已跳过"
-      }[status];
-    },
-    qualityMetricLabel: (metricId: AgentQualityMetricId) => {
-      const labels: Record<AgentQualityMetricId, string> = isChinese
-        ? {
-            complexTaskFirstPassCompletionRate: "复杂任务一次完成率",
-            failureRecoveryRate: "失败后可恢复率",
-            highRiskMisfireRate: "高风险误触发率",
-            mediumTaskFirstPassCompletionRate: "中等任务一次完成率",
-            p0ToolErrorRate: "P0 工具错误率",
-            postModificationBuildPassRate: "build 通过率",
-            postModificationLintPassRate: "lint 通过率",
-            postModificationTypecheckPassRate: "typecheck 通过率",
-            simpleTaskFirstPassCompletionRate: "简单任务一次完成率",
-            toolCallSuccessRate: "工具调用成功率",
-            unrelatedCodeChangeRate: "无关代码改动率",
-            wrongFileModificationRate: "错误文件修改率",
-            writeBeforeConfirmationRate: "确认前写盘率"
-          }
-        : {
-            complexTaskFirstPassCompletionRate: "Complex first-pass",
-            failureRecoveryRate: "Failure recovery",
-            highRiskMisfireRate: "High-risk misfire",
-            mediumTaskFirstPassCompletionRate: "Medium first-pass",
-            p0ToolErrorRate: "P0 error rate",
-            postModificationBuildPassRate: "Build pass rate",
-            postModificationLintPassRate: "Lint pass rate",
-            postModificationTypecheckPassRate: "Typecheck pass rate",
-            simpleTaskFirstPassCompletionRate: "Simple first-pass",
-            toolCallSuccessRate: "Tool success rate",
-            unrelatedCodeChangeRate: "Unrelated change rate",
-            wrongFileModificationRate: "Wrong file rate",
-            writeBeforeConfirmationRate: "Write before confirmation"
-          };
-
-      return labels[metricId];
-    },
     confirmationPolicy: (policy: ExtensionConfirmationPolicy) => {
       if (!isChinese) {
         return policy;
@@ -2054,41 +1789,6 @@ function getExtensionsCopy(language: Language) {
         ask: "按权限询问",
         never: "无需确认"
       }[policy];
-    },
-    toolAvailability: (availability: BuiltInToolAvailability) => {
-      if (!isChinese) {
-        return availability;
-      }
-
-      return {
-        available: "可用",
-        not_implemented: "未实现"
-      }[availability];
-    },
-    toolRisk: (risk: BuiltInToolRiskLevel) => {
-      if (!isChinese) {
-        return risk;
-      }
-
-      return {
-        critical: "critical",
-        high: "高",
-        low: "低",
-        medium: "中"
-      }[risk];
-    },
-    toolCallStatus: (status: BuiltInToolCallLogRecord["status"]) => {
-      if (!isChinese) {
-        return status;
-      }
-
-      return {
-        blocked: "已阻止",
-        cancelled: "已取消",
-        failed: "失败",
-        not_implemented: "未实现",
-        succeeded: "成功"
-      }[status];
     },
     riskLabel: (risk: ExtensionActionRisk) => {
       if (!isChinese) {

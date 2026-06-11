@@ -1,6 +1,6 @@
 // 本文件说明: 扫描项目文件和规则说明, 为 Agent 提供轻量上下文
-import type { Stats } from "node:fs";
-import { readFile, readdir, stat } from "node:fs/promises";
+import type { BigIntStats, Stats } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type {
   ProjectFile,
@@ -8,14 +8,36 @@ import type {
   ProjectScanResult
 } from "../shared/projectTypes.js";
 import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
+import { readCachedSortedDirectoryEntries } from "./projectDirectoryEntriesCache.js";
 
 type ScanOptions = {
   limit?: number;
   previousIndex?: ProjectScanResult | null;
 };
 
+export type ProjectFileStatTask = {
+  filePath: string;
+  relativePath: string;
+};
+
+type CachedInstructionFile = {
+  file: ProjectInstructionFile;
+  modifiedAtMs: number;
+  size: number;
+};
+
+type ProjectFileStatReader = (filePath: string) => Promise<BigIntStats>;
+
+type ReadProjectFileEntriesOptions = {
+  maxConcurrency?: number;
+  readStat?: ProjectFileStatReader;
+};
+
 const maxInstructionFileChars = 12_000;
 const maxInstructionFiles = 12;
+const maxCachedInstructionFiles = 160;
+const defaultMaxProjectFileStatConcurrency = 24;
+const instructionFileCache = new Map<string, CachedInstructionFile>();
 // 只读取轻量项目指令, 避免把完整仓库塞进模型上下文
 const rootInstructionFilePaths = [
   "AGENTS.md",
@@ -64,15 +86,16 @@ export async function scanProjectFiles(
       return;
     }
 
-    const entries = await readdir(directoryPath, { withFileTypes: true });
+    const entries = await readCachedSortedDirectoryEntries(directoryPath);
+    const pendingFileStats: ProjectFileStatTask[] = [];
 
     for (const entry of entries) {
-      if (hasReachedLimit(files.length, limit)) {
+      if (hasReachedLimit(files.length + pendingFileStats.length, limit)) {
         truncated = true;
-        return;
+        break;
       }
 
-      if (entry.isDirectory()) {
+      if (entry.isDirectory) {
         const relativeDirectoryPath = normalizeRelativePath(relative(rootPath, `${directoryPath}${sep}${entry.name}`));
 
         if (isSensitiveProjectPath(relativeDirectoryPath)) {
@@ -80,10 +103,15 @@ export async function scanProjectFiles(
         }
 
         await walk(`${directoryPath}${sep}${entry.name}`);
+
+        if (truncated) {
+          return;
+        }
+
         continue;
       }
 
-      if (!entry.isFile()) {
+      if (!entry.isFile) {
         continue;
       }
 
@@ -94,8 +122,14 @@ export async function scanProjectFiles(
         continue;
       }
 
-      const fileStat = await stat(filePath);
-      files.push(createProjectFileEntry(relativePath, fileStat, previousFilesByPath));
+      pendingFileStats.push({
+        filePath,
+        relativePath
+      });
+    }
+
+    if (pendingFileStats.length > 0) {
+      files.push(...await readProjectFileEntriesWithConcurrency(pendingFileStats, previousFilesByPath));
     }
   }
 
@@ -107,6 +141,46 @@ export async function scanProjectFiles(
     truncated,
     instructionFiles
   };
+}
+
+export async function readProjectFileEntriesWithConcurrency(
+  fileStatTasks: ProjectFileStatTask[],
+  previousFilesByPath: ReadonlyMap<string, ProjectFile>,
+  options: ReadProjectFileEntriesOptions = {}
+): Promise<ProjectFile[]> {
+  const readStat = options.readStat ?? readProjectFileStat;
+  const maxConcurrency = normalizeProjectFileStatConcurrency(options.maxConcurrency);
+  const files: ProjectFile[] = [];
+  let nextTaskIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextTaskIndex < fileStatTasks.length) {
+      const taskIndex = nextTaskIndex;
+      nextTaskIndex += 1;
+
+      const task = fileStatTasks[taskIndex];
+
+      if (!task) {
+        return;
+      }
+
+      const fileStat = await readStat(task.filePath);
+      files[taskIndex] = createProjectFileEntry(task.relativePath, fileStat, previousFilesByPath);
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(maxConcurrency, fileStatTasks.length) },
+      () => worker()
+    )
+  );
+
+  return files;
+}
+
+function readProjectFileStat(filePath: string): Promise<BigIntStats> {
+  return stat(filePath, { bigint: true });
 }
 
 // 汇总 AGENTS, README 和规则文件内容, 作为模型的项目说明
@@ -123,25 +197,47 @@ function createPreviousFileMap(
 
 function createProjectFileEntry(
   relativePath: string,
-  fileStat: Stats,
+  fileStat: BigIntStats,
   previousFilesByPath: ReadonlyMap<string, ProjectFile>
 ): ProjectFile {
-  const modifiedAtMs = fileStat.mtimeMs;
+  const changedAtNs = fileStat.ctimeNs.toString();
+  const modifiedAtMs = Number(fileStat.mtimeMs);
+  const modifiedAtNs = fileStat.mtimeNs.toString();
+  const size = normalizeBigIntFileSize(fileStat.size);
   const previousFile = previousFilesByPath.get(relativePath);
 
   if (
     previousFile &&
-    previousFile.size === fileStat.size &&
-    previousFile.modifiedAtMs === modifiedAtMs
+    previousFile.size === size &&
+    previousFile.changedAtNs === changedAtNs &&
+    previousFile.modifiedAtNs === modifiedAtNs
   ) {
     return previousFile;
   }
 
   return {
+    changedAtNs,
     modifiedAtMs,
+    modifiedAtNs,
     relativePath,
-    size: fileStat.size
+    size
   };
+}
+
+function normalizeBigIntFileSize(size: bigint): number {
+  if (size > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return Number(size);
+}
+
+function normalizeProjectFileStatConcurrency(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultMaxProjectFileStatConcurrency;
+  }
+
+  return Math.max(1, Math.min(64, Math.round(value)));
 }
 
 async function readProjectInstructionFiles(rootPath: string): Promise<ProjectInstructionFile[]> {
@@ -161,19 +257,21 @@ async function readProjectInstructionFiles(rootPath: string): Promise<ProjectIns
         continue;
       }
 
-      const normalizedContent = normalizeInstructionContent(await readFile(filePath, "utf8"));
+      const instructionFile = await readCachedProjectInstructionFile(
+        rootPath,
+        relativePath,
+        filePath,
+        fileStat
+      );
 
-      if (!normalizedContent) {
+      if (!instructionFile) {
         continue;
       }
 
-      instructionFiles.push({
-        relativePath,
-        content: normalizedContent.slice(0, maxInstructionFileChars),
-        truncated: normalizedContent.length > maxInstructionFileChars
-      });
+      instructionFiles.push(instructionFile);
     } catch (error) {
       if (isMissingPathError(error)) {
+        instructionFileCache.delete(createInstructionFileCacheKey(rootPath, relativePath));
         continue;
       }
 
@@ -182,6 +280,62 @@ async function readProjectInstructionFiles(rootPath: string): Promise<ProjectIns
   }
 
   return instructionFiles;
+}
+
+async function readCachedProjectInstructionFile(
+  rootPath: string,
+  relativePath: string,
+  filePath: string,
+  fileStat: Stats
+): Promise<ProjectInstructionFile | null> {
+  const cacheKey = createInstructionFileCacheKey(rootPath, relativePath);
+  const cachedFile = instructionFileCache.get(cacheKey);
+  const modifiedAtMs = fileStat.mtimeMs;
+
+  if (
+    cachedFile &&
+    cachedFile.size === fileStat.size &&
+    cachedFile.modifiedAtMs === modifiedAtMs
+  ) {
+    rememberInstructionFile(cacheKey, cachedFile);
+    return cachedFile.file;
+  }
+
+  const normalizedContent = normalizeInstructionContent(await readFile(filePath, "utf8"));
+
+  if (!normalizedContent) {
+    instructionFileCache.delete(cacheKey);
+    return null;
+  }
+
+  const file = {
+    relativePath,
+    content: normalizedContent.slice(0, maxInstructionFileChars),
+    truncated: normalizedContent.length > maxInstructionFileChars
+  };
+
+  rememberInstructionFile(cacheKey, {
+    file,
+    modifiedAtMs,
+    size: fileStat.size
+  });
+
+  return file;
+}
+
+function rememberInstructionFile(cacheKey: string, cachedFile: CachedInstructionFile): void {
+  instructionFileCache.delete(cacheKey);
+  instructionFileCache.set(cacheKey, cachedFile);
+
+  while (instructionFileCache.size > maxCachedInstructionFiles) {
+    const oldestCacheKey = instructionFileCache.keys().next().value;
+
+    if (typeof oldestCacheKey !== "string") {
+      return;
+    }
+
+    instructionFileCache.delete(oldestCacheKey);
+  }
 }
 
 // 收集常见项目说明文件路径, 不存在的文件交给读取阶段忽略
@@ -206,10 +360,10 @@ async function readCursorRulePaths(rootPath: string): Promise<string[]> {
   const rulesDirectoryPath = join(rootPath, ".cursor", "rules");
 
   try {
-    const entries = await readdir(rulesDirectoryPath, { withFileTypes: true });
+    const entries = await readCachedSortedDirectoryEntries(rulesDirectoryPath);
 
     return entries
-      .filter((entry) => entry.isFile() && /\.(?:md|mdc|txt)$/i.test(entry.name))
+      .filter((entry) => entry.isFile && /\.(?:md|mdc|txt)$/i.test(entry.name))
       .map((entry) => normalizeRelativePath(`.cursor/rules/${entry.name}`))
       .sort((left, right) => left.localeCompare(right));
   } catch (error) {
@@ -243,6 +397,10 @@ function hasReachedLimit(count: number, limit: number | null): boolean {
 // 将绝对路径转成统一的项目相对路径
 function toProjectFilePath(rootPath: string, relativePath: string): string {
   return join(rootPath, ...relativePath.split("/"));
+}
+
+function createInstructionFileCacheKey(rootPath: string, relativePath: string): string {
+  return `${rootPath}\u0000${relativePath}`;
 }
 
 // 识别路径不存在错误, 扫描时把缺失目录当作空目录处理

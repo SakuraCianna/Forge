@@ -1,6 +1,6 @@
 // 本文件说明: 为受控文本搜索维护本地内存索引, 避免重复读取未变化的项目文本文件
-import type { Stats } from "node:fs";
-import { readFile, readdir, realpath, stat } from "node:fs/promises";
+import type { BigIntStats } from "node:fs";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { relative, sep } from "node:path";
 import type {
   ProjectTextSearchMatch,
@@ -8,6 +8,7 @@ import type {
   ProjectTextSearchResult
 } from "../shared/fileTypes.js";
 import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
+import { readCachedSortedDirectoryEntries } from "./projectDirectoryEntriesCache.js";
 import { createProjectIgnoreMatcher } from "./projectIgnore.js";
 import {
   createProjectTextSearchIndexCache,
@@ -15,12 +16,19 @@ import {
   type ProjectTextSearchIndexCacheEntry
 } from "./projectTextSearchIndexCache.js";
 
-type ProjectTextIndexEntry = {
+export type ProjectTextIndexEntry = {
+  changedAtNs?: string;
   lowerLines: string[];
   modifiedAtMs: number;
+  modifiedAtNs?: string;
   relativePath: string;
   size: number;
   lines: string[];
+};
+
+export type ProjectTextIndexFileTask = {
+  absolutePath: string;
+  relativePath: string;
 };
 
 type ProjectTextSearchIndex = {
@@ -35,8 +43,19 @@ type ProjectTextLineReference = {
   lineIndex: number;
 };
 
+type ProjectTextIndexStatReader = (absolutePath: string) => Promise<BigIntStats>;
+
+type ProjectTextIndexFileContentReader = (absolutePath: string) => Promise<string>;
+
+type ReadProjectTextIndexEntriesOptions = {
+  maxConcurrency?: number;
+  readFileContent?: ProjectTextIndexFileContentReader;
+  readStat?: ProjectTextIndexStatReader;
+};
+
 const maxSearchPreviewChars = 240;
 const maxCachedProjectTextSearchIndexes = 6;
+const defaultMaxProjectTextIndexReadConcurrency = 12;
 const projectTextSearchIndexes = new Map<string, ProjectTextSearchIndex>();
 let projectTextSearchIndexCache: ProjectTextSearchIndexCache | null = null;
 
@@ -102,11 +121,13 @@ async function buildProjectTextSearchIndex(
 
   // 仍然每次按目录确认可见文件集合, 但未变化文件直接复用内存文本快照
   async function walk(directoryPath: string): Promise<void> {
-    for (const entry of await readSortedDirectoryEntries(directoryPath)) {
+    const pendingFileTasks: ProjectTextIndexFileTask[] = [];
+
+    for (const entry of await readCachedSortedDirectoryEntries(directoryPath)) {
       const absolutePath = `${directoryPath}${sep}${entry.name}`;
       const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
 
-      if (entry.isDirectory()) {
+      if (entry.isDirectory) {
         if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, true)) {
           continue;
         }
@@ -115,19 +136,23 @@ async function buildProjectTextSearchIndex(
         continue;
       }
 
-      if (!entry.isFile() || isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
+      if (!entry.isFile || isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
         continue;
       }
 
-      const fileStat = await stat(absolutePath);
-      const textEntry = await readTextIndexEntry(
+      pendingFileTasks.push({
         absolutePath,
-        relativePath,
-        fileStat,
-        normalizedMaxFileBytes,
-        previousEntries.get(relativePath)
-      );
+        relativePath
+      });
+    }
 
+    const textEntries = await readProjectTextIndexEntriesWithConcurrency(
+      pendingFileTasks,
+      previousEntries,
+      normalizedMaxFileBytes
+    );
+
+    for (const textEntry of textEntries) {
       if (textEntry) {
         entries.push(textEntry);
       }
@@ -152,28 +177,78 @@ async function buildProjectTextSearchIndex(
   return index;
 }
 
+export async function readProjectTextIndexEntriesWithConcurrency(
+  fileTasks: ProjectTextIndexFileTask[],
+  previousEntries: ReadonlyMap<string, ProjectTextIndexEntry>,
+  maxFileBytes: number,
+  options: ReadProjectTextIndexEntriesOptions = {}
+): Promise<Array<ProjectTextIndexEntry | null>> {
+  const maxConcurrency = normalizeProjectTextIndexReadConcurrency(options.maxConcurrency);
+  const readFileContent = options.readFileContent ?? readProjectTextIndexFileContent;
+  const readStat = options.readStat ?? readProjectTextIndexFileStat;
+  const entries: Array<ProjectTextIndexEntry | null> = [];
+  let nextTaskIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextTaskIndex < fileTasks.length) {
+      const taskIndex = nextTaskIndex;
+      nextTaskIndex += 1;
+
+      const task = fileTasks[taskIndex];
+
+      if (!task) {
+        return;
+      }
+
+      const fileStat = await readStat(task.absolutePath);
+      entries[taskIndex] = await readTextIndexEntry(
+        task.absolutePath,
+        task.relativePath,
+        fileStat,
+        maxFileBytes,
+        previousEntries.get(task.relativePath),
+        readFileContent
+      );
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(maxConcurrency, fileTasks.length) },
+      () => worker()
+    )
+  );
+
+  return entries;
+}
+
 async function readTextIndexEntry(
   absolutePath: string,
   relativePath: string,
-  fileStat: Stats,
+  fileStat: BigIntStats,
   maxFileBytes: number,
-  previousEntry: ProjectTextIndexEntry | undefined
+  previousEntry: ProjectTextIndexEntry | undefined,
+  readFileContent: ProjectTextIndexFileContentReader
 ): Promise<ProjectTextIndexEntry | null> {
-  const modifiedAtMs = fileStat.mtimeMs;
+  const changedAtNs = fileStat.ctimeNs.toString();
+  const modifiedAtMs = Number(fileStat.mtimeMs);
+  const modifiedAtNs = fileStat.mtimeNs.toString();
+  const size = normalizeBigIntFileSize(fileStat.size);
 
-  if (fileStat.size > maxFileBytes) {
+  if (size > maxFileBytes) {
     return null;
   }
 
   if (
     previousEntry &&
-    previousEntry.size === fileStat.size &&
-    previousEntry.modifiedAtMs === modifiedAtMs
+    previousEntry.size === size &&
+    previousEntry.changedAtNs === changedAtNs &&
+    previousEntry.modifiedAtNs === modifiedAtNs
   ) {
     return previousEntry;
   }
 
-  const content = await readFile(absolutePath, "utf8");
+  const content = await readFileContent(absolutePath);
 
   if (content.includes("\u0000")) {
     return null;
@@ -182,12 +257,22 @@ async function readTextIndexEntry(
   const lines = content.split(/\r?\n/u);
 
   return {
+    changedAtNs,
     lines,
     lowerLines: lines.map((line) => line.toLocaleLowerCase()),
     modifiedAtMs,
+    modifiedAtNs,
     relativePath,
-    size: fileStat.size
+    size
   };
+}
+
+function readProjectTextIndexFileStat(absolutePath: string): Promise<BigIntStats> {
+  return stat(absolutePath, { bigint: true });
+}
+
+function readProjectTextIndexFileContent(absolutePath: string): Promise<string> {
+  return readFile(absolutePath, "utf8");
 }
 
 function createTokenLineReferences(
@@ -222,8 +307,10 @@ function createProjectTextSearchIndexCacheEntries(
   entries: ProjectTextIndexEntry[]
 ): ProjectTextSearchIndexCacheEntry[] {
   return entries.map((entry) => ({
+    changedAtNs: entry.changedAtNs,
     lines: entry.lines,
     modifiedAtMs: entry.modifiedAtMs,
+    modifiedAtNs: entry.modifiedAtNs,
     relativePath: entry.relativePath,
     size: entry.size
   }));
@@ -379,14 +466,24 @@ function normalizeSearchQuery(query: string): string {
   return normalized;
 }
 
-async function readSortedDirectoryEntries(directoryPath: string) {
-  return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) =>
-    left.name.localeCompare(right.name)
-  );
-}
-
 function createTextSearchIndexCacheKey(rootPath: string, maxFileBytes: number): string {
   return `${rootPath}\u0000${maxFileBytes}`;
+}
+
+function normalizeProjectTextIndexReadConcurrency(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultMaxProjectTextIndexReadConcurrency;
+  }
+
+  return Math.max(1, Math.min(32, Math.round(value)));
+}
+
+function normalizeBigIntFileSize(size: bigint): number {
+  if (size > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return Number(size);
 }
 
 function normalizeRelativePath(path: string): string {

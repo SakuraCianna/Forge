@@ -35,6 +35,12 @@ npm run dist:win
 
 该命令会生成 x64 NSIS 安装包, 并通过 `--publish never` 禁止 electron-builder 自动发布。安装包输出到 `release` 目录, 文件名类似 `Forge-0.2.1-x64-setup.exe`。
 
+## CI/CD 打包产物
+
+`.github\workflows\ci-cd.yml` 会在 PR 和任意分支 push 时运行 `npm ci`, `npm test`, `npm run typecheck`, `npm run lint` 和 `npm run build`。
+
+推送 `v*` tag 或手动运行 workflow 时, CI 通过后会执行 `npm run dist:win`, 并把 `release\*setup.exe` 上传为 `forge-windows-installer` artifact。该 workflow 只生成和保存安装包 artifact, 不会自动创建 GitHub Release, 也不会自动发布安装包。正式发布仍按下方 GitHub Release 步骤人工确认、上传和记录烟测证据。
+
 ## GitHub Release 发布
 
 1. 确认安装包已经生成
@@ -109,7 +115,8 @@ npm run quality:v0.2:usable
 ## 当前已知打包警告
 
 - 2026-06-06 发布用 `npm run dist:win` 初始复跑退出码为 0, 安装包 `release\Forge-0.2.1-x64-setup.exe` 生成成功, 当时产物 SHA-256 为 `669b43f60660c3379652217cc723181492404619ad8816e1632bb3411db8f972`。
-- 2026-06-06 后续代码质量复跑将 Vite 可打包的 renderer/worker 依赖移出 production dependencies 后, 当前本地发布收口安装包 SHA-256 为 `68e9e039b1d97f515186f5ee4347e8c7cd58d5deca499e0d304782581045e014`; 安装包约从 144 MB 降到 104 MB, `app.asar` 约从 168 MB 降到 17 MB, 且不再生成 `app.asar.unpacked`。
+- 2026-06-06 后续代码质量复跑将 Vite 可打包的 renderer/worker 依赖移出 production dependencies 后, 当时本地发布收口安装包 SHA-256 为 `68e9e039b1d97f515186f5ee4347e8c7cd58d5deca499e0d304782581045e014`; 安装包约从 144 MB 降到 104 MB, `app.asar` 约从 168 MB 降到 17 MB, 且不再生成 `app.asar.unpacked`。
+- 2026-06-10 重新运行 `npm run dist:win` 后, 当前本地安装包 `release\Forge-0.2.1-x64-setup.exe` 的 SHA-256 为 `a4b8312f0d7569c25eb75828b64c4a59e54d617702f036da1443bfa9bbff2892`。
 - `duplicate dependency references`: 仍由 electron-builder 扫描 npm production 依赖时输出, 但已从前端和构建依赖的大量重复项收敛到邮件解析链路的少量传递依赖, 例如 `libmime`, `@zone-eu/mailsplit`, `domhandler`。
 - `DEP0190`: `NODE_OPTIONS=--trace-deprecation` 显示调用栈位于 `node_modules\app-builder-lib\src\node-module-collector\nodeModulesCollector.ts`; 这是 electron-builder 依赖扫描阶段的上游警告。Forge 自有质量门禁脚本使用 `shell: false` 和 npm CLI 文件执行命令, 没有为规避该警告改动运行时代码。
 
@@ -117,4 +124,4 @@ npm run quality:v0.2:usable
 
 - 当前 Windows 安装包未接入代码签名, 因此用户首次安装可能看到系统安全提示
 - 不要在未检查产物前上传安装包
-- 如果未来要接入自动发布, 先新增独立 CI 流程并把 `--publish never` 调整为明确的发布策略
+- 如果未来要接入自动发布, 先把当前 artifact-only CI/CD 流程扩展为明确的发布策略, 并同步调整 `--publish never`

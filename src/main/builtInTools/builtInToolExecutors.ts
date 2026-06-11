@@ -30,7 +30,7 @@ import {
   searchProjectTextFiles,
   writeProjectTextFile
 } from "../projectFileService.js";
-import { scanProjectFiles } from "../projectScanner.js";
+import { scanProjectFiles as scanProjectFilesDefault } from "../projectScanner.js";
 import { searchWeb } from "../webSearchService.js";
 import { assertProjectPathNotSensitive } from "../../shared/sensitiveProjectFiles.js";
 import type { BuiltInToolExecutionContext } from "../../shared/builtInToolTypes.js";
@@ -38,6 +38,7 @@ import type { BuiltInToolExecutorMap } from "./builtInToolRegistry.js";
 
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 type OpenExternal = (url: string) => Promise<unknown> | unknown;
+type ScanProjectFiles = typeof scanProjectFilesDefault;
 
 export type BuiltInToolExecutorFactoryOptions = {
   browserTools?: BrowserPreviewTools;
@@ -46,6 +47,7 @@ export type BuiltInToolExecutorFactoryOptions = {
   listRunningCommands?: typeof listRunningProjectCommands;
   openExternal?: OpenExternal;
   runCommand?: typeof runProjectCommand;
+  scanProjectFiles?: ScanProjectFiles;
 };
 
 export function createDefaultBuiltInToolExecutors({
@@ -54,7 +56,8 @@ export function createDefaultBuiltInToolExecutors({
   fetcher = fetch,
   listRunningCommands = listRunningProjectCommands,
   openExternal,
-  runCommand = runProjectCommand
+  runCommand = runProjectCommand,
+  scanProjectFiles = scanProjectFilesDefault
 }: BuiltInToolExecutorFactoryOptions = {}): BuiltInToolExecutorMap {
   return {
     applyEdit: (input, context) =>
@@ -84,7 +87,13 @@ export function createDefaultBuiltInToolExecutors({
       };
     },
     createBranch: (input, context) =>
-      runCommand(createCommandOptions(input, context, `git switch -c ${readRequiredString(input, "branch")}`)),
+      runCommand(
+        createCommandOptions(
+          input,
+          context,
+          `git switch -c ${quoteCommandArgument(readRequiredString(input, "branch"))}`
+        )
+      ),
     createCommit: (input, context) =>
       commitProjectChanges({
         projectRoot: requireProjectRoot(input, context),
@@ -180,10 +189,14 @@ export function createDefaultBuiltInToolExecutors({
       };
     },
     getDependencyGraph: (input, context) =>
-      getDependencyGraph(requireProjectRoot(input, context), {
-        includeExternal: readOptionalBoolean(input, "includeExternal") ?? false,
-        limit: readOptionalNumber(input, "limit")
-      }),
+      getDependencyGraph(
+        requireProjectRoot(input, context),
+        {
+          includeExternal: readOptionalBoolean(input, "includeExternal") ?? false,
+          limit: readOptionalNumber(input, "limit")
+        },
+        scanProjectFiles
+      ),
     getFileSymbols: async (input, context) => {
       const file = await readProjectTextFile({
         projectRoot: requireProjectRoot(input, context),
@@ -232,13 +245,18 @@ export function createDefaultBuiltInToolExecutors({
     getGitStatus: (input, context) =>
       getProjectGitStatus({ projectRoot: requireProjectRoot(input, context) }),
     getProjectMetadata: (input, context) => getProjectMetadata(requireProjectRoot(input, context)),
-    getProjectSummary: (input, context) => getProjectSummary(requireProjectRoot(input, context)),
+    getProjectSummary: (input, context) =>
+      getProjectSummary(requireProjectRoot(input, context), scanProjectFiles),
     getProjectTree: (input, context) =>
       scanProjectFiles(requireProjectRoot(input, context), {
         limit: readOptionalNumber(input, "limit")
       }),
     getRelatedFiles: (input, context) =>
-      getRelatedFiles(requireProjectRoot(input, context), readRequiredString(input, "relativePath")),
+      getRelatedFiles(
+        requireProjectRoot(input, context),
+        readRequiredString(input, "relativePath"),
+        scanProjectFiles
+      ),
     globFiles: (input, context) =>
       globProjectFiles({
         projectRoot: requireProjectRoot(input, context),
@@ -332,6 +350,7 @@ export function createDefaultBuiltInToolExecutors({
     readManyFiles: async (input, context) => {
       const projectRoot = requireProjectRoot(input, context);
       const relativePaths = readRequiredStringArray(input, "relativePaths").slice(0, 20);
+      const maxBytesPerFile = readOptionalNumberFromAny(input, ["maxBytesPerFile", "maxBytes"]);
 
       return {
         files: await Promise.all(
@@ -339,7 +358,7 @@ export function createDefaultBuiltInToolExecutors({
             readProjectTextFile({
               projectRoot,
               relativePath,
-              maxBytes: readOptionalNumber(input, "maxBytes")
+              maxBytes: maxBytesPerFile
             })
           )
         )
@@ -435,9 +454,13 @@ export function createDefaultBuiltInToolExecutors({
     searchDiagnostics: (input, context) =>
       searchDiagnosticsInProject(requireProjectRoot(input, context), input),
     searchRegex: (input, context) =>
-      searchRegexInProject(requireProjectRoot(input, context), readRequiredString(input, "pattern")),
+      searchRegexInProject(
+        requireProjectRoot(input, context),
+        readRequiredString(input, "pattern"),
+        scanProjectFiles
+      ),
     searchSemantic: (input, context) =>
-      searchSemanticInProject(requireProjectRoot(input, context), input),
+      searchSemanticInProject(requireProjectRoot(input, context), input, scanProjectFiles),
     searchMemory: (input, context) =>
       searchProjectMemoryFile(requireProjectRoot(input, context), readRequiredString(input, "query")),
     searchText: (input, context) =>
@@ -512,7 +535,10 @@ export function createDefaultBuiltInToolExecutors({
   };
 }
 
-async function getProjectSummary(projectRoot: string): Promise<Record<string, unknown>> {
+async function getProjectSummary(
+  projectRoot: string,
+  scanProjectFiles: ScanProjectFiles
+): Promise<Record<string, unknown>> {
   const project = await scanProjectFiles(projectRoot, { limit: 2_000 });
   const packageJson = await readJsonProjectFile(projectRoot, "package.json");
   const topLevelDirectories = Array.from(
@@ -544,7 +570,7 @@ async function getProjectMetadata(projectRoot: string): Promise<Record<string, u
   ];
   const files = await Promise.all(
     metadataFiles.map(async (relativePath) => {
-      const content = await readFile(resolve(projectRoot, relativePath), "utf8").catch(() => null);
+      const content = await readCachedProjectTextContent(projectRoot, relativePath, 200_000);
 
       return content === null
         ? null
@@ -564,7 +590,8 @@ async function getProjectMetadata(projectRoot: string): Promise<Record<string, u
 
 async function getRelatedFiles(
   projectRoot: string,
-  relativePath: string
+  relativePath: string,
+  scanProjectFiles: ScanProjectFiles
 ): Promise<Record<string, unknown>> {
   const project = await scanProjectFiles(projectRoot, { limit: 5_000 });
   const normalizedPath = relativePath.replace(/\\/g, "/");
@@ -1066,7 +1093,27 @@ async function readJsonProjectFile(
   relativePath: string
 ): Promise<Record<string, unknown> | null> {
   try {
-    return JSON.parse(await readFile(resolve(projectRoot, relativePath), "utf8")) as Record<string, unknown>;
+    const content = await readCachedProjectTextContent(projectRoot, relativePath, 256_000);
+
+    return content === null ? null : JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function readCachedProjectTextContent(
+  projectRoot: string,
+  relativePath: string,
+  maxBytes: number
+): Promise<string | null> {
+  try {
+    const file = await readProjectTextFile({
+      projectRoot,
+      relativePath,
+      maxBytes
+    });
+
+    return file.content;
   } catch {
     return null;
   }
@@ -1222,7 +1269,8 @@ async function getDependencyGraph(
   }: {
     includeExternal: boolean;
     limit?: number;
-  }
+  },
+  scanProjectFiles: ScanProjectFiles
 ): Promise<Record<string, unknown>> {
   const project = await scanProjectFiles(projectRoot, { limit: 5_000 });
   const allRelativePaths = project.files.map((file) => file.relativePath);
@@ -1232,9 +1280,7 @@ async function getDependencyGraph(
   const edges = [];
 
   for (const file of sourceFiles) {
-    const content = await readFile(resolveProjectRelativePath(projectRoot, file.relativePath), "utf8").catch(
-      () => null
-    );
+    const content = await readCachedProjectTextContent(projectRoot, file.relativePath, 512_000);
 
     if (!content || content.includes("\u0000")) {
       continue;
@@ -1409,7 +1455,8 @@ function decodeHtmlEntities(value: string): string {
 
 async function searchRegexInProject(
   projectRoot: string,
-  pattern: string
+  pattern: string,
+  scanProjectFiles: ScanProjectFiles
 ): Promise<Record<string, unknown>> {
   const regex = new RegExp(pattern, "u");
   const project = await scanProjectFiles(projectRoot, { limit: 5_000 });
@@ -1420,7 +1467,7 @@ async function searchRegexInProject(
       continue;
     }
 
-    const content = await readFile(resolveProjectRelativePath(projectRoot, file.relativePath), "utf8").catch(() => null);
+    const content = await readCachedProjectTextContent(projectRoot, file.relativePath, 256_000);
 
     if (!content || content.includes("\u0000")) {
       continue;
@@ -1452,7 +1499,8 @@ async function searchRegexInProject(
 
 async function searchSemanticInProject(
   projectRoot: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  scanProjectFiles: ScanProjectFiles
 ): Promise<Record<string, unknown>> {
   const query = readRequiredString(input, "query");
   const limit = clampSemanticSearchLimit(readOptionalNumber(input, "limit"));
@@ -1475,8 +1523,7 @@ async function searchSemanticInProject(
       continue;
     }
 
-    const content = await readFile(resolveProjectRelativePath(projectRoot, file.relativePath), "utf8")
-      .catch(() => null);
+    const content = await readCachedProjectTextContent(projectRoot, file.relativePath, maxFileBytes);
 
     if (!content || content.includes("\u0000")) {
       continue;
@@ -2093,6 +2140,18 @@ function readOptionalNumber(input: Record<string, unknown>, key: string): number
   const value = input[key];
 
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readOptionalNumberFromAny(input: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = readOptionalNumber(input, key);
+
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function readOptionalBoolean(input: Record<string, unknown>, key: string): boolean | undefined {

@@ -71,6 +71,7 @@ export const extensionChannels = {
   deleteSecret: "forge:extensions:delete-secret",
   invoke: "forge:extensions:invoke",
   confirmInvocation: "forge:extensions:confirm-invocation",
+  startOAuth: "forge:extensions:start-oauth",
   logs: "forge:extensions:logs",
   create: "forge:extensions:create",
   update: "forge:extensions:update",

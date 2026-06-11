@@ -23,10 +23,6 @@ import type {
   BuiltInToolExecutionRequest
 } from "@shared/builtInToolTypes";
 import type {
-  BuiltInToolQaRunRequest,
-  BuiltInToolQaRunResult
-} from "@shared/builtInToolQaTypes";
-import type {
   ExtensionConfirmInvocationRequest,
   ExtensionCreateRequest,
   ExtensionCreateResult,
@@ -34,6 +30,8 @@ import type {
   ExtensionInvocationLogRecord,
   ExtensionInvocationRequest,
   ExtensionInvocationResult,
+  ExtensionOAuthStartRequest,
+  ExtensionOAuthStartResult,
   ExtensionRegistrySnapshot,
   ExtensionSecretSaveRequest,
   ExtensionSettingsPatch,
@@ -121,6 +119,7 @@ declare global {
         confirmInvocation: (
           request: ExtensionConfirmInvocationRequest
         ) => Promise<ExtensionInvocationResult>;
+        startOAuth: (request: ExtensionOAuthStartRequest) => Promise<ExtensionOAuthStartResult>;
         listLogs: (limit?: number) => Promise<ExtensionInvocationLogRecord[]>;
       };
       builtInTools: {
@@ -129,7 +128,6 @@ declare global {
         listLogs: (limit?: number) => Promise<BuiltInToolCallLogRecord[]>;
         getMetrics: () => Promise<AgentQualityMetricSnapshot>;
         recordMetric: (observation: AgentQualityObservation) => Promise<unknown>;
-        runDevelopmentQa: (request?: BuiltInToolQaRunRequest) => Promise<BuiltInToolQaRunResult>;
       };
       system: {
         openExternal: (url: string) => Promise<boolean>;

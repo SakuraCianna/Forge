@@ -13,6 +13,7 @@ import type {
   RunningProjectCommand,
   RunProjectCommandOptions
 } from "../src/main/commandRunner.js";
+import type { ProjectScanResult } from "../src/shared/projectTypes.js";
 import { builtInToolDefinitions } from "../src/shared/builtInToolCatalog.js";
 
 test("every available built-in tool has a default executor", () => {
@@ -51,6 +52,111 @@ test("default built-in tool executors run P0 file, search and diff tools", async
     assert.equal((readFileResult as { content: string }).content, "export const answer = 42;\n");
     assert.equal((searchResult as { matches: unknown[] }).matches.length, 1);
     assert.equal((previewResult as { changeKind: string }).changeKind, "edit");
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("readManyFiles passes maxBytesPerFile through as the per-file size limit", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-read-many-"));
+
+  try {
+    await writeFile(join(projectRoot, "first.txt"), "first file content\n", "utf8");
+    await writeFile(join(projectRoot, "second.txt"), "second file content\n", "utf8");
+
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const result = await getBuiltInToolFromRegistry(registry, "readManyFiles").execute(
+      { relativePaths: ["first.txt", "second.txt"], maxBytesPerFile: 5 },
+      { projectRoot }
+    );
+
+    assert.equal((result as { status: string }).status, "failed");
+    assert.match(
+      (result as { error: { message: string } }).error.message,
+      /File is too large to preview/u
+    );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("project-wide built-in tool executors use the injected project scanner", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-scan-injection-"));
+
+  try {
+    await writeFile(join(projectRoot, "package.json"), JSON.stringify({ name: "scan-fixture" }), "utf8");
+
+    const scanCalls: Array<{ limit?: number; rootPath: string }> = [];
+    const scanResult: ProjectScanResult = {
+      rootPath: projectRoot,
+      files: [
+        {
+          modifiedAtMs: 100,
+          relativePath: "src/main.ts",
+          size: 20
+        },
+        {
+          modifiedAtMs: 101,
+          relativePath: "src/main.test.ts",
+          size: 30
+        }
+      ],
+      truncated: false,
+      instructionFiles: [
+        {
+          relativePath: "AGENTS.md",
+          content: "Use project evidence.",
+          truncated: false
+        }
+      ]
+    };
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors({
+        scanProjectFiles: async (rootPath, options = {}) => {
+          scanCalls.push({
+            limit: options.limit,
+            rootPath
+          });
+
+          return scanResult;
+        }
+      })
+    });
+
+    const projectTree = await getBuiltInToolFromRegistry(registry, "getProjectTree").execute(
+      { limit: 123 },
+      { projectRoot }
+    );
+    const entrypoints = await getBuiltInToolFromRegistry(registry, "getEntrypoints").execute(
+      {},
+      { projectRoot }
+    );
+    const summary = await getBuiltInToolFromRegistry(registry, "getProjectSummary").execute(
+      {},
+      { projectRoot }
+    );
+    const instructions = await getBuiltInToolFromRegistry(registry, "readProjectInstructions").execute(
+      {},
+      { projectRoot }
+    );
+
+    assert.deepEqual(scanCalls, [
+      { rootPath: projectRoot, limit: 123 },
+      { rootPath: projectRoot, limit: undefined },
+      { rootPath: projectRoot, limit: 2_000 },
+      { rootPath: projectRoot, limit: undefined }
+    ]);
+    assert.equal((projectTree as ProjectScanResult).files.length, 2);
+    assert.deepEqual((entrypoints as { entrypoints: string[] }).entrypoints, ["src/main.ts"]);
+    assert.equal((summary as { fileCount: number }).fileCount, 2);
+    assert.deepEqual(
+      (instructions as { instructionFiles: Array<{ relativePath: string }> }).instructionFiles.map(
+        (file) => file.relativePath
+      ),
+      ["AGENTS.md"]
+    );
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }
@@ -120,6 +226,66 @@ test("default built-in tool executors provide dependency, diagnostic and validat
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }
+});
+
+test("dependency graph reads source files up to its analysis budget", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-dependency-graph-budget-"));
+
+  try {
+    await writeFile(join(projectRoot, "lib.ts"), "export const answer = 42;\n", "utf8");
+    await writeFile(
+      join(projectRoot, "index.ts"),
+      `import { answer } from "./lib";\n${"// filler line\n".repeat(20_000)}console.log(answer);\n`,
+      "utf8"
+    );
+
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const dependencyGraph = await getBuiltInToolFromRegistry(registry, "getDependencyGraph").execute(
+      { limit: 20 },
+      { projectRoot }
+    );
+
+    assert.ok(
+      (dependencyGraph as { edges: Array<{ from: string; to?: string }> }).edges.some(
+        (edge) => edge.from === "index.ts" && edge.to === "lib.ts"
+      )
+    );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("git branch executors quote branch names before building shell commands", async () => {
+  const commands: string[] = [];
+  const runCommand = async (options: RunProjectCommandOptions) => {
+    commands.push(options.command);
+
+    return {
+      command: options.command,
+      cwd: options.cwd,
+      exitCode: 0,
+      stderr: "",
+      stdout: "",
+      timedOut: false
+    };
+  };
+  const registry = createBuiltInToolRegistry({
+    executors: createDefaultBuiltInToolExecutors({ runCommand })
+  });
+  const createBranchTool = getBuiltInToolFromRegistry(registry, "createBranch");
+  const checkoutBranchTool = getBuiltInToolFromRegistry(registry, "checkoutBranch");
+  const branch = "feature/test'; Write-Output unsafe; '";
+  const projectRoot = "E:\\CodeHome\\Forge";
+
+  await createBranchTool.execute({ branch }, { projectRoot, confirmed: true });
+  await checkoutBranchTool.execute({ branch }, { projectRoot, confirmed: true, typedConfirmation: "CHECKOUT" });
+
+  assert.deepEqual(commands, [
+    "git switch -c 'feature/test''; Write-Output unsafe; '''",
+    "git switch 'feature/test''; Write-Output unsafe; '''"
+  ]);
 });
 
 test("default built-in tool executors run local semantic search without reading sensitive files", async () => {

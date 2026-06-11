@@ -53,6 +53,8 @@ export type ComposerSuggestionKind = "command" | ComposerContextKind;
 
 export type ComposerSlashCommandId =
   | "feedback"
+  | "compact"
+  | "init"
   | "mcp"
   | "model"
   | "persona"
@@ -608,6 +610,8 @@ function createSlashCommands(language: Language): SlashCommand[] {
   if (language === "zh-CN") {
     return [
       { actionId: "mcp", id: "mcp", label: "MCP", description: "显示 Forge MCP 服务状态", insertText: "" },
+      { actionId: "init", id: "init", label: "初始化", description: "创建项目 AGENTS.md 指令文件", insertText: "" },
+      { actionId: "compact", id: "compact", label: "压缩上下文", description: "压缩当前对话上下文", insertText: "" },
       { actionId: "persona", id: "persona", label: "个性", description: "打开回应方式和个性化设置", insertText: "" },
       { actionId: "feedback", id: "feedback", label: "反馈", description: "提交有关此聊天的反馈", insertText: "" },
       { actionId: "quick", id: "quick", label: "快速", description: "切换更快的响应方式", insertText: "" },
@@ -619,6 +623,8 @@ function createSlashCommands(language: Language): SlashCommand[] {
 
   return [
     { actionId: "mcp", id: "mcp", label: "MCP", description: "Show Forge MCP server status", insertText: "" },
+    { actionId: "init", id: "init", label: "Init", description: "Create the project AGENTS.md instruction file", insertText: "" },
+    { actionId: "compact", id: "compact", label: "Compact Context", description: "Compact the current conversation context", insertText: "" },
     { actionId: "persona", id: "persona", label: "Persona", description: "Open response style settings", insertText: "" },
     { actionId: "feedback", id: "feedback", label: "Feedback", description: "Submit feedback about this chat", insertText: "" },
     { actionId: "quick", id: "quick", label: "Quick", description: "Switch to a faster response mode", insertText: "" },

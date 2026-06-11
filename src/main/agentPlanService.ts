@@ -121,17 +121,38 @@ const structuredStepArrayKeys = ["steps", "actions", "tasks"] as const;
 const structuredPlanObjectKeys = ["plan", "executionPlan", "execution_plan"] as const;
 const projectEngineeringPresetInstructions = [
   "Think like a project engineer: understand the stack, repository layout, entrypoints, package managers, and existing conventions before editing.",
+  "Base decisions on observed files and tool results. When evidence is missing or conflicting, plan an inspect step instead of guessing.",
+  "Keep scope tight: do not broaden the task, reorganize unrelated modules, or introduce new architecture unless the user asked for it.",
+  "Never delete features, comment out core logic, hide errors, or bypass validation merely to make checks pass.",
   "For feature requests, plan the smallest complete product slice: data/model changes, backend/API changes, frontend/UI changes, configuration, and verification when those layers are relevant.",
   "For full-stack requests, include both server and client entrypoints plus the integration contract between them.",
   "Do not satisfy app-building requests with only a dependency file or one isolated source file unless the existing project truly requires no other files.",
   "When the user names a framework or architecture, use the framework's normal project structure instead of inventing a flat demo.",
+  "For new separated full-stack scaffolds in Forge, put Spring/Java/Maven backend files under Backend/ and Vite frontend files under Frontend/ unless the existing repository or user explicitly names another root.",
   "For generated applications, keep dependencies, imports, annotations, schema/seed data, API responses, frontend types, and rendered fields mutually consistent.",
   "Do not use framework helpers such as Lombok annotations unless the matching dependency is present in the planned build file; prefer plain constructors, getters, and setters when uncertain.",
   "For frontend/backend projects, define one API contract and reuse it everywhere: route path, HTTP method, JSON field names, seed data columns, frontend types, and UI columns must agree.",
+  "For TypeScript frontend scaffolds, include the TypeScript project config required by the queued build command, not just package.json and src files.",
   "For Vite frontend clients talking to a local backend, prefer a relative /api path with a dev proxy instead of hardcoding http://localhost origins in components.",
   "Project scaffolding requests are not tiny edits: if the project is empty or bare, plan a coherent skeleton with build config, source entrypoints, runtime config, and verification.",
   'For scaffold edit steps, prefer a "files" string array so Forge can expand one architectural step into several controlled file edits without wasting the plan budget.'
 ] as const;
+const softwareEngineeringWorkflowInstructions = [
+  "Follow a durable software engineering workflow: clarify intent from the task, inspect the current project, design the smallest coherent change, implement in scoped files, verify with concrete checks, and leave delivery evidence.",
+  "For code generation, prefer production-shaped modules over demos: explicit entrypoints, typed contracts when the stack supports them, configuration that matches commands, and user-facing error or empty states where relevant.",
+  "Plan repository reconnaissance before mutation when the target project state is unknown: read README/config/entrypoints or search for the owning module before editing.",
+  "When touching multiple layers, align the contract first: names, routes, schema fields, DTOs, API clients, UI columns, tests, and seed data must agree.",
+  "Treat verification as part of implementation, not an optional afterthought. Use the narrowest command that can prove the changed behavior, then broaden only when the change affects shared paths.",
+  "Finish with auditable evidence: changed file scope, verification command, result, known risk, and whether Git work remains."
+] as const;
+const planQualityChecklistInstructions = [
+  "Before returning the plan, ensure every mutating step has a concrete target or files array, every verification command points at the chosen project root, and the plan has an observable acceptance signal.",
+  "When the user gives an error, log, screenshot, or failing command, inspect the named files and nearby configuration before broad rewrites.",
+  "For generated apps, plan minimal but production-shaped code: real entrypoints, typed contracts when the stack supports them, loading/error/empty states for UIs, and tests or smoke checks for the main path.",
+  "Prefer positive, executable steps over vague reminders. If a constraint matters, express the concrete action that satisfies it."
+] as const;
+const planJsonExampleInstruction =
+  'Example shape: {"steps":[{"kind":"inspect","description":"Read existing entrypoints","target":"src/main.ts"},{"kind":"edit","description":"Update implementation and matching test","files":["src/feature.ts","tests/feature.test.ts"]},{"kind":"verify","description":"Run focused verification","target":"npm test"}]}';
 const builtInToolNameByNormalizedName = new Map(
   builtInToolDefinitions.map((tool) => [normalizeBuiltInToolNameKey(tool.name), tool.name])
 );
@@ -497,9 +518,15 @@ function createAgentPlanInstructions(personalization?: string): string {
     "You are Forge, an open-source local AI coding agent.",
     "Generate a concise execution plan for the user's local project.",
     ...projectEngineeringPresetInstructions,
+    ...softwareEngineeringWorkflowInstructions,
     "Keep the plan small and respect the Agent profile plan step limit from the request context.",
     "Follow the Agent profile verification policy from the request context.",
+    "Separate discovery, mutation, and verification. Put read/search/git status steps before risky edits when the current state is unknown, and put validation after edits.",
+    "If current framework, package, API, or platform behavior affects the solution, plan web_search, fetchDocs, or another reliable documentation lookup before relying on that fact.",
+    "Do not include commit, branch switch, revert, dependency install, push, delete, or external write steps unless the user request or project workflow makes that side effect necessary.",
+    ...planQualityChecklistInstructions,
     'Prefer JSON only: return a JSON object with a "steps" array and no prose before or after it. Each step must include "kind", "description", and optional "target".',
+    planJsonExampleInstruction,
     'When useful, include a "tool" field that names one Forge controlled tool: "read", "list_directory", "glob", "grep", "web_search", "git_status", "bash", "edit", "built_in_tool", or "invoke_extension".',
     'For Built-in Tools, use kind "other", tool "built_in_tool", exact "toolName", and an "input" object. Prefer exact built-in tools over shell commands when the catalog contains a matching capability.',
     'For external Extensions, use kind "other", tool "invoke_extension", plus "extensionId", "actionId", and an "input" object that matches the enabled action schema.',
@@ -509,7 +536,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     "For edit steps, the target must be exactly one project-relative file path only. Put comparison notes or reasoning in description, never in target.",
     "For inspect steps, target must be one file, folder, glob pattern, or search query. Do not combine several unrelated paths in one target string.",
     "For verify steps, target must be a runnable command such as npm run build, npm run typecheck, mvn test, or git status --short.",
-    "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For subprojects prefer package-manager subdirectory commands such as npm --prefix frontend install before npm --prefix frontend run build; use the same package manager if pnpm, yarn, or bun is already chosen.",
+    "For JavaScript or TypeScript scaffold work, install project dependencies before the first package build/test command when package.json is created or already present but local dependencies may not be installed. For new separated frontend subprojects prefer package-manager subdirectory commands such as npm --prefix Frontend install before npm --prefix Frontend run build; use the same package manager if pnpm, yarn, or bun is already chosen.",
     'Allowed step kinds: "inspect", "edit", "verify", "commit", "other".',
     'Use "read" for exact files, "list_directory" for folders, "glob" for file patterns, "grep" for project text search queries, "web_search" for current external web information, and "git_status" for git status or diff checks.',
     'Use "built_in_tool" for named Forge Built-in Tools such as readFile, searchText, previewDiff, getGitStatus, getDiagnostics, or runTypecheck.',
@@ -531,9 +558,17 @@ function createAgentFileChangeInstructions(personalization?: string): string {
     "Rewrite the selected file to satisfy the user task.",
     "Return only the complete replacement file content.",
     "Do not include explanations, markdown fences, diffs, or patch markers.",
+    "Begin with the natural first token for that file type, such as package, import, <script>, or JSON object syntax; do not omit required boilerplate.",
     "Preserve existing style and imports unless the task requires changes.",
+    "Use the current file content as the source of truth. Do not remove existing behavior, exports, validation, accessibility, error handling, or tests unless the user explicitly requested it.",
+    ...softwareEngineeringWorkflowInstructions,
     "For multi-file scaffolds, make this file compatible with the queued and existing companion files: build dependencies, imports, entity fields, database seed data, API paths, frontend types, and UI columns must line up.",
-    "Do not introduce a library, annotation, runtime helper, API field, or database column unless the rest of the project contract supports it."
+    "For separated Spring Boot + frontend scaffolds, keep backend files under Backend/, frontend files under Frontend/, and ensure generated commands target Backend/pom.xml and Frontend/package.json unless the current project already uses different roots.",
+    "For Spring Boot + H2/JPA data.sql files, table names and columns must exactly match the entity mapping, and runtime config must defer data.sql until JPA has created the schema unless schema.sql is supplied.",
+    "For Vue/TypeScript files, every imported symbol must have a matching export in the queued companion files; do not call getStudents if the API client exports fetchStudents.",
+    "Do not introduce a library, annotation, runtime helper, API field, or database column unless the rest of the project contract supports it.",
+    "Before producing the file, self-check imports, exports, package declarations, config references, schema/table names, and verification commands implied by this file.",
+    "Do not silence failures by deleting code, weakening checks, hiding exceptions, or replacing real logic with temporary hardcoding."
   ], personalization);
 }
 
@@ -543,7 +578,9 @@ function createAskInstructions(personalization?: string, workMode: AgentWorkMode
     "You are Forge in direct answer mode inside a coding workbench.",
     "Answer the user's question directly and concisely.",
     "If project context is provided, use it to answer project questions without turning the answer into an execution plan.",
+    "Separate verified facts from assumptions. If the provided context is insufficient, say what is known and what would need inspection.",
     "Do not claim you edited files, ran commands, or inspected the workspace.",
+    "Do not invent files, APIs, config keys, command outputs, tests, or current external service behavior.",
     "Do not expose raw internal logs, hidden reasoning, or provider/tool implementation details unless the user asks for debugging details.",
     "When summarizing completed work, mention concrete files, checks, and remaining risks instead of generic success phrases.",
     "Use clean Markdown with short paragraphs and compact bullets only when they improve readability.",
@@ -922,12 +959,18 @@ function formatProjectScaffoldPlanningContext(request: GenerateAgentPlanRequest)
       ? "The selected project appears empty or bare. Treat this as a scaffold task, not a single-file edit."
       : "The selected project already has files. Preserve its structure and fill the missing layers only.",
     "The plan must cover these layers when relevant: dependency/build files, backend entrypoint, domain/model, API/controller, runtime configuration, frontend package/config, frontend entrypoint, UI component/page, and verification command.",
+    "For a new separated full-stack scaffold, use Backend/ as the backend root and Frontend/ as the frontend root; keep Maven verification as mvn -f Backend/pom.xml test and frontend verification as npm --prefix Frontend run build.",
     "For Spring Boot + H2 scaffolds, include Spring Web, Spring Data JPA, H2, and test dependencies when those features are used; include seed data only when its columns exactly match the entity/table mapping.",
+    'For Spring Data JPA + data.sql, either add schema.sql or set spring.jpa.defer-datasource-initialization=true; for the default student demo use @Table(name = "students") and seed students (id, name, age, gender).',
     "For student-list demos with no custom fields requested, keep a minimal stable Student contract such as id, name, age, and gender, then reuse exactly those fields in the entity, data.sql, controller response, frontend API type, and displayed table.",
+    "For student-list demos, use one API client symbol consistently; prefer fetchStudents exported by src/api/students.ts and imported by the Vue component.",
     "If using Lombok, declare Lombok in the build file and configure compilation; otherwise write plain Java fields, constructors, getters, and setters.",
     "For Vue/Vite clients, place backend access behind a small API client that calls a relative /api route and let vite.config configure the proxy.",
+    "For Vue/Vite TypeScript scaffolds, include tsconfig.json and any declaration file needed by the build command before running npm --prefix Frontend run build.",
+    "For generated UI pages, include loading, error, and empty states so backend failures are visible instead of looking like an empty successful response.",
     "Include at least one backend contract test or smoke test for generated API endpoints so compile-time dependency mistakes and JSON field mismatches fail during verification.",
     "For frontend package scaffolds, include dependency installation before verification so local binaries such as tsc and vite exist before build commands run.",
+    "Before marking the scaffold done, self-check import/export names, package scripts, command working directories, and database table names against the files in the plan.",
     'Use grouped edit steps with a "files" array for related files, for example backend foundation files or frontend foundation files.',
     "Do not use shell heredocs or PowerShell file-writing scripts to create project files; use Forge edit steps instead."
   ];
@@ -1251,7 +1294,14 @@ export function parseAgentPlanSteps(
       };
     });
 
-  return applyVerificationPolicy(steps, normalizedStepLimit, verificationPolicy);
+  return applyVerificationPolicy(
+    applyWritePreviewPolicy(
+      applyEngineeringWorkflowPolicy(steps, normalizedStepLimit),
+      normalizedStepLimit
+    ),
+    normalizedStepLimit,
+    verificationPolicy
+  );
 }
 
 function getPlanStepLimit(request: GenerateAgentPlanRequest): number {
@@ -1287,14 +1337,7 @@ function applyVerificationPolicy(
     return steps;
   }
 
-  const verificationStep: AgentPlanStep = {
-    id: `step-${Math.max(1, Math.min(stepLimit, steps.length + 1))}`,
-    title: "Verify changes",
-    description: "Check the resulting project state before finishing.",
-    kind: "verify",
-    status: "pending",
-    target: "git status"
-  };
+  const verificationStep = createInferredVerificationStep(steps, stepLimit);
 
   if (steps.length < stepLimit) {
     return renumberPlanSteps([...steps, verificationStep]);
@@ -1306,6 +1349,61 @@ function applyVerificationPolicy(
   return renumberPlanSteps([...nextSteps, verificationStep]);
 }
 
+function applyEngineeringWorkflowPolicy(
+  steps: AgentPlanStep[],
+  stepLimit: number
+): AgentPlanStep[] {
+  if (
+    steps.length >= stepLimit ||
+    !steps.some(isProjectMutationPlanStep) ||
+    hasDiscoveryBeforeFirstMutation(steps)
+  ) {
+    return steps;
+  }
+
+  return renumberPlanSteps([
+    {
+      id: "step-1",
+      title: "Inspect project context",
+      description: "Inspect the current project structure and relevant target files before editing.",
+      kind: "inspect",
+      status: "pending",
+      target: "."
+    },
+    ...steps
+  ]);
+}
+
+function hasDiscoveryBeforeFirstMutation(steps: AgentPlanStep[]): boolean {
+  for (const step of steps) {
+    if (isProjectMutationPlanStep(step)) {
+      return false;
+    }
+
+    if (isProjectDiscoveryPlanStep(step)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isProjectDiscoveryPlanStep(step: AgentPlanStep): boolean {
+  if (step.kind === "inspect") {
+    return true;
+  }
+
+  if (step.kind === "verify" && step.target && /^git\s+(?:status|diff)(?:\s|$)/iu.test(step.target)) {
+    return true;
+  }
+
+  if (!step.builtInToolName) {
+    return false;
+  }
+
+  return deriveAgentToolSideEffect(step.builtInToolName) === "none";
+}
+
 function findVerificationInsertionRemovalIndex(steps: AgentPlanStep[]): number {
   for (let index = steps.length - 1; index >= 0; index -= 1) {
     if (!isProjectMutationPlanStep(steps[index])) {
@@ -1314,6 +1412,458 @@ function findVerificationInsertionRemovalIndex(steps: AgentPlanStep[]): number {
   }
 
   return Math.max(0, steps.length - 1);
+}
+
+function applyWritePreviewPolicy(steps: AgentPlanStep[], stepLimit: number): AgentPlanStep[] {
+  if (steps.length >= stepLimit || !steps.some(isPreviewableBuiltInEditStep)) {
+    return steps;
+  }
+
+  const nextSteps: AgentPlanStep[] = [];
+  let previewSlots = stepLimit - steps.length;
+
+  for (const step of steps) {
+    if (
+      previewSlots > 0 &&
+      isPreviewableBuiltInEditStep(step) &&
+      !hasPriorBuiltInEditPreview(nextSteps, step)
+    ) {
+      nextSteps.push(createBuiltInEditPreviewStep(step));
+      previewSlots -= 1;
+    }
+
+    nextSteps.push(step);
+  }
+
+  return nextSteps.length === steps.length ? steps : renumberPlanSteps(nextSteps);
+}
+
+function isPreviewableBuiltInEditStep(step: AgentPlanStep): boolean {
+  return (
+    step.builtInToolName === "applyEdit" &&
+    typeof step.builtInToolInput?.relativePath === "string" &&
+    typeof step.builtInToolInput.nextContent === "string"
+  );
+}
+
+function hasPriorBuiltInEditPreview(
+  previousSteps: AgentPlanStep[],
+  editStep: AgentPlanStep
+): boolean {
+  const relativePath = readBuiltInInputString(editStep, "relativePath");
+
+  if (!relativePath) {
+    return false;
+  }
+
+  for (let index = previousSteps.length - 1; index >= 0; index -= 1) {
+    const step = previousSteps[index];
+
+    if (isProjectMutationPlanStep(step)) {
+      return false;
+    }
+
+    if (
+      ["previewDiff", "proposeEdit"].includes(step.builtInToolName ?? "") &&
+      readBuiltInInputString(step, "relativePath") === relativePath
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function createBuiltInEditPreviewStep(editStep: AgentPlanStep): AgentPlanStep {
+  const definition = getBuiltInToolDefinition("previewDiff");
+  const relativePath = readBuiltInInputString(editStep, "relativePath") ?? "";
+  const nextContent = readBuiltInInputString(editStep, "nextContent") ?? "";
+
+  return {
+    id: `${editStep.id}-preview`,
+    title: "Preview edit diff",
+    description: `Preview the diff for ${relativePath} before applying the edit.`,
+    kind: "other",
+    status: "pending",
+    tool: "built-in-tool",
+    builtInToolName: definition.name,
+    builtInToolInput: {
+      relativePath,
+      nextContent
+    },
+    builtInToolRequiresConfirmation: definition.requiresConfirmation,
+    builtInToolRiskLevel: definition.riskLevel,
+    requiresConfirmation: definition.requiresConfirmation
+  };
+}
+
+function readBuiltInInputString(step: AgentPlanStep, key: string): string | null {
+  const value = step.builtInToolInput?.[key];
+
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function createInferredVerificationStep(steps: AgentPlanStep[], stepLimit: number): AgentPlanStep {
+  const target = inferVerificationCommand(steps);
+  const isStatusOnly = target === "git status --short";
+
+  return {
+    id: `step-${Math.max(1, Math.min(stepLimit, steps.length + 1))}`,
+    title: "Verify changes",
+    description: isStatusOnly
+      ? "Review the changed-file set before finishing."
+      : "Run the focused project verification command before finishing.",
+    kind: "verify",
+    status: "pending",
+    target
+  };
+}
+
+function inferVerificationCommand(steps: AgentPlanStep[]): string {
+  const targets = collectMutationVerificationTargets(steps);
+
+  return (
+    inferMavenVerificationCommand(targets) ??
+    inferGradleVerificationCommand(targets) ??
+    inferCargoVerificationCommand(targets) ??
+    inferGoVerificationCommand(targets) ??
+    inferWebVerificationCommand(targets) ??
+    "git status --short"
+  );
+}
+
+function collectMutationVerificationTargets(steps: AgentPlanStep[]): string[] {
+  const targets = new Set<string>();
+
+  for (const step of steps) {
+    if (!isProjectMutationPlanStep(step)) {
+      continue;
+    }
+
+    addVerificationTarget(targets, step.target);
+
+    if (step.builtInToolInput) {
+      addVerificationTargetsFromInput(targets, step.builtInToolInput);
+    }
+  }
+
+  return [...targets];
+}
+
+function addVerificationTargetsFromInput(
+  targets: Set<string>,
+  input: Record<string, unknown>
+): void {
+  for (const key of ["relativePath", "relative_path", "path", "file", "target"]) {
+    const value = input[key];
+
+    if (typeof value === "string") {
+      addVerificationTarget(targets, value);
+    }
+  }
+
+  for (const key of ["relativePaths", "relative_paths", "paths", "files", "targets"]) {
+    const value = input[key];
+
+    if (!Array.isArray(value)) {
+      continue;
+    }
+
+    for (const item of value) {
+      if (typeof item === "string") {
+        addVerificationTarget(targets, item);
+      }
+    }
+  }
+}
+
+function addVerificationTarget(targets: Set<string>, value: string | undefined): void {
+  const target = normalizeVerificationPath(value);
+
+  if (target) {
+    targets.add(target);
+  }
+}
+
+function normalizeVerificationPath(value: string | undefined): string | null {
+  const normalized = value?.trim().replace(/^`|`$/gu, "").replace(/\\/gu, "/");
+
+  if (
+    !normalized ||
+    normalized === "." ||
+    normalized.includes("\n") ||
+    /^(?:git|npm|pnpm|yarn|bun|mvn|gradle|cargo|go|node|npx)\s/iu.test(normalized)
+  ) {
+    return null;
+  }
+
+  return normalized.replace(/^\.\//u, "");
+}
+
+function inferMavenVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const normalizedTarget = target.toLocaleLowerCase();
+    const pomMatch = /(^|\/)pom\.xml$/u.exec(normalizedTarget);
+
+    if (!pomMatch) {
+      continue;
+    }
+
+    const pomPath = target.slice(0, target.length - "pom.xml".length) + "pom.xml";
+    const rootPath = trimTrailingSlash(pomPath.slice(0, -"pom.xml".length));
+
+    return rootPath ? `mvn -f ${formatCommandPath(`${rootPath}/pom.xml`)} test` : "mvn test";
+  }
+
+  for (const target of targets) {
+    const projectRoot = readJvmProjectRoot(target);
+
+    if (projectRoot !== null) {
+      return projectRoot ? `mvn -f ${formatCommandPath(`${projectRoot}/pom.xml`)} test` : "mvn test";
+    }
+  }
+
+  return null;
+}
+
+function inferGradleVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const normalizedTarget = target.toLocaleLowerCase();
+
+    if (!/(^|\/)(build|settings)\.gradle(?:\.kts)?$/u.test(normalizedTarget)) {
+      continue;
+    }
+
+    const rootPath = trimTrailingSlash(target.replace(/(?:build|settings)\.gradle(?:\.kts)?$/iu, ""));
+
+    return rootPath ? `gradle -p ${formatCommandPath(rootPath)} test` : "gradle test";
+  }
+
+  return null;
+}
+
+function inferCargoVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const manifestRoot = readCargoManifestRoot(target);
+
+    if (manifestRoot !== null) {
+      return manifestRoot
+        ? `cargo test --manifest-path ${formatCommandPath(`${manifestRoot}/Cargo.toml`)}`
+        : "cargo test";
+    }
+  }
+
+  for (const target of targets) {
+    const rustRoot = readRustProjectRoot(target);
+
+    if (rustRoot !== null) {
+      return rustRoot
+        ? `cargo test --manifest-path ${formatCommandPath(`${rustRoot}/Cargo.toml`)}`
+        : "cargo test";
+    }
+  }
+
+  return null;
+}
+
+function inferGoVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const moduleRoot = readGoModuleRoot(target);
+
+    if (moduleRoot !== null) {
+      return moduleRoot ? `go -C ${formatCommandPath(moduleRoot)} test ./...` : "go test ./...";
+    }
+  }
+
+  if (targets.some((target) => target.toLocaleLowerCase().endsWith(".go"))) {
+    return "go test ./...";
+  }
+
+  return null;
+}
+
+function inferWebVerificationCommand(targets: string[]): string | null {
+  for (const target of targets) {
+    const packageManagerProject = readPackageManagerProject(target);
+
+    if (packageManagerProject) {
+      return formatPackageManagerBuildCommand(packageManagerProject);
+    }
+  }
+
+  for (const target of targets) {
+    const packageRoot = readPackageJsonRoot(target);
+
+    if (packageRoot !== null) {
+      return packageRoot ? `npm --prefix ${formatCommandPath(packageRoot)} run build` : "npm run build";
+    }
+  }
+
+  for (const target of targets) {
+    const webRoot = readWebProjectRoot(target);
+
+    if (webRoot !== null) {
+      return webRoot ? `npm --prefix ${formatCommandPath(webRoot)} run build` : "npm run build";
+    }
+  }
+
+  return null;
+}
+
+function readCargoManifestRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+
+  if (!/(^|\/)(cargo\.toml|cargo\.lock)$/u.test(normalizedTarget)) {
+    return null;
+  }
+
+  return trimTrailingSlash(target.replace(/(?:Cargo\.toml|Cargo\.lock)$/iu, ""));
+}
+
+function readRustProjectRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+  const srcIndex = normalizedTarget.indexOf("/src/");
+
+  if (!normalizedTarget.endsWith(".rs")) {
+    return null;
+  }
+
+  if (normalizedTarget.startsWith("src/")) {
+    return "";
+  }
+
+  return srcIndex > 0 ? target.slice(0, srcIndex) : null;
+}
+
+function readGoModuleRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+
+  if (!/(^|\/)go\.(?:mod|sum)$/u.test(normalizedTarget)) {
+    return null;
+  }
+
+  return trimTrailingSlash(target.replace(/go\.(?:mod|sum)$/iu, ""));
+}
+
+function readPackageManagerProject(
+  target: string
+): { manager: "bun" | "npm" | "pnpm" | "yarn"; root: string } | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+  const match = /(?:^|\/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|bun\.lock)$/u.exec(
+    normalizedTarget
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const root = trimTrailingSlash(target.slice(0, match.index));
+  const lockFile = match[1];
+
+  if (lockFile === "pnpm-lock.yaml") {
+    return { manager: "pnpm", root };
+  }
+
+  if (lockFile === "yarn.lock") {
+    return { manager: "yarn", root };
+  }
+
+  if (lockFile.startsWith("bun.")) {
+    return { manager: "bun", root };
+  }
+
+  return { manager: "npm", root };
+}
+
+function formatPackageManagerBuildCommand(project: {
+  manager: "bun" | "npm" | "pnpm" | "yarn";
+  root: string;
+}): string {
+  const root = project.root ? formatCommandPath(project.root) : "";
+
+  if (project.manager === "pnpm") {
+    return root ? `pnpm --dir ${root} run build` : "pnpm run build";
+  }
+
+  if (project.manager === "yarn") {
+    return root ? `yarn --cwd ${root} build` : "yarn build";
+  }
+
+  if (project.manager === "bun") {
+    return root ? `bun --cwd ${root} run build` : "bun run build";
+  }
+
+  return root ? `npm --prefix ${root} run build` : "npm run build";
+}
+
+function readPackageJsonRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+
+  if (!/(^|\/)package\.json$/u.test(normalizedTarget)) {
+    return null;
+  }
+
+  return trimTrailingSlash(target.slice(0, target.length - "package.json".length));
+}
+
+function readJvmProjectRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+  const match = /(?:^|\/)src\/(?:main|test)\/(?:java|kotlin|resources)\//u.exec(
+    normalizedTarget
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const rootPath = target.slice(0, match.index).replace(/\/$/u, "");
+
+  return rootPath;
+}
+
+function readWebProjectRoot(target: string): string | null {
+  const normalizedTarget = target.toLocaleLowerCase();
+
+  if (!isWebProjectFile(normalizedTarget)) {
+    return null;
+  }
+
+  const srcIndex = normalizedTarget.indexOf("/src/");
+
+  if (srcIndex > 0) {
+    return target.slice(0, srcIndex);
+  }
+
+  if (normalizedTarget.startsWith("src/")) {
+    return "";
+  }
+
+  const firstSlashIndex = normalizedTarget.indexOf("/");
+  const firstSegment = firstSlashIndex > 0 ? normalizedTarget.slice(0, firstSlashIndex) : "";
+
+  if (["frontend", "client", "web", "app"].includes(firstSegment)) {
+    return target.slice(0, firstSlashIndex);
+  }
+
+  return /^(.+\/)?(?:vite\.config|tsconfig|index\.html|src\/)/u.test(normalizedTarget) ? "" : null;
+}
+
+function isWebProjectFile(normalizedTarget: string): boolean {
+  return (
+    /\.(?:c|m)?(?:js|ts)x?$/u.test(normalizedTarget) ||
+    /\.(?:vue|svelte|astro|css|scss|sass|less|html)$/u.test(normalizedTarget) ||
+    /(^|\/)(vite\.config|webpack\.config|rollup\.config|tsconfig(?:\..*)?\.json|index\.html)$/u.test(
+      normalizedTarget
+    )
+  );
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/$/u, "");
+}
+
+function formatCommandPath(path: string): string {
+  return /\s/u.test(path) ? `"${path.replace(/"/gu, '\\"')}"` : path;
 }
 
 function isProjectMutationPlanStep(step: AgentPlanStep): boolean {
