@@ -77,84 +77,16 @@ test("built-in service extensions expose production manifests for common service
   );
 });
 
-test("OAuth-capable service extensions declare provider metadata and token fields", () => {
+test("built-in service extensions expose manual token fields by default", () => {
   const manifests = serviceExtensionDefinitions.map((definition) => definition.manifest);
-  const oauthManifests = manifests.filter((manifest) => manifest.auth.oauth);
 
-  assert.deepEqual(
-    oauthManifests.map((manifest) => manifest.id),
-    [
-      "github",
-      "gitlab",
-      "bitbucket",
-      "confluence",
-      "slack",
-      "notion",
-      "airtable",
-      "hubspot",
-      "todoist",
-      "asana",
-      "clickup",
-      "monday",
-      "google-calendar",
-      "calendly",
-      "miro",
-      "zoom",
-      "figma",
-      "gmail",
-      "google-drive",
-      "dropbox",
-      "microsoft-365",
-      "linear",
-      "sentry",
-      "jira-cloud",
-      "discord"
-    ]
-  );
+  assert.deepEqual(manifests.filter((manifest) => manifest.auth.oauth).map((manifest) => manifest.id), []);
 
-  for (const manifest of oauthManifests) {
-    const oauth = manifest.auth.oauth;
-
-    assert.ok(oauth);
-    assert.ok(manifest.auth.fields.some((field) => field.id === oauth.accessTokenFieldId));
-    assert.equal(
-      manifest.auth.fields.find((field) => field.id === oauth.accessTokenFieldId)?.manualInput,
-      false
-    );
-    if (oauth.refreshTokenFieldId) {
-      assert.equal(
-        manifest.auth.fields.find((field) => field.id === oauth.refreshTokenFieldId)?.manualInput,
-        false
-      );
+  for (const manifest of manifests) {
+    for (const field of manifest.auth.fields) {
+      assert.notEqual(field.manualInput, false, `${manifest.id}.${field.id} should be editable`);
     }
-    if (oauth.clientIdFieldId) {
-      assert.ok(manifest.auth.fields.some((field) => field.id === oauth.clientIdFieldId));
-    } else if (oauth.redirectUriMode === "brokered") {
-      assert.equal(
-        Boolean(oauth.brokerAuthorizationUrl),
-        Boolean(process.env.FORGE_OAUTH_BROKER_BASE_URL)
-      );
-    } else {
-      assert.ok(oauth.productClientId || oauth.productClientIdEnvVar);
-    }
-    assert.ok(oauth.authorizationUrl.startsWith("https://"));
-    assert.ok(oauth.tokenUrl.startsWith("https://"));
-    assert.ok(oauth.docsUrl.startsWith("https://"));
-    assert.ok(oauth.setupUrl.startsWith("https://"));
   }
-
-  assert.equal(
-    manifests.find((manifest) => manifest.id === "gmail")?.auth.oauth?.redirectUriMode,
-    "loopback"
-  );
-  assert.equal(
-    manifests.find((manifest) => manifest.id === "slack")?.auth.oauth?.redirectUriMode,
-    "brokered"
-  );
-  assert.equal(
-    manifests.find((manifest) => manifest.id === "github")?.auth.oauth?.redirectUriMode,
-    "device-code"
-  );
 });
 
 test("extensions panel maps built-in services to product icon assets", async () => {
@@ -234,7 +166,7 @@ test("extensions panel explains OAuth setup before browser authorization", async
 });
 
 test("gmail OAuth loopback authorization saves access and refresh tokens", async () => {
-  const fixture = await createRegistryFixture();
+  const savedSecrets = new Map<string, string>();
   const fetchMock = installMockFetch(async (url, init) => {
     assert.equal(url, "https://oauth2.googleapis.com/token");
     assert.equal(init?.method, "POST");
@@ -258,24 +190,54 @@ test("gmail OAuth loopback authorization saves access and refresh tokens", async
   });
 
   try {
-    const result = await fixture.registry.startOAuth({
-      extensionId: "gmail"
+    const result = await startExtensionOAuthAuthorization({
+      manifest: serviceExtensionDefinitions.find(
+        (definition) => definition.manifest.id === "gmail"
+      )?.manifest ?? serviceExtensionDefinitions[0].manifest,
+      oauth: {
+        provider: "Google",
+        authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+        tokenUrl: "https://oauth2.googleapis.com/token",
+        scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+        accessTokenFieldId: "accessToken",
+        refreshTokenFieldId: "refreshToken",
+        productClientId: "google-client-id.apps.googleusercontent.com",
+        docsUrl: "https://developers.google.com/identity/protocols/oauth2/native-app",
+        setupUrl: "https://console.cloud.google.com/apis/credentials",
+        redirectUriMode: "loopback",
+        usePkce: true,
+        tokenRequestAuth: "none"
+      },
+      openExternal: async (url) => {
+        const authorizationUrl = new URL(url);
+        const redirectUri = authorizationUrl.searchParams.get("redirect_uri");
+        const state = authorizationUrl.searchParams.get("state");
+
+        assert.equal(authorizationUrl.origin, "https://accounts.google.com");
+        assert.equal(authorizationUrl.searchParams.get("client_id"), "google-client-id.apps.googleusercontent.com");
+
+        if (redirectUri && state) {
+          setTimeout(() => {
+            void fetch(`${redirectUri}?code=gmail-code&state=${encodeURIComponent(state)}`);
+          }, 0);
+        }
+
+        return true;
+      },
+      readSecret: async () => null,
+      saveSecret: async (fieldId, value) => {
+        savedSecrets.set(fieldId, value);
+      },
+      timeoutMs: 10_000
     });
 
     assert.equal(result.provider, "Google");
     assert.deepEqual(result.savedFields, ["accessToken", "refreshToken"]);
+    assert.equal(savedSecrets.get("accessToken"), "ya29-test-token");
+    assert.equal(savedSecrets.get("refreshToken"), "refresh-test-token");
     assert.equal(fetchMock.calls.length, 1);
-
-    const gmailStatus = result.registry.secretStatuses.find(
-      (status) => status.extensionId === "gmail"
-    );
-
-    assert.equal(gmailStatus?.configured, true);
-    assert.equal(gmailStatus?.fields.accessToken.hasValue, true);
-    assert.equal(gmailStatus?.fields.refreshToken.hasValue, true);
   } finally {
     fetchMock.restore();
-    await fixture.cleanup();
   }
 });
 
