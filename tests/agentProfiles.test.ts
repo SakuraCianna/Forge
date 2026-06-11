@@ -12,6 +12,7 @@ test("built-in build profile prompts for scoped evidence-based verified changes"
   const context = getActiveAgentProfileContext(createDefaultAgentProfiles(), "zh-CN");
 
   assert.equal(context.id, "build");
+  assert.equal(context.planStepLimit, 12);
   assert.match(context.instructions, /读取真实项目文件/u);
   assert.match(context.instructions, /可验收结果/u);
   assert.match(context.instructions, /只围绕用户目标/u);
@@ -64,6 +65,41 @@ test("built-in profile migration upgrades previous default prompt text", () => {
 
   assert.match(context.instructions, /可验收结果/u);
   assert.match(context.instructions, /依据错误输出修复/u);
+});
+
+test("built-in build profile migrates old untouched plan limits", () => {
+  const [buildProfile] = createDefaultAgentProfiles();
+  assert.ok(buildProfile);
+  const storage = createMemoryStorage({
+    "forge.agentProfiles": JSON.stringify([
+      {
+        ...buildProfile,
+        planStepLimit: 10
+      }
+    ])
+  });
+  const [migratedProfile] = loadAgentProfiles(storage);
+  const context = getActiveAgentProfileContext([migratedProfile], "zh-CN");
+
+  assert.equal(context.planStepLimit, 12);
+});
+
+test("customized build profile plan limits are preserved", () => {
+  const [buildProfile] = createDefaultAgentProfiles();
+  assert.ok(buildProfile);
+  const storage = createMemoryStorage({
+    "forge.agentProfiles": JSON.stringify([
+      {
+        ...buildProfile,
+        planStepLimit: 8,
+        updatedAt: "2026-06-01T00:00:00.000Z"
+      }
+    ])
+  });
+  const [migratedProfile] = loadAgentProfiles(storage);
+  const context = getActiveAgentProfileContext([migratedProfile], "zh-CN");
+
+  assert.equal(context.planStepLimit, 8);
 });
 
 function createMemoryStorage(values: Record<string, string>): Storage {

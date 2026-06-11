@@ -117,7 +117,7 @@ const defaultProfiles: AgentProfile[] = [
       web: true
     },
     contextBudget: 12000,
-    planStepLimit: 10,
+    planStepLimit: 12,
     autoRunBatchSize: 3,
     maxFailureRecoveryAttempts: 2,
     active: true,
@@ -453,13 +453,13 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
   };
 }
 
-// build 智能体旧默认值是 6 步, 对空项目脚手架太紧; 仅迁移未手动修改过的内置默认配置。
+// build 智能体旧默认值 6/10 步会挤掉检查、预览和验证动作; 仅迁移未手动修改过的内置默认配置。
 function normalizePlanStepLimit(profile: AgentProfile): number {
   if (
     profile.id === "build" &&
     profile.builtIn &&
     profile.updatedAt === defaultProfileTimestamp &&
-    profile.planStepLimit === 6
+    (profile.planStepLimit === 6 || profile.planStepLimit === 10)
   ) {
     return getDefaultPlanStepLimit(profile.id);
   }
