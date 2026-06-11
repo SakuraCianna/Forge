@@ -208,7 +208,7 @@ Forge 当前实现了三类产品化授权路径:
 3. GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 使用 brokered 模式。桌面端只打开 Forge 官方 OAuth 服务, 由服务端持有 client secret 并处理 HTTPS callback, 再把短期 broker code 回跳给本机 Forge。
 4. 普通用户进入扩展页, 直接点击“网页登录授权”, 不需要自己创建 OAuth app、复制 client ID 或保存 client secret。
 5. 对已声明 OAuth 的内置扩展, access token 和 refresh token 由网页登录授权自动写入本机安全存储, 扩展页不会再展示手动粘贴 token 的输入框。
-6. 如果某个构建缺少产品方 OAuth 配置或 Forge OAuth broker, UI 会明确标注“当前构建未配置网页登录”, 这是维护者需要处理的发布配置问题。
+6. 如果某个构建缺少产品方 OAuth 配置或 Forge OAuth broker, UI 会明确标注“当前构建未配置网页登录”, 这是维护者需要处理的发布配置问题。brokered 扩展出现该状态时, 通常缺少 `FORGE_OAUTH_BROKER_BASE_URL` 或对应 Forge OAuth broker 尚未部署。
 7. loopback 和 brokered 模式下, 主进程在 `127.0.0.1` 随机端口启动短期 HTTP 回调监听。
 8. Forge 生成 `state`, 支持的服务同时生成 PKCE `code_verifier` 和 `code_challenge`。
 9. Forge 用系统浏览器打开官方授权页或 Forge OAuth 服务。

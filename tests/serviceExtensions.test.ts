@@ -224,9 +224,11 @@ test("extensions panel explains OAuth setup before browser authorization", async
   assert.match(source, /selectedOAuthUsesProductClient/u);
   assert.match(source, /canStartSelectedOAuth/u);
   assert.match(source, /disabled=\{\s*busyOAuthExtensionId === selectedManifest\.id \|\|/u);
+  assert.match(source, /FORGE_OAUTH_BROKER_BASE_URL/u);
   assert.match(source, /Forge OAuth broker/u);
   assert.match(source, /getManualAuthFields/u);
   assert.match(source, /oauthOnlyCredentials/u);
+  assert.match(source, /copy\.oauthOnlyCredentials/u);
   assert.match(source, /manualInput !== false/u);
   assert.doesNotMatch(source, /打开官方配置/u);
 });
