@@ -1,6 +1,6 @@
 // 本文件说明: 在项目根目录内安全读取, 预览和写入文本文件
-import type { Dirent, Stats } from "node:fs";
-import { lstat, mkdir, readFile, readdir, realpath, stat, unlink, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
+import { lstat, mkdir, readFile, realpath, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import type {
   ProjectDirectoryEntry,
@@ -19,6 +19,7 @@ import {
   isSensitiveProjectPath
 } from "../shared/sensitiveProjectFiles.js";
 import { createLineDiff } from "../shared/textDiff.js";
+import { readCachedSortedDirectoryEntries } from "./projectDirectoryEntriesCache.js";
 import { createProjectIgnoreMatcher } from "./projectIgnore.js";
 export { searchProjectTextFiles } from "./projectTextSearchIndex.js";
 
@@ -247,10 +248,10 @@ export async function listProjectDirectory({
   let truncated = false;
   let visibleEntryIndex = 0;
 
-  let directoryEntries: Dirent[];
+  let directoryEntries: Awaited<ReturnType<typeof readCachedSortedDirectoryEntries>>;
 
   try {
-    directoryEntries = await readSortedDirectoryEntries(resolvedDirectoryPath);
+    directoryEntries = await readCachedSortedDirectoryEntries(resolvedDirectoryPath);
   } catch (error) {
     if (isFileNotFoundError(error) && normalizedRelativePath !== ".") {
       return createMissingDirectoryListResult(normalizedRelativePath);
@@ -267,11 +268,11 @@ export async function listProjectDirectory({
       continue;
     }
 
-    if (ignoreMatcher?.(entryRelativePath, entry.isDirectory())) {
+    if (ignoreMatcher?.(entryRelativePath, entry.isDirectory)) {
       continue;
     }
 
-    if (!entry.isDirectory() && !entry.isFile()) {
+    if (!entry.isDirectory && !entry.isFile) {
       continue;
     }
 
@@ -288,7 +289,7 @@ export async function listProjectDirectory({
     visibleEntryIndex += 1;
 
     entries.push(
-      entry.isDirectory()
+      entry.isDirectory
         ? {
             name: entry.name,
             relativePath: entryRelativePath,
@@ -302,7 +303,7 @@ export async function listProjectDirectory({
           }
     );
 
-    if (entry.isFile()) {
+    if (entry.isFile) {
       pendingFileEntries.push({
         absolutePath,
         index: entries.length - 1
@@ -377,7 +378,7 @@ export async function globProjectFiles({
       return;
     }
 
-    const entries = await readSortedDirectoryEntries(directoryPath);
+    const entries = await readCachedSortedDirectoryEntries(directoryPath);
 
     for (const entry of entries) {
       if (hasReachedLimit(matches.length, resultLimit)) {
@@ -388,7 +389,7 @@ export async function globProjectFiles({
       const absolutePath = `${directoryPath}${sep}${entry.name}`;
       const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
 
-      if (entry.isDirectory()) {
+      if (entry.isDirectory) {
         if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, true)) {
           continue;
         }
@@ -398,7 +399,7 @@ export async function globProjectFiles({
       }
 
       if (
-        !entry.isFile() ||
+        !entry.isFile ||
         isSensitiveProjectPath(relativePath) ||
         ignoreMatcher(relativePath, false) ||
         !patternMatcher(relativePath)
@@ -755,18 +756,6 @@ const textMediaTypeByFileName: Record<string, string> = {
   "tsconfig.json": "application/json; charset=utf-8",
   "vite.config.ts": "text/typescript; charset=utf-8"
 };
-
-// 读取目录时目录排在文件前面, 再按名称排序, 保持文件树和受控工具输出一致
-
-async function readSortedDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
-  return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) => {
-    if (left.isDirectory() !== right.isDirectory()) {
-      return left.isDirectory() ? -1 : 1;
-    }
-
-    return left.name.localeCompare(right.name);
-  });
-}
 
 // 只有调用方显式传入 limit 时才截断文件列表类结果, 默认展示所有未忽略路径
 function normalizeOptionalResultLimit(limit: number | undefined, maxLimit: number): number | null {

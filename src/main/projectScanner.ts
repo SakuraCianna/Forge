@@ -1,6 +1,6 @@
 // 本文件说明: 扫描项目文件和规则说明, 为 Agent 提供轻量上下文
 import type { Stats } from "node:fs";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type {
   ProjectFile,
@@ -8,6 +8,7 @@ import type {
   ProjectScanResult
 } from "../shared/projectTypes.js";
 import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
+import { readCachedSortedDirectoryEntries } from "./projectDirectoryEntriesCache.js";
 
 type ScanOptions = {
   limit?: number;
@@ -72,7 +73,7 @@ export async function scanProjectFiles(
       return;
     }
 
-    const entries = await readdir(directoryPath, { withFileTypes: true });
+    const entries = await readCachedSortedDirectoryEntries(directoryPath);
 
     for (const entry of entries) {
       if (hasReachedLimit(files.length, limit)) {
@@ -80,7 +81,7 @@ export async function scanProjectFiles(
         return;
       }
 
-      if (entry.isDirectory()) {
+      if (entry.isDirectory) {
         const relativeDirectoryPath = normalizeRelativePath(relative(rootPath, `${directoryPath}${sep}${entry.name}`));
 
         if (isSensitiveProjectPath(relativeDirectoryPath)) {
@@ -91,7 +92,7 @@ export async function scanProjectFiles(
         continue;
       }
 
-      if (!entry.isFile()) {
+      if (!entry.isFile) {
         continue;
       }
 
@@ -272,10 +273,10 @@ async function readCursorRulePaths(rootPath: string): Promise<string[]> {
   const rulesDirectoryPath = join(rootPath, ".cursor", "rules");
 
   try {
-    const entries = await readdir(rulesDirectoryPath, { withFileTypes: true });
+    const entries = await readCachedSortedDirectoryEntries(rulesDirectoryPath);
 
     return entries
-      .filter((entry) => entry.isFile() && /\.(?:md|mdc|txt)$/i.test(entry.name))
+      .filter((entry) => entry.isFile && /\.(?:md|mdc|txt)$/i.test(entry.name))
       .map((entry) => normalizeRelativePath(`.cursor/rules/${entry.name}`))
       .sort((left, right) => left.localeCompare(right));
   } catch (error) {

@@ -1,6 +1,6 @@
 // 本文件说明: 为受控文本搜索维护本地内存索引, 避免重复读取未变化的项目文本文件
 import type { Stats } from "node:fs";
-import { readFile, readdir, realpath, stat } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { relative, sep } from "node:path";
 import type {
   ProjectTextSearchMatch,
@@ -8,6 +8,7 @@ import type {
   ProjectTextSearchResult
 } from "../shared/fileTypes.js";
 import { isSensitiveProjectPath } from "../shared/sensitiveProjectFiles.js";
+import { readCachedSortedDirectoryEntries } from "./projectDirectoryEntriesCache.js";
 import { createProjectIgnoreMatcher } from "./projectIgnore.js";
 import {
   createProjectTextSearchIndexCache,
@@ -102,11 +103,11 @@ async function buildProjectTextSearchIndex(
 
   // 仍然每次按目录确认可见文件集合, 但未变化文件直接复用内存文本快照
   async function walk(directoryPath: string): Promise<void> {
-    for (const entry of await readSortedDirectoryEntries(directoryPath)) {
+    for (const entry of await readCachedSortedDirectoryEntries(directoryPath)) {
       const absolutePath = `${directoryPath}${sep}${entry.name}`;
       const relativePath = normalizeRelativePath(relative(resolvedProjectRoot, absolutePath));
 
-      if (entry.isDirectory()) {
+      if (entry.isDirectory) {
         if (isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, true)) {
           continue;
         }
@@ -115,7 +116,7 @@ async function buildProjectTextSearchIndex(
         continue;
       }
 
-      if (!entry.isFile() || isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
+      if (!entry.isFile || isSensitiveProjectPath(relativePath) || ignoreMatcher(relativePath, false)) {
         continue;
       }
 
@@ -377,12 +378,6 @@ function normalizeSearchQuery(query: string): string {
   }
 
   return normalized;
-}
-
-async function readSortedDirectoryEntries(directoryPath: string) {
-  return (await readdir(directoryPath, { withFileTypes: true })).sort((left, right) =>
-    left.name.localeCompare(right.name)
-  );
 }
 
 function createTextSearchIndexCacheKey(rootPath: string, maxFileBytes: number): string {
