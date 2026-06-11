@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import type { BigIntStats } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanProjectFiles } from "../src/main/projectScanner.js";
+import { readProjectFileEntriesWithConcurrency, scanProjectFiles } from "../src/main/projectScanner.js";
 
 test("scanProjectFiles reuses unchanged instruction file cache entries", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-scanner-instructions-cache-"));
@@ -127,3 +128,66 @@ test("scanProjectFiles invalidates same-size file metadata when ctime changes", 
     await rm(projectRoot, { recursive: true, force: true });
   }
 });
+
+test("scanProjectFiles respects the scan limit while batching file metadata reads", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-scanner-file-limit-"));
+
+  try {
+    await writeFile(join(projectRoot, "a.ts"), "export const a = 1;\n", "utf8");
+    await writeFile(join(projectRoot, "b.ts"), "export const b = 2;\n", "utf8");
+    await writeFile(join(projectRoot, "c.ts"), "export const c = 3;\n", "utf8");
+
+    const scan = await scanProjectFiles(projectRoot, { limit: 2 });
+
+    assert.equal(scan.truncated, true);
+    assert.deepEqual(
+      scan.files.map((file) => file.relativePath),
+      ["a.ts", "b.ts"]
+    );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("readProjectFileEntriesWithConcurrency bounds stat concurrency and preserves order", async () => {
+  let activeReads = 0;
+  let maxActiveReads = 0;
+
+  const files = await readProjectFileEntriesWithConcurrency(
+    [
+      { filePath: "E:\\CodeHome\\Forge\\a.ts", relativePath: "a.ts" },
+      { filePath: "E:\\CodeHome\\Forge\\b.ts", relativePath: "b.ts" },
+      { filePath: "E:\\CodeHome\\Forge\\c.ts", relativePath: "c.ts" },
+      { filePath: "E:\\CodeHome\\Forge\\d.ts", relativePath: "d.ts" }
+    ],
+    new Map(),
+    {
+      maxConcurrency: 2,
+      readStat: async (filePath) => {
+        activeReads += 1;
+        maxActiveReads = Math.max(maxActiveReads, activeReads);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        activeReads -= 1;
+
+        return createFakeBigIntStats(filePath);
+      }
+    }
+  );
+
+  assert.equal(maxActiveReads, 2);
+  assert.deepEqual(
+    files.map((file) => file.relativePath),
+    ["a.ts", "b.ts", "c.ts", "d.ts"]
+  );
+});
+
+function createFakeBigIntStats(filePath: string): BigIntStats {
+  const seed = BigInt(filePath.charCodeAt(filePath.length - 4) ?? 1);
+
+  return {
+    ctimeNs: seed,
+    mtimeMs: seed,
+    mtimeNs: seed,
+    size: seed
+  } as BigIntStats;
+}

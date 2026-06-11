@@ -15,15 +15,28 @@ type ScanOptions = {
   previousIndex?: ProjectScanResult | null;
 };
 
+export type ProjectFileStatTask = {
+  filePath: string;
+  relativePath: string;
+};
+
 type CachedInstructionFile = {
   file: ProjectInstructionFile;
   modifiedAtMs: number;
   size: number;
 };
 
+type ProjectFileStatReader = (filePath: string) => Promise<BigIntStats>;
+
+type ReadProjectFileEntriesOptions = {
+  maxConcurrency?: number;
+  readStat?: ProjectFileStatReader;
+};
+
 const maxInstructionFileChars = 12_000;
 const maxInstructionFiles = 12;
 const maxCachedInstructionFiles = 160;
+const defaultMaxProjectFileStatConcurrency = 24;
 const instructionFileCache = new Map<string, CachedInstructionFile>();
 // 只读取轻量项目指令, 避免把完整仓库塞进模型上下文
 const rootInstructionFilePaths = [
@@ -74,11 +87,12 @@ export async function scanProjectFiles(
     }
 
     const entries = await readCachedSortedDirectoryEntries(directoryPath);
+    const pendingFileStats: ProjectFileStatTask[] = [];
 
     for (const entry of entries) {
-      if (hasReachedLimit(files.length, limit)) {
+      if (hasReachedLimit(files.length + pendingFileStats.length, limit)) {
         truncated = true;
-        return;
+        break;
       }
 
       if (entry.isDirectory) {
@@ -89,6 +103,11 @@ export async function scanProjectFiles(
         }
 
         await walk(`${directoryPath}${sep}${entry.name}`);
+
+        if (truncated) {
+          return;
+        }
+
         continue;
       }
 
@@ -103,8 +122,14 @@ export async function scanProjectFiles(
         continue;
       }
 
-      const fileStat = await stat(filePath, { bigint: true });
-      files.push(createProjectFileEntry(relativePath, fileStat, previousFilesByPath));
+      pendingFileStats.push({
+        filePath,
+        relativePath
+      });
+    }
+
+    if (pendingFileStats.length > 0) {
+      files.push(...await readProjectFileEntriesWithConcurrency(pendingFileStats, previousFilesByPath));
     }
   }
 
@@ -116,6 +141,46 @@ export async function scanProjectFiles(
     truncated,
     instructionFiles
   };
+}
+
+export async function readProjectFileEntriesWithConcurrency(
+  fileStatTasks: ProjectFileStatTask[],
+  previousFilesByPath: ReadonlyMap<string, ProjectFile>,
+  options: ReadProjectFileEntriesOptions = {}
+): Promise<ProjectFile[]> {
+  const readStat = options.readStat ?? readProjectFileStat;
+  const maxConcurrency = normalizeProjectFileStatConcurrency(options.maxConcurrency);
+  const files: ProjectFile[] = [];
+  let nextTaskIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextTaskIndex < fileStatTasks.length) {
+      const taskIndex = nextTaskIndex;
+      nextTaskIndex += 1;
+
+      const task = fileStatTasks[taskIndex];
+
+      if (!task) {
+        return;
+      }
+
+      const fileStat = await readStat(task.filePath);
+      files[taskIndex] = createProjectFileEntry(task.relativePath, fileStat, previousFilesByPath);
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(maxConcurrency, fileStatTasks.length) },
+      () => worker()
+    )
+  );
+
+  return files;
+}
+
+function readProjectFileStat(filePath: string): Promise<BigIntStats> {
+  return stat(filePath, { bigint: true });
 }
 
 // 汇总 AGENTS, README 和规则文件内容, 作为模型的项目说明
@@ -165,6 +230,14 @@ function normalizeBigIntFileSize(size: bigint): number {
   }
 
   return Number(size);
+}
+
+function normalizeProjectFileStatConcurrency(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return defaultMaxProjectFileStatConcurrency;
+  }
+
+  return Math.max(1, Math.min(64, Math.round(value)));
 }
 
 async function readProjectInstructionFiles(rootPath: string): Promise<ProjectInstructionFile[]> {
