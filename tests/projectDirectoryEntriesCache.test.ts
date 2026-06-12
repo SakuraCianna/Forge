@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readCachedSortedDirectoryEntries } from "../src/main/projectDirectoryEntriesCache.js";
@@ -38,8 +38,10 @@ test("readCachedSortedDirectoryEntries invalidates when directory entries change
   try {
     await writeFile(join(projectRoot, "alpha.txt"), "alpha\n", "utf8");
     const firstEntries = await readCachedSortedDirectoryEntries(projectRoot);
+    const firstSignature = await readDirectorySignature(projectRoot);
 
     await writeFile(join(projectRoot, "beta.txt"), "beta\n", "utf8");
+    await waitForDirectorySignatureChange(projectRoot, firstSignature);
     const secondEntries = await readCachedSortedDirectoryEntries(projectRoot);
 
     assert.notStrictEqual(secondEntries, firstEntries);
@@ -51,6 +53,37 @@ test("readCachedSortedDirectoryEntries invalidates when directory entries change
     await rm(projectRoot, { recursive: true, force: true });
   }
 });
+
+async function readDirectorySignature(directoryPath: string): Promise<string> {
+  const directoryStat = await stat(directoryPath, { bigint: true });
+
+  return `${directoryStat.ctimeNs}:${directoryStat.mtimeNs}`;
+}
+
+async function waitForDirectorySignatureChange(
+  directoryPath: string,
+  previousSignature: string
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ((await readDirectorySignature(directoryPath)) !== previousSignature) {
+      return;
+    }
+
+    const nudgePath = join(directoryPath, `.forge-cache-signature-${attempt}.tmp`);
+
+    await writeFile(nudgePath, "nudge\n", "utf8");
+    await rm(nudgePath, { force: true });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 25);
+    });
+  }
+
+  assert.notEqual(
+    await readDirectorySignature(directoryPath),
+    previousSignature,
+    "Directory cache invalidation test could not observe a directory metadata change"
+  );
+}
 
 test("readCachedSortedDirectoryEntries keeps cache when only file content changes", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-directory-cache-content-change-"));
