@@ -14,6 +14,8 @@ test("built-in build profile prompts for scoped evidence-based verified changes"
   assert.equal(context.id, "build");
   assert.equal(context.planStepLimit, 12);
   assert.match(context.instructions, /读取真实项目文件/u);
+  assert.match(context.instructions, /上下文预算/u);
+  assert.match(context.instructions, /提示词省略的文件/u);
   assert.match(context.instructions, /可验收结果/u);
   assert.match(context.instructions, /只围绕用户目标/u);
   assert.match(context.instructions, /不引入无关重构或依赖/u);
@@ -65,6 +67,26 @@ test("built-in profile migration upgrades previous default prompt text", () => {
 
   assert.match(context.instructions, /可验收结果/u);
   assert.match(context.instructions, /依据错误输出修复/u);
+});
+
+test("built-in profile migration upgrades the last build default prompt text", () => {
+  const oldPrompt =
+    "先读取真实项目文件和当前状态, 明确可验收结果后再改; 只围绕用户目标做小而完整的改动, 优先复用现有结构, 不引入无关重构或依赖; 代码要能从真实入口运行, 导入导出、配置、数据契约和命令路径必须一致; 修改后运行匹配的 typecheck, test, build 或 lint, 如检查失败要依据错误输出修复或明确说明阻塞";
+  const [buildProfile] = createDefaultAgentProfiles();
+  assert.ok(buildProfile);
+  const storage = createMemoryStorage({
+    "forge.agentProfiles": JSON.stringify([
+      {
+        ...buildProfile,
+        systemPrompt: oldPrompt
+      }
+    ])
+  });
+  const [migratedProfile] = loadAgentProfiles(storage);
+  const context = getActiveAgentProfileContext([migratedProfile], "zh-CN");
+
+  assert.match(context.instructions, /上下文预算/u);
+  assert.match(context.instructions, /提示词省略的文件/u);
 });
 
 test("built-in build profile migrates old untouched plan limits", () => {
