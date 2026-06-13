@@ -173,13 +173,48 @@ type CompactProcessedGroup = {
   items: CompactProcessedItem[];
 };
 
-// 紧凑主屏只保留人能直接阅读的消息, 详细执行流水留在 Agent 详情视图里
-function shouldShowCompactTranscriptEvent(event: TaskThreadEvent): boolean {
-  if (event.agentActionRun || event.commandRun?.actionId || event.commandResult?.actionId) {
+// 紧凑主屏在运行中展开可读执行过程, 完成后再折叠回最终总结
+export function shouldShowCompactTranscriptEvent(
+  event: TaskThreadEvent,
+  threadStatus: TaskThread["status"]
+): boolean {
+  if (event.kind === "user") {
+    return true;
+  }
+
+  if (event.kind === "result" && !isReadableLiveProgressEvent(event)) {
+    return true;
+  }
+
+  if (threadStatus === "completed") {
     return false;
   }
 
-  return event.kind === "user" || event.kind === "result";
+  return isReadableLiveProgressEvent(event);
+}
+
+function isReadableLiveProgressEvent(event: TaskThreadEvent): boolean {
+  if (isRawPlanStreamEvent(event)) {
+    return false;
+  }
+
+  return (
+    Boolean(event.agentActionRun) ||
+    Boolean(event.commandRun) ||
+    Boolean(event.commandResult) ||
+    Boolean(event.commandApproval) ||
+    Boolean(event.fileChange) ||
+    Boolean(event.failureRecoveryAttempt) ||
+    Boolean(event.autoFailureRecoverySkip) ||
+    event.kind === "file" ||
+    event.kind === "error" ||
+    event.kind === "command" ||
+    event.kind === "plan"
+  );
+}
+
+function isRawPlanStreamEvent(event: TaskThreadEvent): boolean {
+  return event.kind === "plan" && event.id.includes("-plan-stream-");
 }
 
 // 把线程状态拆成简洁对话视图, 复杂执行细节只在需要的标签里展示
@@ -283,7 +318,10 @@ export function ThreadWorkspace({
     [selectedThread]
   );
   const visibleCompactEvents = useMemo(
-    () => selectedThread?.events.filter(shouldShowCompactTranscriptEvent) ?? [],
+    () =>
+      selectedThread?.events.filter((event) =>
+        shouldShowCompactTranscriptEvent(event, selectedThread.status)
+      ) ?? [],
     [selectedThread]
   );
   const hasCompactSourceEvents = (selectedThread?.events.length ?? 0) > 0;
@@ -3257,12 +3295,9 @@ function getCompactProcessedSummary(
 ): CompactProcessedSummary | null {
   const visibleEventIds = new Set(visibleEvents.map((event) => event.id));
   const hiddenEvents = thread.events.filter((event) => !visibleEventIds.has(event.id));
+  const recoverySummary = getProcessedRecoverySummary(thread, language);
 
-  if (
-    hiddenEvents.length === 0 &&
-    thread.status !== "running" &&
-    thread.status !== "planned"
-  ) {
+  if (hiddenEvents.length === 0 && !recoverySummary) {
     return null;
   }
 
@@ -3271,7 +3306,7 @@ function getCompactProcessedSummary(
     groups: buildCompactProcessedGroups(hiddenEvents, language),
     sourceUrls: extractSourceUrlsFromEvents(hiddenEvents),
     livePreview: getCompactProcessedLivePreview(thread, hiddenEvents),
-    recoverySummary: getProcessedRecoverySummary(thread, language) ?? undefined
+    recoverySummary: recoverySummary ?? undefined
   };
 }
 
