@@ -183,6 +183,8 @@ npm run quality:regression
 npm run quality:v0.3:status
 ```
 
+Built-in Tools QA 和 Browser QA 是 v0.3.x 固定检查入口, 回归记录和发布说明都应保留这两个真实脚本名。
+
 发布前可以运行:
 
 ```powershell
@@ -270,6 +272,8 @@ OAuth 相关变量仅供维护者在自定义构建或部署 Forge OAuth broker 
 - `FORGE_OAUTH_BROKER_BASE_URL`: 启用 GitLab、Bitbucket、Confluence Cloud、Slack、Notion、Airtable、HubSpot、Todoist、Asana、ClickUp、monday.com、Calendly、Miro、Zoom、Figma、Dropbox、Microsoft 365、Sentry、Jira Cloud 和 Discord 的 brokered 授权入口
 
 请不要把 API Key、token、cookie、私钥或证书写入 README、提交信息或日志。
+
+PR 描述、Release notes 和回归证据也只能写凭据用途或脱敏摘要, 不能写真实凭据。
 
 示例配置只描述变量用途, 不写入真实凭据、完整 token、cookie、私钥正文或证书内容。
 
