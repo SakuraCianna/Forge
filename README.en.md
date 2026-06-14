@@ -169,7 +169,7 @@ npm run qa:built-in-tools:browser
 npm run quality:installer-smoke
 npm run quality:metrics
 npm run quality:regression
-npm run quality:v0.2:status
+npm run quality:v0.3:status
 ```
 
 For release checks:
@@ -195,33 +195,33 @@ $env:FORGE_AGENT_METRICS_FILE = "C:\Users\you\AppData\Roaming\Forge\agent-qualit
 npm run quality:metrics
 ```
 
-`npm run quality:regression` reads a v0.2.x real-task regression results JSON file and summarizes first-pass completion, wrong-file modifications, unrelated code changes, post-modification validation pass rates, and failure recovery with the same Agent quality metric definitions. The summary lists each valid task's `changedFiles` so wrong-file and unrelated-change evidence can be reviewed. If the results file is missing, the command reports `missing`; that means real-task regression metrics remain unproven. The default file can be `docs\V0_2_REGRESSION_RESULTS.json`, or you can point the command at one with an environment variable:
+`npm run quality:regression` reads a v0.3.x real-task regression results JSON file and summarizes first-pass completion, wrong-file modifications, unrelated code changes, post-modification validation pass rates, and failure recovery with the same Agent quality metric definitions. The summary lists each valid task's `changedFiles` so wrong-file and unrelated-change evidence can be reviewed. If the results file is missing, the command reports `missing`; that means real-task regression metrics remain unproven. The default file can be `docs\V0_3_REGRESSION_RESULTS.json`, or you can point the command at one with an environment variable:
 
 ```powershell
-$env:FORGE_REGRESSION_RESULTS_FILE = "docs\V0_2_REGRESSION_RESULTS.json"
+$env:FORGE_REGRESSION_RESULTS_FILE = "docs\V0_3_REGRESSION_RESULTS.json"
 npm run quality:regression
 ```
 
-When real-task regression results are used as a v0.2.x usability evidence gate, run the strict version. It requires `forgeVersion` to match the current `package.json` version, exactly one valid result for every fixed task in S1-S5, M1-M5, and C1-C3, each run to record non-empty `changedFiles`, and `changedFiles` to stay within that fixed task's allowed file scope whenever `wrongFileModified` is `false`. Each run must also include exactly one `typecheck`, one `build`, and one `lint` validation, each validation must be a post-modification validation result and record the actual command and exit code, the command must match the validation kind and stay consistent with `passed`, and all real-task regression metrics must meet the usable threshold. Missing files, malformed report shape, version mismatch, incomplete task coverage, unexpected task IDs, duplicate task IDs, invalid runs, missing changedFiles, changedFiles that contradict the wrong-file flag, missing or duplicated validation kinds, zero-denominator metrics, or below-usable metrics exit non-zero:
+When real-task regression results are used as a v0.3.x usability evidence gate, run the strict version. It requires `forgeVersion` to match the current `package.json` version, exactly one valid result for every fixed task in S1-S5, M1-M5, and C1-C3, each run to record non-empty `changedFiles`, and `changedFiles` to stay within that fixed task's allowed file scope whenever `wrongFileModified` is `false`. Each run must also include exactly one `typecheck`, one `build`, and one `lint` validation, each validation must be a post-modification validation result and record the actual command and exit code, the command must match the validation kind and stay consistent with `passed`, and all real-task regression metrics must meet the usable threshold. Missing files, malformed report shape, version mismatch, incomplete task coverage, unexpected task IDs, duplicate task IDs, invalid runs, missing changedFiles, changedFiles that contradict the wrong-file flag, missing or duplicated validation kinds, zero-denominator metrics, or below-usable metrics exit non-zero:
 
 ```powershell
 npm run quality:regression:gate
 ```
 
-`npm run quality:v0.2:status` quickly summarizes the current usability evidence state without running packaging. It reports `unproven` only when formal regression results or installer smoke reports are missing; if any existing evidence has invalid shape, metadata, task coverage, metrics, or installer binding, it reports `blocked` with the matching blockers even when another evidence file is still missing. When evidence files exist but do not pass, text output prints `Regression details` or `Installer smoke details`; with `-- --json`, the same information is available in `regression.details` or `installerSmoke.details` fields for invalid metadata, invalid run counts and reasons, invalid changedFiles, missing tasks, blocking metrics, flagged changedFiles, and missing or failed smoke checks.
+`npm run quality:v0.3:status` quickly summarizes the current usability evidence state without running packaging. It reports `unproven` only when formal regression results or installer smoke reports are missing; if any existing evidence has invalid shape, metadata, task coverage, metrics, or installer binding, it reports `blocked` with the matching blockers even when another evidence file is still missing. When evidence files exist but do not pass, text output prints `Regression details` or `Installer smoke details`; with `-- --json`, the same information is available in `regression.details` or `installerSmoke.details` fields for invalid metadata, invalid run counts and reasons, invalid changedFiles, missing tasks, blocking metrics, flagged changedFiles, and missing or failed smoke checks.
 
 The fixed Built-in Tools QA entry points are `npm run qa:built-in-tools` and `npm run qa:built-in-tools:browser`; docs, release notes, and regression records should use these real script names instead of temporary aliases or unverified new QA commands. The browser QA command starts a temporary local fixture page, then uses a hidden Electron window to verify screenshot capture and page-console inspection.
 
-For release candidates, run the complete v0.2.x quality gate. This command chains tests, release checks, Built-in Tools QA, Browser QA, and Windows installer packaging, so it takes longer because it includes packaging. If `FORGE_QA_PROJECT_ROOT` is not set, it uses `.tmp-test\quality-gate-sandbox` as a controlled QA sandbox:
+For release candidates, run the complete v0.3.x quality gate. This command chains tests, release checks, Built-in Tools QA, Browser QA, and Windows installer packaging, so it takes longer because it includes packaging. If `FORGE_QA_PROJECT_ROOT` is not set, it uses `.tmp-test\quality-gate-sandbox` as a controlled QA sandbox:
 
 ```powershell
-npm run quality:v0.2
+npm run quality:v0.3
 ```
 
-Usability candidates must run the stricter top-level gate. This command first runs a usability evidence preflight and prints all blockers together; only after real-task regression evidence and installer manual smoke evidence pass does it continue to the real-task regression gate, installer smoke gate, and complete engineering gate without rewriting the installer artifact. Generate the installer first with `npm run quality:v0.2` or `npm run dist:win`, then run installer smoke and record the current SHA-256 so the top-level gate does not invalidate its own smoke evidence by packaging again. If `docs\V0_2_REGRESSION_RESULTS.json` is missing, `docs\V0_2_INSTALLER_SMOKE.json` is missing, evidence report shape is malformed, versions do not match, smoke metadata is invalid, the installer SHA-256 does not match, or any gate is below threshold, it exits non-zero:
+Usability candidates must run the stricter top-level gate. This command first runs a usability evidence preflight and prints all blockers together; only after real-task regression evidence and installer manual smoke evidence pass does it continue to the real-task regression gate, installer smoke gate, and complete engineering gate without rewriting the installer artifact. Generate the installer first with `npm run quality:v0.3` or `npm run dist:win`, then run installer smoke and record the current SHA-256 so the top-level gate does not invalidate its own smoke evidence by packaging again. If `docs\V0_3_REGRESSION_RESULTS.json` is missing, `docs\V0_3_INSTALLER_SMOKE.json` is missing, evidence report shape is malformed, versions do not match, smoke metadata is invalid, the installer SHA-256 does not match, or any gate is below threshold, it exits non-zero:
 
 ```powershell
-npm run quality:v0.2:usable
+npm run quality:v0.3:usable
 ```
 
 ## Environment Variables
@@ -252,14 +252,14 @@ docs/
   EXTENSIONS.md      Extensions system guide
   PERFORMANCE.md     Performance strategy and large-project roadmap
   RELEASE.md         Windows installer release workflow
-  V0_2_REGRESSION_TASKS.md
-                    v0.2.x real-task regression set
-  V0_2_REGRESSION_RESULTS.example.json
-                    v0.2.x real-task regression results template, not evidence
-  V0_2_INSTALLER_SMOKE.example.json
-                    v0.2.x installer smoke report template, not evidence
+  V0_3_REGRESSION_TASKS.md
+                    v0.3.x real-task regression set
+  V0_3_REGRESSION_RESULTS.example.json
+                    v0.3.x real-task regression results template, not evidence
+  V0_3_INSTALLER_SMOKE.example.json
+                    v0.3.x installer smoke report template, not evidence
   superpowers/plans/2026-06-05-v0-2-stabilization.md
-                    v0.2.x stabilization metrics and implementation plan
+                    historical v0.2.x stabilization metrics and implementation plan
 ```
 
 ## Basic Workflow
@@ -317,13 +317,13 @@ Forge uses Shiki highlighting for common engineering languages. Less common lang
 
 ## Status
 
-Forge is currently in the v0.2.x stabilization line. The core workflow is running, including local project indexing, provider configuration, agent planning, file review, command execution, Git operations, Built-in Tools, plugin and skill context, Extensions, agent profiles, memory, usage tracking, and localized error messages.
+Forge is currently in the v0.3.x stabilization line. The core workflow is running, including local project indexing, provider configuration, agent planning, file review, command execution, Git operations, Built-in Tools, plugin and skill context, Extensions, agent profiles, memory, usage tracking, and localized error messages.
 
-The main v0.2.x goal is not feature expansion. It is to stabilize Forge into a usable local AI Coding Agent. Tool-layer QA, lint, typecheck, build, and Windows installer generation have automated verification entry points. Real simple, medium, and complex task first-pass completion rates, wrong-file modification rate, unrelated-change rate, and failure-recovery rate still need enough captured samples before Forge can honestly be called usable by those metrics.
+The main v0.3.x goal is not feature expansion. It is to stabilize Forge into a usable local AI Coding Agent. Tool-layer QA, lint, typecheck, build, and Windows installer generation have automated verification entry points. Real simple, medium, and complex task first-pass completion rates, wrong-file modification rate, unrelated-change rate, and failure-recovery rate still need enough captured samples before Forge can honestly be called usable by those metrics.
 
-Until `npm run quality:v0.2:usable` passes, README and release docs should describe v0.2.x as a stabilization line, not as already usable.
+Until `npm run quality:v0.3:usable` passes, README and release docs should describe v0.3.x as a stabilization line, not as already usable.
 
-See `docs/superpowers/plans/2026-06-05-v0-2-stabilization.md` for the stabilization plan and `docs/V0_2_REGRESSION_TASKS.md` for the real-task regression set.
+See `docs/V0_3_REGRESSION_TASKS.md` for the current v0.3.x real-task regression set. Historical v0.2.x stabilization records remain in `docs/superpowers/plans/2026-06-05-v0-2-stabilization.md` and must not be reused as v0.3.x usability evidence.
 
 Ongoing work includes:
 

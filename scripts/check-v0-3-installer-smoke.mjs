@@ -1,4 +1,4 @@
-// 本文件说明: 校验 v0.2.x Windows 安装包人工烟测报告, 不安装应用, 不写入系统状态
+// 本文件说明: 校验 v0.3.x Windows 安装包人工烟测报告, 不安装应用, 不写入系统状态
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -19,7 +19,7 @@ const ISO_TIMESTAMP_WITH_TIMEZONE_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/u;
 
 const args = parseArgs(process.argv.slice(2));
-const reportPath = resolve(args.file ?? process.env.FORGE_INSTALLER_SMOKE_FILE ?? "docs/V0_2_INSTALLER_SMOKE.json");
+const reportPath = resolve(args.file ?? process.env.FORGE_INSTALLER_SMOKE_FILE ?? "docs/V0_3_INSTALLER_SMOKE.json");
 
 try {
   const summary = await createSummary(reportPath);
@@ -90,11 +90,11 @@ async function createSummary(filePath) {
   const report = JSON.parse(rawValue);
 
   if (!isRecord(report) || Array.isArray(report)) {
-    throw new Error("v0.2 installer smoke report must be a JSON object");
+    throw new Error("v0.3 installer smoke report must be a JSON object");
   }
 
   if (!isRecord(report.checks) || Array.isArray(report.checks)) {
-    throw new Error("v0.2 installer smoke report must contain a checks object");
+    throw new Error("v0.3 installer smoke report must contain a checks object");
   }
 
   const packageVersion = await readPackageVersion();
@@ -284,7 +284,7 @@ function writeSummary(summary, asJson) {
     return;
   }
 
-  console.log(`v0.2 installer smoke: ${summary.passed ? "passed" : "failed"}`);
+  console.log(`v0.3 installer smoke: ${summary.passed ? "passed" : "failed"}`);
   console.log(`Status: ${summary.status}`);
   console.log(`Installer artifact: ${summary.installerExists ? "found" : "missing"}`);
   console.log(`Installer SHA-256: ${summary.installerSha256Matches ? "matched" : "missing-or-mismatched"}`);

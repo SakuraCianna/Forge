@@ -1,0 +1,16 @@
+{
+  "forgeVersion": "0.3.0",
+  "installerPath": "release/Forge-0.3.0-x64-setup.exe",
+  "installerSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "testedAt": "2026-06-05T12:00:00.000Z",
+  "platform": "Windows 11",
+  "checks": {
+    "appLaunches": false,
+    "projectOpens": false,
+    "filePreviewWorks": false,
+    "safeCommandRuns": false,
+    "generatedDiffAcceptRejectWorks": false,
+    "gitStatusViewOpens": false,
+    "highRiskRequiresConfirmation": false
+  }
+}

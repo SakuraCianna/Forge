@@ -1,4 +1,4 @@
-// 本文件说明: 串联 v0.2.x 发布候选质量门禁, 不执行发布、上传或 Git 写操作
+// 本文件说明: 串联 v0.3.x 发布候选质量门禁, 不执行发布、上传或 Git 写操作
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -30,7 +30,7 @@ const results = [];
 
 for (const command of commands) {
   const startedAt = Date.now();
-  console.log(`\n[quality:v0.2] Running ${command.label}`);
+  console.log(`\n[quality:v0.3] Running ${command.label}`);
   const result = await runCommand(command);
 
   results.push({
@@ -43,7 +43,7 @@ for (const command of commands) {
   }
 }
 
-console.log("\n[quality:v0.2] Summary");
+console.log("\n[quality:v0.3] Summary");
 for (const result of results) {
   const status = result.code === 0 ? "PASS" : "FAIL";
   const warnings = result.warningLabels.length > 0 ? ` warnings=${result.warningLabels.join(",")}` : "";
@@ -144,7 +144,7 @@ async function createDefaultQaSandbox() {
     join(projectRoot, "package.json"),
     JSON.stringify(
       {
-        name: "forge-v0-2-quality-gate-sandbox",
+        name: "forge-v0-3-quality-gate-sandbox",
         scripts: {
           build: "node -e \"console.log('Forge quality gate build')\"",
           lint: "node -e \"console.log('Forge quality gate lint')\"",

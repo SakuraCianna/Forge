@@ -1,4 +1,4 @@
-// 本文件说明: 汇总 v0.2.x 可用性证据状态, 不运行打包门禁, 不生成正式证据
+// 本文件说明: 汇总 v0.3.x 可用性证据状态, 不运行打包门禁, 不生成正式证据
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 const args = parseArgs(process.argv.slice(2));
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 
-const regressionResult = await runJsonScript("summarize-v0-2-regression-results.mjs", [
+const regressionResult = await runJsonScript("summarize-v0-3-regression-results.mjs", [
   "--require-complete-set",
   "--require-usable-regression",
   "--json"
 ]);
-const installerSmokeResult = await runJsonScript("check-v0-2-installer-smoke.mjs", ["--json"]);
+const installerSmokeResult = await runJsonScript("check-v0-3-installer-smoke.mjs", ["--json"]);
 const regressionStatus = getRegressionStatus(regressionResult);
 const installerSmokeStatus = getInstallerSmokeStatus(installerSmokeResult);
 const blockers = [
@@ -293,7 +293,7 @@ function writeSummary(summary, asJson) {
     return;
   }
 
-  console.log(`v0.2 usability status: ${summary.classification}`);
+  console.log(`v0.3 usability status: ${summary.classification}`);
   console.log(`Regression evidence: ${summary.regression.status}`);
   console.log(`Installer smoke evidence: ${summary.installerSmoke.status}`);
 

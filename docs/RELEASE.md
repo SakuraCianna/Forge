@@ -69,13 +69,13 @@ gh release create v0.3.0 release/Forge-0.3.0-x64-setup.exe --title "Forge v0.3.0
 - 打开 Git 状态视图, 确认可查看当前仓库状态
 - 尝试高风险操作, 确认执行前必须人工确认
 
-完成人工烟测后, 将结果记录到 `docs\V0_2_INSTALLER_SMOKE.json`, 再运行:
+完成人工烟测后, 将结果记录到 `docs\V0_3_INSTALLER_SMOKE.json`, 再运行:
 
 ```powershell
 npm run quality:installer-smoke
 ```
 
-可以从 `docs\V0_2_INSTALLER_SMOKE.example.json` 复制结构开始填写。示例文件不是证据, 默认值不会满足安装烟测门禁; 只有实际安装并完成清单后, 才能生成正式的 `docs\V0_2_INSTALLER_SMOKE.json`。
+可以从 `docs\V0_3_INSTALLER_SMOKE.example.json` 复制结构开始填写。示例文件不是证据, 默认值不会满足安装烟测门禁; 只有实际安装并完成清单后, 才能生成正式的 `docs\V0_3_INSTALLER_SMOKE.json`。
 
 记录烟测报告前, 先绑定本次实际测试的安装包哈希:
 
@@ -106,10 +106,10 @@ npm run quality:installer-smoke
 
 报告顶层必须是 JSON object, 且 `checks` 必须是 object。其中 `forgeVersion`, `installerPath`, `installerSha256`, `testedAt`, `platform` 是必填元数据。`forgeVersion` 必须和当前 `package.json` 版本一致; `testedAt` 必须是带时区的 ISO 时间戳, 例如 `2026-06-05T12:00:00.000Z`, 且必须是真实存在的日历日期, 不能晚于当前时间; `platform` 必须明确以 Windows 开头, 例如 `Windows 11`; `installerPath` 必须是当前工作区内的相对路径 `release/Forge-<当前版本>-x64-setup.exe`, 不能指向工作区外的同名安装包; `installerSha256` 必须和该安装包当前内容一致。所有 `checks` 字段都必须存在且为 `true`, 否则 `npm run quality:installer-smoke` 会失败。
 
-可用级候选版本需要同时通过真实任务回归门禁、安装包烟测门禁和工程门禁。先运行 `npm run quality:v0.2` 或 `npm run dist:win` 生成当前安装包, 再安装烟测并记录当前 SHA-256。总门禁会先运行可用性证据预检并一次列出所有 blocker; 证据通过后, 再执行真实任务回归门禁、安装包烟测门禁以及不重写安装包的完整工程检查, 避免在烟测后重新打包导致 `installerSha256` 失效:
+可用级候选版本需要同时通过真实任务回归门禁、安装包烟测门禁和工程门禁。先运行 `npm run quality:v0.3` 或 `npm run dist:win` 生成当前安装包, 再安装烟测并记录当前 SHA-256。总门禁会先运行可用性证据预检并一次列出所有 blocker; 证据通过后, 再执行真实任务回归门禁、安装包烟测门禁以及不重写安装包的完整工程检查, 避免在烟测后重新打包导致 `installerSha256` 失效:
 
 ```powershell
-npm run quality:v0.2:usable
+npm run quality:v0.3:usable
 ```
 
 ## 当前已知打包警告
@@ -117,7 +117,7 @@ npm run quality:v0.2:usable
 - 2026-06-06 发布用 `npm run dist:win` 初始复跑退出码为 0, 安装包 `release\Forge-0.2.1-x64-setup.exe` 生成成功, 当时产物 SHA-256 为 `669b43f60660c3379652217cc723181492404619ad8816e1632bb3411db8f972`。
 - 2026-06-06 后续代码质量复跑将 Vite 可打包的 renderer/worker 依赖移出 production dependencies 后, 当时本地发布收口安装包 SHA-256 为 `68e9e039b1d97f515186f5ee4347e8c7cd58d5deca499e0d304782581045e014`; 安装包约从 144 MB 降到 104 MB, `app.asar` 约从 168 MB 降到 17 MB, 且不再生成 `app.asar.unpacked`。
 - 2026-06-10 重新运行 `npm run dist:win` 后, 当前本地安装包 `release\Forge-0.2.1-x64-setup.exe` 的 SHA-256 为 `a4b8312f0d7569c25eb75828b64c4a59e54d617702f036da1443bfa9bbff2892`。
-- 2026-06-12 运行 `npm run quality:v0.2` 发布门禁后, 当前本地安装包 `release\Forge-0.3.0-x64-setup.exe` 大小为 104,018,289 bytes, SHA-256 为 `2d70874d660fa5ca6d4186e786a53029a02d67bfd2c37b83855f4f2e216b5e7b`; 打包仍报告已知的 `duplicate-dependencies` 和 `DEP0190` 警告。
+- 2026-06-12 运行当时的发布门禁后, 当前本地安装包 `release\Forge-0.3.0-x64-setup.exe` 大小为 104,018,289 bytes, SHA-256 为 `2d70874d660fa5ca6d4186e786a53029a02d67bfd2c37b83855f4f2e216b5e7b`; 打包仍报告已知的 `duplicate-dependencies` 和 `DEP0190` 警告。
 - `duplicate dependency references`: 仍由 electron-builder 扫描 npm production 依赖时输出, 但已从前端和构建依赖的大量重复项收敛到邮件解析链路的少量传递依赖, 例如 `libmime`, `@zone-eu/mailsplit`, `domhandler`。
 - `DEP0190`: `NODE_OPTIONS=--trace-deprecation` 显示调用栈位于 `node_modules\app-builder-lib\src\node-module-collector\nodeModulesCollector.ts`; 这是 electron-builder 依赖扫描阶段的上游警告。Forge 自有质量门禁脚本使用 `shell: false` 和 npm CLI 文件执行命令, 没有为规避该警告改动运行时代码。
 

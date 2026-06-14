@@ -23,7 +23,7 @@ Forge: open-source local AI coding agent desktop app (Electron + React + TypeScr
 ## Testing quirks
 
 - Tests are `node:test` + `assert/strict`, written in `tests/*.test.ts`, compiled with NodeNext — imports of source files need explicit `.js` extensions (e.g. `../src/renderer/src/state/agentMemory.js`).
-- Many tests are meta-tests that assert the literal content of `package.json` scripts, `.github/workflows/ci-cd.yml`, and `scripts/*.mjs` (e.g. `tests/githubActionsWorkflow.test.ts`, `tests/builtInToolQaScripts.test.ts`, `tests/v02QualityGateScripts.test.ts`). Editing npm scripts, the CI workflow, or QA scripts requires updating these tests in the same change.
+- Many tests are meta-tests that assert the literal content of `package.json` scripts, `.github/workflows/ci-cd.yml`, and `scripts/*.mjs` (e.g. `tests/githubActionsWorkflow.test.ts`, `tests/builtInToolQaScripts.test.ts`, `tests/v03QualityGateScripts.test.ts`). Editing npm scripts, the CI workflow, or QA scripts requires updating these tests in the same change.
 - `.tmp-test/` is generated output (eslint-ignored). Don't edit or commit content there.
 
 ## Conventions
@@ -33,10 +33,10 @@ Forge: open-source local AI coding agent desktop app (Electron + React + TypeScr
 - README.md is Chinese, README.en.md is English; user-facing changes usually update both.
 - No project `.env`. API keys live in app settings (main-process key vault). Never write keys/tokens into docs, commits, or logs; example configs must not contain real credentials.
 
-## Quality gates and evidence (v0.2.x)
+## Quality gates and evidence (v0.3.x)
 
 - QA entry points are exactly `npm run qa:built-in-tools` and `npm run qa:built-in-tools:browser` — docs/release notes must use these real script names, never invented aliases.
-- `docs/V0_2_REGRESSION_RESULTS.json` and `docs/V0_2_INSTALLER_SMOKE.json` are real evidence files validated by strict gates (`quality:regression:gate`, `quality:installer-smoke`, `quality:v0.2:usable`); the `.example.json` files are templates, not evidence. Never fabricate or hand-edit evidence to make gates pass.
-- Until `npm run quality:v0.2:usable` passes, README and release docs must describe v0.2.x as "stabilization phase", not "usable level".
+- `docs/V0_3_REGRESSION_RESULTS.json` and `docs/V0_3_INSTALLER_SMOKE.json` are real evidence files validated by strict gates (`quality:regression:gate`, `quality:installer-smoke`, `quality:v0.3:usable`); the `.example.json` files are templates, not evidence. Never fabricate or hand-edit evidence to make gates pass.
+- Until `npm run quality:v0.3:usable` passes, README and release docs must describe v0.3.x as "stabilization phase", not "usable level".
 - Built-in tool QA sandbox: set `FORGE_QA_PROJECT_ROOT` (defaults to `.tmp-test/quality-gate-sandbox` in the full gate); browser scenarios are skipped unless `FORGE_QA_BROWSER_PREVIEW_URL` is set.
 - Release flow is manual (`docs/RELEASE.md`); CI only uploads an installer artifact on `v*` tags and never auto-releases.

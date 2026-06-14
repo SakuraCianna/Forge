@@ -1,19 +1,19 @@
-// 本文件说明: 串联 v0.2.x 可用级门禁, 不执行发布、上传或 Git 写操作
+// 本文件说明: 串联 v0.3.x 可用级门禁, 不执行发布、上传或 Git 写操作
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const evidencePreflightCommand = commandSpec(
-  "node scripts/summarize-v0-2-usability-status.mjs --json",
+  "node scripts/summarize-v0-3-usability-status.mjs --json",
   process.execPath,
-  [resolve(scriptDirectory, "summarize-v0-2-usability-status.mjs"), "--json"]
+  [resolve(scriptDirectory, "summarize-v0-3-usability-status.mjs"), "--json"]
 );
 const commands = [
   npmCommandSpec("npm run quality:regression:gate", ["run", "quality:regression:gate"]),
   npmCommandSpec("npm run quality:installer-smoke", ["run", "quality:installer-smoke"]),
   {
-    ...npmCommandSpec("npm run quality:v0.2 (skip dist)", ["run", "quality:v0.2"]),
+    ...npmCommandSpec("npm run quality:v0.3 (skip dist)", ["run", "quality:v0.3"]),
     env: {
       FORGE_QUALITY_GATE_SKIP_DIST: "true"
     }
@@ -36,7 +36,7 @@ const evidenceSummary = parseEvidenceSummary(preflightResult.stdout);
 const evidencePassed = preflightResult.code === 0 && evidenceSummary?.passed === true;
 
 console.log(
-  `[quality:v0.2:usable] Evidence preflight: ${typeof evidenceSummary?.classification === "string"
+  `[quality:v0.3:usable] Evidence preflight: ${typeof evidenceSummary?.classification === "string"
     ? evidenceSummary.classification
     : "error"}`
 );
@@ -52,14 +52,14 @@ results.push({
 });
 
 if (!evidencePassed) {
-  console.log("\n[quality:v0.2:usable] Summary");
+  console.log("\n[quality:v0.3:usable] Summary");
   writeCommandResults(results);
   process.exit(1);
 }
 
 for (const command of commands) {
   const startedAt = Date.now();
-  console.log(`\n[quality:v0.2:usable] Running ${command.label}`);
+  console.log(`\n[quality:v0.3:usable] Running ${command.label}`);
   const code = await runCommand(command);
 
   results.push({
@@ -73,7 +73,7 @@ for (const command of commands) {
   }
 }
 
-console.log("\n[quality:v0.2:usable] Summary");
+console.log("\n[quality:v0.3:usable] Summary");
 writeCommandResults(results);
 
 process.exitCode = results.some((result) => result.code !== 0) ? 1 : 0;
