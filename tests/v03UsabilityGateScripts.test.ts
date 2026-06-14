@@ -9,22 +9,22 @@ import { tmpdir } from "node:os";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const fixturePackageVersion = "0.2.0";
+const fixturePackageVersion = "0.3.0";
 
-test("v0.2 usability gate is wired and exposes a safe dry run", async () => {
+test("v0.3 usability gate is wired and exposes a safe dry run", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
     scripts?: Record<string, string>;
   };
 
-  assert.equal(packageJson.scripts?.["quality:installer-smoke"], "node scripts/check-v0-2-installer-smoke.mjs");
-  assert.equal(packageJson.scripts?.["quality:v0.2:usable"], "node scripts/run-v0-2-usability-gate.mjs");
+  assert.equal(packageJson.scripts?.["quality:installer-smoke"], "node scripts/check-v0-3-installer-smoke.mjs");
+  assert.equal(packageJson.scripts?.["quality:v0.3:usable"], "node scripts/run-v0-3-usability-gate.mjs");
 
-  const scriptSource = await readFile("scripts/run-v0-2-usability-gate.mjs", "utf8");
+  const scriptSource = await readFile("scripts/run-v0-3-usability-gate.mjs", "utf8");
 
   assert.match(scriptSource, /shell:\s*false/u);
   assert.doesNotMatch(scriptSource, /gh\s+release|git\s+push|Remove-Item|rm\s+-rf/u);
 
-  const { stdout } = await execFileAsync(process.execPath, ["scripts/run-v0-2-usability-gate.mjs"], {
+  const { stdout } = await execFileAsync(process.execPath, ["scripts/run-v0-3-usability-gate.mjs"], {
     env: {
       ...process.env,
       FORGE_USABILITY_GATE_DRY_RUN: "true"
@@ -34,14 +34,14 @@ test("v0.2 usability gate is wired and exposes a safe dry run", async () => {
   const dryRun = JSON.parse(stdout) as { commands: string[] };
 
   assert.deepEqual(dryRun.commands, [
-    "node scripts/summarize-v0-2-usability-status.mjs --json",
+    "node scripts/summarize-v0-3-usability-status.mjs --json",
     "npm run quality:regression:gate",
     "npm run quality:installer-smoke",
-    "npm run quality:v0.2 (skip dist)"
+    "npm run quality:v0.3 (skip dist)"
   ]);
 });
 
-test("v0.2 formal usability evidence metadata stays tied to its recorded v0.2 release", async () => {
+test("historical v0.2 formal usability evidence stays tied to its recorded v0.2 release", async () => {
   const regressionReport = JSON.parse(await readFile("docs/V0_2_REGRESSION_RESULTS.json", "utf8")) as {
     forgeVersion?: string;
   };
@@ -76,9 +76,18 @@ test("v0.2 formal usability evidence metadata stays tied to its recorded v0.2 re
   }
 });
 
-test("v0.2 usability gate reports all missing evidence blockers before expensive gates", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-gate-preflight-"));
-  const scriptPath = join(process.cwd(), "scripts", "run-v0-2-usability-gate.mjs");
+test("v0.3 release workflow records installer smoke evidence in the v0.3 evidence file", async () => {
+  const releaseGuide = await readFile("docs/RELEASE.md", "utf8");
+
+  assert.match(releaseGuide, /docs\\V0_3_INSTALLER_SMOKE\.json/u);
+  assert.match(releaseGuide, /docs\\V0_3_INSTALLER_SMOKE\.example\.json/u);
+  assert.match(releaseGuide, /npm run quality:v0\.3:usable/u);
+  assert.doesNotMatch(releaseGuide, /0\.3\.0[\s\S]{0,240}V0_2_INSTALLER_SMOKE/u);
+});
+
+test("v0.3 usability gate reports all missing evidence blockers before expensive gates", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-usability-gate-preflight-"));
+  const scriptPath = join(process.cwd(), "scripts", "run-v0-3-usability-gate.mjs");
 
   const { stdout } = await execFileAsync(process.execPath, [scriptPath], {
     cwd: directory,
@@ -89,18 +98,18 @@ test("v0.2 usability gate reports all missing evidence blockers before expensive
     return { stdout: maybeError.stdout ?? "" };
   });
 
-  assert.match(stdout, /\[quality:v0\.2:usable\] Evidence preflight: unproven/u);
+  assert.match(stdout, /\[quality:v0\.3:usable\] Evidence preflight: unproven/u);
   assert.match(stdout, /Blockers: regression-results-missing, installer-smoke-missing/u);
   assert.match(stdout, /FAIL evidence preflight/u);
-  assert.doesNotMatch(stdout, /\[quality:v0\.2:usable\] Running npm run quality:regression:gate/u);
+  assert.doesNotMatch(stdout, /\[quality:v0\.3:usable\] Running npm run quality:regression:gate/u);
 });
 
-test("v0.2 installer smoke script validates the manual smoke report and installer artifact", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-"));
+test("v0.3 installer smoke script validates the manual smoke report and installer artifact", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
@@ -111,8 +120,8 @@ test("v0.2 installer smoke script validates the manual smoke report and installe
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
@@ -134,7 +143,7 @@ test("v0.2 installer smoke script validates the manual smoke report and installe
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -163,24 +172,24 @@ test("v0.2 installer smoke script validates the manual smoke report and installe
   });
 });
 
-test("v0.2 installer smoke script derives installer name from package version", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-version-"));
+test("v0.3 installer smoke script derives installer name from package version", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-version-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const installerPath = join(releaseDirectory, "Forge-0.2.1-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
-  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.1" }), "utf8");
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.3.0" }), "utf8");
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.1",
-        installerPath: "release/Forge-0.2.1-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
@@ -202,7 +211,7 @@ test("v0.2 installer smoke script derives installer name from package version", 
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -221,12 +230,12 @@ test("v0.2 installer smoke script derives installer name from package version", 
   assert.equal(summary.installerSha256Matches, true);
 });
 
-test("v0.2 installer smoke script fails when report version does not match package version", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-version-mismatch-"));
+test("v0.3 installer smoke script fails when report version does not match package version", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-version-mismatch-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
@@ -238,7 +247,7 @@ test("v0.2 installer smoke script fails when report version does not match packa
     JSON.stringify(
       {
         forgeVersion: "0.2.1",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
@@ -260,7 +269,7 @@ test("v0.2 installer smoke script fails when report version does not match packa
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -283,13 +292,13 @@ test("v0.2 installer smoke script fails when report version does not match packa
   assert.equal(summary.installerSha256Matches, true);
 });
 
-test("v0.2 installer smoke script rejects installer paths outside the current release directory", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-path-scope-"));
-  const externalDirectory = await mkdtemp(join(tmpdir(), "forge-v02-external-release-"));
+test("v0.3 installer smoke script rejects installer paths outside the current release directory", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-path-scope-"));
+  const externalDirectory = await mkdtemp(join(tmpdir(), "forge-v03-external-release-"));
   const externalReleaseDirectory = join(externalDirectory, "release");
   const docsDirectory = join(directory, "docs");
-  const externalInstallerPath = join(externalReleaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const externalInstallerPath = join(externalReleaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
   const installerFixture = "fake installer fixture";
 
   await mkdir(externalReleaseDirectory, { recursive: true });
@@ -300,7 +309,7 @@ test("v0.2 installer smoke script rejects installer paths outside the current re
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         installerPath: externalInstallerPath,
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
@@ -323,7 +332,7 @@ test("v0.2 installer smoke script rejects installer paths outside the current re
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -346,12 +355,12 @@ test("v0.2 installer smoke script rejects installer paths outside the current re
   assert.equal(summary.installerSha256Matches, false);
 });
 
-test("v0.2 installer smoke script fails when installer SHA-256 is missing or stale", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-sha-"));
+test("v0.3 installer smoke script fails when installer SHA-256 is missing or stale", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-sha-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
@@ -361,8 +370,8 @@ test("v0.2 installer smoke script fails when installer SHA-256 is missing or sta
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256("old installer fixture"),
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
@@ -384,7 +393,7 @@ test("v0.2 installer smoke script fails when installer SHA-256 is missing or sta
 
   const { stdout: staleStdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -408,8 +417,8 @@ test("v0.2 installer smoke script fails when installer SHA-256 is missing or sta
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
         checks: {
@@ -430,7 +439,7 @@ test("v0.2 installer smoke script fails when installer SHA-256 is missing or sta
 
   const { stdout: missingStdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -451,10 +460,10 @@ test("v0.2 installer smoke script fails when installer SHA-256 is missing or sta
   assert.equal(missingSummary.installerSha256Matches, false);
 });
 
-test("v0.2 installer smoke script fails when required manual checks are missing", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-missing-"));
+test("v0.3 installer smoke script fails when required manual checks are missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-missing-"));
   const docsDirectory = join(directory, "docs");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
 
   await mkdir(docsDirectory, { recursive: true });
   await writePackageVersion(directory);
@@ -462,8 +471,8 @@ test("v0.2 installer smoke script fails when required manual checks are missing"
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
         checks: {
@@ -477,7 +486,7 @@ test("v0.2 installer smoke script fails when required manual checks are missing"
   );
 
   await assert.rejects(
-    execFileAsync(process.execPath, [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs")], {
+    execFileAsync(process.execPath, [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs")], {
       cwd: directory,
       windowsHide: true
     }),
@@ -485,12 +494,12 @@ test("v0.2 installer smoke script fails when required manual checks are missing"
   );
 });
 
-test("v0.2 installer smoke script fails when report metadata is missing or not Windows", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-metadata-"));
+test("v0.3 installer smoke script fails when report metadata is missing or not Windows", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-metadata-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
@@ -500,8 +509,8 @@ test("v0.2 installer smoke script fails when report metadata is missing or not W
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256("fake installer fixture"),
         platform: "Linux",
         checks: {
@@ -522,7 +531,7 @@ test("v0.2 installer smoke script fails when report metadata is missing or not W
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -554,12 +563,12 @@ test("v0.2 installer smoke script fails when report metadata is missing or not W
   });
 });
 
-test("v0.2 installer smoke script rejects ambiguous smoke metadata", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-ambiguous-metadata-"));
+test("v0.3 installer smoke script rejects ambiguous smoke metadata", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-ambiguous-metadata-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
@@ -570,8 +579,8 @@ test("v0.2 installer smoke script rejects ambiguous smoke metadata", async () =>
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05",
         platform: "not Windows",
@@ -593,7 +602,7 @@ test("v0.2 installer smoke script rejects ambiguous smoke metadata", async () =>
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -614,12 +623,12 @@ test("v0.2 installer smoke script rejects ambiguous smoke metadata", async () =>
   assert.equal(summary.installerSha256Matches, true);
 });
 
-test("v0.2 installer smoke script rejects future smoke timestamps", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-future-time-"));
+test("v0.3 installer smoke script rejects future smoke timestamps", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-future-time-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
@@ -630,8 +639,8 @@ test("v0.2 installer smoke script rejects future smoke timestamps", async () => 
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2999-06-05T12:00:00.000Z",
         platform: "Windows 11",
@@ -653,7 +662,7 @@ test("v0.2 installer smoke script rejects future smoke timestamps", async () => 
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -674,12 +683,12 @@ test("v0.2 installer smoke script rejects future smoke timestamps", async () => 
   assert.equal(summary.installerSha256Matches, true);
 });
 
-test("v0.2 installer smoke script rejects smoke timestamps that are not real calendar dates", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-invalid-calendar-date-"));
+test("v0.3 installer smoke script rejects smoke timestamps that are not real calendar dates", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-invalid-calendar-date-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
@@ -690,8 +699,8 @@ test("v0.2 installer smoke script rejects smoke timestamps that are not real cal
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-02-31T12:00:00.000Z",
         platform: "Windows 11",
@@ -713,7 +722,7 @@ test("v0.2 installer smoke script rejects smoke timestamps that are not real cal
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+    [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
     {
       cwd: directory,
       windowsHide: true
@@ -734,10 +743,10 @@ test("v0.2 installer smoke script rejects smoke timestamps that are not real cal
   assert.equal(summary.installerSha256Matches, true);
 });
 
-test("v0.2 installer smoke script rejects malformed report shape", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-installer-smoke-malformed-"));
+test("v0.3 installer smoke script rejects malformed report shape", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-installer-smoke-malformed-"));
   const docsDirectory = join(directory, "docs");
-  const reportPath = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
+  const reportPath = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
 
   await mkdir(docsDirectory, { recursive: true });
   await writePackageVersion(directory);
@@ -745,8 +754,8 @@ test("v0.2 installer smoke script rejects malformed report shape", async () => {
     reportPath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
         checks: "passed"
@@ -761,7 +770,7 @@ test("v0.2 installer smoke script rejects malformed report shape", async () => {
     async () => {
       await execFileAsync(
         process.execPath,
-        [join(process.cwd(), "scripts", "check-v0-2-installer-smoke.mjs"), "--json"],
+        [join(process.cwd(), "scripts", "check-v0-3-installer-smoke.mjs"), "--json"],
         {
           cwd: directory,
           windowsHide: true

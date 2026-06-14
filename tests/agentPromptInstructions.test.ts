@@ -17,6 +17,8 @@ test("agent system instructions preserve evidence, scope and verification guardr
   assert.match(source, /inspect the current project, design the smallest coherent change/u);
   assert.match(source, /Treat verification as part of implementation/u);
   assert.match(source, /Finish with auditable evidence/u);
+  assert.match(source, /Treat the project file list as a budgeted overview/u);
+  assert.match(source, /Do not assume omitted files are absent/u);
   assert.match(source, /Separate discovery, mutation, and verification/u);
   assert.match(source, /plan web_search, fetchDocs, or another reliable documentation lookup/u);
   assert.match(source, /Do not include commit, branch switch, revert, dependency install, push, delete/u);
@@ -34,6 +36,7 @@ test("file change and direct answer prompts keep honesty and compatibility const
   assert.match(source, /table names and columns must exactly match the entity mapping/u);
   assert.match(source, /do not call getStudents if the API client exports fetchStudents/u);
   assert.match(source, /Separate verified facts from assumptions/u);
+  assert.match(source, /Treat budgeted project context as a partial index/u);
   assert.match(source, /Do not invent files, APIs, config keys, command outputs, tests/u);
 });
 

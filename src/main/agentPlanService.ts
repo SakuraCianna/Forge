@@ -11,7 +11,8 @@ import type {
   GenerateAgentFileChangeRequest,
   GenerateAgentPlanRequest
 } from "../shared/agentTypes.js";
-import type { ForgeProvider } from "../shared/modelTypes.js";
+import type { ForgeProvider, SpeedMode } from "../shared/modelTypes.js";
+import type { ProjectFile, ProjectScanResult } from "../shared/projectTypes.js";
 import type { TokenUsage } from "../shared/usageTypes.js";
 import {
   builtInToolDefinitions,
@@ -111,11 +112,32 @@ type StructuredToolHint =
   | "built-in-tool"
   | "invoke-extension";
 
+type PromptProjectContextOptions = {
+  contextBudget?: number;
+  speed: SpeedMode;
+};
+
+type PromptProjectContextBudget = {
+  fileListChars: number;
+  instructionChars: number;
+  maxFiles: number;
+};
+
 const maxFilesBySpeed = {
   fast: 24,
   balanced: 60
 } as const;
 
+const defaultPromptContextTokenBudget = 12_000;
+const promptContextCharsPerToken = 3;
+const maxInstructionCharsBySpeed = {
+  fast: 8_000,
+  balanced: 24_000
+} as const;
+const maxFileListCharsBySpeed = {
+  fast: 2_400,
+  balanced: 7_200
+} as const;
 const maxStreamContinuations = 1;
 const structuredStepArrayKeys = ["steps", "actions", "tasks"] as const;
 const structuredPlanObjectKeys = ["plan", "executionPlan", "execution_plan"] as const;
@@ -521,6 +543,7 @@ function createAgentPlanInstructions(personalization?: string): string {
     ...softwareEngineeringWorkflowInstructions,
     "Keep the plan small and respect the Agent profile plan step limit from the request context.",
     "Follow the Agent profile verification policy from the request context.",
+    "Treat the project file list as a budgeted overview. Do not assume omitted files are absent; plan read, glob, or grep steps when exact evidence is needed.",
     "Separate discovery, mutation, and verification. Put read/search/git status steps before risky edits when the current state is unknown, and put validation after edits.",
     "If current framework, package, API, or platform behavior affects the solution, plan web_search, fetchDocs, or another reliable documentation lookup before relying on that fact.",
     "Do not include commit, branch switch, revert, dependency install, push, delete, or external write steps unless the user request or project workflow makes that side effect necessary.",
@@ -578,6 +601,7 @@ function createAskInstructions(personalization?: string, workMode: AgentWorkMode
     "You are Forge in direct answer mode inside a coding workbench.",
     "Answer the user's question directly and concisely.",
     "If project context is provided, use it to answer project questions without turning the answer into an execution plan.",
+    "Treat budgeted project context as a partial index: answer from listed evidence, and say when exact file inspection would be needed.",
     "Separate verified facts from assumptions. If the provided context is insufficient, say what is known and what would need inspection.",
     "Do not claim you edited files, ran commands, or inspected the workspace.",
     "Do not invent files, APIs, config keys, command outputs, tests, or current external service behavior.",
@@ -882,14 +906,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // 把项目扫描, 记忆和用户目标整理成计划模型输入
 function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
-  const files = request.projectScan.files
-    .slice(0, maxFilesBySpeed[request.speed])
-    .map((file) => `- ${file.relativePath} (${file.size} bytes)`)
-    .join("\n");
-  const truncatedNote = request.projectScan.truncated ? "\nProject scan was truncated." : "";
   const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
-  const instructionContext = formatProjectInstructions(request.projectScan);
+  const promptContextOptions = createPromptProjectContextOptions(request);
+  const instructionContext = formatProjectInstructions(request.projectScan, promptContextOptions);
   const planStepLimit = getPlanStepLimit(request);
   const verificationPolicy = getVerificationPolicy(request);
   const scaffoldPlanningContext = formatProjectScaffoldPlanningContext(request);
@@ -909,8 +929,7 @@ function createAgentPlanInput(request: GenerateAgentPlanRequest): string {
     formatBuiltInToolContext(request.builtInToolContext),
     formatExtensionContext(request.extensionContext),
     scaffoldPlanningContext,
-    `Project root:\n${request.projectScan.rootPath}`,
-    `Indexed files:\n${files || "- No files indexed"}${truncatedNote}`
+    formatProjectScanContext(request.projectScan, promptContextOptions)
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -1033,7 +1052,10 @@ function detectProjectStackHints(prompt: string): string[] {
 function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): string {
   const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
-  const instructionContext = formatProjectInstructions(request.projectScan);
+  const instructionContext = formatProjectInstructions(
+    request.projectScan,
+    createPromptProjectContextOptions(request)
+  );
 
   return [
     `Task:\n${request.taskPrompt}`,
@@ -1057,7 +1079,8 @@ function createAgentFileChangeInput(request: GenerateAgentFileChangeRequest): st
 function createAskInput(request: GenerateAgentAskRequest): string {
   const profileContext = formatAgentProfile(request.agentProfile);
   const memoryContext = formatAgentMemories(request.memories);
-  const instructionContext = formatProjectInstructions(request.projectScan);
+  const promptContextOptions = createPromptProjectContextOptions(request);
+  const instructionContext = formatProjectInstructions(request.projectScan, promptContextOptions);
   const parts = [
     `User message:\n${request.prompt}`,
     `Selected model:\n${request.model.label} (${request.model.modelName})`,
@@ -1101,21 +1124,7 @@ function createAskInput(request: GenerateAgentAskRequest): string {
   }
 
   if (request.projectScan) {
-    const files = request.projectScan.files
-      .slice(0, maxFilesBySpeed[request.speed])
-      .map((file) => `- ${file.relativePath} (${file.size} bytes)`)
-      .join("\n");
-
-    parts.push(
-      [
-        "Project context:",
-        `Root: ${request.projectScan.rootPath}`,
-        `Indexed files:\n${files || "- No files indexed"}`,
-        request.projectScan.truncated ? "Project scan was truncated." : ""
-      ]
-        .filter(Boolean)
-        .join("\n")
-    );
+    parts.push(formatProjectScanContext(request.projectScan, promptContextOptions));
   }
 
   return parts.join("\n\n");
@@ -1191,8 +1200,116 @@ function formatAgentProfile(
   ].join("\n");
 }
 
+function createPromptProjectContextOptions(
+  request:
+    | Pick<GenerateAgentAskRequest, "agentProfile" | "speed">
+    | Pick<GenerateAgentFileChangeRequest, "agentProfile" | "speed">
+    | Pick<GenerateAgentPlanRequest, "agentProfile" | "speed">
+): PromptProjectContextOptions {
+  return {
+    contextBudget: request.agentProfile?.contextBudget,
+    speed: request.speed
+  };
+}
+
+function createPromptProjectContextBudget({
+  contextBudget,
+  speed
+}: PromptProjectContextOptions): PromptProjectContextBudget {
+  const normalizedTokenBudget =
+    typeof contextBudget === "number" && Number.isFinite(contextBudget)
+      ? Math.min(64_000, Math.max(2_000, Math.round(contextBudget)))
+      : defaultPromptContextTokenBudget;
+  const promptCharBudget = normalizedTokenBudget * promptContextCharsPerToken;
+
+  return {
+    fileListChars: Math.max(
+      900,
+      Math.min(maxFileListCharsBySpeed[speed], Math.round(promptCharBudget * 0.18))
+    ),
+    instructionChars: Math.max(
+      2_400,
+      Math.min(maxInstructionCharsBySpeed[speed], Math.round(promptCharBudget * 0.55))
+    ),
+    maxFiles: maxFilesBySpeed[speed]
+  };
+}
+
+// 为模型输入挑选关键文件概览, 优先保留项目入口和配置, 再按扫描顺序补足预算
+export function selectPromptProjectFiles(
+  files: ProjectFile[],
+  options: PromptProjectContextOptions
+): ProjectFile[] {
+  const budget = createPromptProjectContextBudget(options);
+  const selectedFiles: ProjectFile[] = [];
+  let usedChars = 0;
+
+  const rankedFiles = files
+    .map((file, index) => ({
+      file,
+      index,
+      priority: getPromptProjectFilePriority(file.relativePath)
+    }))
+    .sort(
+      (left, right) =>
+        left.priority - right.priority ||
+        left.index - right.index ||
+        left.file.relativePath.localeCompare(right.file.relativePath)
+    );
+
+  for (const { file } of rankedFiles) {
+    if (selectedFiles.length >= budget.maxFiles) {
+      break;
+    }
+
+    const lineChars = formatProjectFileLine(file).length + 1;
+
+    if (selectedFiles.length > 0 && usedChars + lineChars > budget.fileListChars) {
+      break;
+    }
+
+    selectedFiles.push(file);
+    usedChars += lineChars;
+  }
+
+  return selectedFiles;
+}
+
+export function formatProjectScanContext(
+  projectScan: ProjectScanResult | null | undefined,
+  options: PromptProjectContextOptions
+): string {
+  if (!projectScan) {
+    return "";
+  }
+
+  const selectedFiles = selectPromptProjectFiles(projectScan.files, options);
+  const omittedFileCount = Math.max(0, projectScan.files.length - selectedFiles.length);
+
+  return [
+    "Project context:",
+    `Root: ${projectScan.rootPath}`,
+    `Indexed file count: ${projectScan.files.length}${projectScan.truncated ? " (scan truncated)" : ""}`,
+    `Selected indexed files (${selectedFiles.length}/${projectScan.files.length}, budgeted overview):`,
+    selectedFiles.length > 0
+      ? selectedFiles.map(formatProjectFileLine).join("\n")
+      : "- No files indexed",
+    omittedFileCount > 0
+      ? `${omittedFileCount} indexed files are omitted from this prompt context; inspect or search exact files before editing.`
+      : "",
+    projectScan.truncated
+      ? "Project scan reached its configured file limit; absence from this selected list is not proof a file does not exist."
+      : ""
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 // 压缩项目说明文件, 保留路径名帮助模型判断来源
-function formatProjectInstructions(projectScan?: GenerateAgentAskRequest["projectScan"]): string {
+function formatProjectInstructions(
+  projectScan: GenerateAgentAskRequest["projectScan"] | undefined,
+  options: PromptProjectContextOptions
+): string {
   const instructionFiles =
     projectScan?.instructionFiles
       ?.map((file) => ({
@@ -1206,14 +1323,98 @@ function formatProjectInstructions(projectScan?: GenerateAgentAskRequest["projec
     return "";
   }
 
+  const budget = createPromptProjectContextBudget(options);
+  const blocks: string[] = [];
+  let remainingChars = budget.instructionChars;
+
+  for (const file of instructionFiles) {
+    const headerBudget = `From ${file.relativePath} (truncated):`.length + 2;
+
+    if (remainingChars <= headerBudget + 200) {
+      break;
+    }
+
+    const clippedContent = clipPromptText(file.content, remainingChars - headerBudget);
+    const truncated = file.truncated || clippedContent.truncated;
+    const header = `From ${file.relativePath}${truncated ? " (truncated)" : ""}:`;
+
+    blocks.push([header, clippedContent.text].join("\n"));
+    remainingChars -= header.length + clippedContent.text.length + 3;
+  }
+
+  const omittedFileCount = Math.max(0, instructionFiles.length - blocks.length);
+
   return [
     "Project instructions:",
-    ...instructionFiles.map((file) =>
-      [`From ${file.relativePath}${file.truncated ? " (truncated)" : ""}:`, file.content].join(
-        "\n"
-      )
-    )
-  ].join("\n\n");
+    ...blocks,
+    omittedFileCount > 0
+      ? `${omittedFileCount} project instruction files are omitted by the prompt context budget.`
+      : ""
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function getPromptProjectFilePriority(relativePath: string): number {
+  const normalizedPath = relativePath.replace(/\\/g, "/").toLowerCase();
+
+  if (isRootProjectFoundationPath(normalizedPath)) {
+    return 0;
+  }
+
+  if (/^\.github\/workflows\/[^/]+\.ya?ml$/u.test(normalizedPath)) {
+    return 1;
+  }
+
+  if (isLikelySourceEntrypointPath(normalizedPath)) {
+    return 2;
+  }
+
+  if (/^(?:src|app|pages|backend|frontend|client|server)\//u.test(normalizedPath)) {
+    return 3;
+  }
+
+  if (/^(?:tests?|__tests__|e2e)\//u.test(normalizedPath) || /\.test\.[cm]?[jt]sx?$/u.test(normalizedPath)) {
+    return 4;
+  }
+
+  if (/^docs?\//u.test(normalizedPath)) {
+    return 5;
+  }
+
+  return 6;
+}
+
+function isRootProjectFoundationPath(normalizedPath: string): boolean {
+  return /^(?:agents\.md|readme(?:\.en)?\.md|package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|tsconfig(?:\.[^.]+)?\.json|vite\.config\.[cm]?[jt]s|electron\.vite\.config\.[cm]?[jt]s|next\.config\.[cm]?[jt]s|eslint\.config\.[cm]?[jt]s|pom\.xml|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|pyproject\.toml|requirements\.txt|cargo\.toml|go\.mod)$/u.test(
+    normalizedPath
+  );
+}
+
+function isLikelySourceEntrypointPath(normalizedPath: string): boolean {
+  return /(?:^|\/)(?:main|index|app|server|router|routes|electron|preload)\.[cm]?[jt]sx?$/u.test(
+    normalizedPath
+  );
+}
+
+function formatProjectFileLine(file: ProjectFile): string {
+  return `- ${file.relativePath} (${file.size} bytes)`;
+}
+
+function clipPromptText(value: string, maxChars: number): { text: string; truncated: boolean } {
+  const normalizedMaxChars = Math.max(0, Math.floor(maxChars));
+
+  if (value.length <= normalizedMaxChars) {
+    return { text: value, truncated: false };
+  }
+
+  const truncationMarker = "\n[truncated]";
+  const clippedLength = Math.max(0, normalizedMaxChars - truncationMarker.length);
+
+  return {
+    text: `${value.slice(0, clippedLength).trimEnd()}${truncationMarker}`,
+    truncated: true
+  };
 }
 
 // 流被截断时请求模型续写, 只要求补剩余回答

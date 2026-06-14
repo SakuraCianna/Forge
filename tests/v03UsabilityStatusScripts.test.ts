@@ -10,18 +10,18 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const createdAt = "2026-06-05T12:00:00.000Z";
 
-test("v0.2 usability status is wired and reports missing evidence as unproven", async () => {
+test("v0.3 usability status is wired and reports missing evidence as unproven", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
     scripts?: Record<string, string>;
   };
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-missing-"));
-  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-usability-status-missing-"));
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-3-usability-status.mjs");
 
-  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.3.0" }), "utf8");
 
   assert.equal(
-    packageJson.scripts?.["quality:v0.2:status"],
-    "npm run test:compile && node scripts/summarize-v0-2-usability-status.mjs"
+    packageJson.scripts?.["quality:v0.3:status"],
+    "npm run test:compile && node scripts/summarize-v0-3-usability-status.mjs"
   );
 
   const { stdout } = await execFileAsync(process.execPath, [scriptPath, "--json"], {
@@ -45,25 +45,25 @@ test("v0.2 usability status is wired and reports missing evidence as unproven", 
   });
 });
 
-test("v0.2 usability status reports evidence-ready when strict evidence files pass", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-ready-"));
+test("v0.3 usability status reports evidence-ready when strict evidence files pass", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-usability-status-ready-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
-  const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const regressionFile = join(docsDirectory, "V0_3_REGRESSION_RESULTS.json");
+  const smokeFile = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-3-usability-status.mjs");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
-  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.3.0" }), "utf8");
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     regressionFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           ...["S1", "S2", "S3", "S4", "S5"].map((taskId) => createRegressionRun(taskId, "simple")),
           ...["M1", "M2", "M3", "M4", "M5"].map((taskId) => createRegressionRun(taskId, "medium")),
@@ -79,8 +79,8 @@ test("v0.2 usability status reports evidence-ready when strict evidence files pa
     smokeFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",
@@ -121,19 +121,19 @@ test("v0.2 usability status reports evidence-ready when strict evidence files pa
   });
 });
 
-test("v0.2 usability status reports invalid regression evidence separately from below-threshold metrics", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-invalid-regression-"));
+test("v0.3 usability status reports invalid regression evidence separately from below-threshold metrics", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-usability-status-invalid-regression-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
-  const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const regressionFile = join(docsDirectory, "V0_3_REGRESSION_RESULTS.json");
+  const smokeFile = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-3-usability-status.mjs");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
-  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.3.0" }), "utf8");
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     regressionFile,
@@ -226,25 +226,25 @@ test("v0.2 usability status reports invalid regression evidence separately from 
   assert.match(textOutput, /Blocking metrics: none/u);
 });
 
-test("v0.2 usability status surfaces invalid changed-file evidence for regression reports", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-invalid-changed-files-"));
+test("v0.3 usability status surfaces invalid changed-file evidence for regression reports", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-usability-status-invalid-changed-files-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
-  const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const regressionFile = join(docsDirectory, "V0_3_REGRESSION_RESULTS.json");
+  const smokeFile = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-3-usability-status.mjs");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
-  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.3.0" }), "utf8");
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     regressionFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple"),
@@ -340,14 +340,14 @@ test("v0.2 usability status surfaces invalid changed-file evidence for regressio
   assert.match(textOutput, /Invalid changed files: 0:S1 \[src\/main\/unexpected\.ts\] \[changedFiles\.outOfScope\]/u);
 });
 
-test("v0.2 usability status stays blocked when invalid evidence is mixed with missing evidence", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-invalid-and-missing-"));
+test("v0.3 usability status stays blocked when invalid evidence is mixed with missing evidence", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-usability-status-invalid-and-missing-"));
   const docsDirectory = join(directory, "docs");
-  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
-  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const regressionFile = join(docsDirectory, "V0_3_REGRESSION_RESULTS.json");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-3-usability-status.mjs");
 
   await mkdir(docsDirectory, { recursive: true });
-  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.3.0" }), "utf8");
   await writeFile(
     regressionFile,
     JSON.stringify(
@@ -409,29 +409,29 @@ test("v0.2 usability status stays blocked when invalid evidence is mixed with mi
     windowsHide: true
   });
 
-  assert.match(textOutput, /v0\.2 usability status: blocked/u);
+  assert.match(textOutput, /v0\.3 usability status: blocked/u);
   assert.match(textOutput, /Blockers: regression-results-invalid, installer-smoke-missing/u);
 });
 
-test("v0.2 usability status surfaces changed-file evidence for below-threshold regression metrics", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-below-regression-"));
+test("v0.3 usability status surfaces changed-file evidence for below-threshold regression metrics", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-usability-status-below-regression-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
-  const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const regressionFile = join(docsDirectory, "V0_3_REGRESSION_RESULTS.json");
+  const smokeFile = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-3-usability-status.mjs");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
-  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.3.0" }), "utf8");
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     regressionFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple"),
@@ -522,25 +522,25 @@ test("v0.2 usability status surfaces changed-file evidence for below-threshold r
   assert.match(textOutput, /Changed files: S1 \[src\/main\/unexpected\.ts\] \(wrong-file, unrelated-change\)/u);
 });
 
-test("v0.2 usability status reports invalid installer smoke evidence separately from failed smoke checks", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-usability-status-invalid-smoke-"));
+test("v0.3 usability status reports invalid installer smoke evidence separately from failed smoke checks", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-usability-status-invalid-smoke-"));
   const releaseDirectory = join(directory, "release");
   const docsDirectory = join(directory, "docs");
-  const regressionFile = join(docsDirectory, "V0_2_REGRESSION_RESULTS.json");
-  const smokeFile = join(docsDirectory, "V0_2_INSTALLER_SMOKE.json");
-  const installerPath = join(releaseDirectory, "Forge-0.2.0-x64-setup.exe");
-  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-usability-status.mjs");
+  const regressionFile = join(docsDirectory, "V0_3_REGRESSION_RESULTS.json");
+  const smokeFile = join(docsDirectory, "V0_3_INSTALLER_SMOKE.json");
+  const installerPath = join(releaseDirectory, "Forge-0.3.0-x64-setup.exe");
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-3-usability-status.mjs");
   const installerFixture = "fake installer fixture";
 
   await mkdir(releaseDirectory, { recursive: true });
   await mkdir(docsDirectory, { recursive: true });
-  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.2.0" }), "utf8");
+  await writeFile(join(directory, "package.json"), JSON.stringify({ version: "0.3.0" }), "utf8");
   await writeFile(installerPath, installerFixture, "utf8");
   await writeFile(
     regressionFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           ...["S1", "S2", "S3", "S4", "S5"].map((taskId) => createRegressionRun(taskId, "simple")),
           ...["M1", "M2", "M3", "M4", "M5"].map((taskId) => createRegressionRun(taskId, "medium")),
@@ -556,8 +556,8 @@ test("v0.2 usability status reports invalid installer smoke evidence separately 
     smokeFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05",
         platform: "not Windows",
@@ -655,14 +655,14 @@ function createChangedFilesForTask(taskId: string) {
     S1: ["README.md"],
     S2: ["docs/RELEASE.md"],
     S3: ["README.md"],
-    S4: ["docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"],
+    S4: ["docs/V0_3_REGRESSION_TASKS.md"],
     S5: ["README.md"],
     M1: ["tests/agentQualityMetrics.test.ts"],
     M2: ["tests/agentQualityMetrics.test.ts"],
     M3: ["README.md"],
     M4: ["docs/RELEASE.md"],
-    M5: ["docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"],
-    C1: ["scripts/run-v0-2-quality-gate.mjs"],
+    M5: ["docs/V0_3_REGRESSION_TASKS.md"],
+    C1: ["scripts/run-v0-3-quality-gate.mjs"],
     C2: ["src/renderer/src/components/ExtensionsPanel.tsx"],
     C3: ["tests/agentQualityMetricsLog.test.ts"]
   };
@@ -675,8 +675,8 @@ async function writeInstallerSmokeReport(filePath: string, installerFixture: str
     filePath,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
-        installerPath: "release/Forge-0.2.0-x64-setup.exe",
+        forgeVersion: "0.3.0",
+        installerPath: "release/Forge-0.3.0-x64-setup.exe",
         installerSha256: createSha256(installerFixture),
         testedAt: "2026-06-05T12:00:00.000Z",
         platform: "Windows 11",

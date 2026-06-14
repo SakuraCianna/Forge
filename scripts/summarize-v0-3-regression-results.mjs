@@ -1,4 +1,4 @@
-// 本文件说明: 汇总 v0.2.x 真实任务回归结果, 复用 Agent 质量指标口径, 不写入应用指标日志
+// 本文件说明: 汇总 v0.3.x 真实任务回归结果, 复用 Agent 质量指标口径, 不写入应用指标日志
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, posix, resolve, win32 } from "node:path";
@@ -23,7 +23,7 @@ const TASK_ALLOWED_FILE_RULES = {
     { type: "exact", value: "README.md" },
     { type: "exact", value: "README.en.md" }
   ],
-  S4: [{ type: "exact", value: "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md" }],
+  S4: [{ type: "exact", value: "docs/V0_3_REGRESSION_TASKS.md" }],
   S5: [
     { type: "exact", value: "README.md" },
     { type: "exact", value: "README.en.md" }
@@ -34,15 +34,15 @@ const TASK_ALLOWED_FILE_RULES = {
     { type: "exact", value: "README.md" },
     { type: "exact", value: "README.en.md" },
     { type: "exact", value: "docs/RELEASE.md" },
-    { type: "exact", value: "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md" }
+    { type: "exact", value: "docs/V0_3_REGRESSION_TASKS.md" }
   ],
   M4: [
     { type: "exact", value: "docs/RELEASE.md" },
-    { type: "exact", value: "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md" }
+    { type: "exact", value: "docs/V0_3_REGRESSION_TASKS.md" }
   ],
-  M5: [{ type: "exact", value: "docs/superpowers/plans/2026-06-05-v0-2-stabilization.md" }],
+  M5: [{ type: "exact", value: "docs/V0_3_REGRESSION_TASKS.md" }],
   C1: [
-    { type: "exact", value: "scripts/run-v0-2-quality-gate.mjs" },
+    { type: "exact", value: "scripts/run-v0-3-quality-gate.mjs" },
     { type: "exact", value: "package.json" },
     { type: "exact", value: "README.md" },
     { type: "exact", value: "README.en.md" }
@@ -229,7 +229,7 @@ async function readRegressionRuns(filePath) {
   const parsed = JSON.parse(rawValue);
 
   if (!isRecord(parsed) || !Array.isArray(parsed.runs)) {
-    throw new Error("v0.2 regression results file must contain a runs array");
+    throw new Error("v0.3 regression results file must contain a runs array");
   }
 
   const rawRuns = parsed.runs;
@@ -418,8 +418,8 @@ function createRegressionUsableGate(metrics) {
 
 function findDefaultResultsFile() {
   const candidates = [
-    "docs/V0_2_REGRESSION_RESULTS.json",
-    "docs/v0-2-regression-results.json"
+    "docs/V0_3_REGRESSION_RESULTS.json",
+    "docs/v0-3-regression-results.json"
   ].map((candidate) => resolve(candidate));
 
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
@@ -733,18 +733,18 @@ function writeSummary(summary, asJson) {
   }
 
   if (summary.status === "missing") {
-    console.log("v0.2 regression results: missing");
+    console.log("v0.3 regression results: missing");
     console.log("No regression results file was found. Real task metrics remain unproven.");
     return;
   }
 
   if (summary.status === "error") {
-    console.error(`v0.2 regression results: error reading ${summary.source}`);
+    console.error(`v0.3 regression results: error reading ${summary.source}`);
     console.error(summary.message);
     return;
   }
 
-  console.log(`v0.2 regression results: ${summary.totalRuns} runs`);
+  console.log(`v0.3 regression results: ${summary.totalRuns} runs`);
   console.log(`Source: ${summary.source}`);
   console.log(`Raw runs: ${summary.totalRawRuns}`);
 

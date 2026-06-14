@@ -1,0 +1,424 @@
+{
+  "forgeVersion": "0.3.0",
+  "runs": [
+    {
+      "taskId": "S1",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "README.md",
+        "README.en.md",
+        "docs/RELEASE.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "S2",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/RELEASE.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "S3",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "README.md",
+        "README.en.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "S4",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/V0_3_REGRESSION_TASKS.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "S5",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "README.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "M1",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "tests/agentQualityMetrics.test.ts"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "M2",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "tests/agentQualityMetrics.test.ts"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "M3",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "README.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "M4",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/RELEASE.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "M5",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "docs/V0_3_REGRESSION_TASKS.md"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "C1",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "complex",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "scripts/run-v0-3-quality-gate.mjs"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "C2",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "complex",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "src/renderer/src/components/ExtensionsPanel.tsx"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    },
+    {
+      "taskId": "C3",
+      "createdAt": "2026-06-05T12:00:00.000Z",
+      "complexity": "complex",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": [
+        "tests/agentQualityMetricsLog.test.ts"
+      ],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 1,
+          "passed": false
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 1,
+          "passed": false
+        }
+      ],
+      "failureRecovered": false
+    }
+  ]
+}

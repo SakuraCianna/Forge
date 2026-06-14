@@ -2963,7 +2963,7 @@ function getGeneralSettingsCopy(language: Language): {
       showActivityHeartbeat: "显示运行心跳",
       showActivityHeartbeatDescription: "在主对话区保留一条轻量状态行, 显示 Forge 正在处理的命令或动作",
       showProcessedSummary: "显示“已处理”摘要",
-      showProcessedSummaryDescription: "把读取文件、命令和执行事件折叠到一行轻量反馈里",
+      showProcessedSummaryDescription: "运行中展示读取、命令和编辑过程, 完成后折叠到一行轻量反馈里",
       expandProcessedSummary: "默认展开已处理详情",
       expandProcessedSummaryDescription: "进入线程时直接展开最近内部步骤, 适合调试运行稳定性",
       permissionsDescription: "控制默认能执行哪些操作, Full Access 会自动接管本地队列门禁",
@@ -3044,7 +3044,7 @@ function getGeneralSettingsCopy(language: Language): {
     showActivityHeartbeatDescription:
       "Keep one quiet status row in the main conversation while Forge runs commands or actions",
     showProcessedSummary: "Show processed summary",
-    showProcessedSummaryDescription: "Fold file reads, commands, and execution events into one quiet status row",
+    showProcessedSummaryDescription: "Show file reads, commands, and edits while running, then fold them into one quiet status row",
     expandProcessedSummary: "Expand processed details by default",
     expandProcessedSummaryDescription:
       "Open each thread with recent internal steps visible for debugging",

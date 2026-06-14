@@ -9,11 +9,11 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const createdAt = "2026-06-05T12:00:00.000Z";
 
-test("v0.2 regression results script converts manual runs into quality metrics", async () => {
+test("v0.3 regression results script converts manual runs into quality metrics", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
     scripts?: Record<string, string>;
   };
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-results-"));
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-results-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
@@ -50,7 +50,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
             completedInFirstAttempt: false,
             wrongFileModified: false,
             unrelatedCodeChanged: true,
-            changedFiles: ["scripts/run-v0-2-quality-gate.mjs", "README.md"],
+            changedFiles: ["scripts/run-v0-3-quality-gate.mjs", "README.md"],
             validations: createAllValidationResults(false),
             failureRecovered: false
           }
@@ -64,12 +64,12 @@ test("v0.2 regression results script converts manual runs into quality metrics",
 
   assert.equal(
     packageJson.scripts?.["quality:regression"],
-    "npm run test:compile && node scripts/summarize-v0-2-regression-results.mjs"
+    "npm run test:compile && node scripts/summarize-v0-3-regression-results.mjs"
   );
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -111,7 +111,7 @@ test("v0.2 regression results script converts manual runs into quality metrics",
     },
     {
       taskId: "C1",
-      changedFiles: ["scripts/run-v0-2-quality-gate.mjs", "README.md"],
+      changedFiles: ["scripts/run-v0-3-quality-gate.mjs", "README.md"],
       wrongFileModified: false,
       unrelatedCodeChanged: true
     }
@@ -149,11 +149,11 @@ test("v0.2 regression results script converts manual runs into quality metrics",
   assert.equal(summary.metrics.find((metric) => metric.id === "toolCallSuccessRate")?.value, null);
 });
 
-test("v0.2 regression results script reports incomplete fixed task coverage", async () => {
+test("v0.3 regression results script reports incomplete fixed task coverage", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
     scripts?: Record<string, string>;
   };
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-coverage-"));
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-coverage-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
@@ -182,12 +182,12 @@ test("v0.2 regression results script reports incomplete fixed task coverage", as
 
   assert.equal(
     packageJson.scripts?.["quality:regression:gate"],
-    "npm run test:compile && node scripts/summarize-v0-2-regression-results.mjs --require-complete-set --require-usable-regression"
+    "npm run test:compile && node scripts/summarize-v0-3-regression-results.mjs --require-complete-set --require-usable-regression"
   );
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -211,16 +211,16 @@ test("v0.2 regression results script reports incomplete fixed task coverage", as
   await assert.rejects(
     execFileAsync(
       process.execPath,
-      ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--require-complete-set"],
+      ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--require-complete-set"],
       { windowsHide: true }
     ),
     /Command failed/
   );
 });
 
-test("v0.2 regression results strict gate fails when no results file exists", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-missing-"));
-  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-2-regression-results.mjs");
+test("v0.3 regression results strict gate fails when no results file exists", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-missing-"));
+  const scriptPath = join(process.cwd(), "scripts", "summarize-v0-3-regression-results.mjs");
 
   await assert.rejects(
     execFileAsync(process.execPath, [scriptPath, "--require-complete-set"], {
@@ -239,18 +239,18 @@ test("v0.2 regression results strict gate fails when no results file exists", as
   );
 });
 
-test("v0.2 regression results strict gate fails when complete results are below usable tier", async () => {
+test("v0.3 regression results strict gate fails when complete results are below usable tier", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
     scripts?: Record<string, string>;
   };
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-usable-"));
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-usable-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           ...["S1", "S2", "S3", "S4", "S5"].map((taskId) =>
             createRegressionRun(taskId, "simple", false)
@@ -269,13 +269,13 @@ test("v0.2 regression results strict gate fails when complete results are below 
 
   assert.equal(
     packageJson.scripts?.["quality:regression:gate"],
-    "npm run test:compile && node scripts/summarize-v0-2-regression-results.mjs --require-complete-set --require-usable-regression"
+    "npm run test:compile && node scripts/summarize-v0-3-regression-results.mjs --require-complete-set --require-usable-regression"
   );
 
   const { stdout } = await execFileAsync(
     process.execPath,
     [
-      "scripts/summarize-v0-2-regression-results.mjs",
+      "scripts/summarize-v0-3-regression-results.mjs",
       "--file",
       resultsFile,
       "--json"
@@ -300,7 +300,7 @@ test("v0.2 regression results strict gate fails when complete results are below 
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -312,15 +312,15 @@ test("v0.2 regression results strict gate fails when complete results are below 
   );
 });
 
-test("v0.2 regression results strict gate fails when results contain invalid runs", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-invalid-"));
+test("v0.3 regression results strict gate fails when results contain invalid runs", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-invalid-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           ...["S1", "S2", "S3", "S4", "S5"].map((taskId) =>
             createRegressionRun(taskId, "simple", true)
@@ -350,7 +350,7 @@ test("v0.2 regression results strict gate fails when results contain invalid run
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -375,7 +375,7 @@ test("v0.2 regression results strict gate fails when results contain invalid run
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -387,15 +387,15 @@ test("v0.2 regression results strict gate fails when results contain invalid run
   );
 });
 
-test("v0.2 regression results strict gate fails when changed files evidence is missing", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-changed-files-"));
+test("v0.3 regression results strict gate fails when changed files evidence is missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-changed-files-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             taskId: "S1",
@@ -424,7 +424,7 @@ test("v0.2 regression results strict gate fails when changed files evidence is m
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -459,7 +459,7 @@ test("v0.2 regression results strict gate fails when changed files evidence is m
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -471,15 +471,15 @@ test("v0.2 regression results strict gate fails when changed files evidence is m
   );
 });
 
-test("v0.2 regression results strict gate fails when changed files contradict the wrong-file flag", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-changed-files-scope-"));
+test("v0.3 regression results strict gate fails when changed files contradict the wrong-file flag", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-changed-files-scope-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -503,7 +503,7 @@ test("v0.2 regression results strict gate fails when changed files contradict th
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -538,7 +538,7 @@ test("v0.2 regression results strict gate fails when changed files contradict th
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -550,15 +550,15 @@ test("v0.2 regression results strict gate fails when changed files contradict th
   );
 });
 
-test("v0.2 regression results strict gate fails when fixed task complexity mismatches task id", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-complexity-mismatch-"));
+test("v0.3 regression results strict gate fails when fixed task complexity mismatches task id", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-complexity-mismatch-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           createRegressionRun("S1", "complex", true),
           ...["S2", "S3", "S4", "S5"].map((taskId) =>
@@ -578,7 +578,7 @@ test("v0.2 regression results strict gate fails when fixed task complexity misma
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -613,7 +613,7 @@ test("v0.2 regression results strict gate fails when fixed task complexity misma
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -625,15 +625,15 @@ test("v0.2 regression results strict gate fails when fixed task complexity misma
   );
 });
 
-test("v0.2 regression results strict gate fails when run timestamp is not auditable", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-created-at-"));
+test("v0.3 regression results strict gate fails when run timestamp is not auditable", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-created-at-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -656,7 +656,7 @@ test("v0.2 regression results strict gate fails when run timestamp is not audita
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -691,7 +691,7 @@ test("v0.2 regression results strict gate fails when run timestamp is not audita
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -703,15 +703,15 @@ test("v0.2 regression results strict gate fails when run timestamp is not audita
   );
 });
 
-test("v0.2 regression results strict gate fails when run timestamp is in the future", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-future-created-at-"));
+test("v0.3 regression results strict gate fails when run timestamp is in the future", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-future-created-at-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -727,7 +727,7 @@ test("v0.2 regression results strict gate fails when run timestamp is in the fut
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -745,15 +745,15 @@ test("v0.2 regression results strict gate fails when run timestamp is in the fut
   ]);
 });
 
-test("v0.2 regression results strict gate fails when run timestamp is not a real calendar date", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-invalid-calendar-date-"));
+test("v0.3 regression results strict gate fails when run timestamp is not a real calendar date", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-invalid-calendar-date-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -769,7 +769,7 @@ test("v0.2 regression results strict gate fails when run timestamp is not a real
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -787,15 +787,15 @@ test("v0.2 regression results strict gate fails when run timestamp is not a real
   ]);
 });
 
-test("v0.2 regression results strict gate fails when first-pass completion contradicts validation failure", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-first-pass-validation-"));
+test("v0.3 regression results strict gate fails when first-pass completion contradicts validation failure", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-first-pass-validation-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -822,7 +822,7 @@ test("v0.2 regression results strict gate fails when first-pass completion contr
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -857,7 +857,7 @@ test("v0.2 regression results strict gate fails when first-pass completion contr
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -869,15 +869,15 @@ test("v0.2 regression results strict gate fails when first-pass completion contr
   );
 });
 
-test("v0.2 regression results strict gate fails when recovery is recorded without a failure path", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-recovery-without-failure-"));
+test("v0.3 regression results strict gate fails when recovery is recorded without a failure path", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-recovery-without-failure-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -905,7 +905,7 @@ test("v0.2 regression results strict gate fails when recovery is recorded withou
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -940,7 +940,7 @@ test("v0.2 regression results strict gate fails when recovery is recorded withou
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -952,15 +952,15 @@ test("v0.2 regression results strict gate fails when recovery is recorded withou
   );
 });
 
-test("v0.2 regression results strict gate fails when required validation kinds are missing", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-missing-validation-kind-"));
+test("v0.3 regression results strict gate fails when required validation kinds are missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-missing-validation-kind-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -983,7 +983,7 @@ test("v0.2 regression results strict gate fails when required validation kinds a
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1018,7 +1018,7 @@ test("v0.2 regression results strict gate fails when required validation kinds a
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -1030,15 +1030,15 @@ test("v0.2 regression results strict gate fails when required validation kinds a
   );
 });
 
-test("v0.2 regression results strict gate fails when validation kinds are duplicated", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-duplicate-validation-kind-"));
+test("v0.3 regression results strict gate fails when validation kinds are duplicated", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-duplicate-validation-kind-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -1066,7 +1066,7 @@ test("v0.2 regression results strict gate fails when validation kinds are duplic
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1101,7 +1101,7 @@ test("v0.2 regression results strict gate fails when validation kinds are duplic
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -1113,15 +1113,15 @@ test("v0.2 regression results strict gate fails when validation kinds are duplic
   );
 });
 
-test("v0.2 regression results strict gate fails when validation command evidence is missing", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-evidence-"));
+test("v0.3 regression results strict gate fails when validation command evidence is missing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-validation-evidence-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           ...["S1", "S2", "S3", "S4", "S5"].map((taskId) => ({
             ...createRegressionRun(taskId, "simple", true),
@@ -1145,7 +1145,7 @@ test("v0.2 regression results strict gate fails when validation command evidence
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1171,7 +1171,7 @@ test("v0.2 regression results strict gate fails when validation command evidence
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -1183,15 +1183,15 @@ test("v0.2 regression results strict gate fails when validation command evidence
   );
 });
 
-test("v0.2 regression results strict gate fails when validation pass state contradicts exit code", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-exit-code-"));
+test("v0.3 regression results strict gate fails when validation pass state contradicts exit code", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-validation-exit-code-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -1214,7 +1214,7 @@ test("v0.2 regression results strict gate fails when validation pass state contr
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1232,15 +1232,15 @@ test("v0.2 regression results strict gate fails when validation pass state contr
   ]);
 });
 
-test("v0.2 regression results strict gate fails when validation command does not match its kind", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-command-kind-"));
+test("v0.3 regression results strict gate fails when validation command does not match its kind", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-validation-command-kind-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -1265,7 +1265,7 @@ test("v0.2 regression results strict gate fails when validation command does not
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1283,15 +1283,15 @@ test("v0.2 regression results strict gate fails when validation command does not
   ]);
 });
 
-test("v0.2 regression results strict gate fails when validation is not after modification", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-validation-after-modification-"));
+test("v0.3 regression results strict gate fails when validation is not after modification", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-validation-after-modification-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("S1", "simple", true),
@@ -1314,7 +1314,7 @@ test("v0.2 regression results strict gate fails when validation is not after mod
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1332,15 +1332,15 @@ test("v0.2 regression results strict gate fails when validation is not after mod
   ]);
 });
 
-test("v0.2 regression results strict gate fails when fixed tasks are duplicated", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-duplicate-"));
+test("v0.3 regression results strict gate fails when fixed tasks are duplicated", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-duplicate-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           ...["S1", "S2", "S3", "S4", "S5"].map((taskId) =>
             createRegressionRun(taskId, "simple", true)
@@ -1360,7 +1360,7 @@ test("v0.2 regression results strict gate fails when fixed tasks are duplicated"
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1383,7 +1383,7 @@ test("v0.2 regression results strict gate fails when fixed tasks are duplicated"
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -1395,15 +1395,15 @@ test("v0.2 regression results strict gate fails when fixed tasks are duplicated"
   );
 });
 
-test("v0.2 regression results strict gate fails when failed path omits recovery outcome", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-missing-recovery-"));
+test("v0.3 regression results strict gate fails when failed path omits recovery outcome", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-missing-recovery-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
     resultsFile,
     JSON.stringify(
       {
-        forgeVersion: "0.2.0",
+        forgeVersion: "0.3.0",
         runs: [
           {
             ...createRegressionRun("M1", "medium", false),
@@ -1419,7 +1419,7 @@ test("v0.2 regression results strict gate fails when failed path omits recovery 
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1440,7 +1440,7 @@ test("v0.2 regression results strict gate fails when failed path omits recovery 
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -1452,8 +1452,8 @@ test("v0.2 regression results strict gate fails when failed path omits recovery 
   );
 });
 
-test("v0.2 regression results strict gate fails when report version does not match package version", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-version-"));
+test("v0.3 regression results strict gate fails when report version does not match package version", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-version-"));
   const resultsFile = join(directory, "regression-results.json");
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
   const mismatchedForgeVersion = "0.0.0";
@@ -1481,7 +1481,7 @@ test("v0.2 regression results strict gate fails when report version does not mat
 
   const { stdout } = await execFileAsync(
     process.execPath,
-    ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+    ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
     { windowsHide: true }
   );
   const summary = JSON.parse(stdout) as {
@@ -1506,7 +1506,7 @@ test("v0.2 regression results strict gate fails when report version does not mat
     execFileAsync(
       process.execPath,
       [
-        "scripts/summarize-v0-2-regression-results.mjs",
+        "scripts/summarize-v0-3-regression-results.mjs",
         "--file",
         resultsFile,
         "--require-complete-set",
@@ -1518,8 +1518,8 @@ test("v0.2 regression results strict gate fails when report version does not mat
   );
 });
 
-test("v0.2 regression results script rejects malformed report shape", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "forge-v02-regression-malformed-"));
+test("v0.3 regression results script rejects malformed report shape", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-v03-regression-malformed-"));
   const resultsFile = join(directory, "regression-results.json");
 
   await writeFile(
@@ -1538,7 +1538,7 @@ test("v0.2 regression results script rejects malformed report shape", async () =
     async () => {
       await execFileAsync(
         process.execPath,
-        ["scripts/summarize-v0-2-regression-results.mjs", "--file", resultsFile, "--json"],
+        ["scripts/summarize-v0-3-regression-results.mjs", "--file", resultsFile, "--json"],
         { windowsHide: true }
       );
     },
@@ -1576,14 +1576,14 @@ function createChangedFilesForTask(taskId: string) {
     S1: ["README.md"],
     S2: ["docs/RELEASE.md"],
     S3: ["README.md"],
-    S4: ["docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"],
+    S4: ["docs/V0_3_REGRESSION_TASKS.md"],
     S5: ["README.md"],
     M1: ["tests/agentQualityMetrics.test.ts"],
     M2: ["tests/agentQualityMetrics.test.ts"],
     M3: ["README.md"],
     M4: ["docs/RELEASE.md"],
-    M5: ["docs/superpowers/plans/2026-06-05-v0-2-stabilization.md"],
-    C1: ["scripts/run-v0-2-quality-gate.mjs"],
+    M5: ["docs/V0_3_REGRESSION_TASKS.md"],
+    C1: ["scripts/run-v0-3-quality-gate.mjs"],
     C2: ["src/renderer/src/components/ExtensionsPanel.tsx"],
     C3: ["tests/agentQualityMetricsLog.test.ts"]
   };
