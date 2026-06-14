@@ -122,8 +122,10 @@ npm run quality:v0.3:usable
 - 2026-06-06 后续代码质量复跑将 Vite 可打包的 renderer/worker 依赖移出 production dependencies 后, 当时本地发布收口安装包 SHA-256 为 `68e9e039b1d97f515186f5ee4347e8c7cd58d5deca499e0d304782581045e014`; 安装包约从 144 MB 降到 104 MB, `app.asar` 约从 168 MB 降到 17 MB, 且不再生成 `app.asar.unpacked`。
 - 2026-06-10 重新运行 `npm run dist:win` 后, 当前本地安装包 `release\Forge-0.2.1-x64-setup.exe` 的 SHA-256 为 `a4b8312f0d7569c25eb75828b64c4a59e54d617702f036da1443bfa9bbff2892`。
 - 2026-06-12 运行当时的发布门禁后, 当前本地安装包 `release\Forge-0.3.0-x64-setup.exe` 大小为 104,018,289 bytes, SHA-256 为 `2d70874d660fa5ca6d4186e786a53029a02d67bfd2c37b83855f4f2e216b5e7b`; 打包仍报告已知的 `duplicate-dependencies` 和 `DEP0190` 警告。
+- 2026-06-14 重新运行 `npm run dist:win` 后, 当前本地安装包 `release\Forge-0.3.0-x64-setup.exe` 大小为 104,020,380 bytes, 最后一次复核 SHA-256 为 `ba87c9eadfb87d25f299fb48c59572c14dab29c78b06a1cc46fee4284c1ff255`; 打包仍报告已知的 `duplicate dependency references` 和 `DEP0190` 警告, 命令退出码为 0。后续安装烟测前必须重新计算当次安装包 SHA-256, 不沿用本行历史值。
 - `duplicate dependency references`: 仍由 electron-builder 扫描 npm production 依赖时输出, 但已从前端和构建依赖的大量重复项收敛到邮件解析链路的少量传递依赖, 例如 `libmime`, `@zone-eu/mailsplit`, `domhandler`。
 - `DEP0190`: `NODE_OPTIONS=--trace-deprecation` 显示调用栈位于 `node_modules\app-builder-lib\src\node-module-collector\nodeModulesCollector.ts`; 这是 electron-builder 依赖扫描阶段的上游警告。Forge 自有质量门禁脚本使用 `shell: false` 和 npm CLI 文件执行命令, 没有为规避该警告改动运行时代码。
+- 2026-06-14 警告归类: `duplicate dependency references` 为 external 传递依赖打包提示, `DEP0190` 为 external 上游 electron-builder 依赖扫描警告; 本次没有为消除警告修改 `package-lock.json`, `node_modules`, 打包 target 或发布策略。
 
 ## 发布注意事项
 

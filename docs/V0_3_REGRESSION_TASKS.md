@@ -182,6 +182,7 @@
 - 禁止文件: `scripts/**`, `src/**`
 - 验证命令: `rg -n "qa:built-in-tools:browser|Browser QA|浏览器 QA" README.md README.en.md docs/RELEASE.md docs/V0_3_REGRESSION_TASKS.md`
 - 一次完成规则: 文档说明该命令会启动临时 fixture 页面并用 Electron 验证截图和控制台检查。
+- 脚本事实: `npm run qa:built-in-tools:browser` 会启动 `127.0.0.1` 临时 fixture 页面, 再把 URL 传给 Electron runner 检查 `browser-screenshot` 和 `browser-console` 场景。
 - 错误文件规则: 修改 Browser QA 脚本记为错误文件修改。
 - 无关改动规则: 引入 Playwright 或其他新依赖记为无关改动。
 - 恢复规则: 如果文档和脚本不一致, Agent 应读取脚本后修正文档。
@@ -193,6 +194,7 @@
 - 禁止文件: `package-lock.json`, `node_modules/**`
 - 验证命令: `npm run dist:win`
 - 一次完成规则: 安装包生成成功, 警告来源被记录为 Forge-owned 或 external。
+- 当前复盘摘要: 2026-06-14 运行 `npm run dist:win` 退出码为 0, 生成 `release\Forge-0.3.0-x64-setup.exe`, 大小 104,020,380 bytes, 最后一次复核 SHA-256 为 `ba87c9eadfb87d25f299fb48c59572c14dab29c78b06a1cc46fee4284c1ff255`; `duplicate dependency references` 归类为 external 传递依赖打包提示, `DEP0190` 归类为 external 上游 electron-builder 依赖扫描警告。后续安装烟测前必须重新计算当次安装包 SHA-256。
 - 错误文件规则: 为消除警告而大升级依赖记为错误文件修改。
 - 无关改动规则: 改变打包 target 或发布策略记为无关改动。
 - 恢复规则: 如果打包失败, Agent 应回到最近可通过配置并记录失败原因。
