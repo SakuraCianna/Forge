@@ -1,0 +1,17 @@
+{
+  "forgeVersion": "0.3.0",
+  "installerPath": "release/Forge-0.3.0-x64-setup.exe",
+  "installerSha256": "edd8bf0a07945edd5ea8d7a0596d049855a3c3d2579bef5d33bec8c5b6f537cc",
+  "testedAt": "2026-06-14T18:16:41.657+08:00",
+  "platform": "Windows 11 Home 64-bit build 26200",
+  "method": "Installed release/Forge-0.3.0-x64-setup.exe with /S into the current user's Programs directory, launched the installed Forge.exe with a remote debugging port, and verified the installed renderer/preload IPC against .tmp-test/installer-smoke-project. The checked flows covered app launch, project scan, file preview, safe command execution, diff preview reject and write acceptance, Git status diff visibility, and deleteFile blocking without typed confirmation.",
+  "checks": {
+    "appLaunches": true,
+    "projectOpens": true,
+    "filePreviewWorks": true,
+    "safeCommandRuns": true,
+    "generatedDiffAcceptRejectWorks": true,
+    "gitStatusViewOpens": true,
+    "highRiskRequiresConfirmation": true
+  }
+}
