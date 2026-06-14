@@ -231,6 +231,8 @@ Built-in Tools QA 的固定入口是 `npm run qa:built-in-tools` 和 `npm run qa
 npm run quality:v0.3
 ```
 
+该门禁只执行本地检查和打包, 不会发布、上传或执行 Git 写操作; 摘要会列出每个子命令的 PASS/FAIL, 并在打包输出包含已知警告时标记 `duplicate-dependencies` 或 `dep0190-shell-args`。
+
 可用级候选版本需要运行更严格的总门禁。该命令会先执行可用性证据预检并一次列出所有 blocker; 只有真实任务回归证据和安装包人工烟测证据都通过后, 才会继续运行真实任务回归门禁、安装包烟测门禁和不重写安装包的完整工程门禁。安装包必须先通过 `npm run quality:v0.3` 或 `npm run dist:win` 生成, 再执行安装烟测并记录当前 SHA-256, 避免总门禁在烟测后重新打包导致证据失效。如果缺少 `docs\V0_3_REGRESSION_RESULTS.json`, 缺少 `docs\V0_3_INSTALLER_SMOKE.json`, 证据报告结构错误、版本不匹配、烟测元数据无效、安装包 SHA-256 不匹配, 或任一门禁未达标, 会以非 0 状态退出:
 
 ```powershell
