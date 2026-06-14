@@ -1,0 +1,489 @@
+{
+  "forgeVersion": "0.3.0",
+  "runs": [
+    {
+      "taskId": "S1",
+      "createdAt": "2026-06-14T08:37:21.815Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["docs/RELEASE.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command produced no matches as expected: rg -n \"0\\.1\\.0|0\\.1\\.x\" README.md README.en.md docs/RELEASE.md",
+        "Release workflow now explicitly keeps v0.3.x described as stabilization until npm run quality:v0.3:usable passes"
+      ]
+    },
+    {
+      "taskId": "S2",
+      "createdAt": "2026-06-14T08:36:10.186Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["docs/RELEASE.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: rg -n \"Forge-0\\.3\\.0|v0\\.3\\.0|RELEASE_NOTES_v0\\.3\\.0|V0_3_INSTALLER_SMOKE\" docs/RELEASE.md",
+        "Release document now includes an explicit current v0.3.0 installer example line without changing release strategy"
+      ]
+    },
+    {
+      "taskId": "S3",
+      "createdAt": "2026-06-14T08:39:46.513Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["README.md", "README.en.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: rg -n \"qa:built-in-tools|qa:built-in-tools:browser\" README.md README.en.md",
+        "Chinese and English README files now explicitly preserve the two fixed v0.3.x QA script names"
+      ]
+    },
+    {
+      "taskId": "S4",
+      "createdAt": "2026-06-14T08:28:54.038Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["docs/V0_3_REGRESSION_TASKS.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command also passed after modification: rg -n \"0\\.98|0\\.02|0\\.85|0\\.7|0\\.45|0\\.9|0\\.08|0\\.1|exactly 0|80%\" docs/V0_3_REGRESSION_TASKS.md",
+        "Documentation was updated to list usable thresholds copied from src/shared/agentQualityMetrics.ts without changing runtime code"
+      ]
+    },
+    {
+      "taskId": "S5",
+      "createdAt": "2026-06-14T08:41:30.808Z",
+      "complexity": "simple",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["README.md", "README.en.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: rg -n \"API Key|token|cookie|私钥|certificates|private keys\" README.md README.en.md",
+        "Chinese and English README files now state that PR descriptions, release notes, and regression evidence must use sanitized credential summaries only"
+      ]
+    },
+    {
+      "taskId": "M1",
+      "createdAt": "2026-06-14T08:47:22.829Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["tests/agentQualityMetrics.test.ts"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: npm test",
+        "Added a filtered-out denominator test proving blocked tool calls, pre-modification build validations, and absent simple task samples keep value and all tier pass fields null"
+      ]
+    },
+    {
+      "taskId": "M2",
+      "createdAt": "2026-06-14T08:48:53.301Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["tests/agentQualityMetrics.test.ts"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: npm test",
+        "Added a distinct-ratio complexity bucket test proving simple, medium, and complex first-pass rates keep independent numerator, denominator, value, and usable tier status"
+      ]
+    },
+    {
+      "taskId": "M3",
+      "createdAt": "2026-06-14T08:54:09.125Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["docs/V0_3_REGRESSION_TASKS.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: rg -n \"qa:built-in-tools:browser|Browser QA|浏览器 QA\" README.md README.en.md docs/RELEASE.md docs/V0_3_REGRESSION_TASKS.md",
+        "Regression task documentation now records that the browser QA script starts a 127.0.0.1 fixture and passes it to the Electron runner for browser-screenshot and browser-console scenarios"
+      ]
+    },
+    {
+      "taskId": "M4",
+      "createdAt": "2026-06-14T09:46:57.331Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["docs/RELEASE.md", "docs/V0_3_REGRESSION_TASKS.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: npm run dist:win",
+        "dist:win generated release\\Forge-0.3.0-x64-setup.exe and reported duplicate dependency references plus DEP0190; both warnings were classified as external in docs",
+        "Post-run Get-FileHash returned ba87c9eadfb87d25f299fb48c59572c14dab29c78b06a1cc46fee4284c1ff255 for a 104020380 byte installer; docs now warn installer smoke must recompute the current SHA-256"
+      ]
+    },
+    {
+      "taskId": "M5",
+      "createdAt": "2026-06-14T08:23:28.351Z",
+      "complexity": "medium",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["docs/V0_3_REGRESSION_TASKS.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command also passed after modification: npm run qa:built-in-tools with FORGE_QA_PROJECT_ROOT set to the resolved absolute sandbox path",
+        "QA summary: total 76, succeeded 64, failed 0, skipped 12, P0 scenario tools 14, P0 succeeded scenario tools 14, safety total 2, safety passed 2"
+      ]
+    },
+    {
+      "taskId": "C1",
+      "createdAt": "2026-06-14T09:55:10.768Z",
+      "complexity": "complex",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["README.md", "README.en.md"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: npm run quality:v0.3",
+        "quality:v0.3 summary passed npm test, release:check, qa:built-in-tools, qa:built-in-tools:browser, and dist:win",
+        "dist:win summary included warnings=duplicate-dependencies,dep0190-shell-args; README now documents that the gate is local-only and does not publish, upload, or perform Git writes"
+      ]
+    },
+    {
+      "taskId": "C2",
+      "createdAt": "2026-06-14T09:57:03.109Z",
+      "complexity": "complex",
+      "completedInFirstAttempt": true,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["tests/agentQualityMetricsLog.test.ts"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": null,
+      "notes": [
+        "Task verification command passed after modification: npm test",
+        "Added a local export serialization regression test proving snapshot JSON preserves numerator, denominator, value, and MVP/usable/excellent tier fields"
+      ]
+    },
+    {
+      "taskId": "C3",
+      "createdAt": "2026-06-14T10:00:47.065Z",
+      "complexity": "complex",
+      "completedInFirstAttempt": false,
+      "wrongFileModified": false,
+      "unrelatedCodeChanged": false,
+      "changedFiles": ["tests/failureRecoveryMetrics.test.ts"],
+      "validations": [
+        {
+          "kind": "typecheck",
+          "command": "npm run typecheck",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "build",
+          "command": "npm run build",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        },
+        {
+          "kind": "lint",
+          "command": "npm run lint",
+          "exitCode": 0,
+          "passed": true,
+          "afterModification": true
+        }
+      ],
+      "failureRecovered": true,
+      "notes": [
+        "Task verification command passed after modification: npm test",
+        "Added a same-thread regression test proving recovered and unrecovered failed actions both produce failure_recovery observations",
+        "Initial strict draft regression gate failed because failureRecoveryRate was unproven; recovered by classifying C3 as the explicit failure-recovery sample and rerunning the strict gate"
+      ]
+    }
+  ]
+}
