@@ -4,6 +4,8 @@
 
 ## 发布前检查
 
+在 `npm run quality:v0.3:usable` 通过前, v0.3.x 发布说明仍按稳定化阶段处理, 不写成已达到可用级。
+
 1. 确认工作树干净, 并检查本次发布包含的变更
 
 ```powershell
@@ -48,6 +50,8 @@ npm run dist:win
 ```powershell
 Get-ChildItem release -Filter "*setup.exe"
 ```
+
+当前 v0.3.0 发布示例应能定位到 `release\Forge-0.3.0-x64-setup.exe`; 升级版本时同步更新示例文件名和下方 GitHub Release 命令。
 
 2. 创建 tag 和 GitHub Release, 并上传安装包
 

@@ -172,6 +172,8 @@ npm run quality:regression
 npm run quality:v0.3:status
 ```
 
+Built-in Tools QA and Browser QA are fixed v0.3.x check entry points, and regression records plus release docs should keep these exact script names.
+
 For release checks:
 
 ```powershell
@@ -236,6 +238,8 @@ OAuth-related variables are only for maintainers who build custom releases or de
 - `FORGE_OAUTH_BROKER_BASE_URL`: enables brokered authorization for GitLab, Bitbucket, Confluence Cloud, Slack, Notion, Airtable, HubSpot, Todoist, Asana, ClickUp, monday.com, Calendly, Miro, Zoom, Figma, Dropbox, Microsoft 365, Sentry, Jira Cloud, and Discord
 
 Do not write API keys, tokens, cookies, private keys, or certificates into README files, commit messages, or logs.
+
+PR descriptions, release notes, and regression evidence should describe credential purpose or sanitized summaries only, never real credentials.
 
 Example configuration should describe variable purpose only; it must not include real credentials, full tokens, cookies, private key bodies, or certificate contents.
 
