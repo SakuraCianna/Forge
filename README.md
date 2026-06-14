@@ -196,6 +196,7 @@ npm run release:check
 GitHub Actions 工作流位于 `.github\workflows\ci-cd.yml`。
 
 - PR 和任意分支 push 会在 `windows-latest` 上运行 `npm ci`、`npm test`、`npm run typecheck`、`npm run lint` 和 `npm run build`。
+- workflow 使用只读 `GITHUB_TOKEN` 权限、PowerShell 7 shell 和 Node.js 24; checkout 不持久化写入凭据。
 - 推送 `v*` tag 或手动运行 workflow 时, 会在 CI 通过后执行 `npm run dist:win`, 并上传 `forge-windows-installer` artifact。
 - 当前工作流只生成和上传安装包 artifact, 不会自动创建 GitHub Release, 不会自动发布, 也不会跳过发布前人工检查和安装包烟测。
 
