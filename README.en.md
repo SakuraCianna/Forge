@@ -220,6 +220,8 @@ For release candidates, run the complete v0.3.x quality gate. This command chain
 npm run quality:v0.3
 ```
 
+This gate only runs local checks and packaging; it does not publish, upload, or perform Git write operations. Its summary lists PASS/FAIL for each child command, and marks `duplicate-dependencies` or `dep0190-shell-args` when packaging output contains those known warnings.
+
 Usability candidates must run the stricter top-level gate. This command first runs a usability evidence preflight and prints all blockers together; only after real-task regression evidence and installer manual smoke evidence pass does it continue to the real-task regression gate, installer smoke gate, and complete engineering gate without rewriting the installer artifact. Generate the installer first with `npm run quality:v0.3` or `npm run dist:win`, then run installer smoke and record the current SHA-256 so the top-level gate does not invalidate its own smoke evidence by packaging again. If `docs\V0_3_REGRESSION_RESULTS.json` is missing, `docs\V0_3_INSTALLER_SMOKE.json` is missing, evidence report shape is malformed, versions do not match, smoke metadata is invalid, the installer SHA-256 does not match, or any gate is below threshold, it exits non-zero:
 
 ```powershell

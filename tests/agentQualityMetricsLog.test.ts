@@ -104,6 +104,42 @@ test("agent quality metrics snapshots expose review fields for every metric", as
   }
 });
 
+test("agent quality metrics snapshots serialize review fields for local export", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "forge-agent-metrics-export-"));
+
+  try {
+    const store = createAgentQualityMetricsLogStore({
+      directory,
+      createId: createIncrementingMetricId()
+    });
+
+    for (const observation of createReviewableMetricObservations()) {
+      await store.append(observation);
+    }
+
+    const parsedSnapshot = JSON.parse(JSON.stringify(await store.snapshot())) as {
+      metrics: AgentQualityMetricValue[];
+    };
+    const exportedSimpleMetric = parsedSnapshot.metrics.find(
+      (metric) => metric.id === "simpleTaskFirstPassCompletionRate"
+    );
+
+    assert.deepEqual(
+      exportedSimpleMetric ? pickReviewFields(exportedSimpleMetric) : null,
+      {
+        numerator: 1,
+        denominator: 1,
+        value: 1,
+        mvpPassed: true,
+        usablePassed: true,
+        excellentPassed: true
+      }
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 function createIncrementingMetricId(): () => string {
   let index = 0;
 

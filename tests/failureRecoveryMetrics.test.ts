@@ -16,6 +16,12 @@ const action: AgentAction = {
   status: "failed",
   command: "npm test"
 };
+const secondAction: AgentAction = {
+  ...action,
+  id: "action-2",
+  stepId: "step-2",
+  command: "npm run build"
+};
 
 test("failure recovery metrics record recovered actions after a failure and recovery attempt", () => {
   const thread = createThreadWithFailureRecoveryAttempt();
@@ -79,6 +85,54 @@ test("failure recovery metrics record unrecovered actions when a failed action i
   });
 });
 
+test("failure recovery metrics record recovered and unrecovered actions in the same thread", () => {
+  const thread = createThreadWithFailureRecoveryAttempts([action, secondAction]);
+  const recordedKeys = new Set<string>();
+  const recoveredDecision = resolveFailureRecoveryMetricDecision({
+    action,
+    createdAt,
+    recovered: true,
+    recordedKeys,
+    thread,
+    threadId: thread.id
+  });
+
+  assert.equal(recoveredDecision.kind, "record");
+
+  if (recoveredDecision.kind === "record") {
+    recordedKeys.add(recoveredDecision.key);
+  }
+
+  const unrecoveredDecision = resolveFailureRecoveryMetricDecision({
+    action: secondAction,
+    createdAt,
+    recovered: false,
+    recordedKeys,
+    thread,
+    threadId: thread.id
+  });
+
+  assert.equal(unrecoveredDecision.kind, "record");
+  assert.deepEqual(
+    [
+      recoveredDecision.kind === "record" ? recoveredDecision.observation : null,
+      unrecoveredDecision.kind === "record" ? unrecoveredDecision.observation : null
+    ],
+    [
+      {
+        kind: "failure_recovery",
+        createdAt,
+        recovered: true
+      },
+      {
+        kind: "failure_recovery",
+        createdAt,
+        recovered: false
+      }
+    ]
+  );
+});
+
 test("failure recovery metrics do not record recovery without failure history", () => {
   const thread = createBaseThread({
     agentActions: [{ ...action, status: "completed" }],
@@ -119,37 +173,46 @@ type TestThread = FailureRecoveryMetricThread & {
 };
 
 function createThreadWithFailureRecoveryAttempt(): TestThread {
+  return createThreadWithFailureRecoveryAttempts([action]);
+}
+
+function createThreadWithFailureRecoveryAttempts(actions: AgentAction[]): TestThread {
   return createBaseThread({
-    agentActions: [action],
-    events: [
-      {
-        id: "thread-1-agent-action-run-failed-action-1",
-        kind: "error",
-        message: "动作失败: npm test",
-        createdAt,
-        agentActionRun: {
-          actionId: action.id,
-          label: action.label,
-          status: "failed",
-          startedAt: createdAt,
-          completedAt: createdAt,
-          durationMs: 0
+    agentActions: actions,
+    events: actions.flatMap((failedAction, index) => {
+      const actionDescription =
+        "command" in failedAction ? failedAction.command : failedAction.label;
+
+      return [
+        {
+          id: `thread-1-agent-action-run-failed-${failedAction.id}`,
+          kind: "error",
+          message: `动作失败: ${actionDescription}`,
+          createdAt,
+          agentActionRun: {
+            actionId: failedAction.id,
+            label: failedAction.label,
+            status: "failed",
+            startedAt: createdAt,
+            completedAt: createdAt,
+            durationMs: 0
+          }
+        },
+        {
+          id: `thread-1-recovery-attempt-${failedAction.id}`,
+          kind: "plan",
+          message: `自动恢复: ${actionDescription}`,
+          createdAt,
+          failureRecoveryAttempt: {
+            actionId: failedAction.id,
+            label: failedAction.label,
+            source: "auto",
+            attempt: index + 1,
+            limit: 2
+          }
         }
-      },
-      {
-        id: "thread-1-recovery-attempt-action-1",
-        kind: "plan",
-        message: "自动恢复: npm test",
-        createdAt,
-        failureRecoveryAttempt: {
-          actionId: action.id,
-          label: action.label,
-          source: "auto",
-          attempt: 1,
-          limit: 2
-        }
-      }
-    ]
+      ];
+    })
   });
 }
 
