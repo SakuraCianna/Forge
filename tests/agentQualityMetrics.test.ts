@@ -94,6 +94,32 @@ test("agent quality metrics keep empty denominators unproven", () => {
   }
 });
 
+test("agent quality metrics keep filtered-out denominators unproven", () => {
+  const snapshot = createAgentQualityMetricSnapshot([
+    toolCall("readFile", "blocked", {
+      priority: "P0"
+    }),
+    {
+      kind: "validation_run",
+      createdAt,
+      validation: "build",
+      afterModification: false,
+      passed: true
+    },
+    {
+      kind: "task_outcome",
+      createdAt,
+      complexity: "medium",
+      completedInFirstAttempt: true
+    }
+  ]);
+
+  assertUnprovenMetric(getAgentQualityMetricValue(snapshot, "toolCallSuccessRate"));
+  assertUnprovenMetric(getAgentQualityMetricValue(snapshot, "p0ToolErrorRate"));
+  assertUnprovenMetric(getAgentQualityMetricValue(snapshot, "postModificationBuildPassRate"));
+  assertUnprovenMetric(getAgentQualityMetricValue(snapshot, "simpleTaskFirstPassCompletionRate"));
+});
+
 test("agent quality metrics calculate task complexity buckets independently", () => {
   const snapshot = createAgentQualityMetricSnapshot([
     {
@@ -147,6 +173,47 @@ test("agent quality metrics calculate task complexity buckets independently", ()
       denominator: 1,
       value: 0,
       usablePassed: false
+    }
+  );
+});
+
+test("agent quality metrics keep distinct completion ratios per complexity bucket", () => {
+  const snapshot = createAgentQualityMetricSnapshot([
+    taskOutcome("simple", true),
+    taskOutcome("simple", false),
+    taskOutcome("simple", false),
+    taskOutcome("medium", true),
+    taskOutcome("medium", true),
+    taskOutcome("medium", false),
+    taskOutcome("complex", true),
+    taskOutcome("complex", false)
+  ]);
+
+  assert.deepEqual(
+    pickMetricEvidence(getAgentQualityMetricValue(snapshot, "simpleTaskFirstPassCompletionRate")),
+    {
+      numerator: 1,
+      denominator: 3,
+      value: 1 / 3,
+      usablePassed: false
+    }
+  );
+  assert.deepEqual(
+    pickMetricEvidence(getAgentQualityMetricValue(snapshot, "mediumTaskFirstPassCompletionRate")),
+    {
+      numerator: 2,
+      denominator: 3,
+      value: 2 / 3,
+      usablePassed: false
+    }
+  );
+  assert.deepEqual(
+    pickMetricEvidence(getAgentQualityMetricValue(snapshot, "complexTaskFirstPassCompletionRate")),
+    {
+      numerator: 1,
+      denominator: 2,
+      value: 0.5,
+      usablePassed: true
     }
   );
 });
@@ -206,6 +273,18 @@ function toolCall(
     confirmedBeforeExecution: false,
     sideEffect: "none",
     ...patch
+  };
+}
+
+function taskOutcome(
+  complexity: Extract<AgentQualityObservation, { kind: "task_outcome" }>["complexity"],
+  completedInFirstAttempt: boolean
+): Extract<AgentQualityObservation, { kind: "task_outcome" }> {
+  return {
+    kind: "task_outcome",
+    createdAt,
+    complexity,
+    completedInFirstAttempt
   };
 }
 
