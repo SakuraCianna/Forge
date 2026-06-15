@@ -198,6 +198,49 @@ test("MEMORY.md managed entries become project scoped agent memories", () => {
   );
 });
 
+test("user-authored MEMORY.md notes become project scoped agent memories", () => {
+  const memories = mergeAgentMemoriesWithProjectScan([], {
+    rootPath: "E:\\CodeHome\\Forge",
+    files: [],
+    truncated: false,
+    instructionFiles: [
+      {
+        relativePath: "MEMORY.md",
+        truncated: false,
+        content: [
+          "# MEMORY.md",
+          "",
+          "- Forge agents should keep PowerShell commands Windows-safe.",
+          "- Use PR checks as release evidence."
+        ].join("\n")
+      }
+    ]
+  });
+  const relevant = selectRelevantAgentMemories(
+    memories,
+    "E:\\CodeHome\\Forge",
+    1,
+    "PowerShell command safety"
+  );
+
+  assert.deepEqual(
+    relevant.map((entry) => ({
+      content: entry.content,
+      id: entry.id,
+      projectPath: entry.projectPath,
+      scope: entry.scope
+    })),
+    [
+      {
+        content: "Forge agents should keep PowerShell commands Windows-safe.",
+        id: "memory-md:manual-1",
+        projectPath: "E:\\CodeHome\\Forge",
+        scope: "project"
+      }
+    ]
+  );
+});
+
 test("MEMORY.md managed entries do not duplicate local project memories", () => {
   const memories = mergeAgentMemoriesWithProjectScan(
     [

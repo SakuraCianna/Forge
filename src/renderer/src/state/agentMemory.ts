@@ -8,6 +8,13 @@ const maxMemoryContentLength = 420;
 const projectMemoryManagedStartMarker = "<!-- forge-memory:managed:start -->";
 const projectMemoryManagedEndMarker = "<!-- forge-memory:managed:end -->";
 const projectMemoryEntryPrefix = "<!-- forge-memory-entry";
+const manualProjectMemoryTimestamp = "1970-01-01T00:00:00.000Z";
+const ignoredManualProjectMemoryLines = new Set([
+  "forge reads this file as project memory when scanning the workspace.",
+  "forge may update the managed section silently during agent work. do not store secrets, tokens, cookies, private keys, or production credentials here.",
+  "forge updates this section automatically. edit or delete entries when they are wrong.",
+  "_no managed memories yet._"
+]);
 
 type AgentMemoryScope = "global" | "project";
 
@@ -353,6 +360,13 @@ type ProjectMemoryMarkdownEntry = {
 };
 
 function parseProjectMemoryMarkdownEntries(content: string): ProjectMemoryMarkdownEntry[] {
+  return [
+    ...parseManualProjectMemoryMarkdownEntries(content),
+    ...parseManagedProjectMemoryMarkdownEntries(content)
+  ];
+}
+
+function parseManagedProjectMemoryMarkdownEntries(content: string): ProjectMemoryMarkdownEntry[] {
   const managedContent = readProjectMemoryManagedContent(content);
 
   if (!managedContent) {
@@ -363,6 +377,55 @@ function parseProjectMemoryMarkdownEntries(content: string): ProjectMemoryMarkdo
     .split(/\r?\n/u)
     .map((line) => parseProjectMemoryEntryLine(line.trim()))
     .filter((entry): entry is ProjectMemoryMarkdownEntry => Boolean(entry));
+}
+
+function parseManualProjectMemoryMarkdownEntries(content: string): ProjectMemoryMarkdownEntry[] {
+  return stripProjectMemoryManagedBlock(content)
+    .split(/\r?\n/u)
+    .map(normalizeManualProjectMemoryLine)
+    .filter(Boolean)
+    .slice(0, 20)
+    .map((manualContent, index) => ({
+      id: `manual-${index + 1}`,
+      content: manualContent,
+      createdAt: manualProjectMemoryTimestamp,
+      updatedAt: manualProjectMemoryTimestamp
+    }));
+}
+
+function stripProjectMemoryManagedBlock(content: string): string {
+  const normalizedContent = content.replace(/\r\n/g, "\n");
+  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
+  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    return normalizedContent;
+  }
+
+  return [
+    normalizedContent.slice(0, startIndex),
+    normalizedContent.slice(endIndex + projectMemoryManagedEndMarker.length)
+  ].join("\n");
+}
+
+function normalizeManualProjectMemoryLine(line: string): string {
+  const trimmedLine = line.trim();
+
+  if (!trimmedLine || trimmedLine.startsWith("#") || trimmedLine.startsWith("<!--")) {
+    return "";
+  }
+
+  const withoutListMarker = trimmedLine
+    .replace(/^(?:[-*+]|\d+[.)])\s+/u, "")
+    .replace(/^\[[ xX]\]\s+/u, "")
+    .trim();
+  const content = normalizeMemoryContent(redactSensitiveMemoryContent(withoutListMarker));
+
+  if (!content || ignoredManualProjectMemoryLines.has(content.toLocaleLowerCase())) {
+    return "";
+  }
+
+  return content;
 }
 
 function readProjectMemoryManagedContent(content: string): string | null {
