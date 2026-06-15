@@ -41,6 +41,7 @@ const instructionFileCache = new Map<string, CachedInstructionFile>();
 // 只读取轻量项目指令, 避免把完整仓库塞进模型上下文
 const rootInstructionFilePaths = [
   "AGENTS.md",
+  "MEMORY.md",
   "CLAUDE.md",
   "CLAUDE.local.md",
   "GEMINI.md",

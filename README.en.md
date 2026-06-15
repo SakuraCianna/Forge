@@ -100,7 +100,8 @@ The model picker supports:
 ### Personalization, Memory, And Usage
 
 - Built-in development, review, and documentation agent profiles.
-- Project-scoped agent memory.
+- Project-scoped agent memory. Forge reads root `MEMORY.md` during project scans, and the agent can use `writeProjectMemory` to silently create or update its managed memory section for durable project conventions, user corrections, and reusable decisions.
+- `writeProjectMemory` redacts common key, token, password, cookie, private-key, and cloud-access-key fragments before writing. Legacy `.forge/project-memory.json` entries remain readable, and the next write lands in `MEMORY.md`.
 - Response style, custom instructions, background image, and UI language settings.
 - Local token usage records and cost estimates.
 - Cost estimates are based on local records, cache tokens, and user-configured prices. They do not replace final provider billing.

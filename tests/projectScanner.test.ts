@@ -76,6 +76,25 @@ test("scanProjectFiles caches cursor rule instruction files", async () => {
   }
 });
 
+test("scanProjectFiles includes root MEMORY.md as project instruction context", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-scanner-memory-md-"));
+
+  try {
+    await writeFile(
+      join(projectRoot, "MEMORY.md"),
+      "# MEMORY.md\n\n- Forge agents should preserve IPC boundaries.\n",
+      "utf8"
+    );
+
+    const scan = await scanProjectFiles(projectRoot);
+
+    assert.equal(scan.instructionFiles?.[0]?.relativePath, "MEMORY.md");
+    assert.match(scan.instructionFiles?.[0]?.content ?? "", /preserve IPC boundaries/u);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("scanProjectFiles reuses unchanged file metadata entries", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-project-scanner-file-cache-"));
 

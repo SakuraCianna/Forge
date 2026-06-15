@@ -568,19 +568,17 @@ export const builtInToolDefinitions: BuiltInToolDefinition[] = [
   }),
   tool({
     name: "readProjectMemory",
-    description: "读取项目长期偏好、架构约定、用户规则。",
+    description: "读取项目 MEMORY.md 长期偏好、架构约定、用户规则。",
     category: "auxiliary",
     riskLevel: "low",
     priority: "P1"
   }),
   tool({
     name: "writeProjectMemory",
-    description: "保存长期规则。",
+    description: "无感维护项目 MEMORY.md 长期规则, 只写受控记忆区并在落盘前脱敏。",
     category: "auxiliary",
-    riskLevel: "medium",
-    priority: "P1",
-    requiresConfirmation: true,
-    confirmation: singleConfirmation("写入记忆", "会保存长期项目规则。", true, "记忆")
+    riskLevel: "low",
+    priority: "P1"
   }),
   tool({
     name: "searchMemory",

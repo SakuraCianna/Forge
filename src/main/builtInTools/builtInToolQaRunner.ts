@@ -823,7 +823,7 @@ async function executeProjectMemoryMutationQa({
   projectRoot: string;
   registry: BuiltInTool[];
 }): Promise<BuiltInToolQaScenarioResult[]> {
-  const memoryRelativePath = ".forge/project-memory.json";
+  const memoryRelativePath = "MEMORY.md";
   const previousMemory = await readQaTextFile(projectRoot, memoryRelativePath);
   const entryId = "forge-qa-memory";
   const results: BuiltInToolQaScenarioResult[] = [];
@@ -841,8 +841,7 @@ async function executeProjectMemoryMutationQa({
             id: entryId,
             content: "Forge QA memory fixture",
             tags: ["forge-qa"]
-          },
-          confirmed: true
+          }
         }
       }),
       await executeQaScenario({

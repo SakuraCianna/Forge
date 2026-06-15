@@ -144,8 +144,8 @@ test("high and critical mutation tools can auto-execute in full access mode", ()
   }
 });
 
-test("all side-effect tools can auto-execute in full access mode", () => {
-  const sideEffectTools = [
+test("confirmation-gated side-effect tools can auto-execute in full access mode", () => {
+  const confirmationGatedSideEffectTools = [
     "createFile",
     "deleteFile",
     "moveFile",
@@ -171,13 +171,12 @@ test("all side-effect tools can auto-execute in full access mode", () => {
     "runBuild",
     "runTests",
     "runTargetedTest",
-    "writeProjectMemory",
     "deleteMemory",
     "createProjectInstructions",
     "updateProjectInstructions"
   ];
 
-  for (const toolName of sideEffectTools) {
+  for (const toolName of confirmationGatedSideEffectTools) {
     const definition = getBuiltInToolDefinition(toolName);
 
     assert.equal(definition.requiresConfirmation, true, toolName);
@@ -187,6 +186,15 @@ test("all side-effect tools can auto-execute in full access mode", () => {
       toolName
     );
   }
+});
+
+test("project MEMORY.md writes are low-risk auto memory updates", () => {
+  const definition = getBuiltInToolDefinition("writeProjectMemory");
+
+  assert.equal(definition.riskLevel, "low");
+  assert.equal(definition.requiresConfirmation, false);
+  assert.match(definition.description, /MEMORY\.md/u);
+  assert.equal(canAutoExecuteBuiltInTool(definition, { fullAccess: false }), true);
 });
 
 test("confirmation-gated tools expose review metadata for the UI", () => {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -724,7 +724,7 @@ test("default revertFile executor restores an explicit previousContent snapshot 
   }
 });
 
-test("project memory tools read and write project-scoped memory with confirmation for writes", async () => {
+test("project memory tools silently maintain project MEMORY.md entries", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-"));
 
   try {
@@ -734,19 +734,19 @@ test("project memory tools read and write project-scoped memory with confirmatio
     const readTool = getBuiltInToolFromRegistry(registry, "readProjectMemory");
     const writeTool = getBuiltInToolFromRegistry(registry, "writeProjectMemory");
     const initial = await readTool.execute({}, { projectRoot });
-    const blocked = await writeTool.execute(
+    const written = await writeTool.execute(
       { id: "architecture", content: "Use Electron IPC for privileged tools.", tags: ["architecture"] },
       { projectRoot }
     );
-    const written = await writeTool.execute(
-      { id: "architecture", content: "Use Electron IPC for privileged tools.", tags: ["architecture"] },
-      { projectRoot, confirmed: true }
-    );
     const afterWrite = await readTool.execute({}, { projectRoot });
+    const memoryMarkdown = await readFile(join(projectRoot, "MEMORY.md"), "utf8");
 
     assert.deepEqual((initial as { entries: unknown[] }).entries, []);
-    assert.equal((blocked as { status: string }).status, "blocked");
+    assert.equal((initial as { relativePath: string }).relativePath, "MEMORY.md");
     assert.equal((written as { status: string }).status, "ok");
+    assert.equal((written as { relativePath: string }).relativePath, "MEMORY.md");
+    assert.match(memoryMarkdown, /<!-- forge-memory:managed:start -->/u);
+    assert.match(memoryMarkdown, /Use Electron IPC for privileged tools\./u);
     assert.deepEqual(
       (afterWrite as { entries: Array<{ id: string; content: string; tags: string[] }> }).entries.map(
         (entry) => ({
@@ -763,6 +763,94 @@ test("project memory tools read and write project-scoped memory with confirmatio
         }
       ]
     );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("project memory write redacts sensitive values before persisting MEMORY.md", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-redact-"));
+
+  try {
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const readTool = getBuiltInToolFromRegistry(registry, "readProjectMemory");
+    const writeTool = getBuiltInToolFromRegistry(registry, "writeProjectMemory");
+
+    const written = await writeTool.execute(
+      {
+        id: "secret-note",
+        content:
+          "OpenAI api_key=sk-test-secret-value, token: \"ghp_secret_value\", and password: hunter2 should never be stored.",
+        tags: ["security"]
+      },
+      { projectRoot }
+    );
+    const memoryMarkdown = await readFile(join(projectRoot, "MEMORY.md"), "utf8");
+    const afterWrite = await readTool.execute({}, { projectRoot });
+    const [entry] = (afterWrite as { entries: Array<{ content: string }> }).entries;
+
+    assert.equal((written as { status: string }).status, "ok");
+    assert.ok(entry);
+    assert.match(entry.content, /api_key=\[redacted\]/u);
+    assert.match(entry.content, /token: "\[redacted\]"/u);
+    assert.match(entry.content, /password: \[redacted\]/u);
+    assert.doesNotMatch(memoryMarkdown, /sk-test-secret-value/u);
+    assert.doesNotMatch(memoryMarkdown, /ghp_secret_value/u);
+    assert.doesNotMatch(memoryMarkdown, /hunter2/u);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("project memory reads legacy JSON entries before migrating writes to MEMORY.md", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-legacy-"));
+
+  try {
+    await mkdir(join(projectRoot, ".forge"), { recursive: true });
+    await writeFile(
+      join(projectRoot, ".forge", "project-memory.json"),
+      `${JSON.stringify(
+        {
+          entries: [
+            {
+              id: "legacy",
+              content: "Legacy project memory survives migration.",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+              tags: ["legacy"]
+            }
+          ]
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const readTool = getBuiltInToolFromRegistry(registry, "readProjectMemory");
+    const writeTool = getBuiltInToolFromRegistry(registry, "writeProjectMemory");
+    const initial = await readTool.execute({}, { projectRoot });
+
+    await writeTool.execute(
+      { id: "current", content: "Current project memory uses MEMORY.md.", tags: ["current"] },
+      { projectRoot }
+    );
+
+    const afterWrite = await readTool.execute({}, { projectRoot });
+    const memoryMarkdown = await readFile(join(projectRoot, "MEMORY.md"), "utf8");
+
+    assert.equal((initial as { legacyRelativePath: string }).legacyRelativePath, ".forge/project-memory.json");
+    assert.deepEqual(
+      (afterWrite as { entries: Array<{ id: string }> }).entries.map((entry) => entry.id),
+      ["legacy", "current"]
+    );
+    assert.match(memoryMarkdown, /Legacy project memory survives migration\./u);
+    assert.match(memoryMarkdown, /Current project memory uses MEMORY\.md\./u);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }

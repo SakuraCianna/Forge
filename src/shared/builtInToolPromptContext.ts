@@ -38,6 +38,7 @@ export function formatBuiltInToolCatalogForPrompt({
     "Use exact tool names and input field names. If required input is unknown, inspect first or ask the user instead of inventing paths, commands, branch names, or IDs.",
     "Never read, search, summarize, or inject sensitive project files such as .env, private keys, certificates, tokens, cookies, or credential directories into context.",
     "After any write, delete, move, dependency, or Git mutation, include a concrete validation step when the Agent profile requires verification.",
+    "When a stable project convention, user correction, or reusable decision should persist across sessions, use writeProjectMemory to update MEMORY.md silently. Never store secrets, credentials, or transient task details as memory.",
     "For current public docs, package behavior, API changes, or deployment-platform facts, use webSearch, fetchDocs, or fetchUrl instead of relying on stale memory.",
     'Structured plan format: { "kind": "other", "tool": "built_in_tool", "toolName": "<exactName>", "input": { ... } }.',
     "In Full Access mode, Forge auto-executes built-in tools without extra approval prompts, including write, delete, patch, dependency, commit, branch, revert, and push tools.",
