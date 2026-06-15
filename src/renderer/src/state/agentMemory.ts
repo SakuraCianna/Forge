@@ -32,6 +32,20 @@ export type ProjectMemoryWriteRequest = {
   };
 };
 
+export type CompactedProjectMemorySource = {
+  id: string;
+  projectPath?: string | null;
+  contextCompaction?: {
+    content: string;
+    createdAt: string;
+    estimatedTokensAfter?: number;
+    estimatedTokensBefore?: number;
+    reason: "manual" | "auto";
+    retainedEventCount?: number;
+    sourceEventCount?: number;
+  };
+};
+
 export type ProjectMemoryWriteFailureEvent = {
   id: string;
   kind: "error";
@@ -231,6 +245,31 @@ export function createProjectMemoryWriteRequest(
   };
 }
 
+// 长线程压缩后把摘要沉淀到项目 MEMORY.md, 靠压缩阈值避免短会话被误存成长期记忆
+export function createCompactedProjectMemoryWriteRequest(
+  thread: CompactedProjectMemorySource
+): ProjectMemoryWriteRequest | null {
+  const projectRoot = normalizeProjectPath(thread.projectPath);
+  const compaction = thread.contextCompaction;
+  const content = normalizeMemoryContent(compaction?.content ?? "");
+
+  if (!projectRoot || !compaction || content.length < 80) {
+    return null;
+  }
+
+  return {
+    toolName: "writeProjectMemory",
+    projectRoot,
+    input: {
+      id: `compact-${normalizeMemoryIdSegment(thread.id)}-${hashMemoryContent(
+        `${compaction.createdAt}\n${content}`
+      )}`,
+      content,
+      tags: ["auto-memory", "compaction", compaction.reason]
+    }
+  };
+}
+
 // MEMORY.md 写入失败需要能被用户审计, 但不应让主问答或任务队列误判为失败
 export function formatProjectMemoryWriteFailure(language: Language, detail: string): string {
   return language === "zh-CN"
@@ -287,6 +326,15 @@ function hashMemoryContent(value: string): string {
   }
 
   return hash.toString(36);
+}
+
+function normalizeMemoryIdSegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 48) || "thread";
 }
 
 // 同时生成英文单词 token 和中文短词 token, 让中英混合提问都能召回记忆

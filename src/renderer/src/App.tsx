@@ -292,6 +292,7 @@ import {
   type GeneralPreferences
 } from "@/state/generalPreferences";
 import {
+  createCompactedProjectMemoryWriteRequest,
   createProjectMemoryWriteFailureEvent,
   createProjectMemoryWriteRequest,
   deleteAgentMemory,
@@ -300,7 +301,8 @@ import {
   loadAgentMemories,
   saveAgentMemories,
   upsertAgentMemory,
-  type AgentMemoryEntry
+  type AgentMemoryEntry,
+  type ProjectMemoryWriteRequest
 } from "@/state/agentMemory";
 import {
   createDefaultAgentProfiles,
@@ -3190,6 +3192,11 @@ export function App(): ReactElement {
     setThreads((current) =>
       current.map((candidate) => (candidate.id === thread.id ? result.thread : candidate))
     );
+    const projectMemoryRequest = createCompactedProjectMemoryWriteRequest(result.thread);
+
+    if (projectMemoryRequest) {
+      executeProjectMemoryWriteRequest(thread.id, projectMemoryRequest);
+    }
 
     return result.thread;
   }
@@ -3683,6 +3690,13 @@ export function App(): ReactElement {
       return;
     }
 
+    executeProjectMemoryWriteRequest(threadId, projectMemoryRequest);
+  }
+
+  function executeProjectMemoryWriteRequest(
+    threadId: string,
+    projectMemoryRequest: ProjectMemoryWriteRequest
+  ): void {
     void window.forge.builtInTools
       .execute(projectMemoryRequest)
       .then((result) => {

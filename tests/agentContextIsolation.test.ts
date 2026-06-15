@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createCompactedProjectMemoryWriteRequest,
   createProjectMemoryWriteFailureEvent,
   createProjectMemoryWriteRequest,
   extractAgentMemoryCandidate,
@@ -84,6 +85,64 @@ test("global memories stay in local storage instead of project MEMORY.md", () =>
 
   assert.ok(candidate);
   assert.equal(createProjectMemoryWriteRequest(candidate), null);
+});
+
+test("compacted project context can become an automatic MEMORY.md write", () => {
+  const request = createCompactedProjectMemoryWriteRequest({
+    id: "thread-compact",
+    projectPath: "E:\\CodeHome\\Forge",
+    contextCompaction: {
+      content:
+        "## Decisions\nForge should mirror durable project rules into MEMORY.md after explicit remember requests.\n\n## Verified commands\nnpm test and npm run typecheck passed for the memory bridge.",
+      createdAt: "2026-06-15T10:00:00.000Z",
+      estimatedTokensAfter: 120,
+      estimatedTokensBefore: 980,
+      reason: "auto",
+      retainedEventCount: 6,
+      sourceEventCount: 18
+    }
+  });
+
+  assert.ok(request);
+  assert.equal(request.toolName, "writeProjectMemory");
+  assert.equal(request.projectRoot, "E:\\CodeHome\\Forge");
+  assert.match(request.input.id, /^compact-thread-compact-/u);
+  assert.match(request.input.content, /Forge should mirror durable project rules into MEMORY\.md/u);
+  assert.deepEqual(request.input.tags, ["auto-memory", "compaction", "auto"]);
+});
+
+test("compacted context memory writes require a project and useful summary", () => {
+  assert.equal(
+    createCompactedProjectMemoryWriteRequest({
+      id: "global-thread",
+      contextCompaction: {
+        content: "## Short\nToo small",
+        createdAt: "2026-06-15T10:00:00.000Z",
+        estimatedTokensAfter: 12,
+        estimatedTokensBefore: 60,
+        reason: "manual",
+        retainedEventCount: 1,
+        sourceEventCount: 2
+      }
+    }),
+    null
+  );
+  assert.equal(
+    createCompactedProjectMemoryWriteRequest({
+      id: "project-thread",
+      projectPath: "E:\\CodeHome\\Forge",
+      contextCompaction: {
+        content: "## Short\nToo small",
+        createdAt: "2026-06-15T10:00:00.000Z",
+        estimatedTokensAfter: 12,
+        estimatedTokensBefore: 60,
+        reason: "manual",
+        retainedEventCount: 1,
+        sourceEventCount: 2
+      }
+    }),
+    null
+  );
 });
 
 test("project memory write failures become auditable non-blocking thread events", () => {
