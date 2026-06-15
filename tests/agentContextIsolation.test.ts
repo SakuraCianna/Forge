@@ -6,6 +6,8 @@ import {
   createProjectMemoryWriteRequest,
   extractAgentMemoryCandidate,
   formatProjectMemoryWriteFailure,
+  mergeAgentMemoriesWithProjectScan,
+  selectRelevantAgentMemoriesForProject,
   selectRelevantAgentMemories,
   type AgentMemoryEntry
 } from "../src/renderer/src/state/agentMemory.js";
@@ -142,6 +144,113 @@ test("compacted context memory writes require a project and useful summary", () 
       }
     }),
     null
+  );
+});
+
+test("MEMORY.md managed entries become project scoped agent memories", () => {
+  const memories = mergeAgentMemoriesWithProjectScan([], {
+    rootPath: "E:\\CodeHome\\Forge",
+    files: [],
+    truncated: false,
+    instructionFiles: [
+      {
+        relativePath: "MEMORY.md",
+        truncated: false,
+        content: [
+          "# MEMORY.md",
+          "",
+          "<!-- forge-memory:managed:start -->",
+          "## Forge Managed Memories",
+          "",
+          '- <!-- forge-memory-entry id="ipc-boundary" createdAt="2026-06-15T09:00:00.000Z" updatedAt="2026-06-15T10:00:00.000Z" tags="architecture,explicit" --> Forge renderer must access fs through main-process IPC.',
+          "",
+          "<!-- forge-memory:managed:end -->"
+        ].join("\n")
+      }
+    ]
+  });
+  const relevant = selectRelevantAgentMemories(
+    memories,
+    "E:\\CodeHome\\Forge",
+    8,
+    "renderer fs boundary"
+  );
+
+  assert.deepEqual(
+    relevant.map((entry) => ({
+      id: entry.id,
+      scope: entry.scope,
+      projectPath: entry.projectPath,
+      content: entry.content,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt
+    })),
+    [
+      {
+        id: "memory-md:ipc-boundary",
+        scope: "project",
+        projectPath: "E:\\CodeHome\\Forge",
+        content: "Forge renderer must access fs through main-process IPC.",
+        createdAt: "2026-06-15T09:00:00.000Z",
+        updatedAt: "2026-06-15T10:00:00.000Z"
+      }
+    ]
+  );
+});
+
+test("MEMORY.md managed entries do not duplicate local project memories", () => {
+  const memories = mergeAgentMemoriesWithProjectScan(
+    [
+      memory(
+        "local-ipc",
+        "project",
+        "E:\\CodeHome\\Forge",
+        "Forge renderer must access fs through main-process IPC."
+      )
+    ],
+    {
+      rootPath: "E:\\CodeHome\\Forge",
+      files: [],
+      truncated: false,
+      instructionFiles: [
+        {
+          relativePath: "MEMORY.md",
+          truncated: false,
+          content:
+            '<!-- forge-memory:managed:start -->\n- <!-- forge-memory-entry id="ipc-boundary" createdAt="2026-06-15T09:00:00.000Z" updatedAt="2026-06-15T10:00:00.000Z" tags="architecture" --> Forge renderer must access fs through main-process IPC.\n<!-- forge-memory:managed:end -->'
+        }
+      ]
+    }
+  );
+
+  assert.deepEqual(
+    memories.map((entry) => entry.id),
+    ["local-ipc"]
+  );
+});
+
+test("project memory selection includes MEMORY.md managed memories", () => {
+  const relevant = selectRelevantAgentMemoriesForProject({
+    agentMemories: [],
+    projectScan: {
+      rootPath: "E:\\CodeHome\\Forge",
+      files: [],
+      truncated: false,
+      instructionFiles: [
+        {
+          relativePath: "MEMORY.md",
+          truncated: false,
+          content:
+            '<!-- forge-memory:managed:start -->\n- <!-- forge-memory-entry id="ipc-boundary" createdAt="2026-06-15T09:00:00.000Z" updatedAt="2026-06-15T10:00:00.000Z" tags="architecture" --> Forge renderer must access fs through main-process IPC.\n<!-- forge-memory:managed:end -->'
+        }
+      ]
+    },
+    query: "检查 renderer fs boundary 约定"
+  });
+
+  assert.deepEqual(
+    relevant.map((entry) => entry.id),
+    ["memory-md:ipc-boundary"]
   );
 });
 

@@ -1,8 +1,12 @@
 // 本文件说明: 维护 Agent 记忆的持久化, 去重, 检索和中文短词匹配
 import type { Language } from "@shared/modelTypes";
+import type { ProjectScanResult } from "@shared/projectTypes";
 
 const agentMemoryStorageKey = "forge.agentMemories";
 const maxMemoryContentLength = 420;
+const projectMemoryManagedStartMarker = "<!-- forge-memory:managed:start -->";
+const projectMemoryManagedEndMarker = "<!-- forge-memory:managed:end -->";
+const projectMemoryEntryPrefix = "<!-- forge-memory-entry";
 
 type AgentMemoryScope = "global" | "project";
 
@@ -193,6 +197,59 @@ export function deleteAgentMemory(memories: AgentMemoryEntry[], memoryId: string
   return memories.filter((memory) => memory.id !== memoryId);
 }
 
+// 将根目录 MEMORY.md 的受控区条目并入运行时记忆, 让文件记忆也能按任务相关性召回
+export function mergeAgentMemoriesWithProjectScan(
+  memories: AgentMemoryEntry[],
+  projectScan: ProjectScanResult | null | undefined
+): AgentMemoryEntry[] {
+  if (!projectScan) {
+    return memories;
+  }
+
+  const projectMemories = createAgentMemoriesFromProjectScan(projectScan);
+
+  if (projectMemories.length === 0) {
+    return memories;
+  }
+
+  const existingKeys = new Set(memories.map(createMemoryDuplicateKey));
+  const nextMemories = [...memories];
+
+  for (const memory of projectMemories) {
+    const key = createMemoryDuplicateKey(memory);
+
+    if (existingKeys.has(key)) {
+      continue;
+    }
+
+    existingKeys.add(key);
+    nextMemories.push(memory);
+  }
+
+  return nextMemories;
+}
+
+export function selectRelevantAgentMemoriesForProject({
+  agentMemories,
+  limit = 8,
+  projectPath,
+  projectScan,
+  query = ""
+}: {
+  agentMemories: AgentMemoryEntry[];
+  limit?: number;
+  projectPath?: string | null;
+  projectScan?: ProjectScanResult | null;
+  query?: string;
+}): AgentMemoryEntry[] {
+  return selectRelevantAgentMemories(
+    mergeAgentMemoriesWithProjectScan(agentMemories, projectScan),
+    projectPath ?? projectScan?.rootPath ?? null,
+    limit,
+    query
+  );
+}
+
 // 只从明确的记忆指令里提取内容, 避免普通聊天被误存成长期记忆
 export function extractAgentMemoryCandidate(
   prompt: string,
@@ -270,6 +327,88 @@ export function createCompactedProjectMemoryWriteRequest(
   };
 }
 
+function createAgentMemoriesFromProjectScan(projectScan: ProjectScanResult): AgentMemoryEntry[] {
+  const memoryFile = projectScan.instructionFiles?.find(
+    (file) => normalizeInstructionPath(file.relativePath) === "memory.md"
+  );
+
+  if (!memoryFile) {
+    return [];
+  }
+
+  return parseProjectMemoryMarkdownEntries(memoryFile.content).map((entry) => ({
+    id: `memory-md:${entry.id}`,
+    scope: "project",
+    projectPath: projectScan.rootPath,
+    content: normalizeMemoryContent(entry.content),
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt
+  }));
+}
+
+type ProjectMemoryMarkdownEntry = {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function parseProjectMemoryMarkdownEntries(content: string): ProjectMemoryMarkdownEntry[] {
+  const managedContent = readProjectMemoryManagedContent(content);
+
+  if (!managedContent) {
+    return [];
+  }
+
+  return managedContent
+    .split(/\r?\n/u)
+    .map((line) => parseProjectMemoryEntryLine(line.trim()))
+    .filter((entry): entry is ProjectMemoryMarkdownEntry => Boolean(entry));
+}
+
+function readProjectMemoryManagedContent(content: string): string | null {
+  const normalizedContent = content.replace(/\r\n/g, "\n");
+  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
+  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    return null;
+  }
+
+  return normalizedContent.slice(
+    startIndex + projectMemoryManagedStartMarker.length,
+    endIndex
+  );
+}
+
+function parseProjectMemoryEntryLine(line: string): ProjectMemoryMarkdownEntry | null {
+  if (!line.startsWith(`- ${projectMemoryEntryPrefix}`)) {
+    return null;
+  }
+
+  const match =
+    /^- <!-- forge-memory-entry id="([^"]+)" createdAt="([^"]+)" updatedAt="([^"]+)" tags="[^"]*" --> (.+)$/u.exec(
+      line
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  const content = normalizeMemoryContent(match[4]);
+
+  if (!content) {
+    return null;
+  }
+
+  return {
+    id: match[1],
+    createdAt: match[2],
+    updatedAt: match[3],
+    content
+  };
+}
+
 // MEMORY.md 写入失败需要能被用户审计, 但不应让主问答或任务队列误判为失败
 export function formatProjectMemoryWriteFailure(language: Language, detail: string): string {
   return language === "zh-CN"
@@ -311,9 +450,21 @@ function normalizeProjectPathForCompare(value: string | null | undefined): strin
   return normalizeProjectPath(value)?.toLowerCase() ?? null;
 }
 
+function normalizeInstructionPath(value: string): string {
+  return value.replace(/\\/gu, "/").toLowerCase();
+}
+
 // 去重比较只关心可读内容, 避免大小写差异生成重复记忆
 function normalizeForDuplicate(value: string): string {
   return normalizeMemoryContent(value).toLowerCase();
+}
+
+function createMemoryDuplicateKey(memory: AgentMemoryEntry): string {
+  return [
+    memory.scope,
+    normalizeProjectPathForCompare(memory.projectPath) ?? "",
+    normalizeForDuplicate(memory.content)
+  ].join("\0");
 }
 
 // 生成稳定短 ID, 避免同一条显式项目记忆反复写入时在 MEMORY.md 里重复堆积
