@@ -18,7 +18,7 @@ import type {
 } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
 import {
-  selectRelevantAgentMemories,
+  selectRelevantAgentMemoriesForProject,
   type AgentMemoryEntry
 } from "@/state/agentMemory";
 import { appendAttachmentContextsToPrompt } from "@/state/composerAttachments";
@@ -64,7 +64,11 @@ export function createAgentPlanRequestPayload({
   attachments?: AgentImageAttachment[];
   projectScan: ProjectScanResult;
 }): AgentRequestPayload<GenerateAgentPlanRequest> {
-  const memories = selectRelevantAgentMemories(agentMemories, projectScan.rootPath, 8, taskPrompt);
+  const memories = selectRelevantAgentMemoriesForProject({
+    agentMemories,
+    projectScan,
+    query: taskPrompt
+  });
 
   return {
     memories,
@@ -99,12 +103,11 @@ export function createAgentAskRequestPayload({
   projectScan?: ProjectScanResult | null;
   conversation?: Array<{ role: "user" | "assistant"; content: string }>;
 }): AgentRequestPayload<GenerateAgentAskRequest> {
-  const memories = selectRelevantAgentMemories(
+  const memories = selectRelevantAgentMemoriesForProject({
     agentMemories,
-    projectScan?.rootPath ?? null,
-    8,
-    prompt
-  );
+    projectScan,
+    query: prompt
+  });
 
   return {
     memories,
@@ -141,7 +144,12 @@ export function createAgentFileChangeRequestPayload({
   relativePath: string;
   currentContent: string;
 }): AgentRequestPayload<GenerateAgentFileChangeRequest> {
-  const memories = selectRelevantAgentMemories(agentMemories, projectRoot, 8, memoryQuery);
+  const memories = selectRelevantAgentMemoriesForProject({
+    agentMemories,
+    projectPath: projectRoot,
+    projectScan,
+    query: memoryQuery
+  });
 
   return {
     memories,
