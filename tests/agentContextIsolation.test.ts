@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createProjectMemoryWriteFailureEvent,
   createProjectMemoryWriteRequest,
   extractAgentMemoryCandidate,
+  formatProjectMemoryWriteFailure,
   selectRelevantAgentMemories,
   type AgentMemoryEntry
 } from "../src/renderer/src/state/agentMemory.js";
@@ -82,6 +84,26 @@ test("global memories stay in local storage instead of project MEMORY.md", () =>
 
   assert.ok(candidate);
   assert.equal(createProjectMemoryWriteRequest(candidate), null);
+});
+
+test("project memory write failures become auditable non-blocking thread events", () => {
+  const message = formatProjectMemoryWriteFailure(
+    "zh-CN",
+    "内置工具 writeProjectMemory 执行失败: disk is read-only"
+  );
+  const event = createProjectMemoryWriteFailureEvent({
+    createdAt: "2026-06-15T08:30:00.000Z",
+    message,
+    threadId: "thread-1"
+  });
+
+  assert.equal(message, "项目 MEMORY.md 记忆写入失败: 内置工具 writeProjectMemory 执行失败: disk is read-only");
+  assert.deepEqual(event, {
+    id: "thread-1-memory-write-error-2026-06-15T08:30:00.000Z",
+    kind: "error",
+    message,
+    createdAt: "2026-06-15T08:30:00.000Z"
+  });
 });
 
 test("direct answer follow-up cannot append across different project scopes", () => {

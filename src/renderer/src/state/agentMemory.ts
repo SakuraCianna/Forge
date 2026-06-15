@@ -1,4 +1,6 @@
 // 本文件说明: 维护 Agent 记忆的持久化, 去重, 检索和中文短词匹配
+import type { Language } from "@shared/modelTypes";
+
 const agentMemoryStorageKey = "forge.agentMemories";
 const maxMemoryContentLength = 420;
 
@@ -28,6 +30,13 @@ export type ProjectMemoryWriteRequest = {
     content: string;
     tags: string[];
   };
+};
+
+export type ProjectMemoryWriteFailureEvent = {
+  id: string;
+  kind: "error";
+  message: string;
+  createdAt: string;
 };
 
 type MemoryDeps = {
@@ -219,6 +228,30 @@ export function createProjectMemoryWriteRequest(
       content,
       tags: ["explicit"]
     }
+  };
+}
+
+// MEMORY.md 写入失败需要能被用户审计, 但不应让主问答或任务队列误判为失败
+export function formatProjectMemoryWriteFailure(language: Language, detail: string): string {
+  return language === "zh-CN"
+    ? `项目 MEMORY.md 记忆写入失败: ${detail}`
+    : `Project MEMORY.md memory write failed: ${detail}`;
+}
+
+export function createProjectMemoryWriteFailureEvent({
+  createdAt,
+  message,
+  threadId
+}: {
+  createdAt: string;
+  message: string;
+  threadId: string;
+}): ProjectMemoryWriteFailureEvent {
+  return {
+    id: `${threadId}-memory-write-error-${createdAt}`,
+    kind: "error",
+    message,
+    createdAt
   };
 }
 
