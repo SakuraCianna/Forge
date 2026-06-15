@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createProjectMemoryWriteRequest,
+  extractAgentMemoryCandidate,
   selectRelevantAgentMemories,
   type AgentMemoryEntry
 } from "../src/renderer/src/state/agentMemory.js";
@@ -55,6 +57,31 @@ test("projectless memory retrieval can use global memories", () => {
     result.map((entry) => entry.id),
     ["global"]
   );
+});
+
+test("explicit project memories can be mirrored into MEMORY.md writes", () => {
+  const candidate = extractAgentMemoryCandidate(
+    "请记住 Forge 修改代码前先读真实文件",
+    "E:\\CodeHome\\Forge"
+  );
+
+  assert.ok(candidate);
+
+  const request = createProjectMemoryWriteRequest(candidate);
+
+  assert.ok(request);
+  assert.equal(request.toolName, "writeProjectMemory");
+  assert.equal(request.projectRoot, "E:\\CodeHome\\Forge");
+  assert.equal(request.input.content, "Forge 修改代码前先读真实文件");
+  assert.match(request.input.id, /^explicit-/u);
+  assert.deepEqual(request.input.tags, ["explicit"]);
+});
+
+test("global memories stay in local storage instead of project MEMORY.md", () => {
+  const candidate = extractAgentMemoryCandidate("remember answer in concise Chinese", null);
+
+  assert.ok(candidate);
+  assert.equal(createProjectMemoryWriteRequest(candidate), null);
 });
 
 test("direct answer follow-up cannot append across different project scopes", () => {

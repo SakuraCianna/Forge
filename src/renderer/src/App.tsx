@@ -292,6 +292,7 @@ import {
   type GeneralPreferences
 } from "@/state/generalPreferences";
 import {
+  createProjectMemoryWriteRequest,
   deleteAgentMemory,
   extractAgentMemoryCandidate,
   loadAgentMemories,
@@ -3670,6 +3671,17 @@ export function App(): ReactElement {
         sourceThreadId: threadId
       })
     );
+
+    const projectMemoryRequest = createProjectMemoryWriteRequest({
+      ...candidate,
+      sourceThreadId: threadId
+    });
+
+    if (!projectMemoryRequest) {
+      return;
+    }
+
+    void window.forge.builtInTools.execute(projectMemoryRequest);
   }
 
   // 为同一线程生成流式回答, 记忆和个性化提示在这里统一注入
