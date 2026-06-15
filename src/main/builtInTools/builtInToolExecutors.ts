@@ -32,6 +32,7 @@ import {
 } from "../projectFileService.js";
 import { scanProjectFiles as scanProjectFilesDefault } from "../projectScanner.js";
 import { searchWeb } from "../webSearchService.js";
+import { redactSensitiveMemoryContent } from "../../shared/memoryRedaction.js";
 import { assertProjectPathNotSensitive } from "../../shared/sensitiveProjectFiles.js";
 import type { BuiltInToolExecutionContext } from "../../shared/builtInToolTypes.js";
 import type { BuiltInToolExecutorMap } from "./builtInToolRegistry.js";
@@ -1160,7 +1161,7 @@ function normalizeProjectMemoryEntryId(id: string | undefined): string {
 }
 
 function normalizeProjectMemoryContent(content: string): string {
-  const normalizedContent = redactSensitiveProjectMemoryContent(content)
+  const normalizedContent = redactSensitiveMemoryContent(content)
     .replace(/\s+/gu, " ")
     .trim()
     .slice(0, maxProjectMemoryContentChars);
@@ -1192,22 +1193,6 @@ function normalizeProjectMemoryTags(tags: string[]): string[] {
   }
 
   return normalizedTags.slice(0, 12);
-}
-
-function redactSensitiveProjectMemoryContent(content: string): string {
-  return content
-    .replace(
-      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/gu,
-      "[redacted private key]"
-    )
-    .replace(
-      /\b(api[_-]?key|token|secret|password|cookie)\b(\s*[:=]\s*)(["']?)[^\s"'`,;]+/giu,
-      (_match, key: string, separator: string, quote: string) =>
-        `${key}${separator}${quote}[redacted]${quote}`
-    )
-    .replace(/\b(?:sk|ghp|github_pat|xox[baprs]?)-[A-Za-z0-9_-]{8,}\b/gu, "[redacted token]")
-    .replace(/\bAKIA[0-9A-Z]{16}\b/gu, "[redacted aws access key]")
-    .replace(/\bBearer\s+[A-Za-z0-9._-]{12,}\b/giu, "Bearer [redacted]");
 }
 
 function tokenizeSearchText(value: string): string[] {
