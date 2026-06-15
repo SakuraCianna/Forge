@@ -292,9 +292,11 @@ import {
   type GeneralPreferences
 } from "@/state/generalPreferences";
 import {
+  createProjectMemoryWriteFailureEvent,
   createProjectMemoryWriteRequest,
   deleteAgentMemory,
   extractAgentMemoryCandidate,
+  formatProjectMemoryWriteFailure,
   loadAgentMemories,
   saveAgentMemories,
   upsertAgentMemory,
@@ -3681,7 +3683,38 @@ export function App(): ReactElement {
       return;
     }
 
-    void window.forge.builtInTools.execute(projectMemoryRequest);
+    void window.forge.builtInTools
+      .execute(projectMemoryRequest)
+      .then((result) => {
+        if (!isBuiltInToolProblemResult(result)) {
+          return;
+        }
+
+        appendProjectMemoryWriteFailureEvent(
+          threadId,
+          formatBuiltInToolProblemNotice(settings.language, result)
+        );
+      })
+      .catch((error: unknown) => {
+        appendProjectMemoryWriteFailureEvent(
+          threadId,
+          formatRuntimeError(settings.language, error)
+        );
+      });
+  }
+
+  function appendProjectMemoryWriteFailureEvent(threadId: string, detail: string): void {
+    const createdAt = new Date().toISOString();
+
+    setThreads((current) =>
+      appendThreadEvents(current, threadId, [
+        createProjectMemoryWriteFailureEvent({
+          createdAt,
+          message: formatProjectMemoryWriteFailure(settings.language, detail),
+          threadId
+        })
+      ])
+    );
   }
 
   // 为同一线程生成流式回答, 记忆和个性化提示在这里统一注入
