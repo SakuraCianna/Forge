@@ -804,6 +804,55 @@ test("project memory write redacts sensitive values before persisting MEMORY.md"
   }
 });
 
+test("project memory write merges similar memories instead of appending duplicates", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-merge-"));
+
+  try {
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const readTool = getBuiltInToolFromRegistry(registry, "readProjectMemory");
+    const writeTool = getBuiltInToolFromRegistry(registry, "writeProjectMemory");
+
+    await writeTool.execute(
+      { id: "ipc-boundary", content: "Use Electron IPC for privileged tools.", tags: ["architecture"] },
+      { projectRoot }
+    );
+    const updated = await writeTool.execute(
+      {
+        id: "ipc-boundary-new",
+        content: "Always use Electron IPC for privileged tools.",
+        tags: ["auto-memory", "ipc"]
+      },
+      { projectRoot }
+    );
+    const afterWrite = await readTool.execute({}, { projectRoot });
+    const memoryMarkdown = await readFile(join(projectRoot, "MEMORY.md"), "utf8");
+    const entries = (afterWrite as { entries: Array<{ id: string; content: string; tags: string[] }> }).entries;
+
+    assert.equal((updated as { entry: { id: string } }).entry.id, "ipc-boundary");
+    assert.equal(entries.length, 1);
+    assert.deepEqual(
+      entries.map((entry) => ({
+        content: entry.content,
+        id: entry.id,
+        tags: entry.tags
+      })),
+      [
+        {
+          content: "Always use Electron IPC for privileged tools.",
+          id: "ipc-boundary",
+          tags: ["architecture", "auto-memory", "ipc"]
+        }
+      ]
+    );
+    assert.equal(memoryMarkdown.match(/forge-memory-entry/gu)?.length, 1);
+    assert.doesNotMatch(memoryMarkdown, /ipc-boundary-new/u);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("project memory reads legacy JSON entries before migrating writes to MEMORY.md", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-legacy-"));
 
