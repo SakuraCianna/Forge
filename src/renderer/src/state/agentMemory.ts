@@ -319,9 +319,7 @@ export function createCompactedProjectMemoryWriteRequest(
     toolName: "writeProjectMemory",
     projectRoot,
     input: {
-      id: `compact-${normalizeMemoryIdSegment(thread.id)}-${hashMemoryContent(
-        `${compaction.createdAt}\n${content}`
-      )}`,
+      id: `compact-${normalizeMemoryIdSegment(thread.id)}`,
       content,
       tags: ["auto-memory", "compaction", compaction.reason]
     }

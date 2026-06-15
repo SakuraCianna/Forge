@@ -108,7 +108,7 @@ test("compacted project context can become an automatic MEMORY.md write", () => 
   assert.ok(request);
   assert.equal(request.toolName, "writeProjectMemory");
   assert.equal(request.projectRoot, "E:\\CodeHome\\Forge");
-  assert.match(request.input.id, /^compact-thread-compact-/u);
+  assert.equal(request.input.id, "compact-thread-compact");
   assert.match(request.input.content, /Forge should mirror durable project rules into MEMORY\.md/u);
   assert.deepEqual(request.input.tags, ["auto-memory", "compaction", "auto"]);
 });

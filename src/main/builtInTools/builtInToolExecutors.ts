@@ -686,6 +686,22 @@ const projectMemoryManagedStartMarker = "<!-- forge-memory:managed:start -->";
 const projectMemoryManagedEndMarker = "<!-- forge-memory:managed:end -->";
 const projectMemoryEntryPrefix = "<!-- forge-memory-entry";
 const maxProjectMemoryContentChars = 1_000;
+const projectMemoryMergeStopWords = new Set([
+  "always",
+  "and",
+  "for",
+  "from",
+  "into",
+  "must",
+  "project",
+  "should",
+  "that",
+  "the",
+  "this",
+  "use",
+  "using",
+  "with"
+]);
 
 async function applyUnifiedDiffPatch(
   projectRoot: string,
@@ -917,16 +933,16 @@ async function writeProjectMemoryFile(
   const entryId = normalizeProjectMemoryEntryId(id);
   const normalizedContent = normalizeProjectMemoryContent(content);
   const normalizedTags = normalizeProjectMemoryTags(tags);
-  const existingEntry = currentEntries.find((entry) => entry.id === entryId);
+  const existingEntry = findProjectMemoryUpsertTarget(currentEntries, entryId, normalizedContent);
   const nextEntry: ProjectMemoryEntry = {
-    id: entryId,
+    id: existingEntry?.id ?? entryId,
     content: normalizedContent,
     createdAt: existingEntry?.createdAt ?? now,
     updatedAt: now,
-    tags: normalizedTags
+    tags: mergeProjectMemoryTags(existingEntry?.tags ?? [], normalizedTags)
   };
   const entries = existingEntry
-    ? currentEntries.map((entry) => (entry.id === entryId ? nextEntry : entry))
+    ? currentEntries.map((entry) => (entry.id === existingEntry.id ? nextEntry : entry))
     : [...currentEntries, nextEntry];
 
   await writeProjectMemoryEntries(projectRoot, entries);
@@ -1171,6 +1187,53 @@ function normalizeProjectMemoryContent(content: string): string {
   }
 
   return normalizedContent;
+}
+
+function findProjectMemoryUpsertTarget(
+  entries: ProjectMemoryEntry[],
+  entryId: string,
+  content: string
+): ProjectMemoryEntry | null {
+  const exactIdEntry = entries.find((entry) => entry.id === entryId);
+
+  if (exactIdEntry) {
+    return exactIdEntry;
+  }
+
+  return entries.find((entry) => isSimilarProjectMemoryContent(entry.content, content)) ?? null;
+}
+
+function isSimilarProjectMemoryContent(left: string, right: string): boolean {
+  const leftTokens = createProjectMemoryMergeTokens(left);
+  const rightTokens = createProjectMemoryMergeTokens(right);
+
+  if (leftTokens.size < 3 || rightTokens.size < 3) {
+    return false;
+  }
+
+  let sharedTokenCount = 0;
+
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) {
+      sharedTokenCount += 1;
+    }
+  }
+
+  const smallerTokenCount = Math.min(leftTokens.size, rightTokens.size);
+
+  return sharedTokenCount >= 3 && sharedTokenCount / smallerTokenCount >= 0.75;
+}
+
+function createProjectMemoryMergeTokens(content: string): Set<string> {
+  return new Set(
+    tokenizeSearchText(content)
+      .map((token) => token.toLocaleLowerCase())
+      .filter((token) => token.length >= 3 && !projectMemoryMergeStopWords.has(token))
+  );
+}
+
+function mergeProjectMemoryTags(existingTags: string[], incomingTags: string[]): string[] {
+  return normalizeProjectMemoryTags([...existingTags, ...incomingTags]);
 }
 
 function normalizeProjectMemoryTags(tags: string[]): string[] {
