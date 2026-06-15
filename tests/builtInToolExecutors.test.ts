@@ -915,6 +915,71 @@ test("project memory write keeps managed MEMORY.md concise by pruning oldest aut
   }
 });
 
+test("project memory reads user-authored MEMORY.md notes without moving them into the managed block", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-manual-"));
+
+  try {
+    await writeFile(
+      join(projectRoot, "MEMORY.md"),
+      [
+        "# MEMORY.md",
+        "",
+        "- Forge agents should keep PowerShell commands Windows-safe.",
+        "",
+        "<!-- forge-memory:managed:start -->",
+        "## Forge Managed Memories",
+        "",
+        '- <!-- forge-memory-entry id="ipc-boundary" createdAt="2026-06-15T09:00:00.000Z" updatedAt="2026-06-15T10:00:00.000Z" tags="architecture" --> Forge renderer must access fs through main-process IPC.',
+        "",
+        "<!-- forge-memory:managed:end -->",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const readTool = getBuiltInToolFromRegistry(registry, "readProjectMemory");
+    const writeTool = getBuiltInToolFromRegistry(registry, "writeProjectMemory");
+    const initial = await readTool.execute({}, { projectRoot });
+
+    await writeTool.execute(
+      { id: "release-flow", content: "Use PR checks as release-flow evidence.", tags: ["auto-memory"] },
+      { projectRoot }
+    );
+
+    const afterWriteMarkdown = await readFile(join(projectRoot, "MEMORY.md"), "utf8");
+    const afterWrite = await readTool.execute({}, { projectRoot });
+
+    assert.deepEqual(
+      (initial as { entries: Array<{ content: string; tags: string[] }> }).entries.map((entry) => ({
+        content: entry.content,
+        tags: entry.tags
+      })),
+      [
+        {
+          content: "Forge agents should keep PowerShell commands Windows-safe.",
+          tags: ["manual"]
+        },
+        {
+          content: "Forge renderer must access fs through main-process IPC.",
+          tags: ["architecture"]
+        }
+      ]
+    );
+    assert.match(afterWriteMarkdown, /- Forge agents should keep PowerShell commands Windows-safe\./u);
+    assert.equal(afterWriteMarkdown.match(/forge-memory-entry/gu)?.length, 2);
+    assert.ok(
+      (afterWrite as { entries: Array<{ content: string }> }).entries.some(
+        (entry) => entry.content === "Forge agents should keep PowerShell commands Windows-safe."
+      )
+    );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("project memory reads legacy JSON entries before migrating writes to MEMORY.md", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-legacy-"));
 
