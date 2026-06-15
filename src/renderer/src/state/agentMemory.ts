@@ -20,6 +20,16 @@ type AgentMemoryCandidate = {
   sourceThreadId?: string;
 };
 
+export type ProjectMemoryWriteRequest = {
+  toolName: "writeProjectMemory";
+  projectRoot: string;
+  input: {
+    id: string;
+    content: string;
+    tags: string[];
+  };
+};
+
 type MemoryDeps = {
   createId: () => string;
   now: () => string;
@@ -190,6 +200,28 @@ export function extractAgentMemoryCandidate(
   };
 }
 
+// 项目级显式记忆同步写入 MEMORY.md, 让文件记忆和本地记忆保持同一来源
+export function createProjectMemoryWriteRequest(
+  candidate: AgentMemoryCandidate
+): ProjectMemoryWriteRequest | null {
+  const projectRoot = normalizeProjectPath(candidate.projectPath);
+  const content = normalizeMemoryContent(candidate.content);
+
+  if (!projectRoot || !content) {
+    return null;
+  }
+
+  return {
+    toolName: "writeProjectMemory",
+    projectRoot,
+    input: {
+      id: `explicit-${hashMemoryContent(content)}`,
+      content,
+      tags: ["explicit"]
+    }
+  };
+}
+
 // 统一压缩空白并限制长度, 防止单条记忆拖慢提示词拼装
 function normalizeMemoryContent(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, maxMemoryContentLength);
@@ -210,6 +242,18 @@ function normalizeProjectPathForCompare(value: string | null | undefined): strin
 // 去重比较只关心可读内容, 避免大小写差异生成重复记忆
 function normalizeForDuplicate(value: string): string {
   return normalizeMemoryContent(value).toLowerCase();
+}
+
+// 生成稳定短 ID, 避免同一条显式项目记忆反复写入时在 MEMORY.md 里重复堆积
+function hashMemoryContent(value: string): string {
+  let hash = 0x811c9dc5;
+
+  for (const character of normalizeForDuplicate(value)) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+
+  return hash.toString(36);
 }
 
 // 同时生成英文单词 token 和中文短词 token, 让中英混合提问都能召回记忆
