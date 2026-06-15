@@ -1,6 +1,7 @@
 // 本文件说明: 维护 Agent 记忆的持久化, 去重, 检索和中文短词匹配
 import type { Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
+import { redactSensitiveMemoryContent } from "../../../shared/memoryRedaction.js";
 
 const agentMemoryStorageKey = "forge.agentMemories";
 const maxMemoryContentLength = 420;
@@ -436,22 +437,6 @@ export function createProjectMemoryWriteFailureEvent({
 // 统一压缩空白并限制长度, 防止单条记忆拖慢提示词拼装
 function normalizeMemoryContent(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, maxMemoryContentLength);
-}
-
-function redactSensitiveMemoryContent(content: string): string {
-  return content
-    .replace(
-      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/gu,
-      "[redacted private key]"
-    )
-    .replace(
-      /\b(api[_-]?key|token|secret|password|cookie)\b(\s*[:=]\s*)(["']?)[^\s"'`,;]+/giu,
-      (_match, key: string, separator: string, quote: string) =>
-        `${key}${separator}${quote}[redacted]${quote}`
-    )
-    .replace(/\b(?:sk|ghp|github_pat|xox[baprs]?)-[A-Za-z0-9_-]{8,}\b/gu, "[redacted token]")
-    .replace(/\bAKIA[0-9A-Z]{16}\b/gu, "[redacted aws access key]")
-    .replace(/\bBearer\s+[A-Za-z0-9._-]{12,}\b/giu, "Bearer [redacted]");
 }
 
 // 把空项目路径归一成 null, 方便后面判断全局和项目作用域
