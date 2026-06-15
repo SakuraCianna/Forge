@@ -853,6 +853,68 @@ test("project memory write merges similar memories instead of appending duplicat
   }
 });
 
+test("project memory write keeps managed MEMORY.md concise by pruning oldest automatic entries", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-trim-"));
+
+  try {
+    const entryLines = [
+      '- <!-- forge-memory-entry id="explicit-rule" createdAt="2026-01-01T00:00:00.000Z" updatedAt="2026-01-01T00:00:00.000Z" tags="explicit" --> Preserve this explicit user rule.',
+      ...Array.from({ length: 40 }, (_value, index) => {
+        const minute = String(index).padStart(2, "0");
+
+        return `- <!-- forge-memory-entry id="auto-${index}" createdAt="2026-01-01T00:${minute}:00.000Z" updatedAt="2026-01-01T00:${minute}:00.000Z" tags="auto-memory" --> Automatic memory ${index} stores unique-project-fact-${index}.`;
+      })
+    ];
+
+    await writeFile(
+      join(projectRoot, "MEMORY.md"),
+      [
+        "# MEMORY.md",
+        "",
+        "<!-- forge-memory:managed:start -->",
+        "## Forge Managed Memories",
+        "",
+        "Forge updates this section automatically. Edit or delete entries when they are wrong.",
+        "",
+        ...entryLines,
+        "",
+        "<!-- forge-memory:managed:end -->",
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const registry = createBuiltInToolRegistry({
+      executors: createDefaultBuiltInToolExecutors()
+    });
+    const readTool = getBuiltInToolFromRegistry(registry, "readProjectMemory");
+    const writeTool = getBuiltInToolFromRegistry(registry, "writeProjectMemory");
+
+    const written = await writeTool.execute(
+      {
+        id: "auto-new",
+        content: "Current release-flow evidence prefers pull request checks.",
+        tags: ["auto-memory"]
+      },
+      { projectRoot }
+    );
+
+    const afterWrite = await readTool.execute({}, { projectRoot });
+    const memoryMarkdown = await readFile(join(projectRoot, "MEMORY.md"), "utf8");
+    const entryIds = (afterWrite as { entries: Array<{ id: string }> }).entries.map((entry) => entry.id);
+
+    assert.equal(entryIds.length, 40);
+    assert.ok(entryIds.includes("explicit-rule"));
+    assert.ok(entryIds.includes("auto-new"));
+    assert.ok(!entryIds.includes("auto-0"));
+    assert.ok(!entryIds.includes("auto-1"));
+    assert.equal(memoryMarkdown.match(/forge-memory-entry/gu)?.length, 40);
+    assert.deepEqual((written as { prunedEntryIds: string[] }).prunedEntryIds, ["auto-0", "auto-1"]);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test("project memory reads legacy JSON entries before migrating writes to MEMORY.md", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "forge-tool-project-memory-legacy-"));
 

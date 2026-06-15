@@ -686,6 +686,7 @@ const projectMemoryManagedStartMarker = "<!-- forge-memory:managed:start -->";
 const projectMemoryManagedEndMarker = "<!-- forge-memory:managed:end -->";
 const projectMemoryEntryPrefix = "<!-- forge-memory-entry";
 const maxProjectMemoryContentChars = 1_000;
+const maxProjectMemoryManagedEntries = 40;
 const projectMemoryMergeStopWords = new Set([
   "always",
   "and",
@@ -944,14 +945,20 @@ async function writeProjectMemoryFile(
   const entries = existingEntry
     ? currentEntries.map((entry) => (entry.id === existingEntry.id ? nextEntry : entry))
     : [...currentEntries, nextEntry];
+  const boundedEntries = trimProjectMemoryEntries(entries);
+  const boundedEntryIds = new Set(boundedEntries.map((entry) => entry.id));
+  const prunedEntryIds = entries
+    .filter((entry) => !boundedEntryIds.has(entry.id))
+    .map((entry) => entry.id);
 
-  await writeProjectMemoryEntries(projectRoot, entries);
+  await writeProjectMemoryEntries(projectRoot, boundedEntries);
 
   return {
     status: "ok",
     relativePath: projectMemoryRelativePath,
     entry: nextEntry,
-    entries
+    entries: boundedEntries,
+    ...(prunedEntryIds.length > 0 ? { prunedEntryIds } : {})
   };
 }
 
@@ -1234,6 +1241,41 @@ function createProjectMemoryMergeTokens(content: string): Set<string> {
 
 function mergeProjectMemoryTags(existingTags: string[], incomingTags: string[]): string[] {
   return normalizeProjectMemoryTags([...existingTags, ...incomingTags]);
+}
+
+function trimProjectMemoryEntries(entries: ProjectMemoryEntry[]): ProjectMemoryEntry[] {
+  if (entries.length <= maxProjectMemoryManagedEntries) {
+    return entries;
+  }
+
+  const removableEntryIds = new Set(
+    [...entries]
+      .filter((entry) => !isProtectedProjectMemoryEntry(entry))
+      .sort(compareProjectMemoryEntriesByAge)
+      .slice(0, entries.length - maxProjectMemoryManagedEntries)
+      .map((entry) => entry.id)
+  );
+
+  if (removableEntryIds.size === 0) {
+    return entries;
+  }
+
+  return entries.filter((entry) => !removableEntryIds.has(entry.id));
+}
+
+function isProtectedProjectMemoryEntry(entry: ProjectMemoryEntry): boolean {
+  return normalizeProjectMemoryTags(entry.tags).includes("explicit");
+}
+
+function compareProjectMemoryEntriesByAge(left: ProjectMemoryEntry, right: ProjectMemoryEntry): number {
+  const leftTimestamp = Date.parse(left.updatedAt);
+  const rightTimestamp = Date.parse(right.updatedAt);
+
+  if (leftTimestamp !== rightTimestamp) {
+    return leftTimestamp - rightTimestamp;
+  }
+
+  return left.id.localeCompare(right.id);
 }
 
 function normalizeProjectMemoryTags(tags: string[]): string[] {
