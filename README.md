@@ -111,7 +111,8 @@ Forge 内置多种 Provider 预设, 包括 OpenAI、Anthropic、Gemini、OpenRou
 ### 个性化、记忆和用量
 
 - 内置开发、审查和文档 Agent Profile。
-- 支持项目隔离的 Agent 记忆。
+- 支持项目隔离的 Agent 记忆。Forge 会在项目扫描时读取根目录 `MEMORY.md`, Agent 可通过 `writeProjectMemory` 无感创建或更新其中的受控记忆区, 用于长期项目约定、用户纠正和可复用决策。
+- `writeProjectMemory` 写入前会脱敏常见 key、token、password、cookie、私钥和云访问密钥片段; 旧版 `.forge/project-memory.json` 仍可兼容读取, 下一次写入会落到 `MEMORY.md`。
 - 支持回复风格、自定义指令、背景图和界面语言设置。
 - 支持本地 token 用量记录和成本估算。
 - 用量估算基于本地记录、缓存 token 和用户配置的价格表, 不代表 Provider 最终账单。

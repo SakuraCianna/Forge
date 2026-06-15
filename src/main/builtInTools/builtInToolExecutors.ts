@@ -679,7 +679,12 @@ type SemanticSearchMatch = {
   reason: string;
 };
 
-const projectMemoryRelativePath = ".forge/project-memory.json";
+const projectMemoryRelativePath = "MEMORY.md";
+const legacyProjectMemoryRelativePath = ".forge/project-memory.json";
+const projectMemoryManagedStartMarker = "<!-- forge-memory:managed:start -->";
+const projectMemoryManagedEndMarker = "<!-- forge-memory:managed:end -->";
+const projectMemoryEntryPrefix = "<!-- forge-memory-entry";
+const maxProjectMemoryContentChars = 1_000;
 
 async function applyUnifiedDiffPatch(
   projectRoot: string,
@@ -871,31 +876,23 @@ function applyUnifiedFilePatch(content: string, patch: UnifiedFilePatch): string
 
 async function readProjectMemoryFile(projectRoot: string): Promise<Record<string, unknown>> {
   const filePath = resolveProjectRelativePath(projectRoot, projectMemoryRelativePath);
-  const rawContent = await readFile(filePath, "utf8").catch((error: unknown) => {
-    if (isNodeErrorCode(error, "ENOENT")) {
-      return null;
-    }
-
-    throw error;
-  });
+  const rawContent = await readOptionalTextFile(filePath);
 
   if (rawContent === null) {
+    const legacyEntries = await readLegacyProjectMemoryEntries(projectRoot);
+
     return {
       status: "ok",
       relativePath: projectMemoryRelativePath,
-      entries: []
+      ...(legacyEntries.length > 0 ? { legacyRelativePath: legacyProjectMemoryRelativePath } : {}),
+      entries: legacyEntries
     };
   }
-
-  const parsed = JSON.parse(rawContent) as { entries?: unknown };
-  const entries = Array.isArray(parsed.entries)
-    ? parsed.entries.filter(isProjectMemoryEntry)
-    : [];
 
   return {
     status: "ok",
     relativePath: projectMemoryRelativePath,
-    entries
+    entries: parseProjectMemoryMarkdown(rawContent)
   };
 }
 
@@ -916,22 +913,22 @@ async function writeProjectMemoryFile(
     ? memory.entries.filter(isProjectMemoryEntry)
     : [];
   const now = new Date().toISOString();
-  const entryId = id ?? `memory-${Date.now().toString(36)}`;
+  const entryId = normalizeProjectMemoryEntryId(id);
+  const normalizedContent = normalizeProjectMemoryContent(content);
+  const normalizedTags = normalizeProjectMemoryTags(tags);
   const existingEntry = currentEntries.find((entry) => entry.id === entryId);
   const nextEntry: ProjectMemoryEntry = {
     id: entryId,
-    content,
+    content: normalizedContent,
     createdAt: existingEntry?.createdAt ?? now,
     updatedAt: now,
-    tags
+    tags: normalizedTags
   };
   const entries = existingEntry
     ? currentEntries.map((entry) => (entry.id === entryId ? nextEntry : entry))
     : [...currentEntries, nextEntry];
-  const filePath = resolveProjectRelativePath(projectRoot, projectMemoryRelativePath);
 
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify({ entries }, null, 2)}\n`, "utf8");
+  await writeProjectMemoryEntries(projectRoot, entries);
 
   return {
     status: "ok",
@@ -999,9 +996,218 @@ async function writeProjectMemoryEntries(
   entries: ProjectMemoryEntry[]
 ): Promise<void> {
   const filePath = resolveProjectRelativePath(projectRoot, projectMemoryRelativePath);
+  const currentContent = await readOptionalTextFile(filePath);
+  const nextContent = renderProjectMemoryMarkdown(currentContent, entries);
 
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify({ entries }, null, 2)}\n`, "utf8");
+  await writeFile(filePath, nextContent, "utf8");
+}
+
+async function readOptionalTextFile(filePath: string): Promise<string | null> {
+  return readFile(filePath, "utf8").catch((error: unknown) => {
+    if (isNodeErrorCode(error, "ENOENT")) {
+      return null;
+    }
+
+    throw error;
+  });
+}
+
+async function readLegacyProjectMemoryEntries(projectRoot: string): Promise<ProjectMemoryEntry[]> {
+  const legacyFilePath = resolveProjectRelativePath(projectRoot, legacyProjectMemoryRelativePath);
+  const rawContent = await readOptionalTextFile(legacyFilePath);
+
+  if (rawContent === null) {
+    return [];
+  }
+
+  const parsed = JSON.parse(rawContent) as { entries?: unknown };
+
+  return Array.isArray(parsed.entries)
+    ? parsed.entries.filter(isProjectMemoryEntry)
+    : [];
+}
+
+function parseProjectMemoryMarkdown(content: string): ProjectMemoryEntry[] {
+  const managedContent = readProjectMemoryManagedContent(content);
+
+  if (!managedContent) {
+    return [];
+  }
+
+  return managedContent
+    .split(/\r?\n/u)
+    .map((line) => parseProjectMemoryEntryLine(line.trim()))
+    .filter((entry): entry is ProjectMemoryEntry => Boolean(entry));
+}
+
+function readProjectMemoryManagedContent(content: string): string | null {
+  const normalizedContent = content.replace(/\r\n/g, "\n");
+  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
+  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    return null;
+  }
+
+  return normalizedContent.slice(
+    startIndex + projectMemoryManagedStartMarker.length,
+    endIndex
+  );
+}
+
+function parseProjectMemoryEntryLine(line: string): ProjectMemoryEntry | null {
+  if (!line.startsWith(`- ${projectMemoryEntryPrefix}`)) {
+    return null;
+  }
+
+  const match =
+    /^- <!-- forge-memory-entry id="([^"]+)" createdAt="([^"]+)" updatedAt="([^"]+)" tags="([^"]*)" --> (.+)$/u.exec(
+      line
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    id: match[1],
+    createdAt: match[2],
+    updatedAt: match[3],
+    tags: match[4].split(",").map((tag) => tag.trim()).filter(Boolean),
+    content: match[5].trim()
+  };
+}
+
+function renderProjectMemoryMarkdown(
+  currentContent: string | null,
+  entries: ProjectMemoryEntry[]
+): string {
+  const managedBlock = renderProjectMemoryManagedBlock(entries);
+
+  if (!currentContent?.trim()) {
+    return `${renderProjectMemoryDefaultHeader()}\n\n${managedBlock}\n`;
+  }
+
+  const normalizedContent = currentContent.replace(/\r\n/g, "\n").trimEnd();
+  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
+  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
+
+  if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+    const before = normalizedContent.slice(0, startIndex).trimEnd();
+    const after = normalizedContent
+      .slice(endIndex + projectMemoryManagedEndMarker.length)
+      .trimStart();
+
+    return [
+      before,
+      managedBlock,
+      after
+    ].filter(Boolean).join("\n\n") + "\n";
+  }
+
+  return `${normalizedContent}\n\n${managedBlock}\n`;
+}
+
+function renderProjectMemoryDefaultHeader(): string {
+  return [
+    "# MEMORY.md",
+    "",
+    "Forge reads this file as project memory when scanning the workspace.",
+    "Forge may update the managed section silently during agent work. Do not store secrets, tokens, cookies, private keys, or production credentials here."
+  ].join("\n");
+}
+
+function renderProjectMemoryManagedBlock(entries: ProjectMemoryEntry[]): string {
+  const lines = [
+    projectMemoryManagedStartMarker,
+    "## Forge Managed Memories",
+    "",
+    "Forge updates this section automatically. Edit or delete entries when they are wrong.",
+    ""
+  ];
+
+  if (entries.length === 0) {
+    lines.push("_No managed memories yet._");
+  } else {
+    lines.push(...entries.map(renderProjectMemoryEntryLine));
+  }
+
+  lines.push("", projectMemoryManagedEndMarker);
+
+  return lines.join("\n");
+}
+
+function renderProjectMemoryEntryLine(entry: ProjectMemoryEntry): string {
+  const tags = normalizeProjectMemoryTags(entry.tags).join(",");
+
+  return [
+    "-",
+    `<!-- forge-memory-entry id="${entry.id}" createdAt="${entry.createdAt}" updatedAt="${entry.updatedAt}" tags="${tags}" -->`,
+    entry.content
+  ].join(" ");
+}
+
+function normalizeProjectMemoryEntryId(id: string | undefined): string {
+  const fallbackId = `memory-${Date.now().toString(36)}`;
+  const normalizedId = (id ?? fallbackId)
+    .trim()
+    .replace(/[^\p{L}\p{N}_-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 80);
+
+  return normalizedId || fallbackId;
+}
+
+function normalizeProjectMemoryContent(content: string): string {
+  const normalizedContent = redactSensitiveProjectMemoryContent(content)
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, maxProjectMemoryContentChars);
+
+  if (!normalizedContent) {
+    throw new Error("Project memory content must not be empty");
+  }
+
+  return normalizedContent;
+}
+
+function normalizeProjectMemoryTags(tags: string[]): string[] {
+  const seenTags = new Set<string>();
+  const normalizedTags: string[] = [];
+
+  for (const tag of tags) {
+    const normalizedTag = tag
+      .trim()
+      .replace(/[^\p{L}\p{N}_-]+/gu, "-")
+      .replace(/^-+|-+$/gu, "")
+      .slice(0, 40);
+
+    if (!normalizedTag || seenTags.has(normalizedTag)) {
+      continue;
+    }
+
+    seenTags.add(normalizedTag);
+    normalizedTags.push(normalizedTag);
+  }
+
+  return normalizedTags.slice(0, 12);
+}
+
+function redactSensitiveProjectMemoryContent(content: string): string {
+  return content
+    .replace(
+      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/gu,
+      "[redacted private key]"
+    )
+    .replace(
+      /\b(api[_-]?key|token|secret|password|cookie)\b(\s*[:=]\s*)(["']?)[^\s"'`,;]+/giu,
+      (_match, key: string, separator: string, quote: string) =>
+        `${key}${separator}${quote}[redacted]${quote}`
+    )
+    .replace(/\b(?:sk|ghp|github_pat|xox[baprs]?)-[A-Za-z0-9_-]{8,}\b/gu, "[redacted token]")
+    .replace(/\bAKIA[0-9A-Z]{16}\b/gu, "[redacted aws access key]")
+    .replace(/\bBearer\s+[A-Za-z0-9._-]{12,}\b/giu, "Bearer [redacted]");
 }
 
 function tokenizeSearchText(value: string): string[] {
