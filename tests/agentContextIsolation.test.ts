@@ -254,6 +254,30 @@ test("project memory selection includes MEMORY.md managed memories", () => {
   );
 });
 
+test("MEMORY.md managed memories are redacted before model injection", () => {
+  const memories = mergeAgentMemoriesWithProjectScan([], {
+    rootPath: "E:\\CodeHome\\Forge",
+    files: [],
+    truncated: false,
+    instructionFiles: [
+      {
+        relativePath: "MEMORY.md",
+        truncated: false,
+        content:
+          '<!-- forge-memory:managed:start -->\n- <!-- forge-memory-entry id="secret-note" createdAt="2026-06-15T09:00:00.000Z" updatedAt="2026-06-15T10:00:00.000Z" tags="secret" --> Deployment uses api_key=sk-1234567890abcdef and Authorization: Bearer ghp_1234567890abcdef plus AKIA1234567890ABCDEF.\n<!-- forge-memory:managed:end -->'
+      }
+    ]
+  });
+  const content = memories[0]?.content ?? "";
+
+  assert.match(content, /api_key=\[redacted\]/u);
+  assert.match(content, /Bearer \[redacted\]/u);
+  assert.match(content, /\[redacted aws access key\]/u);
+  assert.doesNotMatch(content, /sk-1234567890abcdef/u);
+  assert.doesNotMatch(content, /ghp_1234567890abcdef/u);
+  assert.doesNotMatch(content, /AKIA1234567890ABCDEF/u);
+});
+
 test("project memory write failures become auditable non-blocking thread events", () => {
   const message = formatProjectMemoryWriteFailure(
     "zh-CN",
