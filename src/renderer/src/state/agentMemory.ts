@@ -19,7 +19,7 @@ export type AgentMemoryEntry = {
   sourceThreadId?: string;
 };
 
-type AgentMemoryCandidate = {
+export type AgentMemoryCandidate = {
   content: string;
   projectPath?: string | null;
   sourceThreadId?: string;
@@ -48,6 +48,17 @@ export type CompactedProjectMemorySource = {
     retainedEventCount?: number;
     sourceEventCount?: number;
   };
+};
+
+export type AgentMemoryPromptCapture = {
+  candidate: AgentMemoryCandidate;
+  projectMemoryRequest: ProjectMemoryWriteRequest | null;
+};
+
+type AgentMemoryPromptCaptureInput = {
+  prompt: string;
+  projectPath?: string | null;
+  sourceThreadId: string;
 };
 
 export type ProjectMemoryWriteFailureEvent = {
@@ -276,6 +287,27 @@ export function extractAgentMemoryCandidate(
     content,
     projectPath: normalizeProjectPath(projectPath),
     trigger: explicitMatch?.[1] ? "explicit" : "implicit"
+  };
+}
+
+// 把用户输入中的可持久化记忆统一整理成本地候选和项目 MEMORY.md 写入请求
+export function createAgentMemoryPromptCapture(
+  input: AgentMemoryPromptCaptureInput
+): AgentMemoryPromptCapture | null {
+  const candidate = extractAgentMemoryCandidate(input.prompt, input.projectPath);
+
+  if (!candidate) {
+    return null;
+  }
+
+  const candidateWithSource = {
+    ...candidate,
+    sourceThreadId: input.sourceThreadId
+  };
+
+  return {
+    candidate: candidateWithSource,
+    projectMemoryRequest: createProjectMemoryWriteRequest(candidateWithSource)
   };
 }
 

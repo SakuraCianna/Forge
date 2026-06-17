@@ -288,11 +288,10 @@ import {
   type GeneralPreferences
 } from "@/state/generalPreferences";
 import {
+  createAgentMemoryPromptCapture,
   createCompactedProjectMemoryWriteRequest,
   createProjectMemoryWriteFailureEvent,
-  createProjectMemoryWriteRequest,
   deleteAgentMemory,
-  extractAgentMemoryCandidate,
   formatProjectMemoryWriteFailure,
   loadAgentMemories,
   saveAgentMemories,
@@ -3379,29 +3378,23 @@ export function App(): ReactElement {
     prompt: string,
     projectPath: string | null
   ): void {
-    const candidate = extractAgentMemoryCandidate(prompt, projectPath ?? getThreadProjectPath(threadId));
-
-    if (!candidate) {
-      return;
-    }
-
-    setAgentMemories((current) =>
-      upsertAgentMemory(current, {
-        ...candidate,
-        sourceThreadId: threadId
-      })
-    );
-
-    const projectMemoryRequest = createProjectMemoryWriteRequest({
-      ...candidate,
+    const promptCapture = createAgentMemoryPromptCapture({
+      prompt,
+      projectPath: projectPath ?? getThreadProjectPath(threadId),
       sourceThreadId: threadId
     });
 
-    if (!projectMemoryRequest) {
+    if (!promptCapture) {
       return;
     }
 
-    executeProjectMemoryWriteRequest(threadId, projectMemoryRequest);
+    setAgentMemories((current) => upsertAgentMemory(current, promptCapture.candidate));
+
+    if (!promptCapture.projectMemoryRequest) {
+      return;
+    }
+
+    executeProjectMemoryWriteRequest(threadId, promptCapture.projectMemoryRequest);
   }
 
   function executeProjectMemoryWriteRequest(
