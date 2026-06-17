@@ -63,11 +63,47 @@ jobs:
       - name: Build Electron app
         run: npm run build
 
+  quality-gates:
+    name: v0.3 Quality Gates
+    runs-on: windows-latest
+    timeout-minutes: 30
+    needs: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run v0.3 regression gate
+        run: npm run quality:regression:gate
+
+      - name: Prepare built-in tools QA sandbox
+        run: node scripts/prepare-built-in-tool-qa-sandbox.mjs
+
+      - name: Run built-in tools QA
+        run: npm run qa:built-in-tools
+
   package-windows:
     name: Package Windows Installer
     runs-on: windows-latest
     timeout-minutes: 45
-    needs: ci
+    needs: quality-gates
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"

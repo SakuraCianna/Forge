@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 test("built-in tool browser QA scripts are wired through npm and Electron", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
@@ -30,6 +35,48 @@ test("built-in tool browser QA scripts are wired through npm and Electron", asyn
   assert.match(electronRunner, /openExternal/u);
   assert.match(electronRunner, /browser-screenshot/u);
   assert.match(electronRunner, /browser-console/u);
+});
+
+test("built-in tool QA sandbox preparation exports a GitHub Actions project root", async () => {
+  const sandboxPrep = await readFile("scripts/prepare-built-in-tool-qa-sandbox.mjs", "utf8");
+
+  assert.match(sandboxPrep, /quality-gate-sandbox/u);
+  assert.match(sandboxPrep, /GITHUB_ENV/u);
+  assert.match(sandboxPrep, /FORGE_QA_PROJECT_ROOT/u);
+  assert.match(sandboxPrep, /prepareBuiltInToolQaSandbox/u);
+  assert.doesNotMatch(sandboxPrep, /gh\s+release|git\s+push|Remove-Item|rm\s+-rf/u);
+});
+
+test("built-in tool QA sandbox preparation writes a usable GitHub Actions env file", async () => {
+  const tempDir = await mkdtemp(join(".tmp-test", "qa-sandbox-env-"));
+  const githubEnvPath = join(tempDir, "github-env.txt");
+
+  try {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ["scripts/prepare-built-in-tool-qa-sandbox.mjs"],
+      {
+        env: {
+          ...process.env,
+          GITHUB_ENV: githubEnvPath
+        },
+        windowsHide: true
+      }
+    );
+    const result = JSON.parse(stdout) as {
+      exportedToGitHubEnv: boolean;
+      projectRoot: string;
+    };
+    const githubEnv = await readFile(githubEnvPath, "utf8");
+    const sandboxPackageJson = await readFile(join(result.projectRoot, "package.json"), "utf8");
+
+    assert.equal(result.exportedToGitHubEnv, true);
+    assert.match(result.projectRoot, /quality-gate-sandbox/u);
+    assert.match(githubEnv, /^FORGE_QA_PROJECT_ROOT=.*quality-gate-sandbox\r?\n$/u);
+    assert.match(sandboxPackageJson, /forge-v0-3-quality-gate-sandbox/u);
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("Electron browser preview tools use the current console-message event shape", async () => {

@@ -196,9 +196,10 @@ npm run release:check
 
 GitHub Actions 工作流位于 `.github\workflows\ci-cd.yml`。
 
-- PR 和任意分支 push 会在 `windows-latest` 上运行 `npm ci`、`npm test`、`npm run typecheck`、`npm run lint` 和 `npm run build`。
+- PR 和任意分支 push 会在 `windows-latest` 上先运行基础 CI: `npm ci`、`npm test`、`npm run typecheck`、`npm run lint` 和 `npm run build`; 基础 CI 通过后继续运行 `npm run quality:regression:gate` 和 `npm run qa:built-in-tools`。
+- v0.3 质量门禁会先准备 `.tmp-test\quality-gate-sandbox` 受控沙箱, 并把解析后的绝对路径写入 `FORGE_QA_PROJECT_ROOT`, 避免 Built-in Tools QA 因缺少项目根目录而被跳过。
 - workflow 使用只读 `GITHUB_TOKEN` 权限、PowerShell 7 shell 和 Node.js 24; checkout 不持久化写入凭据。
-- 推送 `v*` tag 或手动运行 workflow 时, 会在 CI 通过后执行 `npm run dist:win`, 并上传 `forge-windows-installer` artifact。
+- 推送 `v*` tag 或手动运行 workflow 时, 会在基础 CI 和 v0.3 质量门禁都通过后执行 `npm run dist:win`, 并上传 `forge-windows-installer` artifact。
 - 当前工作流只生成和上传安装包 artifact, 不会自动创建 GitHub Release, 不会自动发布, 也不会跳过发布前人工检查和安装包烟测。
 
 `npm test` 会先编译轻量回归测试, 再运行 Node.js 测试, 用于覆盖 Agent 上下文隔离等关键逻辑。
