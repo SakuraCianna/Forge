@@ -1,5 +1,4 @@
 // 本文件说明: 注册常见外部服务内置 Extension, 通过官方 REST API 执行受控动作
-import { Buffer } from "node:buffer";
 import type {
   ExtensionActionDefinition,
   ExtensionManifest
@@ -16,6 +15,30 @@ import {
   trimTrailingSlash
 } from "./serviceAuth.js";
 import { formatErrorPayload, requestJson } from "./serviceHttp.js";
+import {
+  createBasicAuthHeader,
+  encodePathSegment,
+  normalizeDatadogSite,
+  normalizeFreshdeskDomain,
+  normalizeHttpsOrigin,
+  normalizeShopifyStoreDomain,
+  normalizeSimpleHostLabel,
+  normalizeZendeskSubdomain,
+  readArrayLength,
+  readCollectionLength,
+  readEnum,
+  readLimit,
+  readNestedObjectText,
+  readNestedRecord,
+  readObjectText,
+  readOptionalString,
+  readOptionalStringList,
+  readRecord,
+  readRequiredIsoDate,
+  readRequiredString,
+  toOutputRecord,
+  withQuery
+} from "./serviceInput.js";
 
 type BuiltInServiceExtension = {
   handlers: Record<string, ExtensionActionHandler>;
@@ -24,7 +47,6 @@ type BuiltInServiceExtension = {
 };
 
 const defaultListLimit = 20;
-const maxListLimit = 100;
 const notionVersion = "2022-06-28";
 
 export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
@@ -6353,231 +6375,4 @@ async function readSecret(
   }
 
   return value;
-}
-
-function readRequiredString(value: unknown, fieldName: string, maxLength: number): string {
-  const normalized = typeof value === "string" ? value.trim() : "";
-
-  if (!normalized) {
-    throw new Error(`${fieldName} is required`);
-  }
-
-  if (normalized.length > maxLength) {
-    throw new Error(`${fieldName} is too long`);
-  }
-
-  return normalized;
-}
-
-function readOptionalString(value: unknown, maxLength: number): string {
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
-
-function readRequiredIsoDate(value: unknown, fieldName: string): string {
-  const text = readRequiredString(value, fieldName, 120);
-  const date = new Date(text);
-
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`${fieldName} must be a valid ISO date-time`);
-  }
-
-  return text;
-}
-
-function readOptionalStringList(
-  value: unknown,
-  fieldName: string,
-  maxLength: number
-): string[] {
-  const values = Array.isArray(value)
-    ? value
-    : typeof value === "string"
-      ? value.split(/[;,]/u)
-      : [];
-  const normalized = values
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
-
-  if (normalized.length > maxLength) {
-    throw new Error(`${fieldName} has too many values`);
-  }
-
-  return normalized;
-}
-
-function readLimit(value: unknown, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return fallback;
-  }
-
-  return Math.min(maxListLimit, Math.max(1, Math.round(value)));
-}
-
-function normalizeHttpsOrigin(value: string, label: string): string {
-  const normalized = value.trim().replace(/\/+$/u, "");
-  let parsed: URL;
-
-  try {
-    parsed = new URL(normalized);
-  } catch {
-    throw new Error(`${label} must be a valid https URL`);
-  }
-
-  if (parsed.protocol !== "https:") {
-    throw new Error(`${label} must use https`);
-  }
-
-  return parsed.origin;
-}
-
-function normalizeZendeskSubdomain(value: string): string {
-  const normalized = value
-    .trim()
-    .replace(/^https?:\/\//u, "")
-    .replace(/\.zendesk\.com.*$/u, "")
-    .replace(/\/.*$/u, "")
-    .toLowerCase();
-
-  if (!/^[a-z0-9-]+$/u.test(normalized)) {
-    throw new Error("Zendesk subdomain is invalid");
-  }
-
-  return normalized;
-}
-
-function normalizeShopifyStoreDomain(value: string): string {
-  const normalized = value
-    .trim()
-    .replace(/^https?:\/\//u, "")
-    .replace(/\/.*$/u, "")
-    .toLowerCase();
-
-  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/u.test(normalized)) {
-    throw new Error("Shopify store domain must look like example.myshopify.com");
-  }
-
-  return normalized;
-}
-
-function normalizeDatadogSite(value: string): string {
-  const normalized = value
-    .trim()
-    .replace(/^https?:\/\//u, "")
-    .replace(/^api\./u, "")
-    .replace(/\/.*$/u, "")
-    .toLowerCase();
-
-  if (!/^[a-z0-9.-]+$/u.test(normalized)) {
-    throw new Error("Datadog site is invalid");
-  }
-
-  return normalized;
-}
-
-function normalizeFreshdeskDomain(value: string): string {
-  const normalized = value
-    .trim()
-    .replace(/^https?:\/\//u, "")
-    .replace(/\/.*$/u, "")
-    .toLowerCase();
-  const domain = normalized.endsWith(".freshdesk.com")
-    ? normalized
-    : `${normalizeSimpleHostLabel(normalized, "Freshdesk domain")}.freshdesk.com`;
-
-  if (!/^[a-z0-9][a-z0-9-]*\.freshdesk\.com$/u.test(domain)) {
-    throw new Error("Freshdesk domain must look like example.freshdesk.com");
-  }
-
-  return domain;
-}
-
-function normalizeSimpleHostLabel(value: string, label: string): string {
-  const normalized = value
-    .trim()
-    .replace(/^https?:\/\//u, "")
-    .replace(/\/.*$/u, "")
-    .toLowerCase();
-
-  if (!/^[a-z0-9][a-z0-9-]*$/u.test(normalized)) {
-    throw new Error(`${label} is invalid`);
-  }
-
-  return normalized;
-}
-
-function createBasicAuthHeader(username: string, password: string): string {
-  return `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`;
-}
-
-function readEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
-  return allowed.includes(value as T) ? value as T : fallback;
-}
-
-function withQuery(url: string, query: Record<string, string> | undefined): string {
-  if (!query) {
-    return url;
-  }
-
-  const parsed = new URL(url);
-
-  for (const [key, value] of Object.entries(query)) {
-    if (value) {
-      parsed.searchParams.set(key, value);
-    }
-  }
-
-  return parsed.toString();
-}
-
-function encodePathSegment(value: string): string {
-  return encodeURIComponent(value);
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : {};
-}
-
-function toOutputRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? value : { result: value };
-}
-
-function readObjectText(value: unknown, field: string, fallback: string): string {
-  const candidate = readRecord(value)[field];
-  return typeof candidate === "string" && candidate.trim() ? candidate : fallback;
-}
-
-function readNestedObjectText(value: unknown, fields: string[], fallback: string): string {
-  let current: unknown = value;
-
-  for (const field of fields) {
-    current = readRecord(current)[field];
-  }
-
-  return typeof current === "string" && current.trim() ? current : fallback;
-}
-
-function readNestedRecord(value: unknown, fields: string[]): Record<string, unknown> {
-  let current: unknown = value;
-
-  for (const field of fields) {
-    current = readRecord(current)[field];
-  }
-
-  return readRecord(current);
-}
-
-function readArrayLength(value: unknown): number {
-  return Array.isArray(value) ? value.length : 0;
-}
-
-function readCollectionLength(value: unknown): number {
-  if (Array.isArray(value)) {
-    return value.length;
-  }
-
-  return readArrayLength(readRecord(value).results);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
