@@ -107,7 +107,7 @@ const defaultProfiles: AgentProfile[] = [
     ...builtInProfileText.build["zh-CN"],
     permissionMode: "auto",
     verificationPolicy: "require",
-    failureRecoveryPolicy: "auto",
+    failureRecoveryPolicy: "suggest",
     tools: {
       read: true,
       edit: true,
@@ -130,7 +130,7 @@ const defaultProfiles: AgentProfile[] = [
     ...builtInProfileText.review["zh-CN"],
     permissionMode: "auto",
     verificationPolicy: "suggest",
-    failureRecoveryPolicy: "auto",
+    failureRecoveryPolicy: "suggest",
     tools: {
       read: true,
       edit: false,
@@ -153,7 +153,7 @@ const defaultProfiles: AgentProfile[] = [
     ...builtInProfileText.docs["zh-CN"],
     permissionMode: "auto",
     verificationPolicy: "skip",
-    failureRecoveryPolicy: "auto",
+    failureRecoveryPolicy: "suggest",
     tools: {
       read: true,
       edit: true,
@@ -453,10 +453,7 @@ function normalizeAgentProfile(profile: AgentProfile): AgentProfile {
     systemPrompt: normalizeText(profile.systemPrompt),
     permissionMode: profile.permissionMode === "full" ? "full" : "auto",
     verificationPolicy: normalizeVerificationPolicy(profile.verificationPolicy, profile.id),
-    failureRecoveryPolicy: normalizeFailureRecoveryPolicy(
-      profile.failureRecoveryPolicy,
-      profile.id
-    ),
+    failureRecoveryPolicy: normalizeProfileFailureRecoveryPolicy(profile),
     tools: normalizeTools(profile.tools),
     contextBudget,
     planStepLimit,
@@ -603,6 +600,10 @@ function getDefaultFailureRecoveryAttempts(profileId: string): number {
   return defaultProfiles.find((profile) => profile.id === profileId)?.maxFailureRecoveryAttempts ?? 1;
 }
 
+function getDefaultFailureRecoveryPolicy(profileId: string): AgentProfileFailureRecoveryPolicy {
+  return defaultProfiles.find((profile) => profile.id === profileId)?.failureRecoveryPolicy ?? "suggest";
+}
+
 function normalizeVerificationPolicy(
   value: unknown,
   profileId: string
@@ -622,7 +623,20 @@ function normalizeFailureRecoveryPolicy(
     return value;
   }
 
-  return defaultProfiles.find((profile) => profile.id === profileId)?.failureRecoveryPolicy ?? "suggest";
+  return getDefaultFailureRecoveryPolicy(profileId);
+}
+
+// 旧版内置 Agent 默认会自动恢复; 未手动修改过的内置配置迁移为只提示, 避免失败后莫名连续恢复。
+function normalizeProfileFailureRecoveryPolicy(profile: AgentProfile): AgentProfileFailureRecoveryPolicy {
+  if (
+    profile.builtIn &&
+    profile.updatedAt === defaultProfileTimestamp &&
+    profile.failureRecoveryPolicy === "auto"
+  ) {
+    return getDefaultFailureRecoveryPolicy(profile.id);
+  }
+
+  return normalizeFailureRecoveryPolicy(profile.failureRecoveryPolicy, profile.id);
 }
 
 // 将 unknown 缩窄成普通对象, 供字段校验复用

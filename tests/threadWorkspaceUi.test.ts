@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import {
+  isReadableLiveProgressEvent,
+  shouldShowCompactTranscriptEvent
+} from "../src/renderer/src/agent/threadTranscriptEvents.js";
+import type { TaskThreadEvent } from "../src/renderer/src/state/taskThreads.js";
 
 test("compact user messages use hover copy and edit icon actions instead of retry text", async () => {
   const workspaceSource = await readFile("src/renderer/src/components/ThreadWorkspace.tsx", "utf8");
@@ -20,12 +25,104 @@ test("compact transcript shows live process events before folding them after com
   const workspaceSource = await readFile("src/renderer/src/components/ThreadWorkspace.tsx", "utf8");
   const settingsSource = await readFile("src/renderer/src/components/SettingsPanel.tsx", "utf8");
 
-  assert.match(workspaceSource, /shouldShowCompactTranscriptEvent\(\s*event: TaskThreadEvent,\s*threadStatus: TaskThread\["status"\]/u);
-  assert.match(workspaceSource, /event\.kind === "result" && !isReadableLiveProgressEvent\(event\)/u);
-  assert.match(workspaceSource, /threadStatus === "completed"/u);
-  assert.match(workspaceSource, /isReadableLiveProgressEvent\(event\)/u);
-  assert.match(workspaceSource, /isRawPlanStreamEvent\(event\)/u);
+  assert.equal(
+    shouldShowCompactTranscriptEvent(
+      createThreadEvent({ id: "event-user", kind: "user", message: "Build it" }),
+      "completed"
+    ),
+    true
+  );
+  assert.equal(
+    shouldShowCompactTranscriptEvent(
+      createThreadEvent({
+        id: "event-command",
+        kind: "command",
+        message: "开始执行命令: npm test",
+        commandRun: { command: "npm test", status: "running" }
+      }),
+      "running"
+    ),
+    true
+  );
+  assert.equal(
+    shouldShowCompactTranscriptEvent(
+      createThreadEvent({
+        id: "event-command",
+        kind: "command",
+        message: "开始执行命令: npm test",
+        commandRun: { command: "npm test", status: "running" }
+      }),
+      "completed"
+    ),
+    false
+  );
+  assert.equal(
+    shouldShowCompactTranscriptEvent(
+      createThreadEvent({ id: "event-result", kind: "result", message: "Done" }),
+      "completed"
+    ),
+    true
+  );
   assert.match(workspaceSource, /shouldShowCompactTranscriptEvent\(event, selectedThread\.status\)/u);
   assert.match(settingsSource, /运行中展示读取、命令和编辑过程/u);
   assert.match(settingsSource, /while running, then fold/u);
 });
+
+test("compact transcript does not show internal agent action run records as chat text", async () => {
+  const failedActionRun = createThreadEvent({
+    id: "thread-agent-action-failed-action-1",
+    kind: "error",
+    message: "Agent 动作执行失败: 运行命令 npm run build",
+    agentActionRun: {
+      actionId: "action-1",
+      label: "运行命令 npm run build",
+      status: "failed"
+    }
+  });
+
+  assert.equal(isReadableLiveProgressEvent(failedActionRun), false);
+  assert.equal(shouldShowCompactTranscriptEvent(failedActionRun, "running"), false);
+  assert.equal(
+    isReadableLiveProgressEvent(
+      createThreadEvent({
+        id: "event-file",
+        kind: "file",
+        message: "已创建 1 个文件",
+        fileChange: { relativePath: "src/App.tsx", changeKind: "create" }
+      })
+    ),
+    true
+  );
+});
+
+test("compact transcript keeps raw controlled tool results out of the chat stream", async () => {
+  assert.equal(
+    isReadableLiveProgressEvent(
+      createThreadEvent({
+        id: "thread-agent-built-in-tool-readFile-1",
+        kind: "plan",
+        message: "Built-in tool readFile result:\n{}"
+      })
+    ),
+    false
+  );
+  assert.equal(
+    isReadableLiveProgressEvent(
+      createThreadEvent({
+        id: "event-error",
+        kind: "error",
+        message: "命令失败"
+      })
+    ),
+    true
+  );
+});
+
+function createThreadEvent(
+  event: Partial<TaskThreadEvent> & Pick<TaskThreadEvent, "id" | "kind" | "message">
+): TaskThreadEvent {
+  return {
+    createdAt: "2026-06-17T00:00:00.000Z",
+    ...event
+  };
+}
