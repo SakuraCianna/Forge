@@ -1,20 +1,10 @@
 // 本文件说明: 维护 Agent 记忆的持久化, 去重, 检索和中文短词匹配
 import type { Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
-import { redactSensitiveMemoryContent } from "../../../shared/memoryRedaction.js";
+import { parseProjectMemoryMarkdownEntries } from "../../../shared/projectMemoryMarkdown.js";
 
 const agentMemoryStorageKey = "forge.agentMemories";
 const maxMemoryContentLength = 420;
-const projectMemoryManagedStartMarker = "<!-- forge-memory:managed:start -->";
-const projectMemoryManagedEndMarker = "<!-- forge-memory:managed:end -->";
-const projectMemoryEntryPrefix = "<!-- forge-memory-entry";
-const manualProjectMemoryTimestamp = "1970-01-01T00:00:00.000Z";
-const ignoredManualProjectMemoryLines = new Set([
-  "forge reads this file as project memory when scanning the workspace.",
-  "forge may update the managed section silently during agent work. do not store secrets, tokens, cookies, private keys, or production credentials here.",
-  "forge updates this section automatically. edit or delete entries when they are wrong.",
-  "_no managed memories yet._"
-]);
 
 type AgentMemoryScope = "global" | "project";
 
@@ -350,125 +340,6 @@ function createAgentMemoriesFromProjectScan(projectScan: ProjectScanResult): Age
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt
   }));
-}
-
-type ProjectMemoryMarkdownEntry = {
-  id: string;
-  content: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-function parseProjectMemoryMarkdownEntries(content: string): ProjectMemoryMarkdownEntry[] {
-  return [
-    ...parseManualProjectMemoryMarkdownEntries(content),
-    ...parseManagedProjectMemoryMarkdownEntries(content)
-  ];
-}
-
-function parseManagedProjectMemoryMarkdownEntries(content: string): ProjectMemoryMarkdownEntry[] {
-  const managedContent = readProjectMemoryManagedContent(content);
-
-  if (!managedContent) {
-    return [];
-  }
-
-  return managedContent
-    .split(/\r?\n/u)
-    .map((line) => parseProjectMemoryEntryLine(line.trim()))
-    .filter((entry): entry is ProjectMemoryMarkdownEntry => Boolean(entry));
-}
-
-function parseManualProjectMemoryMarkdownEntries(content: string): ProjectMemoryMarkdownEntry[] {
-  return stripProjectMemoryManagedBlock(content)
-    .split(/\r?\n/u)
-    .map(normalizeManualProjectMemoryLine)
-    .filter(Boolean)
-    .slice(0, 20)
-    .map((manualContent, index) => ({
-      id: `manual-${index + 1}`,
-      content: manualContent,
-      createdAt: manualProjectMemoryTimestamp,
-      updatedAt: manualProjectMemoryTimestamp
-    }));
-}
-
-function stripProjectMemoryManagedBlock(content: string): string {
-  const normalizedContent = content.replace(/\r\n/g, "\n");
-  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
-  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
-
-  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-    return normalizedContent;
-  }
-
-  return [
-    normalizedContent.slice(0, startIndex),
-    normalizedContent.slice(endIndex + projectMemoryManagedEndMarker.length)
-  ].join("\n");
-}
-
-function normalizeManualProjectMemoryLine(line: string): string {
-  const trimmedLine = line.trim();
-
-  if (!trimmedLine || trimmedLine.startsWith("#") || trimmedLine.startsWith("<!--")) {
-    return "";
-  }
-
-  const withoutListMarker = trimmedLine
-    .replace(/^(?:[-*+]|\d+[.)])\s+/u, "")
-    .replace(/^\[[ xX]\]\s+/u, "")
-    .trim();
-  const content = normalizeMemoryContent(redactSensitiveMemoryContent(withoutListMarker));
-
-  if (!content || ignoredManualProjectMemoryLines.has(content.toLocaleLowerCase())) {
-    return "";
-  }
-
-  return content;
-}
-
-function readProjectMemoryManagedContent(content: string): string | null {
-  const normalizedContent = content.replace(/\r\n/g, "\n");
-  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
-  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
-
-  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-    return null;
-  }
-
-  return normalizedContent.slice(
-    startIndex + projectMemoryManagedStartMarker.length,
-    endIndex
-  );
-}
-
-function parseProjectMemoryEntryLine(line: string): ProjectMemoryMarkdownEntry | null {
-  if (!line.startsWith(`- ${projectMemoryEntryPrefix}`)) {
-    return null;
-  }
-
-  const match =
-    /^- <!-- forge-memory-entry id="([^"]+)" createdAt="([^"]+)" updatedAt="([^"]+)" tags="[^"]*" --> (.+)$/u.exec(
-      line
-    );
-
-  if (!match) {
-    return null;
-  }
-
-  const content = normalizeMemoryContent(redactSensitiveMemoryContent(match[4]));
-
-  if (!content) {
-    return null;
-  }
-
-  return {
-    id: match[1],
-    createdAt: match[2],
-    updatedAt: match[3],
-    content
-  };
 }
 
 // MEMORY.md 写入失败需要能被用户审计, 但不应让主问答或任务队列误判为失败

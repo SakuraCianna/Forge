@@ -33,6 +33,12 @@ import {
 import { scanProjectFiles as scanProjectFilesDefault } from "../projectScanner.js";
 import { searchWeb } from "../webSearchService.js";
 import { redactSensitiveMemoryContent } from "../../shared/memoryRedaction.js";
+import {
+  parseManagedProjectMemoryMarkdownEntries,
+  parseProjectMemoryMarkdownEntries,
+  renderProjectMemoryMarkdown,
+  type ProjectMemoryMarkdownEntry
+} from "../../shared/projectMemoryMarkdown.js";
 import { assertProjectPathNotSensitive } from "../../shared/sensitiveProjectFiles.js";
 import type { BuiltInToolExecutionContext } from "../../shared/builtInToolTypes.js";
 import type { BuiltInToolExecutorMap } from "./builtInToolRegistry.js";
@@ -657,13 +663,7 @@ type UnifiedFilePatch = {
   hunks: UnifiedPatchHunk[];
 };
 
-type ProjectMemoryEntry = {
-  id: string;
-  content: string;
-  createdAt: string;
-  updatedAt: string;
-  tags: string[];
-};
+type ProjectMemoryEntry = ProjectMemoryMarkdownEntry;
 
 type SemanticSearchTerm = {
   value: string;
@@ -682,18 +682,8 @@ type SemanticSearchMatch = {
 
 const projectMemoryRelativePath = "MEMORY.md";
 const legacyProjectMemoryRelativePath = ".forge/project-memory.json";
-const projectMemoryManagedStartMarker = "<!-- forge-memory:managed:start -->";
-const projectMemoryManagedEndMarker = "<!-- forge-memory:managed:end -->";
-const projectMemoryEntryPrefix = "<!-- forge-memory-entry";
 const maxProjectMemoryContentChars = 1_000;
 const maxProjectMemoryManagedEntries = 40;
-const manualProjectMemoryTimestamp = "1970-01-01T00:00:00.000Z";
-const ignoredManualProjectMemoryLines = new Set([
-  "forge reads this file as project memory when scanning the workspace.",
-  "forge may update the managed section silently during agent work. do not store secrets, tokens, cookies, private keys, or production credentials here.",
-  "forge updates this section automatically. edit or delete entries when they are wrong.",
-  "_no managed memories yet._"
-]);
 const projectMemoryMergeStopWords = new Set([
   "always",
   "and",
@@ -917,7 +907,7 @@ async function readProjectMemoryFile(projectRoot: string): Promise<Record<string
   return {
     status: "ok",
     relativePath: projectMemoryRelativePath,
-    entries: parseProjectMemoryMarkdown(rawContent)
+    entries: parseProjectMemoryMarkdownEntries(rawContent)
   };
 }
 
@@ -1062,186 +1052,6 @@ async function readLegacyProjectMemoryEntries(projectRoot: string): Promise<Proj
   return Array.isArray(parsed.entries)
     ? parsed.entries.filter(isProjectMemoryEntry)
     : [];
-}
-
-function parseProjectMemoryMarkdown(content: string): ProjectMemoryEntry[] {
-  return [
-    ...parseManualProjectMemoryMarkdownEntries(content),
-    ...parseManagedProjectMemoryMarkdownEntries(content)
-  ];
-}
-
-function parseManagedProjectMemoryMarkdownEntries(content: string): ProjectMemoryEntry[] {
-  const managedContent = readProjectMemoryManagedContent(content);
-
-  if (!managedContent) {
-    return [];
-  }
-
-  return managedContent
-    .split(/\r?\n/u)
-    .map((line) => parseProjectMemoryEntryLine(line.trim()))
-    .filter((entry): entry is ProjectMemoryEntry => Boolean(entry));
-}
-
-function parseManualProjectMemoryMarkdownEntries(content: string): ProjectMemoryEntry[] {
-  return stripProjectMemoryManagedBlock(content)
-    .split(/\r?\n/u)
-    .map(normalizeManualProjectMemoryLine)
-    .filter(Boolean)
-    .slice(0, 20)
-    .map((manualContent, index) => ({
-      id: `manual-${index + 1}`,
-      content: manualContent,
-      createdAt: manualProjectMemoryTimestamp,
-      updatedAt: manualProjectMemoryTimestamp,
-      tags: ["manual"]
-    }));
-}
-
-function stripProjectMemoryManagedBlock(content: string): string {
-  const normalizedContent = content.replace(/\r\n/g, "\n");
-  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
-  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
-
-  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-    return normalizedContent;
-  }
-
-  return [
-    normalizedContent.slice(0, startIndex),
-    normalizedContent.slice(endIndex + projectMemoryManagedEndMarker.length)
-  ].join("\n");
-}
-
-function normalizeManualProjectMemoryLine(line: string): string {
-  const trimmedLine = line.trim();
-
-  if (!trimmedLine || trimmedLine.startsWith("#") || trimmedLine.startsWith("<!--")) {
-    return "";
-  }
-
-  const withoutListMarker = trimmedLine
-    .replace(/^(?:[-*+]|\d+[.)])\s+/u, "")
-    .replace(/^\[[ xX]\]\s+/u, "")
-    .trim();
-  const content = redactSensitiveMemoryContent(withoutListMarker)
-    .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, maxProjectMemoryContentChars);
-
-  if (!content || ignoredManualProjectMemoryLines.has(content.toLocaleLowerCase())) {
-    return "";
-  }
-
-  return content;
-}
-
-function readProjectMemoryManagedContent(content: string): string | null {
-  const normalizedContent = content.replace(/\r\n/g, "\n");
-  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
-  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
-
-  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-    return null;
-  }
-
-  return normalizedContent.slice(
-    startIndex + projectMemoryManagedStartMarker.length,
-    endIndex
-  );
-}
-
-function parseProjectMemoryEntryLine(line: string): ProjectMemoryEntry | null {
-  if (!line.startsWith(`- ${projectMemoryEntryPrefix}`)) {
-    return null;
-  }
-
-  const match =
-    /^- <!-- forge-memory-entry id="([^"]+)" createdAt="([^"]+)" updatedAt="([^"]+)" tags="([^"]*)" --> (.+)$/u.exec(
-      line
-    );
-
-  if (!match) {
-    return null;
-  }
-
-  return {
-    id: match[1],
-    createdAt: match[2],
-    updatedAt: match[3],
-    tags: match[4].split(",").map((tag) => tag.trim()).filter(Boolean),
-    content: match[5].trim()
-  };
-}
-
-function renderProjectMemoryMarkdown(
-  currentContent: string | null,
-  entries: ProjectMemoryEntry[]
-): string {
-  const managedBlock = renderProjectMemoryManagedBlock(entries);
-
-  if (!currentContent?.trim()) {
-    return `${renderProjectMemoryDefaultHeader()}\n\n${managedBlock}\n`;
-  }
-
-  const normalizedContent = currentContent.replace(/\r\n/g, "\n").trimEnd();
-  const startIndex = normalizedContent.indexOf(projectMemoryManagedStartMarker);
-  const endIndex = normalizedContent.indexOf(projectMemoryManagedEndMarker);
-
-  if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-    const before = normalizedContent.slice(0, startIndex).trimEnd();
-    const after = normalizedContent
-      .slice(endIndex + projectMemoryManagedEndMarker.length)
-      .trimStart();
-
-    return [
-      before,
-      managedBlock,
-      after
-    ].filter(Boolean).join("\n\n") + "\n";
-  }
-
-  return `${normalizedContent}\n\n${managedBlock}\n`;
-}
-
-function renderProjectMemoryDefaultHeader(): string {
-  return [
-    "# MEMORY.md",
-    "",
-    "Forge reads this file as project memory when scanning the workspace.",
-    "Forge may update the managed section silently during agent work. Do not store secrets, tokens, cookies, private keys, or production credentials here."
-  ].join("\n");
-}
-
-function renderProjectMemoryManagedBlock(entries: ProjectMemoryEntry[]): string {
-  const lines = [
-    projectMemoryManagedStartMarker,
-    "## Forge Managed Memories",
-    "",
-    "Forge updates this section automatically. Edit or delete entries when they are wrong.",
-    ""
-  ];
-
-  if (entries.length === 0) {
-    lines.push("_No managed memories yet._");
-  } else {
-    lines.push(...entries.map(renderProjectMemoryEntryLine));
-  }
-
-  lines.push("", projectMemoryManagedEndMarker);
-
-  return lines.join("\n");
-}
-
-function renderProjectMemoryEntryLine(entry: ProjectMemoryEntry): string {
-  const tags = normalizeProjectMemoryTags(entry.tags).join(",");
-
-  return [
-    "-",
-    `<!-- forge-memory-entry id="${entry.id}" createdAt="${entry.createdAt}" updatedAt="${entry.updatedAt}" tags="${tags}" -->`,
-    entry.content
-  ].join(" ");
 }
 
 function normalizeProjectMemoryEntryId(id: string | undefined): string {
