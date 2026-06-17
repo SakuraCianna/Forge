@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createCompactedProjectMemoryWriteRequest,
+  createAgentMemoryPromptCapture,
   createProjectMemoryWriteFailureEvent,
   createProjectMemoryWriteRequest,
   extractAgentMemoryCandidate,
@@ -107,6 +108,35 @@ test("durable project conventions can be captured without explicit remember word
   assert.ok(request);
   assert.match(request.input.id, /^implicit-/u);
   assert.deepEqual(request.input.tags, ["auto-memory", "implicit"]);
+});
+
+test("agent prompt capture prepares local memory and project MEMORY.md write together", () => {
+  const capture = createAgentMemoryPromptCapture({
+    prompt: "以后这个项目提交信息都用中文",
+    projectPath: "E:\\CodeHome\\Forge",
+    sourceThreadId: "thread-memory"
+  });
+
+  assert.ok(capture);
+  assert.equal(capture.candidate.content, "提交信息都用中文");
+  assert.equal(capture.candidate.projectPath, "E:\\CodeHome\\Forge");
+  assert.equal(capture.candidate.sourceThreadId, "thread-memory");
+  assert.equal(capture.candidate.trigger, "implicit");
+
+  assert.ok(capture.projectMemoryRequest);
+  assert.equal(capture.projectMemoryRequest.projectRoot, "E:\\CodeHome\\Forge");
+  assert.equal(capture.projectMemoryRequest.input.content, "提交信息都用中文");
+  assert.match(capture.projectMemoryRequest.input.id, /^implicit-/u);
+  assert.deepEqual(capture.projectMemoryRequest.input.tags, ["auto-memory", "implicit"]);
+
+  assert.equal(
+    createAgentMemoryPromptCapture({
+      prompt: "这个项目必须修复登录页",
+      projectPath: "E:\\CodeHome\\Forge",
+      sourceThreadId: "thread-memory"
+    }),
+    null
+  );
 });
 
 test("implicit project memory capture avoids global or transient project chatter", () => {
