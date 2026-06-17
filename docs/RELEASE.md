@@ -39,11 +39,13 @@ npm run dist:win
 
 ## CI/CD 打包产物
 
-`.github\workflows\ci-cd.yml` 会在 PR 和任意分支 push 时运行 `npm ci`, `npm test`, `npm run typecheck`, `npm run lint` 和 `npm run build`。
+`.github\workflows\ci-cd.yml` 会在 PR 和任意分支 push 时先运行基础 CI: `npm ci`, `npm test`, `npm run typecheck`, `npm run lint` 和 `npm run build`; 基础 CI 通过后, 会继续运行 v0.3 质量门禁 `npm run quality:regression:gate` 和 `npm run qa:built-in-tools`。
+
+CI 中的 Built-in Tools QA 会先准备 `.tmp-test\quality-gate-sandbox` 受控沙箱, 并通过 `GITHUB_ENV` 把解析后的绝对路径写入 `FORGE_QA_PROJECT_ROOT`, 避免项目根目录缺失导致 QA 只返回 skipped。
 
 workflow 使用只读 `GITHUB_TOKEN` 权限、PowerShell 7 shell 和 Node.js 24; checkout 不持久化写入凭据, 避免普通 CI 运行携带不需要的 Git 写入能力。
 
-推送 `v*` tag 或手动运行 workflow 时, CI 通过后会执行 `npm run dist:win`, 并把 `release\*setup.exe` 上传为 `forge-windows-installer` artifact。该 workflow 只生成和保存安装包 artifact, 不会自动创建 GitHub Release, 也不会自动发布安装包。正式发布仍按下方 GitHub Release 步骤人工确认、上传和记录烟测证据。
+推送 `v*` tag 或手动运行 workflow 时, 基础 CI 和 v0.3 质量门禁都通过后才会执行 `npm run dist:win`, 并把 `release\*setup.exe` 上传为 `forge-windows-installer` artifact。该 workflow 只生成和保存安装包 artifact, 不会自动创建 GitHub Release, 也不会自动发布安装包。正式发布仍按下方 GitHub Release 步骤人工确认、上传和记录烟测证据。
 
 ## GitHub Release 发布
 

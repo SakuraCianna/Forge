@@ -1,7 +1,6 @@
 // 本文件说明: 串联 v0.3.x 发布候选质量门禁, 不执行发布、上传或 Git 写操作
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { prepareBuiltInToolQaSandbox } from "./prepare-built-in-tool-qa-sandbox.mjs";
 
 const commandDefinitions = [
   npmCommandSpec("npm test", ["test"]),
@@ -126,62 +125,11 @@ async function createCommandEnv() {
   delete childEnv.FORGE_QUALITY_GATE_SKIP_DIST;
 
   const projectRoot =
-    process.env.FORGE_QA_PROJECT_ROOT ?? (await createDefaultQaSandbox());
+    process.env.FORGE_QA_PROJECT_ROOT ?? (await prepareBuiltInToolQaSandbox());
 
   return {
     ...childEnv,
     FORGE_QA_MODEL_ID: process.env.FORGE_QA_MODEL_ID ?? "mimo-v2.5-pro",
     FORGE_QA_PROJECT_ROOT: projectRoot
   };
-}
-
-async function createDefaultQaSandbox() {
-  const projectRoot = resolve(".tmp-test", "quality-gate-sandbox");
-  const sourceRoot = join(projectRoot, "src");
-
-  await mkdir(sourceRoot, { recursive: true });
-  await writeFile(
-    join(projectRoot, "package.json"),
-    JSON.stringify(
-      {
-        name: "forge-v0-3-quality-gate-sandbox",
-        scripts: {
-          build: "node -e \"console.log('Forge quality gate build')\"",
-          lint: "node -e \"console.log('Forge quality gate lint')\"",
-          test: "node -e \"console.log('Forge quality gate test')\"",
-          typecheck: "tsc --noEmit"
-        },
-        devDependencies: {
-          typescript: "^6.0.3"
-        }
-      },
-      null,
-      2
-    ),
-    "utf8"
-  );
-  await writeFile(
-    join(projectRoot, "tsconfig.json"),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          module: "ESNext",
-          moduleResolution: "Bundler",
-          strict: true,
-          target: "ES2022"
-        },
-        include: ["src/**/*.ts"]
-      },
-      null,
-      2
-    ),
-    "utf8"
-  );
-  await writeFile(
-    join(sourceRoot, "index.ts"),
-    "export function hello(name: string): string {\n  return `hello ${name}`;\n}\n",
-    "utf8"
-  );
-
-  return projectRoot;
 }

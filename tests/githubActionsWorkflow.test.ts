@@ -22,6 +22,12 @@ test("CI/CD workflow runs project checks and uploads Windows installer artifacts
   assert.match(workflow, /run: npm run typecheck/u);
   assert.match(workflow, /run: npm run lint/u);
   assert.match(workflow, /run: npm run build/u);
+  assert.match(workflow, /quality-gates:/u);
+  assert.match(workflow, /name: v0\.3 Quality Gates/u);
+  assert.match(workflow, /needs: ci/u);
+  assert.match(workflow, /run: npm run quality:regression:gate/u);
+  assert.match(workflow, /run: node scripts\/prepare-built-in-tool-qa-sandbox\.mjs/u);
+  assert.match(workflow, /run: npm run qa:built-in-tools/u);
   assert.match(workflow, /startsWith\(github\.ref, 'refs\/tags\/v'\)/u);
   assert.match(workflow, /run: npm run dist:win/u);
   assert.match(workflow, /uses: actions\/upload-artifact@v7/u);

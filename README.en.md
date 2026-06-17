@@ -185,9 +185,10 @@ npm run release:check
 
 The GitHub Actions workflow lives at `.github\workflows\ci-cd.yml`.
 
-- Pull requests and pushes to any branch run `npm ci`, `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` on `windows-latest`.
+- Pull requests and pushes to any branch first run baseline CI on `windows-latest`: `npm ci`, `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build`; after baseline CI passes, they also run `npm run quality:regression:gate` and `npm run qa:built-in-tools`.
+- The v0.3 quality gates prepare the controlled `.tmp-test\quality-gate-sandbox` first and export its resolved absolute path as `FORGE_QA_PROJECT_ROOT`, so Built-in Tools QA does not skip because the project root is missing.
 - The workflow uses read-only `GITHUB_TOKEN` permissions, a PowerShell 7 shell, and Node.js 24; checkout does not persist write credentials.
-- Pushing a `v*` tag or manually running the workflow runs `npm run dist:win` after CI passes and uploads the `forge-windows-installer` artifact.
+- Pushing a `v*` tag or manually running the workflow runs `npm run dist:win` only after baseline CI and the v0.3 quality gates pass, then uploads the `forge-windows-installer` artifact.
 - The workflow only builds and uploads installer artifacts. It does not create GitHub Releases, publish installers, or replace manual release checks and installer smoke testing.
 
 `npm test` compiles lightweight regression tests first and then runs Node.js tests for core logic such as Agent context isolation.
