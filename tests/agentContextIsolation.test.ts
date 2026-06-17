@@ -82,6 +82,78 @@ test("explicit project memories can be mirrored into MEMORY.md writes", () => {
   assert.deepEqual(request.input.tags, ["explicit"]);
 });
 
+test("durable project conventions can be captured without explicit remember wording", () => {
+  const projectRule = extractAgentMemoryCandidate(
+    "以后这个项目提交信息都用中文",
+    "E:\\CodeHome\\Forge"
+  );
+  const boundaryRule = extractAgentMemoryCandidate(
+    "这个项目必须通过 main/preload 暴露文件能力，不要让 renderer 直接读 fs",
+    "E:\\CodeHome\\Forge"
+  );
+
+  assert.ok(projectRule);
+  assert.equal(projectRule.content, "提交信息都用中文");
+  assert.equal(projectRule.projectPath, "E:\\CodeHome\\Forge");
+
+  assert.ok(boundaryRule);
+  assert.equal(
+    boundaryRule.content,
+    "必须通过 main/preload 暴露文件能力，不要让 renderer 直接读 fs"
+  );
+
+  const request = createProjectMemoryWriteRequest(projectRule);
+
+  assert.ok(request);
+  assert.match(request.input.id, /^implicit-/u);
+  assert.deepEqual(request.input.tags, ["auto-memory", "implicit"]);
+});
+
+test("implicit project memory capture avoids global or transient project chatter", () => {
+  assert.equal(
+    extractAgentMemoryCandidate("以后这个项目提交信息都用中文", null),
+    null
+  );
+  assert.equal(
+    extractAgentMemoryCandidate("这个项目现在 lint 报错，帮我看看", "E:\\CodeHome\\Forge"),
+    null
+  );
+  assert.equal(
+    extractAgentMemoryCandidate("这个项目需要修复登录页", "E:\\CodeHome\\Forge"),
+    null
+  );
+  assert.equal(
+    extractAgentMemoryCandidate("这个项目应该支持导出 CSV", "E:\\CodeHome\\Forge"),
+    null
+  );
+  assert.equal(
+    extractAgentMemoryCandidate("这个项目 user 页面打不开，帮我看看", "E:\\CodeHome\\Forge"),
+    null
+  );
+  assert.equal(
+    extractAgentMemoryCandidate("这个项目必须修复登录页", "E:\\CodeHome\\Forge"),
+    null
+  );
+  assert.equal(
+    extractAgentMemoryCandidate("这个项目优先修复登录页", "E:\\CodeHome\\Forge"),
+    null
+  );
+  assert.equal(
+    extractAgentMemoryCandidate("这个项目默认打开登录页会报错", "E:\\CodeHome\\Forge"),
+    null
+  );
+});
+
+test("implicit project memory candidates redact sensitive values before local persistence", () => {
+  const candidate = extractAgentMemoryCandidate(
+    "这个项目必须使用 api_key=sk-1234567890abcdef 进行本地测试",
+    "E:\\CodeHome\\Forge"
+  );
+
+  assert.ok(candidate);
+  assert.equal(candidate.content, "必须使用 api_key=[redacted] 进行本地测试");
+});
+
 test("global memories stay in local storage instead of project MEMORY.md", () => {
   const candidate = extractAgentMemoryCandidate("remember answer in concise Chinese", null);
 
