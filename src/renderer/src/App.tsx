@@ -210,14 +210,9 @@ import {
 } from "@/state/lazyProjectFileTree";
 import { getProjectFileParentPaths, type ProjectFileTreeNode } from "@/state/projectFileTree";
 import {
-  addRecentProject,
-  createProjectFromPath,
-  loadRecentProjects,
-  removeRecentProject as removeRecentProjectRecord,
-  saveRecentProjects,
-  toggleProjectPinned,
-  type ForgeProject
+  createProjectFromPath
 } from "@/state/projects";
+import { useProjectWorkspace } from "@/state/projectWorkspace";
 import {
   attachThreadAgentActions,
   attachThreadMemoryContext,
@@ -499,19 +494,6 @@ function inferValidationKindFromCommand(command: string): AgentValidationKind | 
   return null;
 }
 
-function selectInitialProjectFromPreferences(
-  projects: ForgeProject[],
-  storage: Storage | null
-): ForgeProject | null {
-  if (!storage) {
-    return projects[0] ?? null;
-  }
-
-  const preferences = loadGeneralPreferences(storage);
-
-  return preferences.defaultOpenTarget === "blank" ? null : (projects[0] ?? null);
-}
-
 function createTextFilePreview(file: ProjectTextFile): ProjectFilePreview {
   return {
     ...file,
@@ -765,19 +747,19 @@ export function App(): ReactElement {
     return loadModelSettings(window.localStorage);
   });
   const [keyStatuses, setKeyStatuses] = useState<Record<string, ProviderKeyStatus>>({});
-  const [recentProjects, setRecentProjects] = useState<ForgeProject[]>(() => {
-    if (typeof window === "undefined") {
-      return [];
-    }
-
-    return loadRecentProjects(window.localStorage);
-  });
-  const [currentProject, setCurrentProject] = useState<ForgeProject | null>(() =>
-    selectInitialProjectFromPreferences(
-      recentProjects,
-      typeof window === "undefined" ? null : window.localStorage
-    )
-  );
+  const {
+    addProject,
+    currentProject,
+    missingProjectPath,
+    recentProjects,
+    removeProject: removeProjectFromWorkspace,
+    renameProject: renameWorkspaceProject,
+    selectProject: selectWorkspaceProject,
+    setCurrentProject,
+    setMissingProjectPath,
+    setRecentProjects,
+    togglePinnedProject: togglePinnedWorkspaceProject
+  } = useProjectWorkspace(typeof window === "undefined" ? null : window.localStorage);
   const [projectScanResult, setProjectScanResult] = useState<ProjectScanResult | null>(null);
   const [previewFile, setPreviewFile] = useState<ProjectTextFile | null>(null);
   const [filePreview, setFilePreview] = useState<ProjectFilePreview | null>(null);
@@ -790,7 +772,6 @@ export function App(): ReactElement {
   const [fileTreeNotice, setFileTreeNotice] = useState<string | null>(null);
   const [fileFormatterMode, setFileFormatterMode] = useState<CodeFormatterMode>("raw");
   const [formattedPreview, setFormattedPreview] = useState<CodeFormatResult | null>(null);
-  const [missingProjectPath, setMissingProjectPath] = useState<string | null>(null);
   const [changePreviews, setChangePreviews] = useState<ProjectFileChangePreview[]>([]);
   const [gitStatus, setGitStatus] = useState<ProjectGitStatus | null>(null);
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
@@ -1265,10 +1246,6 @@ export function App(): ReactElement {
   useEffect(() => {
     saveModelSettings(window.localStorage, settings);
   }, [settings]);
-
-  useEffect(() => {
-    saveRecentProjects(window.localStorage, recentProjects);
-  }, [recentProjects]);
 
   useEffect(() => {
     saveUsageEvents(window.localStorage, usageEvents);
@@ -1840,25 +1817,20 @@ export function App(): ReactElement {
     }
 
     const project = createProjectFromPath(projectPath);
-    setMissingProjectPath(null);
     currentProjectPathRef.current = project.path;
-    setCurrentProject(project);
-    setRecentProjects((current) => addRecentProject(current, project));
+    addProject(project);
     setActiveView("workspace");
   }
 
   // 选中侧边栏项目并刷新缺失提示, 不在这里做昂贵扫描
   function selectProject(projectPath: string): void {
-    const project = recentProjects.find((candidate) => candidate.path === projectPath);
+    const project = selectWorkspaceProject(projectPath);
 
     if (!project) {
       return;
     }
 
-    setMissingProjectPath(null);
     currentProjectPathRef.current = project.path;
-    setCurrentProject(project);
-    setRecentProjects((current) => addRecentProject(current, { ...project, openedAt: new Date().toISOString() }));
     setSelectedThreadId(
       threads.find((thread) => !thread.archived && thread.projectPath === projectPath)?.id ?? null
     );
@@ -1867,29 +1839,15 @@ export function App(): ReactElement {
 
   // 移除最近项目记录, 当前项目被移除时自动选择下一个项目
   function removeProjectRecord(projectPath: string): void {
-    setRecentProjects((current) => removeRecentProjectRecord(current, projectPath));
-
+    removeProjectFromWorkspace(projectPath);
     if (currentProject?.path === projectPath) {
-      setMissingProjectPath(null);
       currentProjectPathRef.current = null;
-      setCurrentProject(null);
     }
   }
 
   // 切换项目置顶状态并同步当前项目引用
   function togglePinnedProject(projectPath: string): void {
-    setRecentProjects((current) => {
-      const nextProjects = toggleProjectPinned(current, projectPath);
-      const updatedProject = nextProjects.find((project) => project.path === projectPath);
-
-      if (updatedProject) {
-        setCurrentProject((currentProjectValue) =>
-          currentProjectValue?.path === projectPath ? updatedProject : currentProjectValue
-        );
-      }
-
-      return nextProjects;
-    });
+    togglePinnedWorkspaceProject(projectPath);
   }
 
   // 归档指定项目的全部会话, 用于项目更多菜单的清理动作
@@ -1922,9 +1880,8 @@ export function App(): ReactElement {
       });
       const nextProject = createProjectFromPath(result.path);
 
-      setMissingProjectPath(null);
-      setCurrentProject(nextProject);
-      setRecentProjects((current) => addRecentProject(current, nextProject));
+      currentProjectPathRef.current = nextProject.path;
+      addProject(nextProject);
       setSelectedThreadId(null);
       setActiveView("workspace");
       setTaskNotice(
@@ -1954,15 +1911,7 @@ export function App(): ReactElement {
       return;
     }
 
-    const normalizedName = makeUniqueProjectName(nextName.trim(), recentProjects, projectPath);
-    setRecentProjects((current) =>
-      current.map((candidate) =>
-        candidate.path === projectPath ? { ...candidate, name: normalizedName } : candidate
-      )
-    );
-    setCurrentProject((current) =>
-      current?.path === projectPath ? { ...current, name: normalizedName } : current
-    );
+    renameWorkspaceProject(projectPath, nextName);
   }
 
   // 启动后优先恢复最近项目, 项目不存在时给出可处理提示
@@ -6091,13 +6040,10 @@ export function App(): ReactElement {
           const thread = selectThreadById(threads, threadId);
 
           if (thread?.projectPath) {
-            const project = recentProjects.find((candidate) => candidate.path === thread.projectPath);
+            const project = selectWorkspaceProject(thread.projectPath);
 
             if (project) {
-              setCurrentProject(project);
-              setRecentProjects((current) =>
-                addRecentProject(current, { ...project, openedAt: new Date().toISOString() })
-              );
+              currentProjectPathRef.current = project.path;
             }
           }
 
@@ -6491,29 +6437,6 @@ function formatAgentRuntimeError(
   const prefix = kind === "file" ? "File action" : kind === "command" ? "Command execution" : "Agent action";
 
   return `${prefix} failed: ${detail}`;
-}
-
-// 重复项目名加序号, 侧边栏展示时保持可区分
-function makeUniqueProjectName(name: string, projects: ForgeProject[], projectPath: string): string {
-  const existing = new Set(
-    projects
-      .filter((project) => project.path !== projectPath)
-      .map((project) => project.name.trim().toLowerCase())
-  );
-
-  if (!existing.has(name.toLowerCase())) {
-    return name;
-  }
-
-  let suffix = 2;
-  let candidate = `${name} ${suffix}`;
-
-  while (existing.has(candidate.toLowerCase())) {
-    suffix += 1;
-    candidate = `${name} ${suffix}`;
-  }
-
-  return candidate;
 }
 
 // 把文本 diff 渲染成逐行预览, 供文件页和审查面板复用
