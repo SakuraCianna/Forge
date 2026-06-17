@@ -27,6 +27,7 @@ export default tseslint.config(
       "coverage/**",
       "dist/**",
       "dist-electron/**",
+      "Forge-site/**",
       "node_modules/**",
       "out/**",
       ".tmp-test/**"
