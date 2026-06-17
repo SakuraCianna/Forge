@@ -270,9 +270,9 @@ import {
   type CodeFormatterMode
 } from "@/state/codeFormatting";
 import {
-  canAppendDirectAnswerToThread,
-  isContinuationPrompt
+  canAppendDirectAnswerToThread
 } from "@/state/conversationRouting";
+import { shouldSubmitAsContinuation } from "@/state/taskContinuation";
 import { createTaskSubmissionRoute } from "@/state/taskSubmissionRouting";
 import {
   createTaskSubmissionExecution,
@@ -530,30 +530,6 @@ function getRunningThreadCommandRunIds(thread: TaskThread | null): string[] {
 
 function getThreadCommandRunKey(command: string, runId?: string): string {
   return runId ? `run:${runId}` : `command:${command}`;
-}
-
-function shouldSubmitAsContinuation(
-  thread: TaskThread | null,
-  currentProjectPath: string | null,
-  prompt: string
-): thread is TaskThread {
-  if (!thread || thread.status === "running" || !isContinuationPrompt(prompt)) {
-    return false;
-  }
-
-  if (thread.projectPath && currentProjectPath && thread.projectPath !== currentProjectPath) {
-    return false;
-  }
-
-  return (
-    (thread.agentActions?.length ?? 0) > 0 ||
-    thread.events.some((event) =>
-      event.kind === "plan" ||
-      event.kind === "file" ||
-      Boolean(event.commandRun) ||
-      Boolean(event.commandResult)
-    )
-  );
 }
 
 export function App(): ReactElement {
