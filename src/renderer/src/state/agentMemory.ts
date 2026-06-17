@@ -1,6 +1,7 @@
 // 本文件说明: 维护 Agent 记忆的持久化, 去重, 检索和中文短词匹配
 import type { Language } from "@shared/modelTypes";
 import type { ProjectScanResult } from "@shared/projectTypes";
+import { redactSensitiveMemoryContent } from "../../../shared/memoryRedaction.js";
 import { parseProjectMemoryMarkdownEntries } from "../../../shared/projectMemoryMarkdown.js";
 
 const agentMemoryStorageKey = "forge.agentMemories";
@@ -22,6 +23,7 @@ type AgentMemoryCandidate = {
   content: string;
   projectPath?: string | null;
   sourceThreadId?: string;
+  trigger?: "explicit" | "implicit";
 };
 
 export type ProjectMemoryWriteRequest = {
@@ -248,7 +250,7 @@ export function selectRelevantAgentMemoriesForProject({
   );
 }
 
-// 只从明确的记忆指令里提取内容, 避免普通聊天被误存成长期记忆
+// 只从明确记忆指令或项目级长期规则里提取内容, 避免普通聊天被误存成长期记忆
 export function extractAgentMemoryCandidate(
   prompt: string,
   projectPath?: string | null
@@ -262,11 +264,9 @@ export function extractAgentMemoryCandidate(
   const explicitMatch =
     /(?:请记住|记住|以后记得|帮我记住|remember|note that)[:：,\s]*(.+)$/iu.exec(normalizedPrompt);
 
-  if (!explicitMatch?.[1]) {
-    return null;
-  }
-
-  const content = normalizeMemoryContent(explicitMatch[1]);
+  const content = explicitMatch?.[1]
+    ? normalizeMemoryContent(redactSensitiveMemoryContent(explicitMatch[1]))
+    : extractImplicitProjectMemoryContent(normalizedPrompt, projectPath);
 
   if (!content || content.length < 4) {
     return null;
@@ -274,8 +274,63 @@ export function extractAgentMemoryCandidate(
 
   return {
     content,
-    projectPath: normalizeProjectPath(projectPath)
+    projectPath: normalizeProjectPath(projectPath),
+    trigger: explicitMatch?.[1] ? "explicit" : "implicit"
   };
+}
+
+function extractImplicitProjectMemoryContent(
+  prompt: string,
+  projectPath?: string | null
+): string | null {
+  if (!normalizeProjectPath(projectPath)) {
+    return null;
+  }
+
+  const match =
+    /^(?:以后|后续|今后)(?:在)?(?:这个|本)?项目(?:里|中)?[:：,，\s]*(.+)$/iu.exec(prompt) ??
+    /^(?:这个|本)项目(?:里|中)?[:：,，\s]*(.+)$/iu.exec(prompt);
+  const content = normalizeMemoryContent(redactSensitiveMemoryContent(match?.[1] ?? ""));
+
+  if (!content || !isDurableProjectMemoryContent(content)) {
+    return null;
+  }
+
+  return content;
+}
+
+function isDurableProjectMemoryContent(content: string): boolean {
+  return (
+    !looksLikeTransientProjectTask(content) &&
+    hasProjectPolicyLanguage(content) &&
+    hasDurableProjectMemorySignal(content)
+  );
+}
+
+function hasProjectPolicyLanguage(content: string): boolean {
+  return (
+    /(?:必须|统一|都用|不要|禁止|优先|保持|只能|默认)/u.test(content) ||
+    /\b(?:always|never|prefer|must|keep)\b/iu.test(content)
+  );
+}
+
+function hasDurableProjectMemorySignal(content: string): boolean {
+  return (
+    /(?:规则|约定|规范|风格|提交|commit|PR|README|文档|注释|命令|PowerShell|Windows|main\/preload|renderer|IPC|fs|Git|分支|测试|质量|门禁|CI|lint|typecheck|build|npm|pnpm|yarn|环境变量|密钥|token|api_key|API key|本地测试|模型|provider|memory|MEMORY\.md|架构|目录|路径|依赖|TypeScript|any|复用|读取|查看|运行)/iu.test(
+      content
+    ) || /(?:都用|统一|保持|只能|不要|禁止)/u.test(content)
+  );
+}
+
+function looksLikeTransientProjectTask(content: string): boolean {
+  return (
+    /(?:帮我|看看|报错|打不开|失败|异常|崩溃|bug|错误|卡住|不显示|不能|无法|fix|broken|error|failing|fails|crash)/iu.test(
+      content
+    ) ||
+    /^(?:必须|优先|默认|先|继续)?(?:修复|解决|排查|处理|实现|新增|添加|支持|优化|重构|拆|推进|改|调整|更新|检查|打开|关闭|删除|创建|做|写|加|移除)/u.test(
+      content
+    )
+  );
 }
 
 // 项目级显式记忆同步写入 MEMORY.md, 让文件记忆和本地记忆保持同一来源
@@ -293,9 +348,11 @@ export function createProjectMemoryWriteRequest(
     toolName: "writeProjectMemory",
     projectRoot,
     input: {
-      id: `explicit-${hashMemoryContent(content)}`,
+      id: `${candidate.trigger === "implicit" ? "implicit" : "explicit"}-${hashMemoryContent(
+        content
+      )}`,
       content,
-      tags: ["explicit"]
+      tags: candidate.trigger === "implicit" ? ["auto-memory", "implicit"] : ["explicit"]
     }
   };
 }

@@ -3373,7 +3373,7 @@ export function App(): ReactElement {
     return thread?.projectPath ?? currentProject?.path ?? null;
   }
 
-  // 用户显式要求记住时写入长期记忆, 普通消息不保存
+  // 用户显式记忆或明确项目长期规则写入长期记忆, 普通消息不保存
   function rememberPromptIfNeeded(
     threadId: string,
     prompt: string,
