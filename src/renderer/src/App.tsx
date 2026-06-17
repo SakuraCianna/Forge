@@ -273,6 +273,7 @@ import {
   canAppendDirectAnswerToThread
 } from "@/state/conversationRouting";
 import { shouldSubmitAsContinuation } from "@/state/taskContinuation";
+import { getRunningThreadCommandRunIds } from "@/state/threadCommandRuns";
 import { createTaskSubmissionRoute } from "@/state/taskSubmissionRouting";
 import {
   createTaskSubmissionExecution,
@@ -497,39 +498,6 @@ function createTextFilePreview(file: ProjectTextFile): ProjectFilePreview {
     kind: "text",
     mediaType: "text/plain; charset=utf-8"
   };
-}
-
-function getRunningThreadCommandRunIds(thread: TaskThread | null): string[] {
-  if (!thread) {
-    return [];
-  }
-
-  const finishedRunKeys = new Set(
-    thread.events
-      .flatMap((event) => (event.commandResult ? [event.commandResult] : []))
-      .map((result) => getThreadCommandRunKey(result.command, result.runId))
-  );
-  const runningRunIds: string[] = [];
-
-  for (const event of thread.events) {
-    const commandRun = event.commandRun;
-
-    if (!commandRun?.runId) {
-      continue;
-    }
-
-    const runKey = getThreadCommandRunKey(commandRun.command, commandRun.runId);
-
-    if (!finishedRunKeys.has(runKey)) {
-      runningRunIds.push(commandRun.runId);
-    }
-  }
-
-  return [...new Set(runningRunIds)];
-}
-
-function getThreadCommandRunKey(command: string, runId?: string): string {
-  return runId ? `run:${runId}` : `command:${command}`;
 }
 
 export function App(): ReactElement {
