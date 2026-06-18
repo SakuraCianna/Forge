@@ -4,7 +4,7 @@
 
 ## 发布前检查
 
-在 `npm run quality:v0.3:usable` 通过前, v0.3.x 发布说明仍按稳定化阶段处理, 不写成已达到可用级。
+v0.3.x 发布说明只有在当前安装包、正式回归证据和安装烟测证据都通过 `npm run quality:v0.3:usable` 后, 才能写成可用级候选。重新打包、更新证据或改动 Runtime/工具执行链路后, 必须重新运行该门禁。
 
 1. 确认工作树干净, 并检查本次发布包含的变更
 
@@ -119,6 +119,8 @@ npm run quality:installer-smoke
 ```powershell
 npm run quality:v0.3:usable
 ```
+
+2026-06-18 已在本仓库用现有正式证据复跑并通过一次 `npm run quality:v0.3:usable`, 当前正式证据文件为 `docs\V0_3_REGRESSION_RESULTS.json` 和 `docs\V0_3_INSTALLER_SMOKE.json`。这不是重新执行人工安装烟测; 后续发布前仍需要按当次安装包重新绑定 SHA-256 并重跑门禁。
 
 ## 当前已知打包警告
 

@@ -3,7 +3,7 @@ import type { AgentAction } from "@shared/agentExecutionPlan";
 import {
   runAgentActionBatch,
   type AgentActionRunOutcome
-} from "@/agent/agentActionExecutor";
+} from "./agentActionExecutor.js";
 
 export type AgentRuntimeQueueCoordinator = {
   hasReservedAgentAction: (threadId: string, actions: AgentAction[]) => boolean;

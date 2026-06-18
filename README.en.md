@@ -263,8 +263,12 @@ docs/
   RELEASE.md         Windows installer release workflow
   V0_3_REGRESSION_TASKS.md
                     v0.3.x real-task regression set
+  V0_3_REGRESSION_RESULTS.json
+                    formal v0.3.x real-task regression evidence
   V0_3_REGRESSION_RESULTS.example.json
                     v0.3.x real-task regression results template, not evidence
+  V0_3_INSTALLER_SMOKE.json
+                    formal v0.3.x installer smoke evidence
   V0_3_INSTALLER_SMOKE.example.json
                     v0.3.x installer smoke report template, not evidence
   superpowers/plans/2026-06-05-v0-2-stabilization.md
@@ -326,11 +330,11 @@ Forge uses Shiki highlighting for common engineering languages. Less common lang
 
 ## Status
 
-Forge is currently in the v0.3.x stabilization line. The core workflow is running, including local project indexing, provider configuration, agent planning, file review, command execution, Git operations, Built-in Tools, plugin and skill context, Extensions, agent profiles, memory, usage tracking, and localized error messages.
+Forge is currently a v0.3.x usability candidate. On 2026-06-18, this repository reran and passed `npm run quality:v0.3:usable` against the existing formal real-task regression evidence and installer smoke evidence, while also covering tests, release checks, Built-in Tools QA, and Browser QA. The core workflow is running, including local project indexing, provider configuration, agent planning, file review, command execution, Git operations, Built-in Tools, plugin and skill context, Extensions, agent profiles, memory, usage tracking, and localized error messages.
 
-The main v0.3.x goal is not feature expansion. It is to stabilize Forge into a usable local AI Coding Agent. Tool-layer QA, lint, typecheck, build, and Windows installer generation have automated verification entry points. Real simple, medium, and complex task first-pass completion rates, wrong-file modification rate, unrelated-change rate, and failure-recovery rate still need enough captured samples before Forge can honestly be called usable by those metrics.
+The main v0.3.x goal is not feature expansion. It is to stabilize Forge into a usable local AI Coding Agent. Tool-layer QA, lint, typecheck, build, Windows installer generation, fixed real-task regression, and installer smoke testing now have automated or formal evidence entry points. Long-running local `agent-quality-metrics.json` data still needs to be collected during real use, so the fixed regression set should not be read as a guarantee for every project shape.
 
-Until `npm run quality:v0.3:usable` passes, README and release docs should describe v0.3.x as a stabilization line, not as already usable.
+If the installer is rebuilt, formal evidence files are updated, or the Runtime/tool execution path changes, rerun `npm run quality:v0.3:usable`; until that fresh verification passes, do not describe the new artifact or change as usable-level.
 
 See `docs/V0_3_REGRESSION_TASKS.md` for the current v0.3.x real-task regression set. Historical v0.2.x stabilization records remain in `docs/superpowers/plans/2026-06-05-v0-2-stabilization.md` and must not be reused as v0.3.x usability evidence.
 

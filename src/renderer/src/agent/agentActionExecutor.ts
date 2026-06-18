@@ -3,14 +3,14 @@ import {
   isLikelyAgentProjectDirectoryPath,
   isLikelyAgentProjectFilePath,
   type AgentAction
-} from "@shared/agentExecutionPlan";
+} from "../../../shared/agentExecutionPlan.js";
 import {
   canAutoExecuteBuiltInTool,
   getBuiltInToolDefinition
-} from "@shared/builtInToolCatalog";
-import { getRequiredAgentPermissionForBuiltInTool } from "@shared/builtInToolAgentPermissions";
+} from "../../../shared/builtInToolCatalog.js";
+import { getRequiredAgentPermissionForBuiltInTool } from "../../../shared/builtInToolAgentPermissions.js";
 import type { AgentProfileContext, AgentToolPermission } from "@shared/agentTypes";
-import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "@/state/generalPreferences";
+import { defaultCommandSafetyRuleReason, type CommandSafetyRule } from "../state/generalPreferences.js";
 
 export type AgentActionExecution =
   | { kind: "open-file"; relativePath: string }

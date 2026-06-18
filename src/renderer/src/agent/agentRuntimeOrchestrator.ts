@@ -10,14 +10,14 @@ import {
   type AgentActionRunOutcome,
   type AgentCommandRisk,
   type AgentCommandSafetyPolicy
-} from "@/agent/agentActionExecutor";
+} from "./agentActionExecutor.js";
 import {
   selectAutoFailureRecoveryCandidate,
   selectAutoFailureRecoverySkipNotice,
   type AutoFailureRecoveryCandidate,
   type AutoFailureRecoverySkipNotice,
   type SelectAutoFailureRecoveryCandidateInput
-} from "@/agent/autoFailureRecovery";
+} from "./autoFailureRecovery.js";
 
 type DeniedPermission = Extract<AgentActionPermissionResult, { ok: false }>;
 type ManualGateExecution = Extract<AgentActionExecution, { kind: "manual-gate" }>;
