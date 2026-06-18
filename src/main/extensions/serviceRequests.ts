@@ -81,6 +81,27 @@ export async function bitbucketRequest({
   });
 }
 
+export async function giteeRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    method,
+    service: "Gitee",
+    url: withQuery(`https://gitee.com/api/v5${path}`, {
+      ...query,
+      access_token: token
+    })
+  });
+}
+
 export async function slackRequest({
   body,
   method,
@@ -260,6 +281,84 @@ export async function googleDriveRequest({
     service: "Google Drive",
     url: withQuery(`https://www.googleapis.com/drive/v3${path}`, query)
   });
+}
+
+export async function nextcloudOcsRequest({
+  credentials,
+  path,
+  query
+}: {
+  credentials: { appPassword: string; serverUrl: string; username: string };
+  path: string;
+  query?: Record<string, string>;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Accept: "application/json",
+      Authorization: createBasicAuthHeader(credentials.username, credentials.appPassword),
+      "OCS-APIRequest": "true"
+    },
+    method: "GET",
+    service: "Nextcloud",
+    url: withQuery(`${credentials.serverUrl}${path}`, {
+      ...query,
+      format: "json"
+    })
+  });
+}
+
+export async function hetznerCloudRequest({
+  method,
+  path,
+  query,
+  token
+}: {
+  method: "GET";
+  path: string;
+  query?: Record<string, string>;
+  token: string;
+}): Promise<unknown> {
+  return requestJson({
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    method,
+    service: "Hetzner Cloud",
+    url: withQuery(`https://api.hetzner.cloud/v1${path}`, query)
+  });
+}
+
+export async function webhookJsonPost({
+  body,
+  service,
+  url
+}: {
+  body: Record<string, unknown>;
+  service: string;
+  url: string;
+}): Promise<unknown> {
+  const result = await requestJson({
+    body,
+    method: "POST",
+    retry: false,
+    service,
+    url
+  });
+  const record = readRecord(result);
+  const statusCode = record.errcode ?? record.code ?? record.StatusCode;
+
+  if (statusCode === undefined) {
+    throw new Error(`${service} webhook request failed: missing success code`);
+  }
+
+  if (
+    (typeof statusCode === "number" && statusCode !== 0) ||
+    (typeof statusCode === "string" && statusCode !== "0")
+  ) {
+    throw new Error(`${service} webhook request failed: ${formatErrorPayload(result)}`);
+  }
+
+  return result;
 }
 
 export async function asanaRequest({

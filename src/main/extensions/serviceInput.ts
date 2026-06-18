@@ -78,6 +78,23 @@ export function normalizeHttpsOrigin(value: string, label: string): string {
   return parsed.origin;
 }
 
+export function normalizeHttpsUrl(value: string, label: string): string {
+  const normalized = value.trim();
+  let parsed: URL;
+
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`${label} must be a valid https URL`);
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error(`${label} must use https`);
+  }
+
+  return parsed.toString();
+}
+
 export function normalizeZendeskSubdomain(value: string): string {
   const normalized = value
     .trim()

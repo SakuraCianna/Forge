@@ -18,6 +18,12 @@ test("built-in service extensions expose production manifests for common service
     "github",
     "gitlab",
     "bitbucket",
+    "gitee",
+    "dingtalk",
+    "wecom",
+    "feishu",
+    "nextcloud",
+    "hetzner-cloud",
     "confluence",
     "slack",
     "notion",
@@ -96,6 +102,12 @@ test("extensions panel maps built-in services to product icon assets", async () 
     ["github", "github.png"],
     ["gitlab", "gitlab.ico"],
     ["bitbucket", "bitbucket.ico"],
+    ["gitee", "gitee.ico"],
+    ["dingtalk", "dingtalk.ico"],
+    ["wecom", "wecom.ico"],
+    ["feishu", "feishu.ico"],
+    ["nextcloud", "nextcloud.ico"],
+    ["hetzner-cloud", "hetzner.ico"],
     ["confluence", "confluence.ico"],
     ["slack", "slack.png"],
     ["notion", "notion.png"],
@@ -536,6 +548,432 @@ test("bitbucket service extension lists repositories with connector token auth",
 
     if (result.ok) {
       assert.equal(result.outputSummary, "Bitbucket team 返回 2 个仓库");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("gitee service extension lists repository issues with access token", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://gitee.com");
+    assert.equal(requestUrl.pathname, "/api/v5/repos/SakuraCianna/Forge/issues");
+    assert.equal(requestUrl.searchParams.get("access_token"), "gitee-token");
+    assert.equal(requestUrl.searchParams.get("per_page"), "2");
+    assert.equal(requestUrl.searchParams.get("state"), "open");
+    assert.equal(init?.method, "GET");
+
+    return {
+      body: [
+        {
+          number: "I1",
+          title: "跟进"
+        },
+        {
+          number: "I2",
+          title: "修复"
+        }
+      ],
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "gitee",
+      "gitee.read",
+      "accessToken",
+      "gitee-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "gitee",
+      actionId: "listRepositoryIssues",
+      input: {
+        limit: 2,
+        owner: "SakuraCianna",
+        repo: "Forge"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Gitee SakuraCianna/Forge 返回 2 个 Issue");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("dingtalk webhook send actions require confirmation before posting", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://oapi.dingtalk.com/robot/send?access_token=test");
+    assert.equal(init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      msgtype: "text",
+      text: {
+        content: "构建通过"
+      }
+    });
+
+    return {
+      body: {
+        errcode: 0,
+        errmsg: "ok"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "dingtalk",
+      "dingtalk.send",
+      "webhookUrl",
+      "https://oapi.dingtalk.com/robot/send?access_token=test"
+    );
+
+    const pending = await fixture.registry.invoke({
+      extensionId: "dingtalk",
+      actionId: "sendTextMessage",
+      input: {
+        content: "构建通过"
+      }
+    });
+
+    assert.equal(pending.ok, false);
+    assert.equal(fetchMock.calls.length, 0);
+
+    if (!pending.ok && "requiresConfirmation" in pending) {
+      const confirmed = await fixture.registry.confirmInvocation({
+        token: pending.confirmation.token
+      });
+
+      assert.equal(confirmed.ok, true);
+      assert.equal(fetchMock.calls.length, 1);
+    } else {
+      assert.fail("sendTextMessage should require confirmation");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("webhook send actions reject non-provider hosts before posting", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async () => {
+    throw new Error("non-provider host should not be called");
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "dingtalk",
+      "dingtalk.send",
+      "webhookUrl",
+      "https://example.com/robot/send?access_token=test"
+    );
+
+    const pending = await fixture.registry.invoke({
+      extensionId: "dingtalk",
+      actionId: "sendTextMessage",
+      input: {
+        content: "构建通过"
+      }
+    });
+
+    if (!pending.ok && "requiresConfirmation" in pending) {
+      const confirmed = await fixture.registry.confirmInvocation({
+        token: pending.confirmation.token
+      });
+
+      assert.equal(confirmed.ok, false);
+      assert.equal(fetchMock.calls.length, 0);
+
+      if (!confirmed.ok && !("requiresConfirmation" in confirmed)) {
+        assert.match(confirmed.error, /DingTalk webhook URL host must be one of: oapi\.dingtalk\.com/u);
+      }
+    } else {
+      assert.fail("sendTextMessage should require confirmation");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("webhook send actions reject responses without official success code", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async () => ({
+    body: {
+      message: "ok"
+    },
+    status: 200
+  }));
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "feishu",
+      "feishu.send",
+      "webhookUrl",
+      "https://open.feishu.cn/open-apis/bot/v2/hook/test"
+    );
+
+    const pending = await fixture.registry.invoke({
+      extensionId: "feishu",
+      actionId: "sendTextMessage",
+      input: {
+        content: "上线完成"
+      }
+    });
+
+    if (!pending.ok && "requiresConfirmation" in pending) {
+      const confirmed = await fixture.registry.confirmInvocation({
+        token: pending.confirmation.token
+      });
+
+      assert.equal(confirmed.ok, false);
+      assert.equal(fetchMock.calls.length, 1);
+
+      if (!confirmed.ok && !("requiresConfirmation" in confirmed)) {
+        assert.match(confirmed.error, /missing success code/u);
+      }
+    } else {
+      assert.fail("sendTextMessage should require confirmation");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("wecom webhook extension sends markdown after confirmation", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test");
+    assert.equal(init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      markdown: {
+        content: "**检查通过**"
+      },
+      msgtype: "markdown"
+    });
+
+    return {
+      body: {
+        errcode: 0,
+        errmsg: "ok"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "wecom",
+      "wecom.send",
+      "webhookUrl",
+      "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test"
+    );
+
+    const pending = await fixture.registry.invoke({
+      extensionId: "wecom",
+      actionId: "sendMarkdownMessage",
+      input: {
+        text: "**检查通过**",
+        title: "Forge"
+      }
+    });
+
+    if (!pending.ok && "requiresConfirmation" in pending) {
+      const confirmed = await fixture.registry.confirmInvocation({
+        token: pending.confirmation.token
+      });
+
+      assert.equal(confirmed.ok, true);
+      assert.equal(fetchMock.calls.length, 1);
+    } else {
+      assert.fail("sendMarkdownMessage should require confirmation");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("feishu webhook extension sends text after confirmation", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    assert.equal(url, "https://open.feishu.cn/open-apis/bot/v2/hook/test");
+    assert.equal(init?.method, "POST");
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      content: {
+        text: "上线完成"
+      },
+      msg_type: "text"
+    });
+
+    return {
+      body: {
+        code: 0,
+        msg: "success"
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "feishu",
+      "feishu.send",
+      "webhookUrl",
+      "https://open.feishu.cn/open-apis/bot/v2/hook/test"
+    );
+
+    const pending = await fixture.registry.invoke({
+      extensionId: "feishu",
+      actionId: "sendTextMessage",
+      input: {
+        content: "上线完成"
+      }
+    });
+
+    if (!pending.ok && "requiresConfirmation" in pending) {
+      const confirmed = await fixture.registry.confirmInvocation({
+        token: pending.confirmation.token
+      });
+
+      assert.equal(confirmed.ok, true);
+      assert.equal(fetchMock.calls.length, 1);
+    } else {
+      assert.fail("sendTextMessage should require confirmation");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("nextcloud service extension invokes OCS with app password auth", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://cloud.example.com");
+    assert.equal(requestUrl.pathname, "/ocs/v1.php/cloud/users/sakura");
+    assert.equal(requestUrl.searchParams.get("format"), "json");
+    assert.equal(init?.method, "GET");
+
+    const headers = init?.headers as Record<string, string>;
+    assert.equal(headers["OCS-APIRequest"], "true");
+    assert.match(headers.Authorization, /^Basic /u);
+
+    return {
+      body: {
+        ocs: {
+          data: {
+            displayname: "Sakura"
+          },
+          meta: {
+            status: "ok"
+          }
+        }
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtensionSecrets(fixture, "nextcloud", "nextcloud.read", {
+      appPassword: "app-password",
+      serverUrl: "https://cloud.example.com",
+      username: "sakura"
+    });
+
+    const result = await fixture.registry.invoke({
+      extensionId: "nextcloud",
+      actionId: "getUserMetadata",
+      input: {
+        userId: "sakura"
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Nextcloud 用户: Sakura");
+    }
+  } finally {
+    fetchMock.restore();
+    await fixture.cleanup();
+  }
+});
+
+test("hetzner cloud service extension lists servers with bearer token", async () => {
+  const fixture = await createRegistryFixture();
+  const fetchMock = installMockFetch(async (url, init) => {
+    const requestUrl = new URL(url);
+
+    assert.equal(requestUrl.origin, "https://api.hetzner.cloud");
+    assert.equal(requestUrl.pathname, "/v1/servers");
+    assert.equal(requestUrl.searchParams.get("per_page"), "2");
+    assert.equal(init?.method, "GET");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer hcloud-token");
+
+    return {
+      body: {
+        servers: [
+          {
+            id: 1,
+            name: "forge-1"
+          },
+          {
+            id: 2,
+            name: "forge-2"
+          }
+        ]
+      },
+      status: 200
+    };
+  });
+
+  try {
+    await configureReadOnlyExtension(
+      fixture,
+      "hetzner-cloud",
+      "hetzner-cloud.read",
+      "apiToken",
+      "hcloud-token"
+    );
+
+    const result = await fixture.registry.invoke({
+      extensionId: "hetzner-cloud",
+      actionId: "listServers",
+      input: {
+        limit: 2
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(fetchMock.calls.length, 1);
+
+    if (result.ok) {
+      assert.equal(result.outputSummary, "Hetzner Cloud 返回 2 台服务器");
     }
   } finally {
     fetchMock.restore();

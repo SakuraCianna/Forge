@@ -1,6 +1,7 @@
 // 本文件说明: 注册常见外部服务内置 Extension, 通过官方 REST API 执行受控动作
 import type { BuiltInServiceExtension } from "./serviceExtensionCore.js";
 import { createSourceControlExtensions } from "./serviceSourceControlExtensions.js";
+import { createRegionalExtensions } from "./serviceRegionalExtensions.js";
 import { createWorkspaceProductivityExtensions } from "./serviceWorkspaceProductivityExtensions.js";
 import { createCustomerExtensions } from "./serviceCustomerExtensions.js";
 import { createTaskCollaborationExtensions } from "./serviceTaskCollaborationExtensions.js";
@@ -12,6 +13,7 @@ import { createDeveloperCommunityExtensions } from "./serviceDeveloperCommunityE
 
 export const serviceExtensionDefinitions: BuiltInServiceExtension[] = [
   ...createSourceControlExtensions(),
+  ...createRegionalExtensions(),
   ...createWorkspaceProductivityExtensions(),
   ...createCustomerExtensions(),
   ...createTaskCollaborationExtensions(),

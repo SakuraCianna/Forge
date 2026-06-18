@@ -41,6 +41,12 @@ Registry 负责:
 - `github`: GitHub REST API 扩展。
 - `gitlab`: GitLab REST API 扩展。
 - `bitbucket`: Bitbucket Cloud REST API 扩展。
+- `gitee`: Gitee API 扩展。
+- `dingtalk`: DingTalk 群机器人 webhook 扩展。
+- `wecom`: WeCom 群机器人 webhook 扩展。
+- `feishu`: Feishu 群机器人 webhook 扩展。
+- `nextcloud`: Nextcloud OCS API 扩展。
+- `hetzner-cloud`: Hetzner Cloud API 扩展。
 - `confluence`: Confluence Cloud REST API 扩展。
 - `slack`: Slack Web API 扩展。
 - `notion`: Notion API 扩展。
@@ -259,6 +265,10 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 - ClickUp OAuth 使用 `https://app.clickup.com/api` 授权入口和 `https://api.clickup.com/api/v2/oauth/token` token endpoint, 用户授权后可读取已授权 Workspaces。
 - monday.com OAuth 使用 `https://auth.monday.com/oauth2/authorize` 和 `https://auth.monday.com/oauth2/token`, API 调用集中到 GraphQL endpoint `https://api.monday.com/v2`。
 - Trello REST API 可以通过 API key 和用户 token 作为查询参数调用, token 必须视为敏感凭据保存。
+- Gitee API v5 支持通过 access token 读取当前用户、仓库和 Issue 摘要, token 必须按最小权限保存。
+- DingTalk、WeCom 和 Feishu 群机器人 webhook 会向外部群发送真实消息, 所有发送动作必须二次确认。
+- Nextcloud OCS API 可配合用户名和 app password 读取 capabilities、用户资料和用户搜索结果。
+- Hetzner Cloud API 使用 Bearer project API token 调用 `https://api.hetzner.cloud/v1`, 建议使用只读 token。
 - Stripe API 使用 secret key 或 restricted key 鉴权, 只读集成应优先使用受限 key。
 - Shopify Admin GraphQL API 使用 Admin API access token 和店铺域名调用, 商品读取需要 `read_products`, 订单读取需要 `read_orders` 等 scope。
 - Mailchimp Marketing API 使用 API key 和 server prefix 调用 `https://{prefix}.api.mailchimp.com/3.0`。
@@ -320,6 +330,63 @@ Salesforce、Zendesk、Intercom、Freshdesk、Pipedrive、Trello、Stripe、Shop
 - `account`
 - `repository`
 - `issue`
+
+### Gitee
+
+`gitee` 使用 Gitee personal access token。当前先开放只读动作, 适合读取国内代码仓库上下文。
+
+支持动作:
+
+- `getCurrentUser`: 读取当前 Gitee 用户摘要。
+- `listRepositories`: 读取当前用户可访问的 Gitee 仓库列表。
+- `listRepositoryIssues`: 读取指定 Gitee 仓库的 Issue 列表。
+
+### DingTalk
+
+`dingtalk` 使用钉钉群自定义机器人 webhook。发送类动作始终要求确认, 且 webhook host 必须是 `oapi.dingtalk.com`。
+
+支持动作:
+
+- `sendTextMessage`: 向钉钉群机器人发送文本消息。
+- `sendMarkdownMessage`: 向钉钉群机器人发送 Markdown 消息。
+
+### WeCom
+
+`wecom` 使用企业微信群机器人 webhook。发送类动作始终要求确认, 且 webhook host 必须是 `qyapi.weixin.qq.com`。
+
+支持动作:
+
+- `sendTextMessage`: 向企业微信群机器人发送文本消息, 可传入成员 ID 或 `@all`。
+- `sendMarkdownMessage`: 向企业微信群机器人发送 Markdown 消息。
+
+### Feishu
+
+`feishu` 使用飞书群自定义机器人 webhook。发送类动作始终要求确认, 且 webhook host 必须是 `open.feishu.cn` 或 `open.larksuite.com`。
+
+支持动作:
+
+- `sendTextMessage`: 向飞书群机器人发送文本消息。
+- `sendMarkdownMessage`: 向飞书群机器人发送富文本消息。
+
+### Nextcloud
+
+`nextcloud` 使用 Nextcloud HTTPS 地址、用户名和 app password。建议在 Nextcloud 中为 Forge 单独创建应用密码, 不要保存主登录密码。
+
+支持动作:
+
+- `getCapabilities`: 读取 Nextcloud OCS capabilities。
+- `getUserMetadata`: 读取指定用户资料。
+- `autocompleteUsers`: 使用 Nextcloud OCS autocomplete 搜索用户。
+
+### Hetzner Cloud
+
+`hetzner-cloud` 使用 Hetzner Cloud project API token。当前先开放只读动作, 建议使用只读 token。
+
+支持动作:
+
+- `listServers`: 读取 servers 列表。
+- `listLocations`: 读取 locations 列表。
+- `listImages`: 读取 images 列表。
 
 ### Slack
 

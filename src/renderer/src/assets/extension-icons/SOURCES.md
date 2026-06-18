@@ -9,6 +9,12 @@ The product names and marks belong to their respective owners.
 | GitHub | `github.png` | `https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png` |
 | GitLab | `gitlab.ico` | `https://about.gitlab.com/favicon.ico` |
 | Bitbucket | `bitbucket.ico` | `https://bitbucket.org/favicon.ico` |
+| Gitee | `gitee.ico` | `https://gitee.com/favicon.ico` |
+| DingTalk | `dingtalk.ico` | `https://www.dingtalk.com/favicon.ico` |
+| WeCom | `wecom.ico` | `https://work.weixin.qq.com/favicon.ico` |
+| Feishu | `feishu.ico` | `https://www.feishu.cn/favicon.ico` |
+| Nextcloud | `nextcloud.ico` | `https://nextcloud.com/favicon.ico` |
+| Hetzner Cloud | `hetzner.ico` | `https://www.hetzner.com/favicon.ico` |
 | Confluence Cloud | `confluence.ico` | `https://www.atlassian.com/favicon.ico` |
 | Slack | `slack.png` | `https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png` |
 | Notion | `notion.png` | `https://www.notion.com/images/logo-ios.png` |

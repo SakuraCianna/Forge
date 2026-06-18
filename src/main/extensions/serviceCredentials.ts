@@ -4,6 +4,7 @@ import {
   normalizeDatadogSite,
   normalizeFreshdeskDomain,
   normalizeHttpsOrigin,
+  normalizeHttpsUrl,
   normalizeShopifyStoreDomain,
   normalizeSimpleHostLabel,
   normalizeZendeskSubdomain
@@ -104,6 +105,34 @@ export async function readTwilioCredentials(
   const authToken = await readSecret(context, "authToken", "Twilio Auth Token");
 
   return { accountSid, authToken };
+}
+
+export async function readNextcloudCredentials(
+  context: ExtensionActionHandlerContext
+): Promise<{ appPassword: string; serverUrl: string; username: string }> {
+  const rawServerUrl = await readSecret(context, "serverUrl", "Nextcloud server URL");
+  const username = await readSecret(context, "username", "Nextcloud username");
+  const appPassword = await readSecret(context, "appPassword", "Nextcloud app password");
+  const serverUrl = normalizeHttpsOrigin(rawServerUrl, "Nextcloud server URL");
+
+  return { appPassword, serverUrl, username };
+}
+
+export async function readWebhookUrl(
+  context: ExtensionActionHandlerContext,
+  fieldId: string,
+  label: string,
+  allowedHosts: readonly string[]
+): Promise<string> {
+  const rawUrl = await readSecret(context, fieldId, label);
+  const url = normalizeHttpsUrl(rawUrl, label);
+  const host = new URL(url).hostname.toLowerCase();
+
+  if (!allowedHosts.includes(host)) {
+    throw new Error(`${label} host must be one of: ${allowedHosts.join(", ")}`);
+  }
+
+  return url;
 }
 
 export async function readSecret(
