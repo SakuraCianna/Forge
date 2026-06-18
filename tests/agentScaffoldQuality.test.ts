@@ -74,6 +74,48 @@ test("bare separated scaffold normalizes lowercase frontend and backend roots", 
   assert.ok(!actionTargets.includes("frontend/src/App.vue"));
 });
 
+test("separated scaffold normalizes root casing after the project is no longer bare", () => {
+  const result = supplementBareProjectScaffoldActions({
+    actions: [
+      createEditAction("action-1", "Backend/pom.xml"),
+      createEditAction("action-2", "frontend/src/App.vue"),
+      createRunAction("action-3", "npm --prefix frontend run build")
+    ],
+    bareProject: false,
+    isCreationTask: true,
+    prompt: studentManagerPrompt
+  });
+  const actionTargets = result.actions.map((action) => action.target ?? action.command);
+
+  assert.equal(result.addedActions, 0);
+  assert.deepEqual(result.missingLayers, []);
+  assert.ok(actionTargets.includes("Backend/pom.xml"));
+  assert.ok(actionTargets.includes("Frontend/src/App.vue"));
+  assert.ok(actionTargets.includes("npm --prefix Frontend run build"));
+  assert.ok(!actionTargets.includes("frontend/src/App.vue"));
+  assert.ok(!actionTargets.includes("npm --prefix frontend run build"));
+});
+
+test("non-bare separated scaffold preserves explicit client roots", () => {
+  const result = supplementBareProjectScaffoldActions({
+    actions: [
+      createEditAction("action-1", "Backend/pom.xml"),
+      createEditAction("action-2", "client/src/App.vue"),
+      createRunAction("action-3", "npm --prefix client run build")
+    ],
+    bareProject: false,
+    isCreationTask: true,
+    prompt: "在已有前后端分离项目里继续补学生管理页面, 前端目录是 client, 后端是 Backend"
+  });
+  const actionTargets = result.actions.map((action) => action.target ?? action.command);
+
+  assert.ok(actionTargets.includes("Backend/pom.xml"));
+  assert.ok(actionTargets.includes("client/src/App.vue"));
+  assert.ok(actionTargets.includes("npm --prefix client run build"));
+  assert.ok(!actionTargets.includes("Frontend/src/App.vue"));
+  assert.ok(!actionTargets.includes("npm --prefix Frontend run build"));
+});
+
 test("bare Vue TypeScript scaffold supplements missing frontend config files", () => {
   const result = supplementBareProjectScaffoldActions({
     actions: [

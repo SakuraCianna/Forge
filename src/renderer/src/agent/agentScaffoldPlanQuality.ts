@@ -52,7 +52,7 @@ export function supplementBareProjectScaffoldActions({
   addedActions: number;
   missingLayers: ScaffoldLayer[];
 } {
-  if (!isCreationTask || !bareProject) {
+  if (!isCreationTask) {
     return {
       actions,
       addedActions: 0,
@@ -60,7 +60,18 @@ export function supplementBareProjectScaffoldActions({
     };
   }
 
-  const normalizedActions = normalizeBareScaffoldActionRoots(actions, prompt);
+  const normalizedActions = normalizeBareScaffoldActionRoots(actions, prompt, {
+    canonicalizeAliasRoots: bareProject
+  });
+
+  if (!bareProject) {
+    return {
+      actions: normalizedActions,
+      addedActions: 0,
+      missingLayers: []
+    };
+  }
+
   const expectedLayers = getExpectedScaffoldLayers(prompt);
 
   if (expectedLayers.length === 0) {
@@ -531,7 +542,11 @@ function resolveScaffoldRoots(stack: ScaffoldStack): {
   };
 }
 
-function normalizeBareScaffoldActionRoots(actions: AgentAction[], prompt: string): AgentAction[] {
+function normalizeBareScaffoldActionRoots(
+  actions: AgentAction[],
+  prompt: string,
+  options: { canonicalizeAliasRoots: boolean }
+): AgentAction[] {
   const stack = detectScaffoldStack(prompt);
 
   if (!stack.separated || !(stack.backend || stack.springBoot)) {
@@ -542,10 +557,10 @@ function normalizeBareScaffoldActionRoots(actions: AgentAction[], prompt: string
 
   return actions.map((action) => {
     const nextTarget = action.target
-      ? normalizeBareScaffoldTarget(action.target, roots)
+      ? normalizeBareScaffoldTarget(action.target, roots, options)
       : action.target;
     const nextCommand = action.command
-      ? normalizeBareScaffoldCommand(action.command, roots)
+      ? normalizeBareScaffoldCommand(action.command, roots, options)
       : action.command;
 
     if (nextTarget === action.target && nextCommand === action.command) {
@@ -566,11 +581,13 @@ function normalizeBareScaffoldTarget(
   roots: {
     backendRoot: string;
     frontendRoot: string;
-  }
+  },
+  options: { canonicalizeAliasRoots: boolean }
 ): string {
   return normalizeBareFrontendTarget(
     normalizeBareBackendTarget(target, roots.backendRoot),
-    roots.frontendRoot
+    roots.frontendRoot,
+    options
   );
 }
 
@@ -579,11 +596,13 @@ function normalizeBareScaffoldCommand(
   roots: {
     backendRoot: string;
     frontendRoot: string;
-  }
+  },
+  options: { canonicalizeAliasRoots: boolean }
 ): string {
   return normalizeBareFrontendCommand(
     normalizeBareBackendCommand(command, roots.backendRoot),
-    roots.frontendRoot
+    roots.frontendRoot,
+    options
   );
 }
 
@@ -605,14 +624,22 @@ function normalizeBareBackendTarget(target: string, backendRoot: string): string
   return normalizedTarget;
 }
 
-function normalizeBareFrontendTarget(target: string, frontendRoot: string): string {
+function normalizeBareFrontendTarget(
+  target: string,
+  frontendRoot: string,
+  options: { canonicalizeAliasRoots: boolean }
+): string {
   const normalizedTarget = normalizeProjectPath(target);
 
   if (!frontendRoot || normalizedTarget.startsWith(frontendRoot)) {
     return normalizedTarget;
   }
 
-  for (const legacyRoot of ["frontend/", "client/", "web/"]) {
+  const roots = options.canonicalizeAliasRoots
+    ? ["frontend/", "client/", "web/"]
+    : ["frontend/"];
+
+  for (const legacyRoot of roots) {
     if (normalizedTarget.toLocaleLowerCase().startsWith(legacyRoot)) {
       return `${frontendRoot}${normalizedTarget.slice(legacyRoot.length)}`;
     }
@@ -641,15 +668,21 @@ function normalizeBareBackendCommand(command: string, backendRoot: string): stri
   return commandWithCanonicalPom;
 }
 
-function normalizeBareFrontendCommand(command: string, frontendRoot: string): string {
+function normalizeBareFrontendCommand(
+  command: string,
+  frontendRoot: string,
+  options: { canonicalizeAliasRoots: boolean }
+): string {
   const trimmedCommand = command.trim();
 
   if (!frontendRoot) {
     return trimmedCommand;
   }
 
+  const rootPattern = options.canonicalizeAliasRoots ? "frontend|client|web" : "frontend";
+
   return trimmedCommand.replace(
-    /\b(?:frontend|client|web)(?=\s+(?:install|run|test|build)|[\\/])/giu,
+    new RegExp(`\\b(?:${rootPattern})(?=\\s+(?:install|run|test|build)|[\\\\/])`, "giu"),
     frontendRoot.replace(/\/$/u, "")
   );
 }

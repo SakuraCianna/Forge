@@ -106,6 +106,58 @@ test("built-in build profile migrates old untouched plan limits", () => {
   assert.equal(context.planStepLimit, 12);
 });
 
+test("built-in profiles default to suggested failure recovery instead of automatic retries", () => {
+  const defaultProfiles = createDefaultAgentProfiles();
+  const buildContext = getActiveAgentProfileContext(defaultProfiles, "zh-CN");
+  const reviewContext = getActiveAgentProfileContext(
+    selectAgentProfile(defaultProfiles, "review"),
+    "zh-CN"
+  );
+  const docsContext = getActiveAgentProfileContext(
+    selectAgentProfile(defaultProfiles, "docs"),
+    "zh-CN"
+  );
+
+  assert.equal(buildContext.failureRecoveryPolicy, "suggest");
+  assert.equal(reviewContext.failureRecoveryPolicy, "suggest");
+  assert.equal(docsContext.failureRecoveryPolicy, "suggest");
+});
+
+test("untouched built-in profiles migrate legacy automatic recovery to suggestions", () => {
+  const [buildProfile] = createDefaultAgentProfiles();
+  assert.ok(buildProfile);
+  const storage = createMemoryStorage({
+    "forge.agentProfiles": JSON.stringify([
+      {
+        ...buildProfile,
+        failureRecoveryPolicy: "auto"
+      }
+    ])
+  });
+  const [migratedProfile] = loadAgentProfiles(storage);
+  const context = getActiveAgentProfileContext([migratedProfile], "zh-CN");
+
+  assert.equal(context.failureRecoveryPolicy, "suggest");
+});
+
+test("customized built-in profiles can keep automatic recovery", () => {
+  const [buildProfile] = createDefaultAgentProfiles();
+  assert.ok(buildProfile);
+  const storage = createMemoryStorage({
+    "forge.agentProfiles": JSON.stringify([
+      {
+        ...buildProfile,
+        failureRecoveryPolicy: "auto",
+        updatedAt: "2026-06-01T00:00:00.000Z"
+      }
+    ])
+  });
+  const [migratedProfile] = loadAgentProfiles(storage);
+  const context = getActiveAgentProfileContext([migratedProfile], "zh-CN");
+
+  assert.equal(context.failureRecoveryPolicy, "auto");
+});
+
 test("customized build profile plan limits are preserved", () => {
   const [buildProfile] = createDefaultAgentProfiles();
   assert.ok(buildProfile);

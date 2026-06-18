@@ -57,6 +57,7 @@ import { getFailureRecoveryAttemptsForAction } from "@/agent/failureRecoveryAtte
 import { getProcessedRecoverySummary } from "@/agent/processedRecoverySummary";
 import { extractSourceUrlsFromText } from "@/agent/agentSources";
 import { getThreadActivitySummary as getThreadActivitySummaryFromEvents } from "@/agent/threadActivitySummary";
+import { shouldShowCompactTranscriptEvent } from "@/agent/threadTranscriptEvents";
 import { formatAgentCommandRiskReason } from "@/i18n/agentMessages";
 import { useI18n } from "@/i18n/useI18n";
 import type { CommandSafetyRule } from "@/state/generalPreferences";
@@ -172,50 +173,6 @@ type CompactProcessedGroup = {
   summaryLabel: string;
   items: CompactProcessedItem[];
 };
-
-// 紧凑主屏在运行中展开可读执行过程, 完成后再折叠回最终总结
-export function shouldShowCompactTranscriptEvent(
-  event: TaskThreadEvent,
-  threadStatus: TaskThread["status"]
-): boolean {
-  if (event.kind === "user") {
-    return true;
-  }
-
-  if (event.kind === "result" && !isReadableLiveProgressEvent(event)) {
-    return true;
-  }
-
-  if (threadStatus === "completed") {
-    return false;
-  }
-
-  return isReadableLiveProgressEvent(event);
-}
-
-function isReadableLiveProgressEvent(event: TaskThreadEvent): boolean {
-  if (isRawPlanStreamEvent(event)) {
-    return false;
-  }
-
-  return (
-    Boolean(event.agentActionRun) ||
-    Boolean(event.commandRun) ||
-    Boolean(event.commandResult) ||
-    Boolean(event.commandApproval) ||
-    Boolean(event.fileChange) ||
-    Boolean(event.failureRecoveryAttempt) ||
-    Boolean(event.autoFailureRecoverySkip) ||
-    event.kind === "file" ||
-    event.kind === "error" ||
-    event.kind === "command" ||
-    event.kind === "plan"
-  );
-}
-
-function isRawPlanStreamEvent(event: TaskThreadEvent): boolean {
-  return event.kind === "plan" && event.id.includes("-plan-stream-");
-}
 
 // 把线程状态拆成简洁对话视图, 复杂执行细节只在需要的标签里展示
 export function ThreadWorkspace({
