@@ -33,6 +33,19 @@ Forge aims to move AI coding from "suggestions in a chat box" to a local enginee
 - Failure recovery can generate follow-up plans from real tool results and command output. In Full Access mode, local dependency installation, file deletion, and Git actions keep moving automatically; external service permissions and production deployment still follow the relevant extension or platform policy.
 - Normal Q&A, explanation, memory, and chat requests are not forced into the project-change workflow.
 
+### Built-in Tools
+
+- Built-in tools are registered in 8 top-level categories: Project, File, Search, Edit, Terminal, Git, Diagnostics, and Auxiliary.
+- Tool metadata includes the name, description, category, risk level, confirmation policy, input/output schema, availability, and executor entry point.
+- In review mode, writes, deletes, moves, patches, dependency installation, commits, branch switching, reverts, and pushes still enter the confirmation queue.
+- Full Access means local agent-queued actions can run automatically, including commands, dependency installation, file writes, built-in tools, and Git actions.
+- Critical tools still keep typed-confirmation metadata for review mode and audit views, including tool name, risk level, target, consequence, and reversibility.
+- Tool calls write structured audit logs and local quality metrics for success rate, failures, confirmation blocks, and Full Access auto-authorization.
+- Tool priority is split into P0, P1, and P2. P0 is the base coding loop and must keep passing normal Built-in Tools QA; P1 is high-frequency stability work, including official-doc lookup, project summaries, entrypoints, symbols, references, typecheck/lint/build, context, and memory; P2 is advanced or high-risk work such as browser debugging, dependency installation, branch/worktree/revert/push, test execution, and project-instruction mutations.
+- `webSearch` and `fetchDocs` are now P1 high-priority tools. When framework, language, platform API, or current behavior matters, the planner should schedule official documentation lookup first. `fetchDocs` maintains curated official documentation mappings for common topics including React, Next.js, Vue, Vite, TypeScript, Node, Electron, Tailwind, Playwright, Prisma, Supabase, Vercel, OpenAI, Stripe, GitHub Actions, Spring Boot, Maven, Gradle, Java, Python, Go, Rust, Docker, and Kubernetes.
+- `searchSemantic` currently uses a local lightweight semantic fallback. It does not call an embedding model, does not read sensitive files, and marks results as `local_semantic_fallback`.
+- Browser screenshots and page-console inspection use restricted local preview URLs. Screenshots are written to the app data directory by default and return a path, dimensions, and size instead of putting large images directly into model context.
+
 ### Composer, Attachments, And Context References
 
 - The composer supports attachments through the add menu, drag-and-drop, and paste.
@@ -342,7 +355,8 @@ Ongoing work includes:
 
 - A more complete Runtime state-machine split.
 - More granular permission policies.
-- A stronger automatic verification and failure-recovery loop.
+- A stronger automatic verification and failure-recovery loop, including after-edit hooks, failure classification, test selection, and smoke-first verification for new scaffolds.
+- More complete P1/P2 tool productization: documentation versioning, caching, and citation display for `fetchDocs`; trusted-source ranking for `webSearch`; true embedding-backed semantic search; preview-environment guidance for browser tools; and real side-effect sandboxes for high-risk tools such as dependency installation, branch/worktree/revert/push.
 - Better large-project incremental scanning, text indexing, and large-file preview.
 - A more stable product-grade packaging and release workflow.
 

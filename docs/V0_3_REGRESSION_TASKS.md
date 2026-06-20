@@ -201,13 +201,13 @@
 
 ### M5 内置工具 QA 覆盖摘要
 
-- 目标: 让当前回归任务文档记录 Built-in Tools QA 覆盖的工具数量、P0 数量和安全断言。
+- 目标: 让当前回归任务文档记录 Built-in Tools QA 覆盖的工具数量、P0/P1/P2 优先级数量、Web/Browser 场景边界和安全断言。
 - 允许文件: `docs/V0_3_REGRESSION_TASKS.md`
 - 禁止文件: `src/main/builtInTools/**`
-- 验证命令: `npm run qa:built-in-tools`
-- 当前覆盖摘要: 2026-06-14 使用绝对路径 `FORGE_QA_PROJECT_ROOT=E:\CodeHome\Forge\.tmp-test\quality-gate-sandbox` 运行 `npm run qa:built-in-tools`, 结果为 passed; 总场景 76, 成功场景 64, 失败场景 0, 跳过场景 12; 注册工具 70, 可用工具 70, 未实现工具 0; P0 工具 14, P0 场景 14, P0 成功场景 14; 安全断言 2, 通过 2, 失败 0, 用户确认前写盘失败 0, critical 确认失败 0。
+- 验证命令: `npm run qa:built-in-tools` 和 `npm run qa:built-in-tools:browser`
+- 当前覆盖口径: 注册工具 70, 可用工具 70, 未实现工具 0; P0 工具 14, P1 工具 29, P2 工具 27。普通 Built-in Tools QA 必须覆盖全部 P0 工具并保持 P0 成功数量等于 P0 总数; `webSearch` 和 `fetchDocs` 是 P1 高优先级工具, 但 Web/Browser 场景需要本地预览 URL, 因此由 `npm run qa:built-in-tools:browser` 覆盖。依赖安装、分支切换、worktree、revert、push、删除记忆和更新项目指令等高风险外部副作用场景在开发 QA 中只验证跳过/确认边界, 不执行真实远程或破坏性操作。
 - 运行备注: 手动设置 `FORGE_QA_PROJECT_ROOT` 时必须使用解析后的绝对路径; 相对路径会使部分沙箱路径守卫把 `.forge/qa/*` 判为越界, 该失败属于环境配置错误, 不能记录为工具 QA 覆盖结果。
-- 一次完成规则: QA 通过, 文档记录总场景、成功场景、跳过场景、P0 成功数量和安全断言数量。
+- 一次完成规则: QA 通过, 文档记录总场景、成功场景、跳过场景、P0 成功数量、P1 Web 工具覆盖方式和安全断言数量。
 - 错误文件规则: 修改 QA runner 记为错误文件修改。
 - 无关改动规则: 把开发沙箱结果写成生产用户默认行为记为无关改动。
 - 恢复规则: 如果 QA 失败, Agent 应记录失败场景并停止扩大文档结论。
