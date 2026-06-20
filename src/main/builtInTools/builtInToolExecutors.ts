@@ -34,6 +34,10 @@ import { scanProjectFiles as scanProjectFilesDefault } from "../projectScanner.j
 import { searchWeb } from "../webSearchService.js";
 import { assertProjectPathNotSensitive } from "../../shared/sensitiveProjectFiles.js";
 import type { BuiltInToolExecutionContext } from "../../shared/builtInToolTypes.js";
+import {
+  classifyDocumentationUrl,
+  resolveOfficialDocsSource
+} from "../../shared/officialDocsSources.js";
 import type { BuiltInToolExecutorMap } from "./builtInToolRegistry.js";
 import {
   deleteProjectMemoryEntry,
@@ -1009,9 +1013,17 @@ async function fetchDocs(
   const explicitUrl = readOptionalString(input, "url");
 
   if (explicitUrl) {
+    const result = await fetchUrl({ ...input, url: explicitUrl }, fetcher);
+    const documentationSource = classifyDocumentationUrl(String(result.finalUrl ?? explicitUrl));
+
     return {
-      ...(await fetchUrl({ ...input, url: explicitUrl }, fetcher)),
-      source: "explicit-url"
+      ...result,
+      source: "explicit-url",
+      sourceType: documentationSource.type,
+      trustedSource: documentationSource.trusted,
+      sourceLabel: documentationSource.label,
+      documentationSource,
+      ...(documentationSource.officialDocs ? { officialDocs: documentationSource.officialDocs } : {})
     };
   }
 
@@ -1023,9 +1035,9 @@ async function fetchDocs(
     readOptionalString(input, "text") ??
     ""
   ).toLocaleLowerCase();
-  const docsUrl = resolveOfficialDocsUrl(topic);
+  const docsSource = resolveOfficialDocsSource(topic);
 
-  if (!docsUrl) {
+  if (!docsSource) {
     return {
       status: "no_match",
       topic,
@@ -1034,10 +1046,18 @@ async function fetchDocs(
     };
   }
 
+  const result = await fetchUrl({ ...input, url: docsSource.url }, fetcher);
+  const documentationSource = classifyDocumentationUrl(String(result.finalUrl ?? docsSource.url));
+
   return {
-    ...(await fetchUrl({ ...input, url: docsUrl }, fetcher)),
+    ...result,
     source: "official-docs",
-    topic
+    topic,
+    sourceType: documentationSource.type,
+    trustedSource: documentationSource.trusted,
+    sourceLabel: documentationSource.label,
+    officialDocs: docsSource,
+    documentationSource
   };
 }
 
@@ -1221,45 +1241,6 @@ function clampBrowserNumber(
   }
 
   return Math.min(max, Math.max(min, Math.round(value)));
-}
-
-function resolveOfficialDocsUrl(topic: string): string | null {
-  const officialDocs: Array<{ pattern: RegExp; url: string }> = [
-    { pattern: /\breact\b/u, url: "https://react.dev/reference/react" },
-    { pattern: /\bnext(?:\.js|js)?\b/u, url: "https://nextjs.org/docs" },
-    { pattern: /\bvue(?:\.js|js)?\b/u, url: "https://vuejs.org/guide/introduction.html" },
-    { pattern: /\bvite\b/u, url: "https://vite.dev/guide/" },
-    { pattern: /\btypescript\b|\bts\b/u, url: "https://www.typescriptlang.org/docs/" },
-    {
-      pattern: /\bjavascript\b|\bjs\b|\becmascript\b/u,
-      url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript"
-    },
-    { pattern: /\bnode(?:\.js|js)?\b/u, url: "https://nodejs.org/api/" },
-    { pattern: /\belectron\b/u, url: "https://www.electronjs.org/docs/latest/" },
-    { pattern: /\btailwind(?:\s*css)?\b/u, url: "https://tailwindcss.com/docs/installation/using-vite" },
-    { pattern: /\bplaywright\b/u, url: "https://playwright.dev/docs/intro" },
-    { pattern: /\bprisma\b/u, url: "https://www.prisma.io/docs" },
-    { pattern: /\bsupabase\b/u, url: "https://supabase.com/docs" },
-    { pattern: /\bvercel\b/u, url: "https://vercel.com/docs" },
-    { pattern: /\bopenai\b|\bresponses api\b/u, url: "https://developers.openai.com/api/docs" },
-    { pattern: /\bstripe\b/u, url: "https://docs.stripe.com/" },
-    { pattern: /\bgithub actions\b|\bactions workflow\b/u, url: "https://docs.github.com/en/actions" },
-    { pattern: /\bspring\s*boot\b|\bspringboot\b/u, url: "https://docs.spring.io/spring-boot/index.html" },
-    { pattern: /\bmaven\b/u, url: "https://maven.apache.org/guides/" },
-    { pattern: /\bgradle\b/u, url: "https://docs.gradle.org/current/userguide/userguide.html" },
-    { pattern: /\bjava\b/u, url: "https://docs.oracle.com/en/java/" },
-    { pattern: /\bpython\b|\bpy\b/u, url: "https://docs.python.org/3/" },
-    { pattern: /\bgo\b|\bgolang\b/u, url: "https://go.dev/doc/" },
-    { pattern: /\brust\b/u, url: "https://doc.rust-lang.org/book/" },
-    { pattern: /\bdocker\b/u, url: "https://docs.docker.com/" },
-    { pattern: /\bkubernetes\b|\bk8s\b/u, url: "https://kubernetes.io/docs/home/" },
-    { pattern: /\bangular\b/u, url: "https://angular.dev/overview" },
-    { pattern: /\bsvelte\b/u, url: "https://svelte.dev/docs" },
-    { pattern: /\bastro\b/u, url: "https://docs.astro.build/en/getting-started/" }
-  ];
-  const match = officialDocs.find((entry) => entry.pattern.test(topic));
-
-  return match?.url ?? null;
 }
 
 function clampContentLimit(value: number | undefined): number {

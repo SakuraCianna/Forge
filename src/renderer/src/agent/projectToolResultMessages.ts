@@ -67,8 +67,9 @@ export function formatWebSearchResultMessage(
 
   const lines = result.results.slice(0, 8).map((item, index) => {
     const snippet = item.snippet ? ` - ${item.snippet}` : "";
+    const source = formatWebSearchSourceLabel(language, item);
 
-    return `${index + 1}. ${item.title} (${item.source})\n   ${item.url}${snippet}`;
+    return `${index + 1}. ${item.title} (${source})\n   ${item.url}${snippet}`;
   });
   const remaining = result.results.length - lines.length;
 
@@ -77,6 +78,25 @@ export function formatWebSearchResultMessage(
   }
 
   return [header, ...lines].join("\n");
+}
+
+function formatWebSearchSourceLabel(
+  language: Language,
+  item: WebSearchResult["results"][number]
+): string {
+  if (item.sourceType === "official-docs") {
+    return language === "zh-CN"
+      ? `官方文档: ${item.sourceLabel}`
+      : `Official docs: ${item.sourceLabel}`;
+  }
+
+  if (item.sourceType === "trusted-docs") {
+    return language === "zh-CN"
+      ? `可信文档: ${item.sourceLabel}`
+      : `Trusted docs: ${item.sourceLabel}`;
+  }
+
+  return item.source;
 }
 
 export function formatProjectDirectoryListResultMessage(

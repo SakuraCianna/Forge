@@ -205,7 +205,7 @@
 - 允许文件: `docs/V0_3_REGRESSION_TASKS.md`
 - 禁止文件: `src/main/builtInTools/**`
 - 验证命令: `npm run qa:built-in-tools` 和 `npm run qa:built-in-tools:browser`
-- 当前覆盖口径: 注册工具 70, 可用工具 70, 未实现工具 0; P0 工具 14, P1 工具 29, P2 工具 27。普通 Built-in Tools QA 必须覆盖全部 P0 工具并保持 P0 成功数量等于 P0 总数; `webSearch` 和 `fetchDocs` 是 P1 高优先级工具, 但 Web/Browser 场景需要本地预览 URL, 因此由 `npm run qa:built-in-tools:browser` 覆盖。依赖安装、分支切换、worktree、revert、push、删除记忆和更新项目指令等高风险外部副作用场景在开发 QA 中只验证跳过/确认边界, 不执行真实远程或破坏性操作。
+- 当前覆盖口径: 注册工具 70, 可用工具 70, 未实现工具 0; P0 工具 14, P1 工具 29, P2 工具 27。普通 Built-in Tools QA 必须覆盖全部 P0 工具并保持 P0 成功数量等于 P0 总数; `webSearch` 和 `fetchDocs` 是 P1 高优先级工具, `fetchDocs` 需要返回官方文档来源元数据, `webSearch` 需要标注并优先展示官方或可信文档来源。Web/Browser 场景需要本地预览 URL, 因此由 `npm run qa:built-in-tools:browser` 覆盖。依赖安装、分支切换、worktree、revert、push、删除记忆和更新项目指令等高风险外部副作用场景在开发 QA 中只验证跳过/确认边界, 不执行真实远程或破坏性操作。
 - 运行备注: 手动设置 `FORGE_QA_PROJECT_ROOT` 时必须使用解析后的绝对路径; 相对路径会使部分沙箱路径守卫把 `.forge/qa/*` 判为越界, 该失败属于环境配置错误, 不能记录为工具 QA 覆盖结果。
 - 一次完成规则: QA 通过, 文档记录总场景、成功场景、跳过场景、P0 成功数量、P1 Web 工具覆盖方式和安全断言数量。
 - 错误文件规则: 修改 QA runner 记为错误文件修改。

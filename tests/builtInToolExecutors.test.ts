@@ -407,6 +407,21 @@ test("default built-in tool executors fetch web docs and open local browser prev
   assert.equal((nextDocsResult as { source: string }).source, "official-docs");
   assert.equal((springDocsResult as { source: string }).source, "official-docs");
   assert.equal((openAiDocsResult as { source: string }).source, "official-docs");
+  assert.equal(
+    (fetchDocsResult as { officialDocs: { id: string } }).officialDocs.id,
+    "electron"
+  );
+  assert.equal(
+    (fetchDocsResult as { officialDocs: { label: string } }).officialDocs.label,
+    "Electron"
+  );
+  assert.equal(
+    (fetchDocsResult as { officialDocs: { host: string } }).officialDocs.host,
+    "electronjs.org"
+  );
+  assert.equal((fetchDocsResult as { sourceType: string }).sourceType, "official-docs");
+  assert.equal((fetchDocsResult as { trustedSource: boolean }).trustedSource, true);
+  assert.equal((nextDocsResult as { sourceLabel: string }).sourceLabel, "Next.js");
   assert.equal(requestedUrls[1], "https://www.electronjs.org/docs/latest/");
   assert.ok(requestedUrls.includes("https://nextjs.org/docs"));
   assert.ok(requestedUrls.includes("https://docs.spring.io/spring-boot/index.html"));
@@ -421,6 +436,10 @@ test("default built-in tool executors fetch web docs and open local browser prev
   assert.match(
     (webSearchResult as { results: Array<{ title: string }> }).results[0]?.title ?? "",
     /Forge Docs result/u
+  );
+  assert.equal(
+    (webSearchResult as { results: Array<{ sourceType: string }> }).results[0]?.sourceType,
+    "web"
   );
   assert.equal((blockedPreviewResult as { status: string }).status, "failed");
 });

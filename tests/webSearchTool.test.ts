@@ -6,6 +6,10 @@ import {
   parseDuckDuckGoHtmlSearchResults,
   searchWeb
 } from "../src/main/webSearchService.js";
+import {
+  classifyDocumentationUrl,
+  resolveOfficialDocsSource
+} from "../src/shared/officialDocsSources.js";
 
 test("web_search plan steps create a dedicated web-search action", () => {
   const steps: AgentPlanStep[] = [
@@ -42,7 +46,10 @@ test("DuckDuckGo HTML search parser extracts result links and snippets", () => {
       title: "Example & Docs",
       url: "https://example.com/docs",
       snippet: "Current API reference for the example package.",
-      source: "example.com"
+      source: "example.com",
+      sourceType: "web",
+      trustedSource: false,
+      sourceLabel: "example.com"
     }
   ]);
 });
@@ -82,4 +89,96 @@ test("searchWeb returns normalized web results from injected fetch", async () =>
     result.results.map((item) => item.url),
     ["https://example.org/article"]
   );
+  assert.deepEqual(
+    result.results.map((item) => ({
+      sourceLabel: item.sourceLabel,
+      sourceType: item.sourceType,
+      trustedSource: item.trustedSource
+    })),
+    [
+      {
+        sourceLabel: "example.org",
+        sourceType: "web",
+        trustedSource: false
+      }
+    ]
+  );
+});
+
+test("searchWeb promotes official documentation results over generic web pages", async () => {
+  const searchHtml = `
+    <li class="b_algo">
+      <h2><a href="https://example.org/react-guide">React guide</a></h2>
+      <p>A third-party article about React APIs.</p>
+    </li>
+    <li class="b_algo">
+      <h2><a href="https://react.dev/reference/react/useEffect">useEffect Reference</a></h2>
+      <p>The official React API reference.</p>
+    </li>
+  `;
+
+  const result = await searchWeb(
+    {
+      query: "React useEffect docs",
+      limit: 1
+    },
+    {
+      fetcher: async () =>
+        new Response(searchHtml, {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        })
+    }
+  );
+
+  assert.equal(result.results[0]?.url, "https://react.dev/reference/react/useEffect");
+  assert.equal(result.results[0]?.sourceType, "official-docs");
+  assert.equal(result.results[0]?.trustedSource, true);
+  assert.equal(result.results[0]?.officialDocs?.id, "react");
+  assert.equal(result.truncated, true);
+});
+
+test("searchWeb labels same-host official docs by the most specific path", async () => {
+  const searchHtml = `
+    <li class="b_algo">
+      <h2><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/">C# reference</a></h2>
+      <p>Microsoft Learn C# language reference.</p>
+    </li>
+  `;
+
+  const result = await searchWeb(
+    {
+      query: "C# language reference",
+      limit: 1
+    },
+    {
+      fetcher: async () =>
+        new Response(searchHtml, {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        })
+    }
+  );
+
+  assert.equal(result.results[0]?.sourceType, "official-docs");
+  assert.equal(result.results[0]?.officialDocs?.id, "csharp");
+  assert.equal(result.results[0]?.sourceLabel, "C#");
+});
+
+test("documentation source classification does not over-promote shared docs hosts", () => {
+  const azureDocs = classifyDocumentationUrl("https://learn.microsoft.com/azure/app-service/");
+  const githubRestDocs = classifyDocumentationUrl("https://docs.github.com/en/rest/issues/issues");
+
+  assert.equal(azureDocs.type, "trusted-docs");
+  assert.equal(azureDocs.label, "Microsoft Learn");
+  assert.equal(azureDocs.officialDocs, undefined);
+  assert.equal(githubRestDocs.type, "trusted-docs");
+  assert.equal(githubRestDocs.label, "GitHub Docs");
+  assert.equal(githubRestDocs.officialDocs, undefined);
+});
+
+test("official docs topic resolution prefers specific sources before broad aliases", () => {
+  assert.equal(resolveOfficialDocsSource("Ruby on Rails routes")?.id, "rails");
+  assert.equal(resolveOfficialDocsSource("ASP.NET Core controllers")?.id, "aspnet-core");
+  assert.equal(resolveOfficialDocsSource("C# file IO")?.id, "csharp");
 });

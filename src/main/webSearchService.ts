@@ -4,6 +4,7 @@ import type {
   WebSearchResult,
   WebSearchResultItem
 } from "../shared/webSearchTypes.js";
+import { classifyDocumentationUrl } from "../shared/officialDocsSources.js";
 
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -26,6 +27,12 @@ type InstantAnswerResponse = {
   RelatedTopics?: unknown;
 };
 
+type SearchResultDraft = {
+  title: string;
+  url: string;
+  snippet: string;
+};
+
 const defaultSearchLimit = 8;
 const maxSearchLimit = 12;
 const maxQueryLength = 300;
@@ -46,7 +53,8 @@ export async function searchWeb(
 ): Promise<WebSearchResult> {
   const query = normalizeSearchQuery(request.query);
   const limit = clampSearchLimit(request.limit);
-  const results = await searchDuckDuckGo(query, limit, fetcher, timeoutMs);
+  const candidateLimit = Math.min(maxSearchLimit, Math.max(limit + 4, limit));
+  const results = rankWebSearchResults(await searchDuckDuckGo(query, candidateLimit, fetcher, timeoutMs));
 
   return {
     query,
@@ -192,12 +200,7 @@ export function parseJinaSearchResults(
     }
 
     seenUrls.add(url);
-    results.push({
-      title,
-      url,
-      snippet: extractJinaSnippet(block),
-      source: getUrlHostname(url)
-    });
+    results.push(createSearchResultItem(title, url, extractJinaSnippet(block)));
   }
 
   return results;
@@ -236,12 +239,7 @@ export function parseBingHtmlSearchResults(
     const snippetMatch = /<p[^>]*>([\s\S]*?)<\/p>/iu.exec(block);
 
     seenUrls.add(url);
-    results.push({
-      title,
-      url,
-      snippet: snippetMatch ? normalizeSearchText(snippetMatch[1] ?? "") : "",
-      source: getUrlHostname(url)
-    });
+    results.push(createSearchResultItem(title, url, snippetMatch ? normalizeSearchText(snippetMatch[1] ?? "") : ""));
   }
 
   return results;
@@ -270,12 +268,7 @@ export function parseDuckDuckGoHtmlSearchResults(
     const snippet = extractDuckDuckGoSnippet(block);
 
     seenUrls.add(url);
-    results.push({
-      title,
-      url,
-      snippet,
-      source: getUrlHostname(url)
-    });
+    results.push(createSearchResultItem(title, url, snippet));
   }
 
   return results;
@@ -360,17 +353,52 @@ function readInstantAnswerTopics(
 function pushInstantAnswerResult(
   results: WebSearchResultItem[],
   seenUrls: Set<string>,
-  result: Omit<WebSearchResultItem, "source">
+  result: SearchResultDraft
 ): void {
   if (!result.url || seenUrls.has(result.url)) {
     return;
   }
 
   seenUrls.add(result.url);
-  results.push({
-    ...result,
-    source: getUrlHostname(result.url)
-  });
+  results.push(createSearchResultItem(result.title, result.url, result.snippet));
+}
+
+function createSearchResultItem(title: string, url: string, snippet: string): WebSearchResultItem {
+  const classification = classifyDocumentationUrl(url);
+
+  return {
+    title,
+    url,
+    snippet,
+    source: getUrlHostname(url),
+    sourceType: classification.type,
+    trustedSource: classification.trusted,
+    sourceLabel: classification.label,
+    ...(classification.officialDocs ? { officialDocs: classification.officialDocs } : {})
+  };
+}
+
+function rankWebSearchResults(results: WebSearchResultItem[]): WebSearchResultItem[] {
+  return results
+    .map((result, index) => ({
+      index,
+      result,
+      score: scoreWebSearchResult(result)
+    }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map((entry) => entry.result);
+}
+
+function scoreWebSearchResult(result: WebSearchResultItem): number {
+  if (result.sourceType === "official-docs") {
+    return 20;
+  }
+
+  if (result.sourceType === "trusted-docs") {
+    return 10;
+  }
+
+  return 0;
 }
 
 function normalizeDuckDuckGoResultUrl(value: string): string {
