@@ -36,7 +36,13 @@ import { assertProjectPathNotSensitive } from "../../shared/sensitiveProjectFile
 import type { BuiltInToolExecutionContext } from "../../shared/builtInToolTypes.js";
 import {
   classifyDocumentationUrl,
+  officialDocsSourceCatalogVersion,
   resolveOfficialDocsSource
+} from "../../shared/officialDocsSources.js";
+import type {
+  DocumentationCitation,
+  DocumentationSourceClassification,
+  OfficialDocsSource
 } from "../../shared/officialDocsSources.js";
 import type { BuiltInToolExecutorMap } from "./builtInToolRegistry.js";
 import {
@@ -49,6 +55,22 @@ import {
 type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 type OpenExternal = (url: string) => Promise<unknown> | unknown;
 type ScanProjectFiles = typeof scanProjectFilesDefault;
+type FetchDocsCache = Map<string, FetchDocsCacheEntry>;
+
+const fetchDocsDefaultCacheTtlMs = 10 * 60 * 1000;
+const fetchDocsMaxCacheEntries = 64;
+
+type FetchDocsCacheEntry = {
+  createdAtMs: number;
+  result: Record<string, unknown>;
+};
+
+type FetchDocsCacheMetadata = {
+  status: "disabled" | "hit" | "miss" | "refresh";
+  ttlMs: number;
+  cachedAt: string | null;
+  expiresAt: string | null;
+};
 
 export type BuiltInToolExecutorFactoryOptions = {
   browserTools?: BrowserPreviewTools;
@@ -69,6 +91,8 @@ export function createDefaultBuiltInToolExecutors({
   runCommand = runProjectCommand,
   scanProjectFiles = scanProjectFilesDefault
 }: BuiltInToolExecutorFactoryOptions = {}): BuiltInToolExecutorMap {
+  const fetchDocsCache: FetchDocsCache = new Map();
+
   return {
     applyEdit: (input, context) =>
       writeProjectTextFile({
@@ -157,7 +181,7 @@ export function createDefaultBuiltInToolExecutors({
       };
     },
     detectPackageManager: async (input, context) => detectPackageManager(requireProjectRoot(input, context)),
-    fetchDocs: (input) => fetchDocs(input, fetcher),
+    fetchDocs: (input) => fetchDocs(input, fetcher, fetchDocsCache),
     fetchUrl: (input) => fetchUrl(input, fetcher),
     findReferences: (input, context) =>
       searchProjectTextFiles({
@@ -1008,22 +1032,23 @@ async function fetchUrl(
 
 async function fetchDocs(
   input: Record<string, unknown>,
-  fetcher: Fetcher
+  fetcher: Fetcher,
+  cache: FetchDocsCache
 ): Promise<Record<string, unknown>> {
   const explicitUrl = readOptionalString(input, "url");
 
   if (explicitUrl) {
-    const result = await fetchUrl({ ...input, url: explicitUrl }, fetcher);
+    const { cache: cacheMetadata, result } = await fetchUrlWithDocsCache(input, explicitUrl, fetcher, cache);
     const documentationSource = classifyDocumentationUrl(String(result.finalUrl ?? explicitUrl));
 
     return {
       ...result,
       source: "explicit-url",
-      sourceType: documentationSource.type,
-      trustedSource: documentationSource.trusted,
-      sourceLabel: documentationSource.label,
-      documentationSource,
-      ...(documentationSource.officialDocs ? { officialDocs: documentationSource.officialDocs } : {})
+      ...createFetchDocsSourceMetadata({
+        cache: cacheMetadata,
+        documentationSource,
+        result
+      })
     };
   }
 
@@ -1041,23 +1066,188 @@ async function fetchDocs(
     return {
       status: "no_match",
       topic,
+      docsCatalogVersion: officialDocsSourceCatalogVersion,
       message: "No official documentation mapping is available for this topic.",
       suggestedNextStep: "Use webSearch to find the official documentation URL, then call fetchDocs with url."
     };
   }
 
-  const result = await fetchUrl({ ...input, url: docsSource.url }, fetcher);
+  const { cache: cacheMetadata, result } = await fetchUrlWithDocsCache(input, docsSource.url, fetcher, cache);
   const documentationSource = classifyDocumentationUrl(String(result.finalUrl ?? docsSource.url));
 
   return {
     ...result,
     source: "official-docs",
     topic,
+    officialDocs: docsSource,
+    ...createFetchDocsSourceMetadata({
+      cache: cacheMetadata,
+      documentationSource,
+      officialDocs: docsSource,
+      result
+    })
+  };
+}
+
+async function fetchUrlWithDocsCache(
+  input: Record<string, unknown>,
+  url: string,
+  fetcher: Fetcher,
+  cache: FetchDocsCache
+): Promise<{ cache: FetchDocsCacheMetadata; result: Record<string, unknown> }> {
+  const normalizedUrl = normalizeFetchUrl(url);
+  const cacheEnabled = readOptionalBoolean(input, "cache") ?? true;
+  const forceRefresh = readOptionalBoolean(input, "refresh") ?? readOptionalBoolean(input, "forceRefresh") ?? false;
+  const ttlMs = clampFetchDocsCacheTtlMs(readOptionalNumber(input, "cacheTtlMs"));
+  const maxChars = clampContentLimit(readOptionalNumber(input, "maxChars"));
+  const cacheKey = `${normalizedUrl}#maxChars=${maxChars}`;
+  const now = Date.now();
+
+  if (!cacheEnabled) {
+    return {
+      cache: createFetchDocsCacheMetadata("disabled", ttlMs, null),
+      result: await fetchUrl({ ...input, maxChars, url: normalizedUrl }, fetcher)
+    };
+  }
+
+  const cacheStatus = forceRefresh ? "refresh" : "miss";
+
+  if (ttlMs <= 0) {
+    cache.delete(cacheKey);
+    return {
+      cache: createFetchDocsCacheMetadata(cacheStatus, ttlMs, null),
+      result: await fetchUrl({ ...input, maxChars, url: normalizedUrl }, fetcher)
+    };
+  }
+
+  pruneFetchDocsCache(cache, now, ttlMs);
+
+  const cached = cache.get(cacheKey);
+
+  if (cached && !forceRefresh && now - cached.createdAtMs <= ttlMs) {
+    cache.delete(cacheKey);
+    cache.set(cacheKey, cached);
+
+    return {
+      cache: createFetchDocsCacheMetadata("hit", ttlMs, cached.createdAtMs),
+      result: { ...cached.result }
+    };
+  }
+
+  if (cached) {
+    cache.delete(cacheKey);
+  }
+
+  const result = await fetchUrl({ ...input, maxChars, url: normalizedUrl }, fetcher);
+
+  if (result.status === "ok") {
+    pruneFetchDocsCache(cache, now, ttlMs);
+    cache.set(cacheKey, {
+      createdAtMs: now,
+      result: { ...result }
+    });
+  }
+
+  return {
+    cache: createFetchDocsCacheMetadata(cacheStatus, ttlMs, result.status === "ok" ? now : null),
+    result
+  };
+}
+
+function pruneFetchDocsCache(cache: FetchDocsCache, now: number, ttlMs: number): void {
+  for (const [key, entry] of cache) {
+    if (now - entry.createdAtMs > ttlMs) {
+      cache.delete(key);
+    }
+  }
+
+  while (cache.size >= fetchDocsMaxCacheEntries) {
+    const oldestKey = cache.keys().next().value;
+
+    if (typeof oldestKey !== "string") {
+      return;
+    }
+
+    cache.delete(oldestKey);
+  }
+}
+
+function createFetchDocsSourceMetadata({
+  cache,
+  documentationSource,
+  officialDocs,
+  result
+}: {
+  cache: FetchDocsCacheMetadata;
+  documentationSource: DocumentationSourceClassification;
+  officialDocs?: OfficialDocsSource;
+  result: Record<string, unknown>;
+}): Record<string, unknown> {
+  const citation = createDocumentationCitation({
+    documentationSource,
+    accessedAt: cache.cachedAt ?? new Date().toISOString(),
+    result
+  });
+
+  return {
     sourceType: documentationSource.type,
     trustedSource: documentationSource.trusted,
     sourceLabel: documentationSource.label,
-    officialDocs: docsSource,
-    documentationSource
+    docsCatalogVersion: officialDocsSourceCatalogVersion,
+    documentationSource,
+    cache,
+    citations: [citation],
+    citationSummary: formatDocumentationCitationSummary(citation),
+    ...(documentationSource.officialDocs ? { officialDocs: officialDocs ?? documentationSource.officialDocs } : {})
+  };
+}
+
+function createDocumentationCitation({
+  accessedAt,
+  documentationSource,
+  result
+}: {
+  accessedAt: string;
+  documentationSource: DocumentationSourceClassification;
+  result: Record<string, unknown>;
+}): DocumentationCitation {
+  const finalUrl = typeof result.finalUrl === "string"
+    ? result.finalUrl
+    : typeof result.url === "string"
+      ? result.url
+      : "";
+
+  return {
+    title: typeof result.title === "string" ? result.title : null,
+    url: finalUrl,
+    sourceLabel: documentationSource.label,
+    sourceType: documentationSource.type,
+    accessedAt,
+    catalogVersion: officialDocsSourceCatalogVersion
+  };
+}
+
+function formatDocumentationCitationSummary(citation: DocumentationCitation): string {
+  const sourceKind = citation.sourceType === "official-docs"
+    ? "Official docs"
+    : citation.sourceType === "trusted-docs"
+      ? "Trusted docs"
+      : "Web";
+  const title = citation.title ? `${citation.title} - ` : "";
+
+  return `${sourceKind}: ${citation.sourceLabel} - ${title}${citation.url}`;
+}
+
+function createFetchDocsCacheMetadata(
+  status: FetchDocsCacheMetadata["status"],
+  ttlMs: number,
+  cachedAtMs: number | null
+): FetchDocsCacheMetadata {
+  return {
+    status,
+    ttlMs,
+    cachedAt: cachedAtMs === null ? null : new Date(cachedAtMs).toISOString(),
+    expiresAt: cachedAtMs === null ? null : new Date(cachedAtMs + ttlMs).toISOString()
   };
 }
 
@@ -1249,6 +1439,14 @@ function clampContentLimit(value: number | undefined): number {
   }
 
   return Math.min(20_000, Math.max(500, Math.round(value)));
+}
+
+function clampFetchDocsCacheTtlMs(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fetchDocsDefaultCacheTtlMs;
+  }
+
+  return Math.min(60 * 60 * 1000, Math.max(0, Math.round(value)));
 }
 
 function createTimeoutSignal(timeoutMs: number): AbortSignal | undefined {

@@ -1,12 +1,24 @@
 // 本文件说明: 维护内置 Web/Docs 工具共享的官方文档来源与可信来源识别规则
 export type DocumentationSourceType = "official-docs" | "trusted-docs" | "web";
 
+export const officialDocsSourceCatalogVersion = "2026-06-20";
+
 export type OfficialDocsSource = {
   id: string;
   label: string;
   url: string;
   host: string;
   topics: readonly string[];
+  catalogVersion: string;
+};
+
+export type DocumentationCitation = {
+  title: string | null;
+  url: string;
+  sourceLabel: string;
+  sourceType: DocumentationSourceType;
+  accessedAt: string;
+  catalogVersion: string;
 };
 
 export type DocumentationSourceClassification = {
@@ -17,7 +29,7 @@ export type DocumentationSourceClassification = {
   officialDocs?: OfficialDocsSource;
 };
 
-type OfficialDocsSourceDefinition = OfficialDocsSource & {
+type OfficialDocsSourceDefinition = Omit<OfficialDocsSource, "catalogVersion"> & {
   pattern: RegExp;
 };
 
@@ -210,7 +222,8 @@ function toOfficialDocsSource(source: OfficialDocsSourceDefinition): OfficialDoc
     label: source.label,
     url: source.url,
     host: source.host,
-    topics: [...source.topics]
+    topics: [...source.topics],
+    catalogVersion: officialDocsSourceCatalogVersion
   };
 }
 

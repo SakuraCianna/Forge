@@ -376,6 +376,14 @@ test("default built-in tool executors fetch web docs and open local browser prev
     { topic: "Electron" },
     {}
   );
+  const cachedFetchDocsResult = await getBuiltInToolFromRegistry(registry, "fetchDocs").execute(
+    { topic: "Electron" },
+    {}
+  );
+  const refreshedFetchDocsResult = await getBuiltInToolFromRegistry(registry, "fetchDocs").execute(
+    { refresh: true, topic: "Electron" },
+    {}
+  );
   const nextDocsResult = await getBuiltInToolFromRegistry(registry, "fetchDocs").execute(
     { target: "Next.js app router" },
     {}
@@ -419,10 +427,37 @@ test("default built-in tool executors fetch web docs and open local browser prev
     (fetchDocsResult as { officialDocs: { host: string } }).officialDocs.host,
     "electronjs.org"
   );
+  assert.match(
+    (fetchDocsResult as { docsCatalogVersion: string }).docsCatalogVersion,
+    /^\d{4}-\d{2}-\d{2}$/u
+  );
+  assert.equal((fetchDocsResult as { cache: { status: string } }).cache.status, "miss");
+  assert.equal((cachedFetchDocsResult as { cache: { status: string } }).cache.status, "hit");
+  assert.equal((refreshedFetchDocsResult as { cache: { status: string } }).cache.status, "refresh");
   assert.equal((fetchDocsResult as { sourceType: string }).sourceType, "official-docs");
   assert.equal((fetchDocsResult as { trustedSource: boolean }).trustedSource, true);
   assert.equal((nextDocsResult as { sourceLabel: string }).sourceLabel, "Next.js");
+  assert.equal(
+    (fetchDocsResult as { citations: Array<{ sourceLabel: string; sourceType: string; url: string }> }).citations[0]?.sourceLabel,
+    "Electron"
+  );
+  assert.equal(
+    (fetchDocsResult as { citations: Array<{ sourceLabel: string; sourceType: string; url: string }> }).citations[0]?.sourceType,
+    "official-docs"
+  );
+  assert.equal(
+    (fetchDocsResult as { citations: Array<{ sourceLabel: string; sourceType: string; url: string }> }).citations[0]?.url,
+    "https://www.electronjs.org/docs/latest/"
+  );
+  assert.match(
+    (fetchDocsResult as { citationSummary: string }).citationSummary,
+    /Official docs: Electron/u
+  );
   assert.equal(requestedUrls[1], "https://www.electronjs.org/docs/latest/");
+  assert.equal(
+    requestedUrls.filter((url) => url === "https://www.electronjs.org/docs/latest/").length,
+    2
+  );
   assert.ok(requestedUrls.includes("https://nextjs.org/docs"));
   assert.ok(requestedUrls.includes("https://docs.spring.io/spring-boot/index.html"));
   assert.ok(requestedUrls.includes("https://developers.openai.com/api/docs"));
@@ -442,6 +477,100 @@ test("default built-in tool executors fetch web docs and open local browser prev
     "web"
   );
   assert.equal((blockedPreviewResult as { status: string }).status, "failed");
+});
+
+test("fetchDocs cache handles explicit URLs, disabled cache, failed fetches and bounded entries", async () => {
+  const requestedUrls: string[] = [];
+  const fetcher = async (url: string) => {
+    requestedUrls.push(url);
+
+    return new Response(
+      `<html><head><title>${url}</title></head><body><p>Docs fixture for ${url}</p></body></html>`,
+      {
+        headers: {
+          "content-type": "text/html; charset=utf-8"
+        },
+        status: url.includes("/fail") ? 500 : 200
+      }
+    );
+  };
+  const registry = createBuiltInToolRegistry({
+    executors: createDefaultBuiltInToolExecutors({ fetcher })
+  });
+  const fetchDocs = getBuiltInToolFromRegistry(registry, "fetchDocs");
+
+  const explicitMiss = await fetchDocs.execute(
+    { maxChars: 500, url: "https://react.dev/reference/react" },
+    {}
+  );
+  const explicitHit = await fetchDocs.execute(
+    { maxChars: 500, url: "https://react.dev/reference/react" },
+    {}
+  );
+  const disabledCacheFirst = await fetchDocs.execute(
+    { cache: false, url: "https://react.dev/learn" },
+    {}
+  );
+  const disabledCacheSecond = await fetchDocs.execute(
+    { cache: false, url: "https://react.dev/learn" },
+    {}
+  );
+  const zeroTtlFirst = await fetchDocs.execute(
+    { cacheTtlMs: 0, url: "https://react.dev/blog" },
+    {}
+  );
+  const zeroTtlSecond = await fetchDocs.execute(
+    { cacheTtlMs: 0, url: "https://react.dev/blog" },
+    {}
+  );
+  const failedFetchFirst = await fetchDocs.execute(
+    { url: "https://react.dev/fail" },
+    {}
+  );
+  const failedFetchSecond = await fetchDocs.execute(
+    { url: "https://react.dev/fail" },
+    {}
+  );
+
+  for (let index = 0; index < 70; index += 1) {
+    await fetchDocs.execute(
+      { url: `https://react.dev/reference/cache-${index}` },
+      {}
+    );
+  }
+
+  const evictedExplicit = await fetchDocs.execute(
+    { maxChars: 500, url: "https://react.dev/reference/react" },
+    {}
+  );
+
+  assert.equal((explicitMiss as { cache: { status: string } }).cache.status, "miss");
+  assert.equal((explicitHit as { cache: { status: string } }).cache.status, "hit");
+  assert.equal((disabledCacheFirst as { cache: { status: string } }).cache.status, "disabled");
+  assert.equal((disabledCacheSecond as { cache: { status: string } }).cache.status, "disabled");
+  assert.equal((zeroTtlFirst as { cache: { status: string } }).cache.status, "miss");
+  assert.equal((zeroTtlSecond as { cache: { status: string } }).cache.status, "miss");
+  assert.equal((failedFetchFirst as { status: string }).status, "http_error");
+  assert.equal((failedFetchSecond as { status: string }).status, "http_error");
+  assert.equal((failedFetchFirst as { cache: { cachedAt: string | null } }).cache.cachedAt, null);
+  assert.equal((failedFetchSecond as { cache: { cachedAt: string | null } }).cache.cachedAt, null);
+  assert.equal((evictedExplicit as { cache: { status: string } }).cache.status, "miss");
+  assert.equal(
+    requestedUrls.filter((url) => url === "https://react.dev/reference/react").length,
+    2
+  );
+  assert.equal(
+    requestedUrls.filter((url) => url === "https://react.dev/learn").length,
+    2
+  );
+  assert.equal(
+    requestedUrls.filter((url) => url === "https://react.dev/blog").length,
+    2
+  );
+  assert.equal(
+    requestedUrls.filter((url) => url === "https://react.dev/fail").length,
+    2
+  );
 });
 
 test("default built-in tool executors run local browser screenshot and console helpers", async () => {
