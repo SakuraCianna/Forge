@@ -50,7 +50,7 @@ Forge 要从可用原型推进到产品级本地工程工作台: 用户提出真
 
 - 模型计划会先经过工程化 planner 提示和计划解析质量预检: 空项目脚手架任务会收到项目骨架检查清单, build 智能体默认计划预算为 12 步, 不存在脚手架文件的读取步骤会改成创建步骤。
 - 计划提示和解析层已经固化基础软件工程闭环: 先理解项目, 再设计最小完整变更, 再做受控修改, 再运行验证并留下交付证据。对于包含项目变更但缺少发现步骤的模型计划, 解析层会在步数允许时补一个项目结构检查步骤, 降低上来就改文件的风险。
-- 必需验证策略会根据变更目标推断验证命令: Maven 后端优先补 `mvn test` 或 `mvn -f Backend/pom.xml test`, Vite/TypeScript 前端优先补对应包管理器 build 命令, Rust 优先补 `cargo test`, Go 模块优先补 `go test ./...`; 嵌套 Go 模块默认使用当前官方 `go -C <dir> test ./...`, 如果本机 Go 工具链过旧不支持 `-C`, Runtime 会降级到该模块目录下运行 `go test ./...`; 文档类改动退回到 `git status --short`。
+- 必需验证策略会根据变更目标推断验证命令: Maven 后端优先补 `mvn test` 或对应模块命令; 空项目 Spring Boot 脚手架首轮优先用 `mvn -f backend/pom.xml -DskipTests package` 验证编译和打包, 避免生成期测试样板先阻断工程落地。Vite/TypeScript 前端优先补对应包管理器 build 命令, Rust 优先补 `cargo test`, Go 模块优先补 `go test ./...`; 嵌套 Go 模块默认使用当前官方 `go -C <dir> test ./...`, 如果本机 Go 工具链过旧不支持 `-C`, Runtime 会降级到该模块目录下运行 `go test ./...`; 文档类改动退回到 `git status --short`。
 - 直接写入类内置工具会补充写入前证据: 当模型计划直接调用 `applyEdit` 且提供 `relativePath` 和 `nextContent` 时, 解析层会在写入前自动插入同文件 `previewDiff`, 已有同文件 `previewDiff` 或 `proposeEdit` 时不会重复插入。
 - 空项目脚手架还会做结构化覆盖检查: 对 Spring Boot, Vue, Vite 等常见新项目任务, 预检会识别依赖/构建配置, 后端入口, 领域模型, API, 运行配置, 前端配置, 前端入口, 页面组件和验证动作是否缺失, 并把缺失层补成受控 `edit-file` 或 `run-command` 动作。
 - `agentActionExecutor.ts` 负责基础动作解析, 工具权限, 命令风险和自动执行队列判断。

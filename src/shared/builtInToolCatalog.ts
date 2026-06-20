@@ -526,10 +526,10 @@ export const builtInToolDefinitions: BuiltInToolDefinition[] = [
   }),
   tool({
     name: "webSearch",
-    description: "网页搜索, 查文档、版本 API 或报错。",
+    description: "高优先级网页搜索, 查官方文档、版本 API 或报错。",
     category: "auxiliary",
     riskLevel: "medium",
-    priority: "P2"
+    priority: "P1"
   }),
   tool({
     name: "fetchUrl",
@@ -540,10 +540,10 @@ export const builtInToolDefinitions: BuiltInToolDefinition[] = [
   }),
   tool({
     name: "fetchDocs",
-    description: "优先读取 React、Electron、Vite、TypeScript 等官方文档。",
+    description: "按常用框架、语言、平台映射优先读取官方文档。",
     category: "auxiliary",
     riskLevel: "medium",
-    priority: "P2"
+    priority: "P1"
   }),
   tool({
     name: "openBrowserPreview",

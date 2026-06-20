@@ -107,6 +107,9 @@ test("built-in tool catalog contains all 70 tools with required metadata", () =>
     assert.ok(tool.outputSchema);
     assert.ok(["available", "not_implemented"].includes(tool.availability));
   }
+
+  assert.equal(getBuiltInToolDefinition("webSearch").priority, "P1");
+  assert.equal(getBuiltInToolDefinition("fetchDocs").priority, "P1");
 });
 
 test("all registered built-in tools are available", () => {

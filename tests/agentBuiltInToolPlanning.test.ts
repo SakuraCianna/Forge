@@ -52,6 +52,25 @@ test("direct tool names are recognized as built-in tools", () => {
   assert.equal(actions[0]?.builtInToolName, "searchText");
 });
 
+test("fetchDocs plan steps infer docs topic from target", () => {
+  const steps = parseAgentPlanSteps(
+    JSON.stringify({
+      steps: [
+        {
+          kind: "other",
+          tool: "fetchDocs",
+          target: "Next.js app router"
+        }
+      ]
+    })
+  );
+
+  assert.equal(steps[0]?.builtInToolName, "fetchDocs");
+  assert.deepEqual(steps[0]?.builtInToolInput, {
+    query: "Next.js app router"
+  });
+});
+
 test("high-risk built-in tool actions keep confirmation metadata", () => {
   const steps = parseAgentPlanSteps(
     JSON.stringify({
@@ -191,14 +210,14 @@ test("applyPatch plans do not receive invalid previewDiff input", () => {
   assert.equal(steps.at(-1)?.builtInToolName, "applyPatch");
 });
 
-test("required verification policy infers Backend Maven verification", () => {
+test("required verification policy infers backend Maven verification", () => {
   const steps = parseAgentPlanSteps(
     JSON.stringify({
       steps: [
         {
           kind: "edit",
           description: "Update the backend controller",
-          target: "Backend/src/main/java/com/example/student/StudentController.java"
+          target: "backend/src/main/java/com/example/student/StudentController.java"
         }
       ]
     }),
@@ -207,7 +226,7 @@ test("required verification policy infers Backend Maven verification", () => {
   );
 
   assert.equal(steps.at(-1)?.kind, "verify");
-  assert.equal(steps.at(-1)?.target, "mvn -f Backend/pom.xml test");
+  assert.equal(steps.at(-1)?.target, "mvn -f backend/pom.xml test");
 });
 
 test("required verification policy infers nested frontend builds", () => {
@@ -217,7 +236,7 @@ test("required verification policy infers nested frontend builds", () => {
         {
           kind: "edit",
           description: "Update the Vue page",
-          target: "Frontend/src/App.vue"
+          target: "frontend/src/App.vue"
         }
       ]
     }),
@@ -226,7 +245,7 @@ test("required verification policy infers nested frontend builds", () => {
   );
 
   assert.equal(steps.at(-1)?.kind, "verify");
-  assert.equal(steps.at(-1)?.target, "npm --prefix Frontend run build");
+  assert.equal(steps.at(-1)?.target, "npm --prefix frontend run build");
 });
 
 test("required verification policy infers package-manager lockfile builds", () => {
@@ -236,7 +255,7 @@ test("required verification policy infers package-manager lockfile builds", () =
         {
           kind: "edit",
           description: "Update the frontend lockfile",
-          target: "Frontend/pnpm-lock.yaml"
+          target: "frontend/pnpm-lock.yaml"
         }
       ]
     }),
@@ -245,7 +264,7 @@ test("required verification policy infers package-manager lockfile builds", () =
   );
 
   assert.equal(steps.at(-1)?.kind, "verify");
-  assert.equal(steps.at(-1)?.target, "pnpm --dir Frontend run build");
+  assert.equal(steps.at(-1)?.target, "pnpm --dir frontend run build");
 });
 
 test("required verification policy infers Rust verification", () => {
@@ -255,7 +274,7 @@ test("required verification policy infers Rust verification", () => {
         {
           kind: "edit",
           description: "Update the Rust crate",
-          target: "Backend/src/lib.rs"
+          target: "backend/src/lib.rs"
         }
       ]
     }),
@@ -264,7 +283,7 @@ test("required verification policy infers Rust verification", () => {
   );
 
   assert.equal(steps.at(-1)?.kind, "verify");
-  assert.equal(steps.at(-1)?.target, "cargo test --manifest-path Backend/Cargo.toml");
+  assert.equal(steps.at(-1)?.target, "cargo test --manifest-path backend/Cargo.toml");
 });
 
 test("required verification policy infers Go module verification", () => {
@@ -274,7 +293,7 @@ test("required verification policy infers Go module verification", () => {
         {
           kind: "edit",
           description: "Update the Go backend module",
-          target: "Backend/go.mod"
+          target: "backend/go.mod"
         }
       ]
     }),
@@ -283,7 +302,7 @@ test("required verification policy infers Go module verification", () => {
   );
 
   assert.equal(steps.at(-1)?.kind, "verify");
-  assert.equal(steps.at(-1)?.target, "go -C Backend test ./...");
+  assert.equal(steps.at(-1)?.target, "go -C backend test ./...");
 });
 
 test("required verification policy falls back to git status for documentation edits", () => {

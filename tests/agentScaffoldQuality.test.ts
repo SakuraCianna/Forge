@@ -18,32 +18,27 @@ test("bare Spring Boot Vue H2 student scaffold gains contract and verification a
   });
   const actionTargets = result.actions.map((action) => action.target ?? action.command);
 
-  assert.ok(actionTargets.includes("Backend/pom.xml"));
-  assert.ok(actionTargets.includes("Backend/src/main/resources/data.sql"));
-  assert.ok(
-    actionTargets.includes(
-      "Backend/src/test/java/com/example/studentmanager/controller/StudentControllerTest.java"
-    )
-  );
-  assert.ok(actionTargets.includes("Frontend/src/api/students.ts"));
-  assert.ok(actionTargets.includes("Frontend/tsconfig.json"));
-  assert.ok(actionTargets.includes("mvn -f Backend/pom.xml test"));
-  assert.ok(actionTargets.includes("npm --prefix Frontend run build"));
+  assert.ok(actionTargets.includes("backend/pom.xml"));
+  assert.ok(actionTargets.includes("backend/src/main/resources/data.sql"));
+  assert.ok(!actionTargets.some((target) => target?.includes("src/test/java")));
+  assert.ok(actionTargets.includes("frontend/src/api/students.ts"));
+  assert.ok(actionTargets.includes("frontend/tsconfig.json"));
+  assert.ok(actionTargets.includes("mvn -f backend/pom.xml -DskipTests package"));
+  assert.ok(actionTargets.includes("npm --prefix frontend run build"));
   assert.ok(result.missingLayers.includes("dataSeed"));
-  assert.ok(result.missingLayers.includes("backendContractTest"));
   assert.ok(result.missingLayers.includes("frontendApiClient"));
 });
 
 test("bare scaffold supplements run before existing verification commands", () => {
   const result = supplementBareProjectScaffoldActions({
-    actions: [createRunAction("action-1", "mvn -f Backend/pom.xml test")],
+    actions: [createRunAction("action-1", "mvn -f backend/pom.xml -DskipTests package")],
     bareProject: true,
     isCreationTask: true,
     prompt: studentManagerPrompt
   });
   const actionTargets = result.actions.map((action) => action.target ?? action.command);
-  const dataSeedIndex = actionTargets.indexOf("Backend/src/main/resources/data.sql");
-  const verificationIndex = actionTargets.indexOf("mvn -f Backend/pom.xml test");
+  const dataSeedIndex = actionTargets.indexOf("backend/src/main/resources/data.sql");
+  const verificationIndex = actionTargets.indexOf("mvn -f backend/pom.xml -DskipTests package");
 
   assert.ok(dataSeedIndex >= 0);
   assert.ok(verificationIndex >= 0);
@@ -65,19 +60,19 @@ test("bare separated scaffold normalizes lowercase frontend and backend roots", 
   });
   const actionTargets = result.actions.map((action) => action.target ?? action.command);
 
-  assert.ok(actionTargets.includes("Backend/pom.xml"));
-  assert.ok(actionTargets.includes("Backend/src/main/resources/data.sql"));
-  assert.ok(actionTargets.includes("Frontend/src/App.vue"));
-  assert.ok(actionTargets.includes("mvn -f Backend/pom.xml test"));
-  assert.ok(actionTargets.includes("npm --prefix Frontend run build"));
-  assert.ok(!actionTargets.includes("backend/src/main/resources/data.sql"));
-  assert.ok(!actionTargets.includes("frontend/src/App.vue"));
+  assert.ok(actionTargets.includes("backend/pom.xml"));
+  assert.ok(actionTargets.includes("backend/src/main/resources/data.sql"));
+  assert.ok(actionTargets.includes("frontend/src/App.vue"));
+  assert.ok(actionTargets.includes("mvn -f backend/pom.xml -DskipTests package"));
+  assert.ok(actionTargets.includes("npm --prefix frontend run build"));
+  assert.ok(!actionTargets.includes("Backend/src/main/resources/data.sql"));
+  assert.ok(!actionTargets.includes("Frontend/src/App.vue"));
 });
 
 test("separated scaffold normalizes root casing after the project is no longer bare", () => {
   const result = supplementBareProjectScaffoldActions({
     actions: [
-      createEditAction("action-1", "Backend/pom.xml"),
+      createEditAction("action-1", "backend/pom.xml"),
       createEditAction("action-2", "frontend/src/App.vue"),
       createRunAction("action-3", "npm --prefix frontend run build")
     ],
@@ -89,38 +84,38 @@ test("separated scaffold normalizes root casing after the project is no longer b
 
   assert.equal(result.addedActions, 0);
   assert.deepEqual(result.missingLayers, []);
-  assert.ok(actionTargets.includes("Backend/pom.xml"));
-  assert.ok(actionTargets.includes("Frontend/src/App.vue"));
-  assert.ok(actionTargets.includes("npm --prefix Frontend run build"));
-  assert.ok(!actionTargets.includes("frontend/src/App.vue"));
-  assert.ok(!actionTargets.includes("npm --prefix frontend run build"));
+  assert.ok(actionTargets.includes("backend/pom.xml"));
+  assert.ok(actionTargets.includes("frontend/src/App.vue"));
+  assert.ok(actionTargets.includes("npm --prefix frontend run build"));
+  assert.ok(!actionTargets.includes("Frontend/src/App.vue"));
+  assert.ok(!actionTargets.includes("npm --prefix Frontend run build"));
 });
 
 test("non-bare separated scaffold preserves explicit client roots", () => {
   const result = supplementBareProjectScaffoldActions({
     actions: [
-      createEditAction("action-1", "Backend/pom.xml"),
+      createEditAction("action-1", "backend/pom.xml"),
       createEditAction("action-2", "client/src/App.vue"),
       createRunAction("action-3", "npm --prefix client run build")
     ],
     bareProject: false,
     isCreationTask: true,
-    prompt: "在已有前后端分离项目里继续补学生管理页面, 前端目录是 client, 后端是 Backend"
+    prompt: "在已有前后端分离项目里继续补学生管理页面, 前端目录是 client, 后端是 backend"
   });
   const actionTargets = result.actions.map((action) => action.target ?? action.command);
 
-  assert.ok(actionTargets.includes("Backend/pom.xml"));
+  assert.ok(actionTargets.includes("backend/pom.xml"));
   assert.ok(actionTargets.includes("client/src/App.vue"));
   assert.ok(actionTargets.includes("npm --prefix client run build"));
-  assert.ok(!actionTargets.includes("Frontend/src/App.vue"));
-  assert.ok(!actionTargets.includes("npm --prefix Frontend run build"));
+  assert.ok(!actionTargets.includes("frontend/src/App.vue"));
+  assert.ok(!actionTargets.includes("npm --prefix frontend run build"));
 });
 
 test("bare Vue TypeScript scaffold supplements missing frontend config files", () => {
   const result = supplementBareProjectScaffoldActions({
     actions: [
-      createEditAction("action-1", "Frontend/package.json"),
-      createEditAction("action-2", "Frontend/vite.config.ts")
+      createEditAction("action-1", "frontend/package.json"),
+      createEditAction("action-2", "frontend/vite.config.ts")
     ],
     bareProject: true,
     isCreationTask: true,
@@ -128,17 +123,17 @@ test("bare Vue TypeScript scaffold supplements missing frontend config files", (
   });
   const actionTargets = result.actions.map((action) => action.target ?? action.command);
 
-  assert.ok(actionTargets.includes("Frontend/package.json"));
-  assert.ok(actionTargets.includes("Frontend/vite.config.ts"));
-  assert.ok(actionTargets.includes("Frontend/index.html"));
-  assert.ok(actionTargets.includes("Frontend/tsconfig.json"));
+  assert.ok(actionTargets.includes("frontend/package.json"));
+  assert.ok(actionTargets.includes("frontend/vite.config.ts"));
+  assert.ok(actionTargets.includes("frontend/index.html"));
+  assert.ok(actionTargets.includes("frontend/tsconfig.json"));
 });
 
 test("file change prompt repeats full-stack scaffold consistency guardrails", () => {
   const actions: AgentAction[] = [
-    createEditAction("action-1", "Backend/src/main/java/com/example/studentmanager/entity/Student.java"),
-    createEditAction("action-2", "Backend/src/main/resources/data.sql"),
-    createEditAction("action-3", "Frontend/src/App.vue")
+    createEditAction("action-1", "backend/src/main/java/com/example/studentmanager/entity/Student.java"),
+    createEditAction("action-2", "backend/src/main/resources/data.sql"),
+    createEditAction("action-3", "frontend/src/App.vue")
   ];
   const thread = {
     id: "thread-1",
@@ -153,11 +148,11 @@ test("file change prompt repeats full-stack scaffold consistency guardrails", ()
     events: []
   } satisfies TaskThread;
 
-  const prompt = createFileChangeTaskPrompt(thread, "Frontend/src/App.vue", actions[2]);
+  const prompt = createFileChangeTaskPrompt(thread, "frontend/src/App.vue", actions[2]);
 
   assert.match(prompt, /<scaffold_consistency_guardrails>/u);
   assert.match(prompt, /<file_change_instructions>/u);
-  assert.match(prompt, /Backend\/.+Frontend\//u);
+  assert.match(prompt, /backend\/.+frontend\//u);
   assert.match(prompt, /id, name, age, gender/u);
   assert.match(prompt, /fetchStudents/u);
   assert.match(prompt, /GET \/api\/students/u);

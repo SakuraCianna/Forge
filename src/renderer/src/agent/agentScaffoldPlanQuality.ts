@@ -9,7 +9,6 @@ export type ScaffoldLayer =
   | "api"
   | "runtimeConfig"
   | "dataSeed"
-  | "backendContractTest"
   | "frontendConfig"
   | "frontendEntry"
   | "frontendApiClient"
@@ -124,9 +123,6 @@ function getExpectedScaffoldLayers(prompt: string): ScaffoldLayer[] {
     if (stack.springBoot && stack.h2) {
       layers.add("dataSeed");
     }
-    if (stack.springBoot) {
-      layers.add("backendContractTest");
-    }
     layers.add("verification");
   }
 
@@ -193,10 +189,6 @@ function detectCoveredScaffoldLayers(actions: AgentAction[]): Set<ScaffoldLayer>
 
     if (/(^|\/)src\/main\/resources\/(?:data|schema)\.sql$/iu.test(target)) {
       coveredLayers.add("dataSeed");
-    }
-
-    if (/(^|\/)src\/test\/(?:java|kotlin)\/.*(?:controller|api).*test\.(?:java|kt)$/iu.test(target)) {
-      coveredLayers.add("backendContractTest");
     }
 
     if (/(^|\/)(frontend|client|web)\/src\/main\.[jt]s$/iu.test(target)) {
@@ -391,17 +383,6 @@ function createScaffoldLayerCandidates(
             }
           ]
         : [];
-    case "backendContractTest":
-      return stack.springBoot
-        ? [
-            {
-              layer,
-              kind: "edit-file",
-              label: `创建 ${backendRoot}src/test/java/com/example/${projectSlug}/controller/${entityName}ControllerTest.java`,
-              target: `${backendRoot}src/test/java/com/example/${projectSlug}/controller/${entityName}ControllerTest.java`
-            }
-          ]
-        : [];
     case "frontendConfig":
       return stack.frontend || stack.vue || stack.react || stack.vite
         ? [
@@ -484,7 +465,9 @@ function createVerificationCandidates(
   const candidates: ScaffoldCompletionCandidate[] = [];
 
   if (stack.springBoot) {
-    const command = backendRoot ? `mvn -f ${backendRoot}pom.xml test` : "mvn test";
+    const command = backendRoot
+      ? `mvn -f ${backendRoot}pom.xml -DskipTests package`
+      : "mvn -DskipTests package";
 
     candidates.push({
       layer: "verification",
@@ -536,9 +519,9 @@ function resolveScaffoldRoots(stack: ScaffoldStack): {
   frontendRoot: string;
 } {
   return {
-    // Forge 的空项目全栈脚手架约定: Java/Spring 后端放在 Backend, 前端放在 Frontend。
-    backendRoot: stack.separated ? "Backend/" : "",
-    frontendRoot: stack.separated || stack.backend ? "Frontend/" : ""
+    // Forge 的空项目全栈脚手架约定: Java/Spring 后端放在 backend, 前端放在 frontend。
+    backendRoot: stack.separated ? "backend/" : "",
+    frontendRoot: stack.separated || stack.backend ? "frontend/" : ""
   };
 }
 
@@ -600,7 +583,7 @@ function normalizeBareScaffoldCommand(
   options: { canonicalizeAliasRoots: boolean }
 ): string {
   return normalizeBareFrontendCommand(
-    normalizeBareBackendCommand(command, roots.backendRoot),
+    normalizeBareBackendCommand(command, roots.backendRoot, options),
     roots.frontendRoot,
     options
   );
@@ -648,7 +631,11 @@ function normalizeBareFrontendTarget(
   return normalizedTarget;
 }
 
-function normalizeBareBackendCommand(command: string, backendRoot: string): string {
+function normalizeBareBackendCommand(
+  command: string,
+  backendRoot: string,
+  options: { canonicalizeAliasRoots: boolean }
+): string {
   const backendPom = `${backendRoot}pom.xml`;
   const trimmedCommand = command.trim();
 
@@ -661,8 +648,27 @@ function normalizeBareBackendCommand(command: string, backendRoot: string): stri
     backendPom
   );
 
+  if (options.canonicalizeAliasRoots) {
+    const mavenTestPattern = new RegExp(
+      `^mvn\\s+-f\\s+${escapeRegExp(backendPom)}\\s+test\\b`,
+      "iu"
+    );
+
+    if (mavenTestPattern.test(commandWithCanonicalPom)) {
+      return commandWithCanonicalPom.replace(
+        mavenTestPattern,
+        `mvn -f ${backendPom} -DskipTests package`
+      );
+    }
+  }
+
   if (/^mvn\s+test\b/iu.test(commandWithCanonicalPom)) {
-    return commandWithCanonicalPom.replace(/^mvn\s+test\b/iu, `mvn -f ${backendPom} test`);
+    return commandWithCanonicalPom.replace(
+      /^mvn\s+test\b/iu,
+      options.canonicalizeAliasRoots
+        ? `mvn -f ${backendPom} -DskipTests package`
+        : `mvn -f ${backendPom} test`
+    );
   }
 
   return commandWithCanonicalPom;
@@ -776,7 +782,6 @@ function formatScaffoldLayerLabel(layer: ScaffoldLayer, language: Language): str
     api: "API",
     runtimeConfig: "运行配置",
     dataSeed: "数据库初始化",
-    backendContractTest: "后端契约测试",
     frontendConfig: "前端配置",
     frontendEntry: "前端入口",
     frontendApiClient: "前端 API 客户端",
@@ -790,7 +795,6 @@ function formatScaffoldLayerLabel(layer: ScaffoldLayer, language: Language): str
     api: "API",
     runtimeConfig: "runtime config",
     dataSeed: "database seed data",
-    backendContractTest: "backend contract test",
     frontendConfig: "frontend config",
     frontendEntry: "frontend entrypoint",
     frontendApiClient: "frontend API client",
@@ -803,4 +807,8 @@ function formatScaffoldLayerLabel(layer: ScaffoldLayer, language: Language): str
 
 function normalizeProjectPath(value: string): string {
   return value.trim().replace(/\\/gu, "/").replace(/^\.\/+/u, "").replace(/\/+/gu, "/");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

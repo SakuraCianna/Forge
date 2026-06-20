@@ -118,6 +118,16 @@ test("compact transcript keeps raw controlled tool results out of the chat strea
   );
 });
 
+test("processed summary uses gray handled labels with collapsed details", async () => {
+  const workspaceSource = await readFile("src/renderer/src/components/ThreadWorkspace.tsx", "utf8");
+
+  assert.match(workspaceSource, /已处理 \$\{duration\}/u);
+  assert.match(workspaceSource, /思考过程/u);
+  assert.match(workspaceSource, /处理详情/u);
+  assert.match(workspaceSource, /compactProcessedGroupExpanded\[group\.kind\] \?\? false/u);
+  assert.doesNotMatch(workspaceSource, /executionRecord: "执行记录"/u);
+});
+
 function createThreadEvent(
   event: Partial<TaskThreadEvent> & Pick<TaskThreadEvent, "id" | "kind" | "message">
 ): TaskThreadEvent {

@@ -64,7 +64,7 @@ function formatScaffoldConsistencyContext(prompt: string, actions: AgentAction[]
 
   if (hasBackendAndFrontend && isSpringBoot) {
     lines.push(
-      "For a new separated Spring Boot + frontend scaffold, keep backend files under Backend/, frontend files under Frontend/, run Maven as mvn -f Backend/pom.xml ..., and run frontend package commands as npm --prefix Frontend ... unless the existing repository or user explicitly names different roots."
+      "For a new separated Spring Boot + frontend scaffold, keep backend files under backend/, frontend files under frontend/, run Maven as mvn -f backend/pom.xml ..., and run frontend package commands as npm --prefix frontend ... unless the existing repository or user explicitly names different roots."
     );
   }
 
@@ -99,13 +99,13 @@ function formatScaffoldConsistencyContext(prompt: string, actions: AgentAction[]
   if (isVueOrVite) {
     lines.push(
       "For Vue/Vite frontend files, prefer a relative /api request through vite.config proxy instead of hardcoding http://localhost origins inside components.",
-      "For new separated Vue/Vite scaffolds, keep frontend files under Frontend/.",
+      "For new separated Vue/Vite scaffolds, keep frontend files under frontend/.",
       "For Vue/Vite TypeScript scaffolds, include tsconfig.json and make sure package scripts reference only locally declared dependencies."
     );
   }
 
   lines.push(
-    "Package files must declare the local tools used by queued verification commands, and tests should exercise the generated API contract when a backend is present.",
+    "Package files must declare the local tools used by queued verification commands. For first-pass scaffolds, prefer compile/build verification before adding generated tests unless the task explicitly asks for tests.",
     "Before returning this file, self-check that imports have matching exports, generated commands point at existing folders, and the file does not rely on undeclared dependencies."
   );
 

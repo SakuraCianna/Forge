@@ -9,7 +9,7 @@ test("agent system instructions preserve evidence, scope and verification guardr
   assert.match(source, /plan an inspect step instead of guessing/u);
   assert.match(source, /Keep scope tight/u);
   assert.match(source, /Never delete features, comment out core logic, hide errors, or bypass validation/u);
-  assert.match(source, /backend files under Backend\/ and Vite frontend files under Frontend\//u);
+  assert.match(source, /backend files under backend\/ and Vite frontend files under frontend\//u);
   assert.match(source, /TypeScript project config required by the queued build command/u);
   assert.match(source, /observable acceptance signal/u);
   assert.match(source, /minimal but production-shaped code/u);
@@ -20,7 +20,7 @@ test("agent system instructions preserve evidence, scope and verification guardr
   assert.match(source, /Treat the project file list as a budgeted overview/u);
   assert.match(source, /Do not assume omitted files are absent/u);
   assert.match(source, /Separate discovery, mutation, and verification/u);
-  assert.match(source, /plan web_search, fetchDocs, or another reliable documentation lookup/u);
+  assert.match(source, /prefer fetchDocs for known official docs mappings, then web_search/u);
   assert.match(source, /Do not include commit, branch switch, revert, dependency install, push, delete/u);
   assert.match(source, /Example shape:/u);
 });

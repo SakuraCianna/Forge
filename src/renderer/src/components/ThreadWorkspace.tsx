@@ -666,7 +666,12 @@ export function ThreadWorkspace({
     const approvedCommand = event.commandApproval;
     const failed = Boolean(result && !result.cancelled && (result.timedOut || result.exitCode !== 0));
     const passed = Boolean(result && result.exitCode === 0 && !result.timedOut);
-    const label = getCompactEventLabel(event, language);
+    const eventKind = getCompactProcessedEventKind(
+      event,
+      event.message,
+      extractSourceUrls(event.message)
+    );
+    const label = getCompactEventLabel(event, eventKind, language);
 
     return (
       <article key={event.id} className="grid grid-cols-[24px_minmax(0,1fr)] gap-3">
@@ -898,6 +903,7 @@ export function ThreadWorkspace({
   // 将内部执行流水折叠进一条已处理摘要, 正文只保留最终可读输出
   function renderCompactProcessedSummary(summary: CompactProcessedSummary): ReactElement {
     const sourceCopy = language === "zh-CN" ? "来源" : "Sources";
+    const processedCopy = language === "zh-CN" ? `已处理 ${duration}` : `Processed ${duration}`;
 
     return (
       <section className="mx-auto w-full max-w-[880px] border-b border-[#ececf1] pb-2">
@@ -908,6 +914,9 @@ export function ThreadWorkspace({
           onClick={() => setCompactProcessedExpanded((expanded) => !expanded)}
           className="flex min-h-7 w-full flex-wrap items-center gap-x-2 gap-y-1 text-left text-sm font-medium text-[#8e8ea0] transition hover:text-[#565869]"
         >
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-[13px] font-medium text-[#8e8ea0]">
+            {processedCopy}
+          </span>
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             {summary.recoverySummary ? (
               <span className="inline-flex min-w-0 items-center gap-1 text-[12px] font-normal text-[#9a3412]">
@@ -980,7 +989,7 @@ export function ThreadWorkspace({
   function renderCompactProcessedGroup(group: CompactProcessedGroup): ReactElement {
     const Icon = getCompactProcessedGroupIcon(group.kind);
     const visibleItems = group.items.slice(-12);
-    const groupExpanded = compactProcessedGroupExpanded[group.kind] ?? true;
+    const groupExpanded = compactProcessedGroupExpanded[group.kind] ?? false;
 
     return (
       <details
@@ -1525,7 +1534,7 @@ export function ThreadWorkspace({
             recoveryDecision: "恢复决策",
             recoveryHistory: "恢复历史",
             copyContext: "复制动作上下文",
-            executionRecord: "执行记录",
+            executionRecord: "处理详情",
             autoRecovery: "自动恢复",
             manualRecovery: "手动恢复",
             recoveryAttempt: (attempt: number, limit?: number) =>
@@ -1561,7 +1570,7 @@ export function ThreadWorkspace({
             recoveryDecision: "Recovery decision",
             recoveryHistory: "Recovery history",
             copyContext: "Copy action context",
-            executionRecord: "Execution record",
+            executionRecord: "Processing detail",
             autoRecovery: "Automatic recovery",
             manualRecovery: "Manual recovery",
             recoveryAttempt: (attempt: number, limit?: number) =>
@@ -3339,7 +3348,7 @@ function createCompactProcessedItem(
     return {
       id: event.id,
       kind: "command",
-      label: getCompactEventLabel(event, language),
+      label: getCompactEventLabel(event, "command", language),
       detail: compactProcessedDetail(command),
       createdAt: event.completedAt ?? event.createdAt,
       urls,
@@ -3348,7 +3357,7 @@ function createCompactProcessedItem(
   }
 
   const kind = getCompactProcessedEventKind(event, text, urls);
-  const label = getCompactEventLabel(event, language);
+  const label = getCompactEventLabel(event, kind, language);
   const detailSource = getCompactProcessedDetailSource(event, actionLabel);
   const dedupeKey = event.agentActionRun?.actionId
     ? `${kind}:action:${event.agentActionRun.actionId}`
@@ -3436,26 +3445,26 @@ function isFileReadTranscript(value: string): boolean {
 function getCompactProcessedGroupTitle(kind: CompactProcessedGroupKind, language: Language): string {
   if (language === "zh-CN") {
     return {
-      web: "网页搜索",
-      command: "命令",
-      edit: "编辑",
-      search: "项目检索",
-      file: "文件观察",
+      web: "查阅资料",
+      command: "运行命令",
+      edit: "修改文件",
+      search: "检索项目",
+      file: "观察项目",
       error: "需要恢复",
-      plan: "思考",
-      other: "其他记录"
+      plan: "思考过程",
+      other: "处理事项"
     }[kind];
   }
 
   return {
-    web: "Web search",
-    command: "Commands",
-    edit: "Edits",
-    search: "Project search",
-    file: "File reads",
+    web: "Looked up references",
+    command: "Ran commands",
+    edit: "Changed files",
+    search: "Searched project",
+    file: "Observed project",
     error: "Needs recovery",
-    plan: "Reasoning",
-    other: "Other records"
+    plan: "Reasoning trace",
+    other: "Handled items"
   }[kind];
 }
 
@@ -3466,26 +3475,26 @@ function getCompactProcessedGroupSummary(
 ): string {
   if (language === "zh-CN") {
     return {
-      web: `已搜索网页 ${count} 次`,
-      command: `已运行 ${count} 条命令`,
-      edit: `已编辑 ${count} 个文件`,
-      search: `已检索 ${count} 次`,
-      file: `已读取 ${count} 项`,
-      error: `需要恢复 ${count} 条`,
-      plan: `已思考 ${count} 次`,
-      other: `已处理 ${count} 条记录`
+      web: `查阅了 ${count} 条资料`,
+      command: `运行了 ${count} 条命令`,
+      edit: `修改了 ${count} 个文件`,
+      search: `检索了 ${count} 次`,
+      file: `读取了 ${count} 项`,
+      error: `记录了 ${count} 个问题`,
+      plan: `整理了 ${count} 段思考`,
+      other: `处理了 ${count} 条事项`
     }[kind];
   }
 
   return {
-    web: `searched web ${count} ${count === 1 ? "time" : "times"}`,
+    web: `looked up ${count} reference${count === 1 ? "" : "s"}`,
     command: `ran ${count} command${count === 1 ? "" : "s"}`,
-    edit: `edited ${count} file${count === 1 ? "" : "s"}`,
+    edit: `changed ${count} file${count === 1 ? "" : "s"}`,
     search: `searched project ${count} ${count === 1 ? "time" : "times"}`,
     file: `read ${count} item${count === 1 ? "" : "s"}`,
-    error: `needs recovery ${count}`,
-    plan: `reasoned ${count} ${count === 1 ? "time" : "times"}`,
-    other: `processed ${count} record${count === 1 ? "" : "s"}`
+    error: `recorded ${count} issue${count === 1 ? "" : "s"}`,
+    plan: `captured ${count} reasoning note${count === 1 ? "" : "s"}`,
+    other: `handled ${count} item${count === 1 ? "" : "s"}`
   }[kind];
 }
 
@@ -3559,7 +3568,11 @@ function getCompactProcessedLivePreview(
 }
 
 // 把事件类型压成短标签, 避免对话区出现内部术语
-function getCompactEventLabel(event: TaskThreadEvent, language: Language): string {
+function getCompactEventLabel(
+  event: TaskThreadEvent,
+  kind: CompactProcessedGroupKind,
+  language: Language
+): string {
   if (event.commandApproval) {
     return language === "zh-CN" ? "命令已批准" : "Command approved";
   }
@@ -3591,7 +3604,29 @@ function getCompactEventLabel(event: TaskThreadEvent, language: Language): strin
     return language === "zh-CN" ? "输出" : "Output";
   }
 
-  return language === "zh-CN" ? "执行记录" : "Run transcript";
+  if (language === "zh-CN") {
+    return {
+      web: "查阅资料",
+      command: "运行命令",
+      edit: "修改文件",
+      search: "检索项目",
+      file: "读取项目",
+      error: "需要恢复",
+      plan: "思考过程",
+      other: "已处理"
+    }[kind];
+  }
+
+  return {
+    web: "Looked up references",
+    command: "Ran command",
+    edit: "Changed files",
+    search: "Searched project",
+    file: "Read project",
+    error: "Needs recovery",
+    plan: "Reasoning trace",
+    other: "Handled"
+  }[kind];
 }
 
 // 查找最近命令结果, 成功和失败都可以用于上下文

@@ -376,6 +376,18 @@ test("default built-in tool executors fetch web docs and open local browser prev
     { topic: "Electron" },
     {}
   );
+  const nextDocsResult = await getBuiltInToolFromRegistry(registry, "fetchDocs").execute(
+    { target: "Next.js app router" },
+    {}
+  );
+  const springDocsResult = await getBuiltInToolFromRegistry(registry, "fetchDocs").execute(
+    { topic: "Spring Boot REST" },
+    {}
+  );
+  const openAiDocsResult = await getBuiltInToolFromRegistry(registry, "fetchDocs").execute(
+    { topic: "OpenAI Responses API" },
+    {}
+  );
   const openPreviewResult = await getBuiltInToolFromRegistry(registry, "openBrowserPreview").execute(
     { url: "http://localhost:5173/" },
     {}
@@ -392,7 +404,13 @@ test("default built-in tool executors fetch web docs and open local browser prev
   assert.equal((fetchUrlResult as { title: string }).title, "Docs");
   assert.match((fetchUrlResult as { content: string }).content, /Forge Docs/u);
   assert.equal((fetchDocsResult as { source: string }).source, "official-docs");
+  assert.equal((nextDocsResult as { source: string }).source, "official-docs");
+  assert.equal((springDocsResult as { source: string }).source, "official-docs");
+  assert.equal((openAiDocsResult as { source: string }).source, "official-docs");
   assert.equal(requestedUrls[1], "https://www.electronjs.org/docs/latest/");
+  assert.ok(requestedUrls.includes("https://nextjs.org/docs"));
+  assert.ok(requestedUrls.includes("https://docs.spring.io/spring-boot/index.html"));
+  assert.ok(requestedUrls.includes("https://developers.openai.com/api/docs"));
   assert.deepEqual(openPreviewResult, {
     status: "ok",
     url: "http://localhost:5173/",

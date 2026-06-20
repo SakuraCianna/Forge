@@ -1019,6 +1019,8 @@ async function fetchDocs(
     readOptionalString(input, "topic") ??
     readOptionalString(input, "library") ??
     readOptionalString(input, "query") ??
+    readOptionalString(input, "target") ??
+    readOptionalString(input, "text") ??
     ""
   ).toLocaleLowerCase();
   const docsUrl = resolveOfficialDocsUrl(topic);
@@ -1222,27 +1224,42 @@ function clampBrowserNumber(
 }
 
 function resolveOfficialDocsUrl(topic: string): string | null {
-  if (/\breact\b/u.test(topic)) {
-    return "https://react.dev/reference/react";
-  }
+  const officialDocs: Array<{ pattern: RegExp; url: string }> = [
+    { pattern: /\breact\b/u, url: "https://react.dev/reference/react" },
+    { pattern: /\bnext(?:\.js|js)?\b/u, url: "https://nextjs.org/docs" },
+    { pattern: /\bvue(?:\.js|js)?\b/u, url: "https://vuejs.org/guide/introduction.html" },
+    { pattern: /\bvite\b/u, url: "https://vite.dev/guide/" },
+    { pattern: /\btypescript\b|\bts\b/u, url: "https://www.typescriptlang.org/docs/" },
+    {
+      pattern: /\bjavascript\b|\bjs\b|\becmascript\b/u,
+      url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript"
+    },
+    { pattern: /\bnode(?:\.js|js)?\b/u, url: "https://nodejs.org/api/" },
+    { pattern: /\belectron\b/u, url: "https://www.electronjs.org/docs/latest/" },
+    { pattern: /\btailwind(?:\s*css)?\b/u, url: "https://tailwindcss.com/docs/installation/using-vite" },
+    { pattern: /\bplaywright\b/u, url: "https://playwright.dev/docs/intro" },
+    { pattern: /\bprisma\b/u, url: "https://www.prisma.io/docs" },
+    { pattern: /\bsupabase\b/u, url: "https://supabase.com/docs" },
+    { pattern: /\bvercel\b/u, url: "https://vercel.com/docs" },
+    { pattern: /\bopenai\b|\bresponses api\b/u, url: "https://developers.openai.com/api/docs" },
+    { pattern: /\bstripe\b/u, url: "https://docs.stripe.com/" },
+    { pattern: /\bgithub actions\b|\bactions workflow\b/u, url: "https://docs.github.com/en/actions" },
+    { pattern: /\bspring\s*boot\b|\bspringboot\b/u, url: "https://docs.spring.io/spring-boot/index.html" },
+    { pattern: /\bmaven\b/u, url: "https://maven.apache.org/guides/" },
+    { pattern: /\bgradle\b/u, url: "https://docs.gradle.org/current/userguide/userguide.html" },
+    { pattern: /\bjava\b/u, url: "https://docs.oracle.com/en/java/" },
+    { pattern: /\bpython\b|\bpy\b/u, url: "https://docs.python.org/3/" },
+    { pattern: /\bgo\b|\bgolang\b/u, url: "https://go.dev/doc/" },
+    { pattern: /\brust\b/u, url: "https://doc.rust-lang.org/book/" },
+    { pattern: /\bdocker\b/u, url: "https://docs.docker.com/" },
+    { pattern: /\bkubernetes\b|\bk8s\b/u, url: "https://kubernetes.io/docs/home/" },
+    { pattern: /\bangular\b/u, url: "https://angular.dev/overview" },
+    { pattern: /\bsvelte\b/u, url: "https://svelte.dev/docs" },
+    { pattern: /\bastro\b/u, url: "https://docs.astro.build/en/getting-started/" }
+  ];
+  const match = officialDocs.find((entry) => entry.pattern.test(topic));
 
-  if (/\belectron\b/u.test(topic)) {
-    return "https://www.electronjs.org/docs/latest/";
-  }
-
-  if (/\bvite\b/u.test(topic)) {
-    return "https://vite.dev/guide/";
-  }
-
-  if (/\btypescript\b|\bts\b/u.test(topic)) {
-    return "https://www.typescriptlang.org/docs/";
-  }
-
-  if (/\bnode(?:\.js)?\b/u.test(topic)) {
-    return "https://nodejs.org/api/";
-  }
-
-  return null;
+  return match?.url ?? null;
 }
 
 function clampContentLimit(value: number | undefined): number {
