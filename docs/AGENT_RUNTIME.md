@@ -72,7 +72,7 @@ Forge 要从可用原型推进到产品级本地工程工作台: 用户提出真
 - 完成总结会汇总创建, 编辑, 删除, 读取, 失败恢复和耗时统计, 主界面只保留简短结果。
 - Built-in Tools 当前全部有真实 executor 或受控降级结果, 不再保留 `not_implemented` 工具。优先级语义如下:
   - P0 是 Agent 写代码闭环的基础能力, 包括项目树、文件读取、文本/glob 搜索、diff 预览、编辑写入、命令运行、Git 状态/diff 和基础诊断。P0 必须被普通开发 QA 覆盖并保持错误率为 0。
-  - P1 是高频稳定性能力, 包括项目摘要、入口/符号/引用/相关文件、创建文件、补丁、格式化/恢复、包脚本、typecheck/lint/build、错误解析、项目记忆/指令、上下文预算, 以及 `webSearch` / `fetchDocs` 官方文档查询。`fetchDocs` 目前是维护在代码里的官方文档映射表, 已覆盖常见框架、语言和平台, 并返回 `officialDocs` / `sourceType` / `trustedSource` / `docsCatalogVersion` / `citations` 元数据, 同一 executor 内有短 TTL 内存缓存; 官方文档抓取失败或主题无映射时会返回结构化 `fallbackSearch` 候选, 不把搜索候选伪装成已读取的文档正文; `webSearch` 会用同一份来源表标注并优先展示官方或可信文档结果, 但还不是动态文档索引。
+  - P1 是高频稳定性能力, 包括项目摘要、入口/符号/引用/相关文件、创建文件、补丁、格式化/恢复、包脚本、typecheck/lint/build、错误解析、项目记忆/指令、上下文预算, 以及 `webSearch` / `fetchDocs` 官方文档查询。`fetchDocs` 目前是维护在代码里的官方文档映射表, 已覆盖常见框架、语言和平台, 并返回 `officialDocs` / `sourceType` / `trustedSource` / `docsCatalogVersion` / `citations` 元数据, 同一 executor 内有短 TTL 内存缓存; 官方文档抓取失败或安全可搜索的主题无映射时会返回结构化 `fallbackSearch` 候选, 不把搜索候选伪装成已读取的文档正文, 也不会把不可信 URL 形态的 topic 自动送去公网搜索; `webSearch` 会用同一份来源表标注并优先展示官方或可信文档结果, 但还不是动态文档索引。
   - P2 是进阶或高风险能力, 包括语义搜索、诊断搜索、测试运行、依赖安装、分支/worktree/revert/push、浏览器预览/截图/控制台、直接 URL 抓取和项目指令变更等。它们已有执行路径和安全门禁, 但仍需要更多真实项目回归、外部副作用沙箱和产品 UI 打磨。
 
 当前仍未完全产品化的重点:

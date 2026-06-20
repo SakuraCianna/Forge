@@ -680,6 +680,43 @@ test("fetchDocs does not send unknown explicit URL failures to public fallback s
   assert.deepEqual(requestedUrls, ["https://internal.company.local/private/docs"]);
 });
 
+test("fetchDocs does not send untrusted URL-like topics to public fallback search", async () => {
+  const requestedUrls: string[] = [];
+  const fetcher = async (url: string) => {
+    requestedUrls.push(url);
+
+    throw new Error("fallback search should not run for untrusted URL-like topics");
+  };
+  const registry = createBuiltInToolRegistry({
+    executors: createDefaultBuiltInToolExecutors({ fetcher })
+  });
+  const fetchDocs = getBuiltInToolFromRegistry(registry, "fetchDocs");
+  const topics = [
+    "see https://internal.company.local/private/docs for API behavior",
+    "see https://user:pass@internal.company.local/private/docs for API behavior",
+    "check localhost:3000 before retrying",
+    "check internal.company.local before retrying",
+    "check api.internal.local:8080 before retrying"
+  ];
+
+  for (const topic of topics) {
+    const result = await fetchDocs.execute(
+      { topic },
+      {}
+    );
+
+    assert.equal((result as { status: string }).status, "no_match", topic);
+    assert.equal(
+      (result as { fallbackSearch: { query: string | null; status: string } }).fallbackSearch.status,
+      "disabled",
+      topic
+    );
+    assert.equal((result as { fallbackSearch: { query: string | null; status: string } }).fallbackSearch.query, null, topic);
+    assert.match((result as { suggestedNextStep: string }).suggestedNextStep, /untrusted URL/u, topic);
+    assert.deepEqual(requestedUrls, [], topic);
+  }
+});
+
 test("default built-in tool executors run local browser screenshot and console helpers", async () => {
   const browserRequests: Array<{ kind: string; url: string; width: number; height: number }> = [];
   const browserTools: BrowserPreviewTools = {

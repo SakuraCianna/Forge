@@ -42,7 +42,7 @@ Forge 的目标是把 AI 编程从“聊天里的建议”推进到“可审查,
 - critical 工具仍保留 typed confirmation 元数据, 用于普通权限模式和审计视图展示工具名、风险等级、影响目标、操作后果和是否可撤销。
 - 工具调用会记录结构化审计日志和本地质量指标, 用于追踪成功率、失败、确认阻断和 Full Access 自动授权执行。
 - 工具优先级分为 P0、P1、P2。P0 是写代码闭环的基础能力, 必须在普通 Built-in Tools QA 中保持通过; P1 是高频稳定性能力, 包括官方文档查询、项目摘要、入口/符号/引用、typecheck/lint/build 和上下文/记忆工具; P2 是进阶或高风险能力, 例如浏览器调试、依赖安装、分支/worktree/revert/push、测试运行和项目指令变更。
-- `webSearch` 和 `fetchDocs` 当前是 P1 高优先级工具。Agent 需要判断框架、语言、平台 API 或近期行为时, planner 会优先安排官方文档查询; `fetchDocs` 维护常用官方文档映射, 覆盖 React、Next.js、Vue、Vite、TypeScript、Node、Electron、Tailwind、Playwright、Prisma、Supabase、Vercel、OpenAI、Stripe、GitHub Actions、Spring Boot、Maven、Gradle、Java、Python、Go、Rust、Docker、Kubernetes、常见测试/包管理/数据库和移动端主题。`fetchDocs` 会返回 `officialDocs` / `sourceType` / `trustedSource` / `docsCatalogVersion` / `citations` 元数据, 并在当前 executor 内使用短 TTL 内存缓存; 官方文档抓取失败或主题没有映射时, 会返回结构化 `fallbackSearch` 候选, 不把搜索结果伪装成已读取的文档正文; `webSearch` 会标注并优先展示官方或可信文档来源。
+- `webSearch` 和 `fetchDocs` 当前是 P1 高优先级工具。Agent 需要判断框架、语言、平台 API 或近期行为时, planner 会优先安排官方文档查询; `fetchDocs` 维护常用官方文档映射, 覆盖 React、Next.js、Vue、Vite、TypeScript、Node、Electron、Tailwind、Playwright、Prisma、Supabase、Vercel、OpenAI、Stripe、GitHub Actions、Spring Boot、Maven、Gradle、Java、Python、Go、Rust、Docker、Kubernetes、常见测试/包管理/数据库和移动端主题。`fetchDocs` 会返回 `officialDocs` / `sourceType` / `trustedSource` / `docsCatalogVersion` / `citations` 元数据, 并在当前 executor 内使用短 TTL 内存缓存; 官方文档抓取失败或安全可搜索的无映射主题会返回结构化 `fallbackSearch` 候选, 但不把搜索结果伪装成已读取的文档正文, 也不会把不可信 URL 形态的 topic 自动送去公网搜索; `webSearch` 会标注并优先展示官方或可信文档来源。
 - `searchSemantic` 当前使用本地轻量语义 fallback, 不调用 embedding 模型, 不读取敏感文件, 返回结果会标注 `local_semantic_fallback`。
 - 浏览器截图和页面控制台检查使用受限本地预览 URL, 截图默认写入应用数据目录并返回文件路径、尺寸和大小, 避免把大图直接塞入上下文。
 

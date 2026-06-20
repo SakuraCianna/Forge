@@ -87,6 +87,10 @@ type FetchDocsFallbackSearch = {
   errorMessage?: string;
 };
 
+type FetchDocsTopicUrlMatch =
+  | { kind: "none" }
+  | { kind: "url-like"; url: string | null };
+
 export type BuiltInToolExecutorFactoryOptions = {
   browserTools?: BrowserPreviewTools;
   cancelCommand?: typeof cancelProjectCommand;
@@ -1091,11 +1095,12 @@ async function fetchDocs(
   const docsSource = resolveOfficialDocsSource(topic);
 
   if (!docsSource) {
+    const fallbackQuery = createTopicDocsFallbackQuery(rawTopic || topic);
     const fallbackSearch = await createFetchDocsFallbackSearch({
       enabled: fallbackSearchEnabled,
       fetcher,
       limit: fallbackLimit,
-      query: createTopicDocsFallbackQuery(rawTopic || topic),
+      query: fallbackQuery,
       reason: "no_match"
     });
 
@@ -1105,9 +1110,7 @@ async function fetchDocs(
       docsCatalogVersion: officialDocsSourceCatalogVersion,
       fallbackSearch,
       message: "No official documentation mapping is available for this topic.",
-      suggestedNextStep: fallbackSearch.status === "ok"
-        ? "Review fallbackSearch.results, then call fetchDocs with a selected official documentation URL."
-        : "Use webSearch to find the official documentation URL, then call fetchDocs with url."
+      suggestedNextStep: createFetchDocsNoMatchSuggestedNextStep(fallbackSearch.status, fallbackQuery)
     };
   }
 
@@ -1313,8 +1316,61 @@ async function createFetchDocsFallbackSearch({
 
 function createTopicDocsFallbackQuery(topic: string): string | null {
   const normalizedTopic = topic.replace(/\s+/gu, " ").trim();
+  const topicUrl = extractUrlLikeTopic(normalizedTopic);
+
+  if (topicUrl.kind === "url-like") {
+    if (!topicUrl.url) {
+      return null;
+    }
+
+    const documentationSource = classifyDocumentationUrl(topicUrl.url);
+
+    return documentationSource.trusted ? createExplicitDocsFallbackQuery(topicUrl.url) : null;
+  }
 
   return normalizedTopic ? `${normalizedTopic} official documentation` : null;
+}
+
+function createFetchDocsNoMatchSuggestedNextStep(
+  fallbackStatus: FetchDocsFallbackSearch["status"],
+  fallbackQuery: string | null
+): string {
+  if (fallbackStatus === "ok") {
+    return "Review fallbackSearch.results, then call fetchDocs with a selected official documentation URL.";
+  }
+
+  if (!fallbackQuery) {
+    return "Fallback search was disabled because the topic is empty or looks like an untrusted URL. Pass a verified official documentation URL via url, or use webSearch manually only after confirming it is safe to disclose.";
+  }
+
+  return "Use webSearch to find the official documentation URL, then call fetchDocs with url.";
+}
+
+function extractUrlLikeTopic(topic: string): FetchDocsTopicUrlMatch {
+  const candidate = topic.match(/https?:\/\/[^\s<>"')]+/iu)?.[0] ??
+    topic.match(/\bwww\.[a-z0-9.-]+(?:\/[^\s<>"')]+)?/iu)?.[0] ??
+    topic.match(/\b(?:localhost|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})(?::\d{2,5})?(?:\/[^\s<>"')]+)?/iu)?.[0] ??
+    topic.match(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*(?:\.(?:local|internal|lan|corp|home|test|localhost))(?::\d{2,5})?(?:\/[^\s<>"')]+)?/iu)?.[0] ??
+    topic.match(/\b(?:[a-z0-9-]+\.)+[a-z0-9-]+:\d{2,5}(?:\/[^\s<>"')]+)?/iu)?.[0];
+
+  if (!candidate) {
+    return { kind: "none" };
+  }
+
+  const trimmedCandidate = candidate.replace(/[),.;]+$/gu, "");
+  const candidateUrl = /^https?:\/\//iu.test(trimmedCandidate) ? trimmedCandidate : `https://${trimmedCandidate}`;
+
+  try {
+    return {
+      kind: "url-like",
+      url: normalizeFetchUrl(candidateUrl)
+    };
+  } catch {
+    return {
+      kind: "url-like",
+      url: null
+    };
+  }
 }
 
 function createExplicitDocsFallbackQuery(url: string): string | null {
