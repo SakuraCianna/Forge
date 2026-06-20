@@ -125,6 +125,9 @@ test("processed summary uses gray handled labels with collapsed details", async 
   assert.match(workspaceSource, /思考过程/u);
   assert.match(workspaceSource, /处理详情/u);
   assert.match(workspaceSource, /compactProcessedGroupExpanded\[group\.kind\] \?\? false/u);
+  assert.match(workspaceSource, /processed-item-details/u);
+  assert.match(workspaceSource, /item\.summary/u);
+  assert.match(workspaceSource, /formatCommandResultForClipboard\(event\.commandResult\)/u);
   assert.doesNotMatch(workspaceSource, /executionRecord: "执行记录"/u);
 });
 

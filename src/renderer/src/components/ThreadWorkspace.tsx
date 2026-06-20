@@ -161,6 +161,7 @@ type CompactProcessedItem = {
   id: string;
   kind: CompactProcessedGroupKind;
   label: string;
+  summary: string;
   detail: string;
   createdAt: string;
   urls: string[];
@@ -1017,14 +1018,23 @@ export function ThreadWorkspace({
         </summary>
         <div className="mt-2 grid gap-1.5">
           {visibleItems.map((item) => (
-            <div key={item.id} className="grid grid-cols-[72px_minmax(0,1fr)] gap-2">
-              <span className="text-[#8e8ea0]">{formatEventTimestamp(item.createdAt)}</span>
-              <div className="min-w-0">
-                <div className="whitespace-pre-wrap break-words font-medium leading-5 text-[#565869]">
-                  {item.label}
-                </div>
+            <details
+              key={item.id}
+              className="processed-item-details border-t border-[#ececf1] pt-1.5 first:border-t-0 first:pt-0"
+            >
+              <summary className="flex cursor-pointer list-none items-start gap-2 [&::-webkit-details-marker]:hidden">
+                <span className="w-[72px] shrink-0 text-[#8e8ea0]">{formatEventTimestamp(item.createdAt)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block whitespace-pre-wrap break-words font-medium leading-5 text-[#565869]">
+                    {item.label}
+                  </span>
+                  <span className="block truncate leading-5 text-[#8e8ea0]">{item.summary}</span>
+                </span>
+                <ChevronDown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#8e8ea0]" />
+              </summary>
+              <div className="ml-[80px] mt-1 min-w-0">
                 <p
-                  className={`mt-0.5 whitespace-pre-wrap break-words leading-5 ${
+                  className={`whitespace-pre-wrap break-words leading-5 text-[#6e6e80] ${
                     item.kind === "command" ? "font-mono text-[11px]" : ""
                   }`}
                 >
@@ -1047,7 +1057,7 @@ export function ThreadWorkspace({
                   </div>
                 ) : null}
               </div>
-            </div>
+            </details>
           ))}
         </div>
       </details>
@@ -3349,7 +3359,8 @@ function createCompactProcessedItem(
       id: event.id,
       kind: "command",
       label: getCompactEventLabel(event, "command", language),
-      detail: compactProcessedDetail(command),
+      summary: compactProcessedSummary(command),
+      detail: getCompactProcessedCommandDetail(event, command),
       createdAt: event.completedAt ?? event.createdAt,
       urls,
       dedupeKey: `command:${getCommandRunKey(command, runId)}`
@@ -3367,11 +3378,27 @@ function createCompactProcessedItem(
     id: event.id,
     kind,
     label,
+    summary: compactProcessedSummary(detailSource),
     detail: compactProcessedDetail(detailSource),
     createdAt: event.completedAt ?? event.createdAt,
     urls,
     dedupeKey
   };
+}
+
+function getCompactProcessedCommandDetail(event: TaskThreadEvent, command: string): string {
+  if (event.commandResult) {
+    return compactProcessedDetail(formatCommandResultForClipboard(event.commandResult));
+  }
+
+  const output = [
+    event.commandRun?.stdout,
+    event.commandRun?.stderr
+  ].filter(Boolean).join("\n");
+
+  return output
+    ? compactProcessedDetail(`${command}\n${formatCommandOutputSnippet(output)}`)
+    : compactProcessedDetail(command);
 }
 
 function getCompactProcessedEventKind(
@@ -3511,8 +3538,22 @@ function getCompactProcessedGroupIcon(kind: CompactProcessedGroupKind): typeof T
   }[kind];
 }
 
+function compactProcessedSummary(value: string): string {
+  const normalized = value.trim().replace(/\s+/gu, " ");
+
+  return normalized.length > 140 ? `${normalized.slice(0, 137)}...` : normalized;
+}
+
 function compactProcessedDetail(value: string): string {
-  return value.trim().replace(/\s+/gu, " ").slice(0, 260);
+  const normalized = value
+    .trim()
+    .replace(/\r\n/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n");
+  const maxLength = 1200;
+
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 34)}\n... processed detail truncated ...`
+    : normalized;
 }
 
 function extractSourceUrlsFromEvents(events: TaskThreadEvent[]): string[] {
