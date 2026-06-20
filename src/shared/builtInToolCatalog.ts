@@ -540,7 +540,7 @@ export const builtInToolDefinitions: BuiltInToolDefinition[] = [
   }),
   tool({
     name: "fetchDocs",
-    description: "按常用框架、语言、平台映射优先读取官方文档。",
+    description: "按常用框架、语言、平台映射优先读取官方文档, 失败或无映射时返回搜索 fallback。",
     category: "auxiliary",
     riskLevel: "medium",
     priority: "P1"

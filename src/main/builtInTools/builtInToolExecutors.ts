@@ -44,6 +44,7 @@ import type {
   DocumentationSourceClassification,
   OfficialDocsSource
 } from "../../shared/officialDocsSources.js";
+import type { WebSearchResultItem } from "../../shared/webSearchTypes.js";
 import type { BuiltInToolExecutorMap } from "./builtInToolRegistry.js";
 import {
   deleteProjectMemoryEntry,
@@ -70,6 +71,20 @@ type FetchDocsCacheMetadata = {
   ttlMs: number;
   cachedAt: string | null;
   expiresAt: string | null;
+};
+
+type FetchDocsFallbackReason = "fetch_error" | "http_error" | "no_match";
+
+type FetchDocsFallbackSearch = {
+  status: "disabled" | "failed" | "no_results" | "ok";
+  reason: FetchDocsFallbackReason;
+  query: string | null;
+  resultCount: number;
+  trustedResultCount: number;
+  results: WebSearchResultItem[];
+  fetchedAt?: string;
+  truncated?: boolean;
+  errorMessage?: string;
 };
 
 export type BuiltInToolExecutorFactoryOptions = {
@@ -1036,12 +1051,15 @@ async function fetchDocs(
   cache: FetchDocsCache
 ): Promise<Record<string, unknown>> {
   const explicitUrl = readOptionalString(input, "url");
+  const fallbackSearchEnabled = readOptionalBoolean(input, "fallbackSearch") ??
+    readOptionalBoolean(input, "fallback") ??
+    true;
+  const fallbackLimit = clampFetchDocsFallbackLimit(readOptionalNumber(input, "fallbackLimit"));
 
   if (explicitUrl) {
     const { cache: cacheMetadata, result } = await fetchUrlWithDocsCache(input, explicitUrl, fetcher, cache);
     const documentationSource = classifyDocumentationUrl(String(result.finalUrl ?? explicitUrl));
-
-    return {
+    const output = {
       ...result,
       source: "explicit-url",
       ...createFetchDocsSourceMetadata({
@@ -1050,32 +1068,52 @@ async function fetchDocs(
         result
       })
     };
+
+    return withFetchDocsFallbackSearch({
+      enabled: fallbackSearchEnabled,
+      fallbackLimit,
+      fetcher,
+      output,
+      query: documentationSource.trusted ? createExplicitDocsFallbackQuery(explicitUrl) : null,
+      result
+    });
   }
 
-  const topic = (
+  const rawTopic = (
     readOptionalString(input, "topic") ??
     readOptionalString(input, "library") ??
     readOptionalString(input, "query") ??
     readOptionalString(input, "target") ??
     readOptionalString(input, "text") ??
     ""
-  ).toLocaleLowerCase();
+  );
+  const topic = rawTopic.toLocaleLowerCase();
   const docsSource = resolveOfficialDocsSource(topic);
 
   if (!docsSource) {
+    const fallbackSearch = await createFetchDocsFallbackSearch({
+      enabled: fallbackSearchEnabled,
+      fetcher,
+      limit: fallbackLimit,
+      query: createTopicDocsFallbackQuery(rawTopic || topic),
+      reason: "no_match"
+    });
+
     return {
       status: "no_match",
       topic,
       docsCatalogVersion: officialDocsSourceCatalogVersion,
+      fallbackSearch,
       message: "No official documentation mapping is available for this topic.",
-      suggestedNextStep: "Use webSearch to find the official documentation URL, then call fetchDocs with url."
+      suggestedNextStep: fallbackSearch.status === "ok"
+        ? "Review fallbackSearch.results, then call fetchDocs with a selected official documentation URL."
+        : "Use webSearch to find the official documentation URL, then call fetchDocs with url."
     };
   }
 
   const { cache: cacheMetadata, result } = await fetchUrlWithDocsCache(input, docsSource.url, fetcher, cache);
   const documentationSource = classifyDocumentationUrl(String(result.finalUrl ?? docsSource.url));
-
-  return {
+  const output = {
     ...result,
     source: "official-docs",
     topic,
@@ -1087,6 +1125,15 @@ async function fetchDocs(
       result
     })
   };
+
+  return withFetchDocsFallbackSearch({
+    enabled: fallbackSearchEnabled,
+    fallbackLimit,
+    fetcher,
+    output,
+    query: createTopicDocsFallbackQuery(docsSource.label),
+    result
+  });
 }
 
 async function fetchUrlWithDocsCache(
@@ -1106,7 +1153,7 @@ async function fetchUrlWithDocsCache(
   if (!cacheEnabled) {
     return {
       cache: createFetchDocsCacheMetadata("disabled", ttlMs, null),
-      result: await fetchUrl({ ...input, maxChars, url: normalizedUrl }, fetcher)
+      result: await fetchUrlForDocs({ ...input, maxChars, url: normalizedUrl }, fetcher)
     };
   }
 
@@ -1116,7 +1163,7 @@ async function fetchUrlWithDocsCache(
     cache.delete(cacheKey);
     return {
       cache: createFetchDocsCacheMetadata(cacheStatus, ttlMs, null),
-      result: await fetchUrl({ ...input, maxChars, url: normalizedUrl }, fetcher)
+      result: await fetchUrlForDocs({ ...input, maxChars, url: normalizedUrl }, fetcher)
     };
   }
 
@@ -1138,7 +1185,7 @@ async function fetchUrlWithDocsCache(
     cache.delete(cacheKey);
   }
 
-  const result = await fetchUrl({ ...input, maxChars, url: normalizedUrl }, fetcher);
+  const result = await fetchUrlForDocs({ ...input, maxChars, url: normalizedUrl }, fetcher);
 
   if (result.status === "ok") {
     pruneFetchDocsCache(cache, now, ttlMs);
@@ -1152,6 +1199,134 @@ async function fetchUrlWithDocsCache(
     cache: createFetchDocsCacheMetadata(cacheStatus, ttlMs, result.status === "ok" ? now : null),
     result
   };
+}
+
+async function fetchUrlForDocs(
+  input: Record<string, unknown>,
+  fetcher: Fetcher
+): Promise<Record<string, unknown>> {
+  try {
+    return await fetchUrl(input, fetcher);
+  } catch (error) {
+    const url = normalizeFetchUrl(readRequiredString(input, "url"));
+
+    return {
+      status: "fetch_error",
+      url,
+      finalUrl: url,
+      statusCode: null,
+      contentType: null,
+      title: null,
+      content: "",
+      truncated: false,
+      errorMessage: formatUnknownError(error)
+    };
+  }
+}
+
+async function withFetchDocsFallbackSearch({
+  enabled,
+  fallbackLimit,
+  fetcher,
+  output,
+  query,
+  result
+}: {
+  enabled: boolean;
+  fallbackLimit: number;
+  fetcher: Fetcher;
+  output: Record<string, unknown>;
+  query: string | null;
+  result: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const status = typeof result.status === "string" ? result.status : "";
+
+  if (status === "ok") {
+    return output;
+  }
+
+  if (status !== "fetch_error" && status !== "http_error") {
+    return output;
+  }
+
+  return {
+    ...output,
+    fallbackSearch: await createFetchDocsFallbackSearch({
+      enabled,
+      fetcher,
+      limit: fallbackLimit,
+      query,
+      reason: status
+    })
+  };
+}
+
+async function createFetchDocsFallbackSearch({
+  enabled,
+  fetcher,
+  limit,
+  query,
+  reason
+}: {
+  enabled: boolean;
+  fetcher: Fetcher;
+  limit: number;
+  query: string | null;
+  reason: FetchDocsFallbackReason;
+}): Promise<FetchDocsFallbackSearch> {
+  if (!enabled || !query) {
+    return {
+      status: "disabled",
+      reason,
+      query,
+      resultCount: 0,
+      trustedResultCount: 0,
+      results: []
+    };
+  }
+
+  try {
+    const searchResult = await searchWeb({ query, limit }, { fetcher });
+
+    return {
+      status: searchResult.results.length > 0 ? "ok" : "no_results",
+      reason,
+      query: searchResult.query,
+      resultCount: searchResult.results.length,
+      trustedResultCount: searchResult.results.filter((result) => result.trustedSource).length,
+      results: searchResult.results,
+      fetchedAt: searchResult.fetchedAt,
+      truncated: searchResult.truncated
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      reason,
+      query,
+      resultCount: 0,
+      trustedResultCount: 0,
+      results: [],
+      errorMessage: formatUnknownError(error)
+    };
+  }
+}
+
+function createTopicDocsFallbackQuery(topic: string): string | null {
+  const normalizedTopic = topic.replace(/\s+/gu, " ").trim();
+
+  return normalizedTopic ? `${normalizedTopic} official documentation` : null;
+}
+
+function createExplicitDocsFallbackQuery(url: string): string | null {
+  try {
+    const parsedUrl = new URL(normalizeFetchUrl(url));
+    const host = parsedUrl.hostname.replace(/^www\./iu, "");
+    const pathHint = parsedUrl.pathname.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+    return `${host} official documentation ${pathHint}`.replace(/\s+/gu, " ").trim();
+  } catch {
+    return createTopicDocsFallbackQuery(url);
+  }
 }
 
 function pruneFetchDocsCache(cache: FetchDocsCache, now: number, ttlMs: number): void {
@@ -1447,6 +1622,18 @@ function clampFetchDocsCacheTtlMs(value: number | undefined): number {
   }
 
   return Math.min(60 * 60 * 1000, Math.max(0, Math.round(value)));
+}
+
+function clampFetchDocsFallbackLimit(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 3;
+  }
+
+  return Math.min(5, Math.max(1, Math.round(value)));
+}
+
+function formatUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function createTimeoutSignal(timeoutMs: number): AbortSignal | undefined {

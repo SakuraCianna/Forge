@@ -573,6 +573,113 @@ test("fetchDocs cache handles explicit URLs, disabled cache, failed fetches and 
   );
 });
 
+test("fetchDocs returns structured search fallback for failed or unmapped documentation", async () => {
+  const requestedUrls: string[] = [];
+  const fetcher = async (url: string) => {
+    requestedUrls.push(url);
+
+    if (url === "https://nextjs.org/docs") {
+      throw new Error("network unavailable");
+    }
+
+    if (url.startsWith("https://www.bing.com/search")) {
+      return new Response(
+        '<html><body><li class="b_algo"><h2><a href="https://www.electronjs.org/docs/latest/">Official docs</a></h2><p>Official documentation fallback.</p></li></body></html>',
+        {
+          headers: {
+            "content-type": "text/html; charset=utf-8"
+          },
+          status: 200
+        }
+      );
+    }
+
+    return new Response(
+      "<html><head><title>Unavailable</title></head><body><p>Service unavailable</p></body></html>",
+      {
+        headers: {
+          "content-type": "text/html; charset=utf-8"
+        },
+        status: url === "https://www.electronjs.org/docs/latest/" ? 503 : 200
+      }
+    );
+  };
+  const registry = createBuiltInToolRegistry({
+    executors: createDefaultBuiltInToolExecutors({ fetcher })
+  });
+  const fetchDocs = getBuiltInToolFromRegistry(registry, "fetchDocs");
+
+  const httpFallback = await fetchDocs.execute(
+    { topic: "Electron", fallbackLimit: 2 },
+    {}
+  );
+  const networkFallback = await fetchDocs.execute(
+    { topic: "Next.js", fallbackLimit: 2 },
+    {}
+  );
+  const noMatchFallback = await fetchDocs.execute(
+    { topic: "Imaginary UI Framework", fallbackLimit: 2 },
+    {}
+  );
+  const disabledFallback = await fetchDocs.execute(
+    { fallbackSearch: false, topic: "Unknown Docs Topic" },
+    {}
+  );
+
+  assert.equal((httpFallback as { status: string }).status, "http_error");
+  assert.equal((httpFallback as { fallbackSearch: { reason: string } }).fallbackSearch.reason, "http_error");
+  assert.equal((httpFallback as { fallbackSearch: { status: string } }).fallbackSearch.status, "ok");
+  assert.equal(
+    (httpFallback as { fallbackSearch: { results: Array<{ sourceType: string }> } }).fallbackSearch.results[0]?.sourceType,
+    "official-docs"
+  );
+  assert.equal((networkFallback as { status: string }).status, "fetch_error");
+  assert.match((networkFallback as { errorMessage: string }).errorMessage, /network unavailable/u);
+  assert.equal((networkFallback as { fallbackSearch: { reason: string } }).fallbackSearch.reason, "fetch_error");
+  assert.equal((networkFallback as { fallbackSearch: { status: string } }).fallbackSearch.status, "ok");
+  assert.equal((noMatchFallback as { status: string }).status, "no_match");
+  assert.equal((noMatchFallback as { fallbackSearch: { reason: string } }).fallbackSearch.reason, "no_match");
+  assert.equal((noMatchFallback as { fallbackSearch: { status: string } }).fallbackSearch.status, "ok");
+  assert.equal((disabledFallback as { fallbackSearch: { status: string } }).fallbackSearch.status, "disabled");
+  assert.ok(requestedUrls.some((url) => url.includes("Electron%20official%20documentation")));
+  assert.ok(requestedUrls.some((url) => url.includes("Next.js%20official%20documentation")));
+  assert.ok(requestedUrls.some((url) => url.includes("Imaginary%20UI%20Framework%20official%20documentation")));
+});
+
+test("fetchDocs does not send unknown explicit URL failures to public fallback search", async () => {
+  const requestedUrls: string[] = [];
+  const fetcher = async (url: string) => {
+    requestedUrls.push(url);
+
+    if (url.startsWith("https://www.bing.com/search") || url.startsWith("https://s.jina.ai/")) {
+      throw new Error("fallback search should not run for unknown explicit URLs");
+    }
+
+    return new Response(
+      "<html><head><title>Internal docs unavailable</title></head><body><p>Service unavailable</p></body></html>",
+      {
+        headers: {
+          "content-type": "text/html; charset=utf-8"
+        },
+        status: 503
+      }
+    );
+  };
+  const registry = createBuiltInToolRegistry({
+    executors: createDefaultBuiltInToolExecutors({ fetcher })
+  });
+  const result = await getBuiltInToolFromRegistry(registry, "fetchDocs").execute(
+    { url: "https://internal.company.local/private/docs" },
+    {}
+  );
+
+  assert.equal((result as { status: string }).status, "http_error");
+  assert.equal((result as { sourceType: string }).sourceType, "web");
+  assert.equal((result as { fallbackSearch: { query: string | null; status: string } }).fallbackSearch.status, "disabled");
+  assert.equal((result as { fallbackSearch: { query: string | null; status: string } }).fallbackSearch.query, null);
+  assert.deepEqual(requestedUrls, ["https://internal.company.local/private/docs"]);
+});
+
 test("default built-in tool executors run local browser screenshot and console helpers", async () => {
   const browserRequests: Array<{ kind: string; url: string; width: number; height: number }> = [];
   const browserTools: BrowserPreviewTools = {
